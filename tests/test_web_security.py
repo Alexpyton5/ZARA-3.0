@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import gzip
 import socket
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -28,6 +30,13 @@ def _install_public_dns(monkeypatch: pytest.MonkeyPatch, calls: list[str] | None
         return _dns_answer(PUBLIC_V4, port)
 
     monkeypatch.setattr(url_security.socket, "getaddrinfo", resolve)
+
+
+def _public_peer_extensions() -> dict[str, object]:
+    stream = SimpleNamespace(
+        get_extra_info=lambda name: (PUBLIC_V4, 443) if name == "server_addr" else None
+    )
+    return {"network_stream": stream}
 
 
 def test_public_url_is_normalized_and_dns_is_rechecked(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,6 +84,19 @@ def test_url_security_rejects_private_or_mixed_dns(monkeypatch: pytest.MonkeyPat
         validate_public_http_url("https://example.com/")
 
 
+def test_url_validation_rejects_result_returned_after_deadline() -> None:
+    def slow_resolver(_host: str, port: int, **_kwargs):
+        time.sleep(0.02)
+        return _dns_answer(PUBLIC_V4, port)
+
+    with pytest.raises(URLSecurityError, match="deadline"):
+        validate_public_http_url(
+            "https://example.com/",
+            resolver=slow_resolver,
+            deadline=time.monotonic() + 0.005,
+        )
+
+
 def test_connected_private_peer_is_rejected() -> None:
     stream = SimpleNamespace(get_extra_info=lambda _name: ("127.0.0.1", 443))
     response = SimpleNamespace(extensions={"network_stream": stream})
@@ -108,11 +130,15 @@ def test_fetch_blocks_private_redirect_before_second_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _install_public_dns(monkeypatch)
-    requests: list[str] = []
+    requests: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(str(request.url))
-        return httpx.Response(302, headers={"location": "http://127.0.0.1/secret"})
+        requests.append((str(request.url), request.headers["host"]))
+        return httpx.Response(
+            302,
+            headers={"location": "http://127.0.0.1/secret"},
+            extensions=_public_peer_extensions(),
+        )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     monkeypatch.setattr(web_actions.httpx, "Client", lambda **_kwargs: client)
@@ -121,7 +147,7 @@ def test_fetch_blocks_private_redirect_before_second_request(
 
     assert result.success is False
     assert "non-public" in result.error
-    assert requests == ["https://example.com/start"]
+    assert requests == [(f"https://{PUBLIC_V4}/start", "example.com")]
 
 
 def test_fetch_revalidates_dns_for_public_redirect(
@@ -129,13 +155,22 @@ def test_fetch_revalidates_dns_for_public_redirect(
 ) -> None:
     dns_calls: list[str] = []
     _install_public_dns(monkeypatch, dns_calls)
-    requests: list[str] = []
+    requests: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(str(request.url))
-        if request.url.host == "example.com":
-            return httpx.Response(302, headers={"location": "https://example.org/final"})
-        return httpx.Response(200, text="verified")
+        requests.append((str(request.url), request.headers["host"]))
+        if request.headers["host"] == "example.com":
+            return httpx.Response(
+                302,
+                headers={"location": "https://example.org/final"},
+                extensions=_public_peer_extensions(),
+            )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/plain; charset=utf-8"},
+            stream=httpx.ByteStream(b"verified"),
+            extensions=_public_peer_extensions(),
+        )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     monkeypatch.setattr(web_actions.httpx, "Client", lambda **_kwargs: client)
@@ -144,8 +179,106 @@ def test_fetch_revalidates_dns_for_public_redirect(
 
     assert result.success is True
     assert result.output == "verified"
-    assert requests == ["https://example.com/start", "https://example.org/final"]
+    assert requests == [
+        (f"https://{PUBLIC_V4}/start", "example.com"),
+        (f"https://{PUBLIC_V4}/final", "example.org"),
+    ]
     assert dns_calls == ["example.com", "example.org"]
+
+
+class _NeverReadCompressedStream(httpx.SyncByteStream):
+    def __init__(self, wire_bytes: bytes) -> None:
+        self.wire_bytes = wire_bytes
+        self.iterations = 0
+
+    def __iter__(self):
+        self.iterations += 1
+        yield self.wire_bytes
+
+
+def test_gzip_bomb_is_rejected_before_decoder_or_stream_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_public_dns(monkeypatch)
+    compressed = gzip.compress(b"A" * (16 * 1024 * 1024))
+    assert len(compressed) < 32 * 1024
+    stream = _NeverReadCompressedStream(compressed)
+    request_headers: list[httpx.Headers] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        request_headers.append(request.headers)
+        return httpx.Response(
+            200,
+            headers={"content-encoding": "gzip"},
+            stream=stream,
+            extensions=_public_peer_extensions(),
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(web_actions.httpx, "Client", lambda **_kwargs: client)
+
+    result = web_actions.web_fetch_action("https://example.com/bomb")
+
+    assert result.success is False
+    assert "Compressed response encoding" in result.error
+    assert request_headers[0]["accept-encoding"] == "identity"
+    assert stream.iterations == 0
+
+
+def test_limited_reader_uses_wire_bytes_without_auto_decompression() -> None:
+    compressed = gzip.compress(b"B" * (4 * 1024 * 1024))
+    response = httpx.Response(
+        200,
+        headers={"content-encoding": "identity"},
+        stream=httpx.ByteStream(compressed),
+    )
+
+    wire_bytes, truncated = web_actions._read_limited_bytes(response, len(compressed) + 1)
+
+    assert wire_bytes == compressed
+    assert truncated is False
+    assert len(wire_bytes) < 8 * 1024
+
+
+def test_redirect_drops_conditional_validators_and_keeps_identity_encoding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_public_dns(monkeypatch)
+    observed: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed.append(request)
+        if request.headers["host"] == "example.com":
+            return httpx.Response(
+                302,
+                headers={"location": "https://example.org/final"},
+                extensions=_public_peer_extensions(),
+            )
+        return httpx.Response(
+            304,
+            stream=httpx.ByteStream(b""),
+            extensions=_public_peer_extensions(),
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(web_actions.httpx, "Client", lambda **_kwargs: client)
+
+    result = web_actions.web_fetch_action(
+        "https://example.com/start",
+        headers={
+            "If-None-Match": '"v1"',
+            "If-Modified-Since": "Fri, 08 Aug 2026 11:00:00 GMT",
+        },
+    )
+
+    assert result.success is True
+    assert observed[0].headers["if-none-match"] == '"v1"'
+    assert "if-none-match" not in observed[1].headers
+    assert "if-modified-since" not in observed[1].headers
+    assert [request.headers["accept-encoding"] for request in observed] == [
+        "identity",
+        "identity",
+    ]
 
 
 class _CountingStream(httpx.SyncByteStream):
@@ -169,6 +302,7 @@ def test_fetch_stops_stream_before_accumulating_past_limit(
             200,
             headers={"content-type": "text/plain; charset=utf-8"},
             stream=stream,
+            extensions=_public_peer_extensions(),
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))

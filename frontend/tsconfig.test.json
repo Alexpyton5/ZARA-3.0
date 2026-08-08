@@ -7,7 +7,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "rootDir": ".",
-    "outDir": "dist-tests"
+    "outDir": "dist-tests",
+    "types": ["node"]
   },
-  "include": ["src/reminderEvents.ts", "tests/**/*.ts"]
+  "include": [
+    "src/reminderEvents.ts",
+    "src/renderer/lib/chatHistory.ts",
+    "tests/**/*.ts"
+  ]
 }

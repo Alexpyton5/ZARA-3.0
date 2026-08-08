@@ -537,6 +537,8 @@ function setupIPC(): void {
   ipcMain.handle('supercerebro-status', () => sendToPython('supercerebro-status'))
   ipcMain.handle('send-message', (_event, payload) => sendToPython('send-message', payload))
   ipcMain.handle('interrupt', () => sendToPython('interrupt'))
+  ipcMain.handle('conversation-history-list', (_event, payload) => sendToPython('conversation-history-list', payload))
+  ipcMain.handle('conversation-history-clear', () => sendToPython('conversation-history-clear'))
   ipcMain.handle('action-execute', executeActionWithConfirmation)
   ipcMain.handle('action-list', () => sendToPython('action-list'))
   ipcMain.handle('system-metrics', () => sendToPython('system-metrics'))

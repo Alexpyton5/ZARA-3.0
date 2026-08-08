@@ -14,6 +14,10 @@ declare global {
       engine?: { change?: (engine: string) => Promise<any>; list?: () => Promise<any> };
       supercerebro?: { toggle?: (active: boolean) => Promise<any>; status?: () => Promise<any> };
       message?: { send?: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) => Promise<any>; interrupt?: () => Promise<any> };
+      conversationHistory?: {
+        list?: (limit?: number) => Promise<any>;
+        clear?: () => Promise<any>;
+      };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
       system?: { metrics?: () => Promise<any>; info?: () => Promise<any> };
       voice?: { start?: () => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any> };

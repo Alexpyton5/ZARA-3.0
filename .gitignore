@@ -18,6 +18,7 @@ frontend/dist-frontend/
 frontend/dist-electron/
 frontend/dist-tests/
 frontend/release/
+frontend/.test-dist/
 build-sidecar/
 dist-sidecar/
 *.tsbuildinfo

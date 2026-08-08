@@ -109,6 +109,7 @@ class IPCHandler:
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self.user_memory = None      # initialized in async init
         self.project_memory = None   # initialized in async init
+        self.conversation_history = None  # Home transcript; separate from model memory
 
     def _set_supercerebro_state(self, active: bool) -> None:
         """Mirror Supercerebro state into the physical capability gate.
@@ -190,6 +191,19 @@ class IPCHandler:
             await self.memory.initialize()
         except Exception as exc:
             essential_errors.append(f"memory: {exc}")
+            traceback.print_exc()
+
+        # The Home transcript is local UI state, not semantic/episodic memory.
+        # Keeping it in its own bounded SQLite store prevents raw conversations
+        # from being injected into prompts or appearing in Memory Galaxy.
+        try:
+            from core.conversation_history import ConversationHistory
+
+            self.conversation_history = ConversationHistory()
+            await asyncio.to_thread(self.conversation_history.list_recent, 1)
+        except Exception as exc:
+            essential_errors.append(f"conversation_history: {exc}")
+            self.conversation_history = None
             traceback.print_exc()
 
         # User Memory Core (ZARA-USER-MEMORY-DESIGN-001): fatos semanticos
@@ -317,6 +331,7 @@ class IPCHandler:
 
     async def _on_gemini_live_turn(self, user_text: str, model_text: str) -> None:
         if user_text:
+            await self._append_conversation_message("user", user_text, "gemini_live")
             await self.send_event('message', {
                 'role': 'user',
                 'content': user_text,
@@ -324,6 +339,7 @@ class IPCHandler:
                 'timestamp': datetime.now().isoformat(),
             })
         if model_text:
+            await self._append_conversation_message("assistant", model_text, "gemini_live")
             await self.send_event('message', {
                 'role': 'assistant',
                 'content': model_text,
@@ -335,6 +351,7 @@ class IPCHandler:
 
     async def _on_gemini_live_error(self, error: str) -> None:
         print(f"[Gemini Live] {error}")
+        await self._append_conversation_message("system", f"Gemini Live: {error}", "gemini_live")
         await self.send_event('message', {
             'role': 'system',
             'content': f'Gemini Live: {error}',
@@ -372,7 +389,7 @@ class IPCHandler:
 
     async def _on_speech_recognized(self, text: str):  # type: ignore[return-value]
         """Callback when speech is fully recognized"""
-        print(f"[Voice] Recognized: {text}")
+        print(f"[Voice] Recognized speech ({len(text)} chars)")
         self._voice_level = 0.0
         await self.send_event('voice-level', {
             'level': 0.0,
@@ -381,6 +398,14 @@ class IPCHandler:
             'state': 'THINKING'
         })
         await self.send_event('state-change', 'THINKING')
+
+        await self._append_conversation_message("user", text, self.current_engine)
+        await self.send_event('message', {
+            'role': 'user',
+            'content': text,
+            'engine': self.current_engine,
+            'timestamp': datetime.now().isoformat(),
+        })
 
         # Process the recognized text through the message handler
         await self._process_voice_message(text)
@@ -401,6 +426,24 @@ class IPCHandler:
             return f"{ctx}\n\nMensagem de Alex:\n{text}"
         except Exception:
             return text
+
+    async def _append_conversation_message(
+        self, role: str, content: str, engine: str = ""
+    ) -> dict[str, Any] | None:
+        """Persist renderer history without making chat availability depend on disk I/O."""
+        if not self.conversation_history:
+            return None
+        try:
+            return await asyncio.to_thread(
+                self.conversation_history.append,
+                role,
+                str(content),
+                engine=str(engine or ""),
+            )
+        except Exception as exc:
+            # Never print raw message content; history is private local data.
+            print(f"[IPC] Conversation history write failed: {type(exc).__name__}")
+            return None
 
     async def _try_reminder_intent(self, text: str) -> str | None:
         """Deterministic reminder intent (ZARA-REMINDER-VOICE-BINDING-001).
@@ -431,6 +474,7 @@ class IPCHandler:
             # ZARA-REMINDER-VOICE-BINDING-001: intent determinístico primeiro.
             reminder_reply = await self._try_reminder_intent(text)
             if reminder_reply:
+                await self._append_conversation_message("assistant", reminder_reply, "reminder")
                 await self.send_event('message', {
                     'role': 'assistant',
                     'content': reminder_reply,
@@ -456,6 +500,8 @@ class IPCHandler:
             if self.memory:
                 await self.memory.add_conversation(text, str(response), engine_used)
 
+            await self._append_conversation_message("assistant", str(response), engine_used)
+
             # Send response as message event
             await self.send_event('message', {
                 'role': 'assistant',
@@ -470,6 +516,9 @@ class IPCHandler:
         except Exception as e:
             print(f"[Voice] Process message error: {e}")
             traceback.print_exc()
+            await self._append_conversation_message(
+                "system", "Não foi possível processar a mensagem de voz.", self.current_engine
+            )
             await self.send_event('message', {
                 'role': 'assistant',
                 'content': f"Erro ao processar: {e}",
@@ -646,6 +695,44 @@ class IPCHandler:
         except Exception as exc:
             await self.send_error(msg, f"project-memory-list: {exc}")
 
+    async def handle_conversation_history_list(self, msg: IPCMessage):
+        """Load the private Home transcript in chronological display order."""
+        if not self.conversation_history:
+            await self.send_error(msg, "Conversation history unavailable")
+            return
+        try:
+            requested_limit = int((msg.payload or {}).get("limit", 200))
+            messages = await asyncio.to_thread(
+                self.conversation_history.list_recent, requested_limit
+            )
+            await self.send_response(
+                msg.request_id,
+                {
+                    "messages": messages,
+                    "count": len(messages),
+                    "local_only": True,
+                },
+            )
+        except (TypeError, ValueError):
+            await self.send_error(msg, "Invalid conversation history limit")
+        except Exception as exc:
+            print(f"[IPC] Conversation history read failed: {type(exc).__name__}")
+            await self.send_error(msg, "Conversation history unavailable")
+
+    async def handle_conversation_history_clear(self, msg: IPCMessage):
+        """Permanently clear the Home transcript after the explicit UI action."""
+        if not self.conversation_history:
+            await self.send_error(msg, "Conversation history unavailable")
+            return
+        try:
+            deleted = await asyncio.to_thread(self.conversation_history.clear)
+            await self.send_response(
+                msg.request_id, {"success": True, "deleted": int(deleted)}
+            )
+        except Exception as exc:
+            print(f"[IPC] Conversation history clear failed: {type(exc).__name__}")
+            await self.send_error(msg, "Conversation history could not be cleared")
+
     async def _speak_response(self, text: str):
         """Speak response using TTS, loading the local model only on first use."""
         if not self.tts_manager:
@@ -725,6 +812,8 @@ class IPCHandler:
             'memory-user-forget': self.handle_memory_user_forget,
             'project-memory-get': self.handle_project_memory_get,
             'project-memory-list': self.handle_project_memory_list,
+            'conversation-history-list': self.handle_conversation_history_list,
+            'conversation-history-clear': self.handle_conversation_history_clear,
         }
 
         handler = handler_map.get(msg.type)
@@ -935,18 +1024,20 @@ class IPCHandler:
 
     async def handle_send_message(self, msg: IPCMessage):
         payload = msg.payload or {}
-        text = payload.get('text', '') or payload.get('message', '')
-        engine = payload.get('engine', self.current_engine)
+        text = str(payload.get('text', '') or payload.get('message', '')).strip()
+        engine = str(payload.get('engine', self.current_engine) or self.current_engine)
 
         if not text:
             await self.send_error(msg, "No text provided")
             return
 
-        print(f"[IPC] Processing message: {text[:50]}... (engine: {engine})")
+        print(f"[IPC] Processing message ({len(text)} chars, engine: {engine})")
+        await self._append_conversation_message("user", text, engine)
 
         # ZARA-REMINDER-VOICE-BINDING-001: texto e voz usam o MESMO intent handler.
         reminder_reply = await self._try_reminder_intent(text)
         if reminder_reply:
+            await self._append_conversation_message("assistant", reminder_reply, "reminder")
             await self.send_response(msg.request_id, {
                 'response': reminder_reply,
                 'engine': 'reminder',
@@ -973,6 +1064,8 @@ class IPCHandler:
             if self.memory:
                 await self.memory.add_conversation(text, response, engine_used)
 
+            await self._append_conversation_message("assistant", response, engine_used)
+
             await self.send_response(msg.request_id, {
                 'response': response,
                 'engine': engine_used
@@ -984,6 +1077,9 @@ class IPCHandler:
         except Exception as e:
             print(f"[IPC] Send message error: {e}")
             traceback.print_exc()
+            await self._append_conversation_message(
+                "system", "Backend indisponível para esta solicitação.", engine
+            )
             await self.send_error(msg, str(e))
 
     async def handle_interrupt(self, msg: IPCMessage):

@@ -25,6 +25,12 @@ const zaraAPI = {
     interrupt: () => ipcRenderer.invoke('interrupt'),
   },
 
+  // Private, local-only Home transcript
+  conversationHistory: {
+    list: (limit = 500) => ipcRenderer.invoke('conversation-history-list', { limit }),
+    clear: () => ipcRenderer.invoke('conversation-history-clear'),
+  },
+
   // Actions
   action: {
     execute: (action: string, params: Record<string, any>) => ipcRenderer.invoke('action-execute', action, params),

@@ -9,8 +9,8 @@ import { VoiceParticleSphere, VoiceState } from './VoiceParticleSphere';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
 import { ZaraLab } from './ZaraLab';
 import { normalizeReminderEvent } from '../../../reminderEvents';
+import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
 
-interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; timestamp: number; }
 interface Toast { id: number; text: string; kind?: 'ok' | 'warn' | 'error'; }
 interface EngineOption { id: string; name: string; provider: string; free_tier?: string; status?: string; }
 
@@ -36,6 +36,8 @@ export const ZaraControlCenter: React.FC = () => {
   const [supercerebro, setSupercerebro] = useState(false);
   const [galaxyOpen, setGalaxyOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [historyReady, setHistoryReady] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const [input, setInput] = useState('');
   const [metrics, setMetrics] = useState({ cpu: 0, memory: 0, network: 0, storage: 0 });
   const [backendOnline, setBackendOnline] = useState(false);
@@ -46,6 +48,8 @@ export const ZaraControlCenter: React.FC = () => {
   const [voiceLabel, setVoiceLabel] = useState('GEMINI LIVE • KORE');
   const logRef = useRef<HTMLDivElement>(null);
   const toastIdRef = useRef(0);
+  const historyReadyRef = useRef(false);
+  const pendingHistoryMessagesRef = useRef<ChatMessage[]>([]);
 
   const notify = useCallback((text: string, kind: Toast['kind'] = 'ok') => {
     toastIdRef.current += 1;
@@ -65,7 +69,12 @@ export const ZaraControlCenter: React.FC = () => {
     }));
     if (api.on?.message) offs.push(api.on.message((m) => {
       if (!m?.content) return;
-      setMessages((old) => [...old, { role: (m.role === 'user' ? 'user' : m.role === 'system' ? 'system' : 'assistant'), content: m.content, timestamp: Date.now() }]);
+      const incoming: ChatMessage = { role: (m.role === 'user' ? 'user' : m.role === 'system' ? 'system' : 'assistant'), content: m.content, timestamp: Date.now() };
+      if (!historyReadyRef.current) {
+        pendingHistoryMessagesRef.current.push(incoming);
+      } else {
+        setMessages((old) => [...old, incoming]);
+      }
     }));
     if (api.on?.metrics) offs.push(api.on.metrics((m) => {
       setMetrics((old) => ({
@@ -77,13 +86,34 @@ export const ZaraControlCenter: React.FC = () => {
     if (api.on?.reminderFired) offs.push(api.on.reminderFired((rawReminder) => {
       const reminder = normalizeReminderEvent(rawReminder);
       if (!reminder) return;
-      setMessages((old) => [...old, {
+      const incoming: ChatMessage = {
         role: 'assistant',
         content: `🔔 Lembrete: ${reminder.text}`,
         timestamp: Date.now(),
-      }]);
+      };
+      if (!historyReadyRef.current) {
+        pendingHistoryMessagesRef.current.push(incoming);
+      } else {
+        setMessages((old) => [...old, incoming]);
+      }
       notify(`🔔 ${reminder.text}`);
     }));
+
+    const completeHistoryLoad = (persisted: ChatMessage[]) => {
+      const pending = pendingHistoryMessagesRef.current;
+      pendingHistoryMessagesRef.current = [];
+      historyReadyRef.current = true;
+      setMessages([...persisted, ...pending]);
+      setHistoryReady(true);
+    };
+    const historyPromise = api.conversationHistory?.list?.(500);
+    if (historyPromise) {
+      historyPromise
+        .then((result: unknown) => completeHistoryLoad(normalizeHistoryResponse(result)))
+        .catch(() => completeHistoryLoad([]));
+    } else {
+      void Promise.resolve().then(() => completeHistoryLoad([]));
+    }
 
     const engineListPromise = api.engine?.list?.();
     if (engineListPromise) {
@@ -169,11 +199,18 @@ export const ZaraControlCenter: React.FC = () => {
     e?.preventDefault();
     const text = input.trim();
     if (!text || busy) return;
+    if (!historyReady) {
+      notify('A conversa ainda está sendo carregada.', 'warn');
+      return;
+    }
     const userMsg: ChatMessage = { role: 'user', content: text, timestamp: Date.now() };
     setMessages((old) => [...old, userMsg]);
     setInput(''); setBusy(true); setState('THINKING');
     try {
-      const history = [...messages, userMsg].slice(-16).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
+      const history = [...messages, userMsg]
+        .filter((m) => m.role !== 'system')
+        .slice(-16)
+        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
       const res: any = await window.zaraIPC?.message?.send?.({ message: text, engine: selectedEngine, history });
       const content = String(res?.content ?? res?.response ?? res?.message ?? res ?? '').trim();
       if (content) setMessages((old) => [...old, { role: 'assistant', content, timestamp: Date.now() }]);
@@ -181,6 +218,24 @@ export const ZaraControlCenter: React.FC = () => {
       setMessages((old) => [...old, { role: 'system', content: 'Backend indisponível para esta solicitação.', timestamp: Date.now() }]);
     } finally {
       setBusy(false); setState(voiceOn ? 'LISTENING' : 'STANDBY');
+    }
+  };
+
+  const clearConversationHistory = async () => {
+    if (clearingHistory || busy || voiceOn || !historyReady) return;
+    if (!window.confirm('Apagar definitivamente o histórico de conversas desta ZARA?')) return;
+    setClearingHistory(true);
+    try {
+      const clear = window.zaraIPC?.conversationHistory?.clear;
+      if (!clear) throw new Error('IPC de histórico indisponível');
+      const result: any = await clear();
+      if (!result?.success) throw new Error('Limpeza não confirmada');
+      setMessages([]);
+      notify('Histórico de conversas apagado.');
+    } catch {
+      notify('Não foi possível apagar o histórico.', 'error');
+    } finally {
+      setClearingHistory(false);
     }
   };
 
@@ -282,15 +337,15 @@ export const ZaraControlCenter: React.FC = () => {
         <form className="command-bar" onSubmit={send}>
           <button type="button" className={`mic ${voiceOn ? 'active' : ''}`} onClick={toggleVoice} aria-label="Modo voz"><Mic size={20}/></button>
           <input className="zara-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message ZARA..."/>
-          <button type="submit" className="send" disabled={busy || !input.trim()} aria-label="Enviar">{busy ? <LoaderCircle className="spin" size={19}/> : <Send size={21}/>}</button>
+          <button type="submit" className="send" disabled={busy || !historyReady || !input.trim()} aria-label="Enviar">{busy ? <LoaderCircle className="spin" size={19}/> : <Send size={21}/>}</button>
         </form>
 
         <section className="conversation-card">
-          <header><span>CONVERSATION LOG</span><button onClick={() => setMessages([])}><Trash2 size={13}/> CLEAR</button></header>
+          <header><span>CONVERSATION LOG</span><button type="button" disabled={clearingHistory || busy || voiceOn || !historyReady} onClick={clearConversationHistory}><Trash2 size={13}/> {clearingHistory ? 'CLEARING...' : 'CLEAR'}</button></header>
           <div className="conversation-scroll" ref={logRef}>
-            {messages.length === 0 && <div className="empty-log">Nenhuma conversa nesta sessão.</div>}
+            {messages.length === 0 && <div className="empty-log">{historyReady ? 'Nenhuma conversa salva.' : 'Carregando conversas...'}</div>}
             {messages.map((m, i) => (
-              <article className={`message-row ${m.role}`} key={`${m.timestamp}-${i}`}>
+              <article className={`message-row ${m.role}`} key={m.id || `${m.timestamp}-${i}`}>
                 <div className="message-icon">{m.role === 'assistant' ? <img src="./zara-symbol.png"/> : m.role === 'system' ? <Activity size={16}/> : <span>A</span>}</div>
                 <div className="message-body"><div><strong>{m.role === 'assistant' ? 'ZARA' : m.role === 'system' ? 'SYSTEM' : 'You'}</strong><time>{timeLabel(m.timestamp)}</time></div><p>{m.content}</p></div>
               </article>

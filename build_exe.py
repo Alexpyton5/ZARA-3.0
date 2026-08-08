@@ -66,6 +66,7 @@ HIDDEN_IMPORTS = [
     "core.reminder_engine",
     "core.reminder_intent",
     "core.url_security",
+    "core.realtime_web",
     # Memory
     "memory.memory_manager",
     "memory.episodic_memory",

@@ -4,6 +4,7 @@ Web Action — Web search and HTTP requests.
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from urllib.parse import urljoin
@@ -11,6 +12,8 @@ from urllib.parse import urljoin
 import httpx
 
 from core.action_registry import ActionResult, action, get_registry
+from core.paths import data_dir
+from core.realtime_web import RealtimeWebResearch, SQLiteWebCache
 from core.url_security import (
     URLSecurityError,
     validate_connected_peer,
@@ -270,7 +273,10 @@ def web_fetch_action(
 
         with httpx.Client(timeout=safe_timeout, follow_redirects=False, trust_env=False) as client:
             with _public_stream(client, safe_method, url, headers=safe_headers) as resp:
-                resp.raise_for_status()
+                # A conditional cache revalidation returns no body by design.
+                # Preserve its status and validators for the research layer.
+                if resp.status_code != 304:
+                    resp.raise_for_status()
                 raw_content, truncated = _read_limited_bytes(resp, safe_limit)
                 encoding = resp.encoding or "utf-8"
                 content_text = raw_content.decode(encoding, errors="replace")
@@ -292,6 +298,78 @@ def web_fetch_action(
         )
     except Exception as e:
         return ActionResult(success=False, error=str(e))
+
+
+_realtime_research_lock = threading.Lock()
+_realtime_researcher: RealtimeWebResearch | None = None
+
+
+def _get_realtime_researcher() -> RealtimeWebResearch:
+    """Create the persistent default researcher only when the action is used."""
+
+    global _realtime_researcher
+    if _realtime_researcher is None:
+        with _realtime_research_lock:
+            if _realtime_researcher is None:
+                cache = SQLiteWebCache(data_dir() / "realtime_web_cache.sqlite3")
+                _realtime_researcher = RealtimeWebResearch(cache=cache)
+    return _realtime_researcher
+
+
+@action(
+    name="web_research",
+    category="web",
+    description="Collect current web sources with cached, verifiable citations",
+    risk="LOW",
+    capability="READ_ONLY",
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Research query"},
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum cited sources (default: 5)",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 20,
+            },
+            "region": {
+                "type": "string",
+                "description": "Search region code (default: wt-wt)",
+                "default": "wt-wt",
+            },
+            "force_refresh": {
+                "type": "boolean",
+                "description": "Revalidate cached sources immediately",
+                "default": False,
+            },
+        },
+        "required": ["query"],
+    },
+)
+def web_research_action(
+    query: str,
+    max_results: int = 5,
+    region: str = "wt-wt",
+    force_refresh: bool = False,
+) -> ActionResult:
+    """Collect live sources without generating or inferring an answer."""
+
+    try:
+        result = _get_realtime_researcher().research(
+            query,
+            max_results=max_results,
+            region=region,
+            force_refresh=force_refresh,
+        )
+        payload = result.to_dict(include_content=True)
+        return ActionResult(
+            success=True,
+            output=result.to_json(include_content=False),
+            data=payload,
+        )
+    except Exception as exc:
+        return ActionResult(success=False, error=str(exc))
 
 
 @action(

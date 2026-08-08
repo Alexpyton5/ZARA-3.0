@@ -86,4 +86,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # PyInstaller replaces this function at runtime so spawned workers execute
+    # multiprocessing.spawn_main() instead of re-entering ZARA's IPC loop.
+    # In normal source execution the standard-library implementation is a no-op.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     sys.exit(main())

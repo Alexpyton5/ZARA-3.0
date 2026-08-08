@@ -3,6 +3,8 @@
 This module deliberately stops at source collection.  It does not call an LLM,
 compose an answer, or infer publication dates.  Callers receive numbered source
 records whose URL and content digest can be verified locally.
+
+RSS/Atom discovery is intentionally deferred to a later ingestion phase.
 """
 from __future__ import annotations
 
@@ -10,26 +12,24 @@ import hashlib
 import json
 import sqlite3
 import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 DEFAULT_CACHE_TTL_SECONDS = 15 * 60
+DEFAULT_CACHE_MAX_ENTRIES = 500
 DEFAULT_MAX_RESULTS = 5
-_TRACKING_QUERY_KEYS = frozenset(
-    {
-        "fbclid",
-        "gclid",
-        "dclid",
-        "msclkid",
-        "mc_cid",
-        "mc_eid",
-        "ref_src",
-    }
-)
+MAX_RESEARCH_RESULTS = 10
+MAX_SOURCE_BYTES = 512 * 1024
+MAX_TITLE_CHARS = 512
+MAX_SNIPPET_CHARS = 2_000
+MAX_WARNING_CHARS = 1_000
+MAX_TOTAL_TIMEOUT_SECONDS = 50.0
+MAX_REQUEST_TIMEOUT_SECONDS = 8.0
 
 
 def utc_now() -> datetime:
@@ -93,21 +93,27 @@ def canonicalize_url(url: str) -> str:
 
     # Preserve URL path semantics while normalizing escaping and an empty root.
     path = quote(parts.path or "/", safe="/%:@!$&'()*+,;=-._~")
-    query_items = []
-    for key, value in parse_qsl(parts.query, keep_blank_values=True):
-        normalized_key = key.casefold()
-        if normalized_key.startswith("utm_") or normalized_key in _TRACKING_QUERY_KEYS:
-            continue
-        query_items.append((key, value))
-    query_items.sort(key=lambda item: (item[0], item[1]))
-    query = urlencode(query_items, doseq=True)
-    return urlunsplit((scheme, netloc, path, query, ""))
+    # Query order and every parameter are semantic for some signed URLs.  The
+    # canonical value is only a cache/dedup key; it must not invalidate a
+    # signature or collapse two potentially different resources.
+    return urlunsplit((scheme, netloc, path, parts.query, ""))
 
 
 def content_sha256(content: str) -> str:
     """Return the lowercase SHA-256 hex digest for source content."""
 
     return hashlib.sha256(str(content).encode("utf-8")).hexdigest()
+
+
+def _limit_utf8(value: str, max_bytes: int) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore")
+
+
+def _bounded(value: Any, max_chars: int) -> str:
+    return str(value or "")[:max_chars]
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +132,7 @@ class SourceRecord:
     etag: str | None = None
     last_modified: str | None = None
     from_cache: bool = False
+    is_excerpt: bool = False
 
     def __post_init__(self) -> None:
         if self.citation_number < 0:
@@ -148,6 +155,10 @@ class SourceRecord:
     def citation(self) -> str:
         return f"[{self.citation_number}]"
 
+    @property
+    def content_size_bytes(self) -> int:
+        return len(self.content.encode("utf-8"))
+
     def to_dict(self, *, include_content: bool = True) -> dict[str, Any]:
         data: dict[str, Any] = {
             "citation_number": self.citation_number,
@@ -157,6 +168,7 @@ class SourceRecord:
             "title": self.title,
             "snippet": self.snippet,
             "content_hash": self.content_hash,
+            "content_size_bytes": self.content_size_bytes,
             "retrieved_at": _datetime_to_text(self.retrieved_at),
             "published_at": (
                 _datetime_to_text(self.published_at) if self.published_at is not None else None
@@ -164,6 +176,7 @@ class SourceRecord:
             "etag": self.etag,
             "last_modified": self.last_modified,
             "from_cache": self.from_cache,
+            "is_excerpt": self.is_excerpt,
         }
         if include_content:
             data["content"] = self.content
@@ -198,12 +211,14 @@ class ResearchResult:
                 "url": source.url,
                 "canonical_url": source.canonical_url,
                 "content_hash": source.content_hash,
+                "content_size_bytes": source.content_size_bytes,
                 "retrieved_at": _datetime_to_text(source.retrieved_at),
                 "published_at": (
                     _datetime_to_text(source.published_at)
                     if source.published_at is not None
                     else None
                 ),
+                "is_excerpt": source.is_excerpt,
             }
             for source in self.sources
         )
@@ -280,10 +295,14 @@ class SQLiteWebCache:
         database: str | Path | sqlite3.Connection = ":memory:",
         *,
         ttl_seconds: int | float = DEFAULT_CACHE_TTL_SECONDS,
+        max_entries: int = DEFAULT_CACHE_MAX_ENTRIES,
     ) -> None:
         if float(ttl_seconds) < 0:
             raise ValueError("ttl_seconds cannot be negative")
+        if int(max_entries) < 1:
+            raise ValueError("max_entries must be positive")
         self.ttl_seconds = float(ttl_seconds)
+        self.max_entries = int(max_entries)
         self._lock = threading.RLock()
         self._owns_connection = not isinstance(database, sqlite3.Connection)
         if isinstance(database, sqlite3.Connection):
@@ -310,10 +329,20 @@ class SQLiteWebCache:
                     retrieved_at TEXT NOT NULL,
                     published_at TEXT,
                     etag TEXT,
-                    last_modified TEXT
+                    last_modified TEXT,
+                    is_excerpt INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
+            columns = {
+                str(row[1])
+                for row in self._connection.execute("PRAGMA table_info(realtime_web_cache)")
+            }
+            if "is_excerpt" not in columns:
+                self._connection.execute(
+                    "ALTER TABLE realtime_web_cache "
+                    "ADD COLUMN is_excerpt INTEGER NOT NULL DEFAULT 0"
+                )
             self._connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_realtime_web_hash "
                 "ON realtime_web_cache(content_hash)"
@@ -345,8 +374,8 @@ class SQLiteWebCache:
                 """
                 INSERT INTO realtime_web_cache (
                     canonical_url, url, title, snippet, content, content_hash,
-                    retrieved_at, published_at, etag, last_modified
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    retrieved_at, published_at, etag, last_modified, is_excerpt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(canonical_url) DO UPDATE SET
                     url = excluded.url,
                     title = excluded.title,
@@ -356,7 +385,8 @@ class SQLiteWebCache:
                     retrieved_at = excluded.retrieved_at,
                     published_at = excluded.published_at,
                     etag = excluded.etag,
-                    last_modified = excluded.last_modified
+                    last_modified = excluded.last_modified,
+                    is_excerpt = excluded.is_excerpt
                 """,
                 (
                     record.canonical_url,
@@ -373,8 +403,26 @@ class SQLiteWebCache:
                     ),
                     record.etag,
                     record.last_modified,
+                    int(record.is_excerpt),
                 ),
             )
+            excess = self._connection.execute(
+                "SELECT MAX(COUNT(*) - ?, 0) FROM realtime_web_cache",
+                (self.max_entries,),
+            ).fetchone()[0]
+            if excess:
+                self._connection.execute(
+                    """
+                    DELETE FROM realtime_web_cache
+                    WHERE canonical_url IN (
+                        SELECT canonical_url
+                        FROM realtime_web_cache
+                        ORDER BY julianday(retrieved_at) ASC, canonical_url ASC
+                        LIMIT ?
+                    )
+                    """,
+                    (excess,),
+                )
 
     def revalidate(
         self,
@@ -430,6 +478,7 @@ class SQLiteWebCache:
             etag=row["etag"],
             last_modified=row["last_modified"],
             from_cache=True,
+            is_excerpt=bool(row["is_excerpt"]),
         )
 
 
@@ -455,6 +504,9 @@ class RealtimeWebResearch:
         fetch_action: FetchCallable | None = None,
         cache: SQLiteWebCache | None = None,
         clock: ClockCallable = utc_now,
+        monotonic: Callable[[], float] = time.monotonic,
+        total_timeout_seconds: int | float = MAX_TOTAL_TIMEOUT_SECONDS,
+        request_timeout_seconds: int | float = MAX_REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         if search_action is None or fetch_action is None:
             from core.actions.web import web_fetch_action, web_search_action
@@ -465,6 +517,17 @@ class RealtimeWebResearch:
         self.fetch_action = fetch_action
         self.cache = cache or SQLiteWebCache()
         self.clock = clock
+        if float(total_timeout_seconds) <= 0 or float(request_timeout_seconds) <= 0:
+            raise ValueError("research timeouts must be positive")
+        self.monotonic = monotonic
+        self.total_timeout_seconds = min(
+            float(total_timeout_seconds),
+            MAX_TOTAL_TIMEOUT_SECONDS,
+        )
+        self.request_timeout_seconds = min(
+            float(request_timeout_seconds),
+            MAX_REQUEST_TIMEOUT_SECONDS,
+        )
 
     def research(
         self,
@@ -477,12 +540,14 @@ class RealtimeWebResearch:
         normalized_query = str(query or "").strip()
         if not normalized_query:
             raise ValueError("query cannot be empty")
-        limit = max(1, min(int(max_results), 20))
+        limit = max(1, min(int(max_results), MAX_RESEARCH_RESULTS))
         started_at = _require_utc(self.clock(), "clock result")
+        deadline = self.monotonic() + self.total_timeout_seconds
         search_result = self.search_action(
             normalized_query,
             max_results=limit,
             region=region,
+            timeout=self._network_timeout(deadline),
         )
         if not search_result.success:
             raise RuntimeError(search_result.error or "Web search failed")
@@ -496,31 +561,46 @@ class RealtimeWebResearch:
         for candidate in candidates:
             if len(sources) >= limit:
                 break
+            if self.monotonic() >= deadline:
+                warnings.append("Research deadline reached before all sources were fetched")
+                break
             raw_url = str(candidate.get("url") or "").strip()
             try:
-                requested_url = canonicalize_url(raw_url)
+                canonical_url = canonicalize_url(raw_url)
             except ValueError as exc:
-                warnings.append(f"Skipped invalid URL {raw_url!r}: {exc}")
+                warnings.append(
+                    _bounded(f"Skipped invalid URL {raw_url!r}: {exc}", MAX_WARNING_CHARS)
+                )
                 continue
-            if requested_url in seen_urls:
+            if canonical_url in seen_urls:
                 continue
 
             try:
                 source = self._get_source(
                     candidate,
-                    requested_url=requested_url,
+                    request_url=raw_url,
+                    cache_key=canonical_url,
                     now=_require_utc(self.clock(), "clock result"),
                     force_refresh=force_refresh,
+                    deadline=deadline,
                 )
             except Exception as exc:
-                warnings.append(f"Failed to fetch {requested_url}: {exc}")
+                warnings.append(
+                    _bounded(f"Failed to fetch {canonical_url}: {exc}", MAX_WARNING_CHARS)
+                )
                 continue
 
             if source.canonical_url in seen_urls or source.content_hash in seen_hashes:
                 continue
             seen_urls.add(source.canonical_url)
             seen_hashes.add(source.content_hash)
-            sources.append(replace(source, citation_number=len(sources) + 1))
+            cited_source = replace(source, citation_number=len(sources) + 1)
+            sources.append(cited_source)
+            if cited_source.is_excerpt:
+                warnings.append(
+                    f"{cited_source.citation} is an excerpt capped at "
+                    f"{cited_source.content_size_bytes} bytes"
+                )
 
         return ResearchResult(
             query=normalized_query,
@@ -547,11 +627,13 @@ class RealtimeWebResearch:
         self,
         candidate: Mapping[str, Any],
         *,
-        requested_url: str,
+        request_url: str,
+        cache_key: str,
         now: datetime,
         force_refresh: bool,
+        deadline: float,
     ) -> SourceRecord:
-        cached = self.cache.lookup(requested_url, now=now)
+        cached = self.cache.lookup(cache_key, now=now)
         if cached is not None and cached.is_fresh and not force_refresh:
             return replace(cached.record, citation_number=0, from_cache=True)
 
@@ -562,7 +644,12 @@ class RealtimeWebResearch:
             if cached.record.last_modified:
                 request_headers["If-Modified-Since"] = cached.record.last_modified
 
-        fetch_result = self.fetch_action(requested_url, headers=request_headers or None)
+        fetch_result = self.fetch_action(
+            request_url,
+            headers=request_headers or None,
+            max_size=MAX_SOURCE_BYTES,
+            timeout=self._network_timeout(deadline),
+        )
         status = self._fetch_status(fetch_result)
         response_headers = self._fetch_headers(fetch_result)
         if status == 304 and cached is not None:
@@ -572,19 +659,34 @@ class RealtimeWebResearch:
                 etag=self._header(response_headers, "etag"),
                 last_modified=self._header(response_headers, "last-modified"),
             )
+        if status == 304:
+            # A validator-free 304 has no representation to reuse.  Retry once
+            # as an unconditional GET and never create an empty cache record.
+            fetch_result = self.fetch_action(
+                request_url,
+                headers=None,
+                max_size=MAX_SOURCE_BYTES,
+                timeout=self._network_timeout(deadline),
+            )
+            status = self._fetch_status(fetch_result)
+            response_headers = self._fetch_headers(fetch_result)
+            if status == 304:
+                raise RuntimeError("Server returned 304 without a cached representation")
         if not fetch_result.success:
             raise RuntimeError(fetch_result.error or "Web fetch failed")
 
         response_data = fetch_result.data if isinstance(fetch_result.data, Mapping) else {}
-        response_url = str(response_data.get("url") or requested_url)
+        response_url = str(response_data.get("url") or request_url)
         canonical_url = canonicalize_url(response_url)
-        content = str(fetch_result.output or "")
+        raw_content = str(fetch_result.output or "")
+        hard_truncated = len(raw_content.encode("utf-8")) > MAX_SOURCE_BYTES
+        content = _limit_utf8(raw_content, MAX_SOURCE_BYTES)
         record = SourceRecord(
             citation_number=0,
             url=response_url,
             canonical_url=canonical_url,
-            title=str(candidate.get("title") or canonical_url),
-            snippet=str(candidate.get("snippet") or ""),
+            title=_bounded(candidate.get("title") or canonical_url, MAX_TITLE_CHARS),
+            snippet=_bounded(candidate.get("snippet"), MAX_SNIPPET_CHARS),
             content=content,
             content_hash=content_sha256(content),
             retrieved_at=now,
@@ -593,9 +695,16 @@ class RealtimeWebResearch:
             etag=self._header(response_headers, "etag"),
             last_modified=self._header(response_headers, "last-modified"),
             from_cache=False,
+            is_excerpt=hard_truncated or bool(response_data.get("truncated")),
         )
         self.cache.put(record)
         return record
+
+    def _network_timeout(self, deadline: float) -> float:
+        remaining = deadline - self.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Research deadline reached")
+        return min(self.request_timeout_seconds, remaining)
 
     @staticmethod
     def _fetch_status(result: _ActionResultLike) -> int | None:
@@ -629,8 +738,15 @@ SQLiteResearchCache = SQLiteWebCache
 
 __all__ = [
     "CacheLookup",
+    "DEFAULT_CACHE_MAX_ENTRIES",
     "DEFAULT_CACHE_TTL_SECONDS",
     "DEFAULT_MAX_RESULTS",
+    "MAX_RESEARCH_RESULTS",
+    "MAX_REQUEST_TIMEOUT_SECONDS",
+    "MAX_SNIPPET_CHARS",
+    "MAX_SOURCE_BYTES",
+    "MAX_TITLE_CHARS",
+    "MAX_TOTAL_TIMEOUT_SECONDS",
     "RealtimeWebResearch",
     "ResearchResult",
     "SQLiteResearchCache",

@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 import httpx
 
@@ -65,6 +66,7 @@ def _public_stream(
     headers: dict[str, str] | None = None,
     content: str | bytes | None = None,
     form_data: dict[str, str] | None = None,
+    deadline: float | None = None,
 ) -> Iterator[httpx.Response]:
     """Open a streamed response while validating DNS, peers and every redirect."""
 
@@ -74,13 +76,19 @@ def _public_stream(
     request_form = form_data
 
     for redirect_count in range(MAX_REDIRECTS + 1):
-        request = client.build_request(
-            request_method,
-            current.url,
-            headers=headers,
-            content=request_content,
-            data=request_form,
-        )
+        timeout: float | None = None
+        if deadline is not None:
+            timeout = deadline - time.monotonic()
+            if timeout <= 0:
+                raise TimeoutError("Web request deadline reached")
+        request_kwargs = {
+            "headers": headers,
+            "content": request_content,
+            "data": request_form,
+        }
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        request = client.build_request(request_method, current.url, **request_kwargs)
         response = client.send(request, stream=True, follow_redirects=False)
         try:
             validate_connected_peer(response)
@@ -111,14 +119,28 @@ def _public_stream(
             request_form = None
 
 
-def _read_limited_bytes(response: httpx.Response, limit: int) -> tuple[bytes, bool]:
+def _read_limited_bytes(
+    response: httpx.Response,
+    limit: int,
+    *,
+    deadline: float | None = None,
+) -> tuple[bytes, bool]:
     """Read at most ``limit`` bytes plus one sentinel byte from a stream."""
 
     if limit < 1:
         raise ValueError("Response byte limit must be positive")
     buffer = bytearray()
     sentinel_limit = limit + 1
-    for chunk in response.iter_bytes():
+    iterator = iter(response.iter_bytes())
+    while True:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("Web response deadline reached")
+        try:
+            chunk = next(iterator)
+        except StopIteration:
+            break
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("Web response deadline reached")
         if not chunk:
             continue
         remaining = sentinel_limit - len(buffer)
@@ -139,6 +161,20 @@ def _public_response_headers(response: httpx.Response) -> dict[str, str]:
     }
 
 
+def _normalize_ddg_result_url(href: str) -> str:
+    """Resolve scheme-relative links and unwrap DuckDuckGo's ``uddg`` redirect."""
+
+    resolved = urljoin(DDG_HTML_URL, str(href or "").strip())
+    parts = urlsplit(resolved)
+    host = (parts.hostname or "").casefold().rstrip(".")
+    if host in {"duckduckgo.com", "www.duckduckgo.com", "html.duckduckgo.com"}:
+        target = parse_qs(parts.query).get("uddg", [""])[0].strip()
+        target_parts = urlsplit(target)
+        if target_parts.scheme.casefold() in {"http", "https"} and target_parts.hostname:
+            return target
+    return resolved
+
+
 @action(
     name="web_search",
     category="web",
@@ -149,11 +185,23 @@ def _public_response_headers(response: httpx.Response) -> dict[str, str]:
             "query": {"type": "string", "description": "Search query"},
             "max_results": {"type": "integer", "description": "Max results (default: 10)", "default": 10},
             "region": {"type": "string", "description": "Region code (default: wt-wt)", "default": "wt-wt"},
+            "timeout": {
+                "type": "number",
+                "description": "Total search deadline in seconds",
+                "default": 30,
+                "minimum": 0.1,
+                "maximum": 30,
+            },
         },
         "required": ["query"],
     },
 )
-def web_search_action(query: str, max_results: int = 10, region: str = "wt-wt") -> ActionResult:
+def web_search_action(
+    query: str,
+    max_results: int = 10,
+    region: str = "wt-wt",
+    timeout: float = 30,
+) -> ActionResult:
     """Search web via DuckDuckGo HTML."""
     try:
         max_results = max(1, min(int(max_results), 50))
@@ -164,17 +212,24 @@ def web_search_action(query: str, max_results: int = 10, region: str = "wt-wt") 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
+        safe_timeout = max(0.1, min(float(timeout), 30.0))
+        deadline = time.monotonic() + safe_timeout
 
-        with httpx.Client(timeout=30.0, follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(timeout=safe_timeout, follow_redirects=False, trust_env=False) as client:
             with _public_stream(
                 client,
                 "POST",
                 DDG_HTML_URL,
                 headers=headers,
                 form_data=params,
+                deadline=deadline,
             ) as resp:
                 resp.raise_for_status()
-                raw_html, truncated = _read_limited_bytes(resp, MAX_SEARCH_BYTES)
+                raw_html, truncated = _read_limited_bytes(
+                    resp,
+                    MAX_SEARCH_BYTES,
+                    deadline=deadline,
+                )
                 if truncated:
                     raise RuntimeError("Search response exceeded the safe size limit")
                 html = raw_html.decode(resp.encoding or "utf-8", errors="replace")
@@ -193,12 +248,13 @@ def web_search_action(query: str, max_results: int = 10, region: str = "wt-wt") 
 
             def handle_starttag(self, tag, attrs):
                 attrs = dict(attrs)
-                if tag == "a" and attrs.get("class") == "result__snippet":
+                classes = set(attrs.get("class", "").split())
+                if tag == "a" and "result__snippet" in classes:
                     self._in_snippet = True
-                elif tag == "a" and attrs.get("class") == "result__url":
+                elif tag == "a" and classes.intersection({"result__a", "result__url"}):
                     self._in_title = True
-                    self._current["url"] = attrs.get("href", "")
-                elif tag == "div" and attrs.get("class") == "result__snippet":
+                    self._current["url"] = _normalize_ddg_result_url(attrs.get("href", ""))
+                elif tag == "div" and "result__snippet" in classes:
                     self._in_snippet = True
 
             def handle_endtag(self, tag):
@@ -246,7 +302,7 @@ def web_search_action(query: str, max_results: int = 10, region: str = "wt-wt") 
             "url": {"type": "string", "description": "URL to fetch"},
             "method": {"type": "string", "description": "Read-only HTTP method", "default": "GET", "enum": ["GET", "HEAD"]},
             "headers": {"type": "object", "description": "Safe read-only request headers"},
-            "timeout": {"type": "integer", "description": "Timeout in seconds (default: 30)", "default": 30},
+            "timeout": {"type": "number", "description": "Timeout in seconds (default: 30)", "default": 30},
             "max_size": {"type": "integer", "description": "Max response size in bytes (hard maximum: 5MB)", "default": 5242880, "minimum": 1, "maximum": 5242880},
         },
         "required": ["url"],
@@ -257,7 +313,7 @@ def web_fetch_action(
     method: str = "GET",
     headers: dict = None,
     data: str = None,
-    timeout: int = 30,
+    timeout: float = 30,
     max_size: int = 5242880,
 ) -> ActionResult:
     """Fetch a web page."""
@@ -268,16 +324,27 @@ def web_fetch_action(
         if data not in (None, "", b""):
             raise URLSecurityError("Read-only web_fetch does not accept a request body")
         safe_headers = _sanitize_fetch_headers(headers)
-        safe_timeout = max(1, min(int(timeout), 120))
+        safe_timeout = max(0.1, min(float(timeout), 120.0))
         safe_limit = max(1, min(int(max_size), MAX_FETCH_BYTES))
+        deadline = time.monotonic() + safe_timeout
 
         with httpx.Client(timeout=safe_timeout, follow_redirects=False, trust_env=False) as client:
-            with _public_stream(client, safe_method, url, headers=safe_headers) as resp:
+            with _public_stream(
+                client,
+                safe_method,
+                url,
+                headers=safe_headers,
+                deadline=deadline,
+            ) as resp:
                 # A conditional cache revalidation returns no body by design.
                 # Preserve its status and validators for the research layer.
                 if resp.status_code != 304:
                     resp.raise_for_status()
-                raw_content, truncated = _read_limited_bytes(resp, safe_limit)
+                raw_content, truncated = _read_limited_bytes(
+                    resp,
+                    safe_limit,
+                    deadline=deadline,
+                )
                 encoding = resp.encoding or "utf-8"
                 content_text = raw_content.decode(encoding, errors="replace")
                 if truncated:
@@ -331,7 +398,7 @@ def _get_realtime_researcher() -> RealtimeWebResearch:
                 "description": "Maximum cited sources (default: 5)",
                 "default": 5,
                 "minimum": 1,
-                "maximum": 20,
+                "maximum": 10,
             },
             "region": {
                 "type": "string",
@@ -362,7 +429,8 @@ def web_research_action(
             region=region,
             force_refresh=force_refresh,
         )
-        payload = result.to_dict(include_content=True)
+        # IPC receives provenance and hashes, not up to megabytes of raw pages.
+        payload = result.to_dict(include_content=False)
         return ActionResult(
             success=True,
             output=result.to_json(include_content=False),

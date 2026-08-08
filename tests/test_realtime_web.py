@@ -10,6 +10,7 @@ import pytest
 import core.actions.web as web_actions
 from core.action_registry import ActionResult, get_registry
 from core.realtime_web import (
+    MAX_SOURCE_BYTES,
     RealtimeWebResearch,
     ResearchResult,
     SourceRecord,
@@ -53,12 +54,12 @@ def test_source_requires_aware_utc_retrieval_time() -> None:
     assert source.retrieved_at.tzinfo is UTC
 
 
-def test_canonical_url_removes_tracking_fragment_and_normalizes_query() -> None:
+def test_canonical_url_preserves_query_semantics_while_normalizing_origin() -> None:
     canonical = canonicalize_url(
         " HTTPS://Example.COM.:443/a%20b?utm_source=test&b=2&a=1&fbclid=x#fragment "
     )
 
-    assert canonical == "https://example.com/a%20b?a=1&b=2"
+    assert canonical == "https://example.com/a%20b?utm_source=test&b=2&a=1&fbclid=x"
 
 
 def test_sqlite_cache_is_injectable_and_obeys_ttl() -> None:
@@ -80,6 +81,20 @@ def test_sqlite_cache_is_injectable_and_obeys_ttl() -> None:
     assert connection.execute("SELECT COUNT(*) FROM realtime_web_cache").fetchone()[0] == 1
 
 
+def test_sqlite_cache_evicts_oldest_entries_deterministically() -> None:
+    now = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+    cache = SQLiteWebCache(max_entries=2)
+
+    # Equal timestamps deliberately exercise the canonical-URL tie breaker.
+    cache.put(_source(retrieved_at=now, url="https://example.com/b"))
+    cache.put(_source(retrieved_at=now, url="https://example.com/a"))
+    cache.put(_source(retrieved_at=now + timedelta(seconds=1), url="https://example.com/c"))
+
+    assert cache.lookup("https://example.com/a", now=now) is None
+    assert cache.lookup("https://example.com/b", now=now) is not None
+    assert cache.lookup("https://example.com/c", now=now) is not None
+
+
 def test_research_revalidates_stale_cache_with_http_validators() -> None:
     current_time = [datetime(2026, 8, 8, 12, 0, tzinfo=UTC)]
     fetch_calls: list[dict | None] = []
@@ -97,7 +112,15 @@ def test_research_revalidates_stale_cache_with_http_validators() -> None:
             }
         )
 
-    def fetch(url: str, *, headers: dict | None = None) -> ActionResult:
+    def fetch(
+        url: str,
+        *,
+        headers: dict | None = None,
+        max_size: int,
+        timeout: float,
+    ) -> ActionResult:
+        assert max_size == MAX_SOURCE_BYTES
+        assert 0 < timeout <= 8
         fetch_calls.append(headers)
         if len(fetch_calls) == 1:
             return _result(
@@ -156,7 +179,7 @@ def test_research_deduplicates_canonical_urls_and_content_hashes() -> None:
         return _result(
             data={
                 "results": [
-                    {"url": "https://EXAMPLE.com/a?utm_source=x", "title": "A"},
+                    {"url": "https://EXAMPLE.com:443/a#fragment", "title": "A"},
                     {"url": "https://example.com/a", "title": "A duplicate"},
                     {"url": "https://example.org/copy", "title": "Content duplicate"},
                     {
@@ -168,8 +191,16 @@ def test_research_deduplicates_canonical_urls_and_content_hashes() -> None:
             }
         )
 
-    def fetch(url: str, *, headers: dict | None = None) -> ActionResult:
+    def fetch(
+        url: str,
+        *,
+        headers: dict | None = None,
+        max_size: int,
+        timeout: float,
+    ) -> ActionResult:
         assert headers is None
+        assert max_size == MAX_SOURCE_BYTES
+        assert 0 < timeout <= 8
         fetched.append(url)
         body = "same body" if "unique" not in url else "different body"
         return _result(output=body, data={"url": url, "status": 200, "headers": {}})
@@ -182,7 +213,7 @@ def test_research_deduplicates_canonical_urls_and_content_hashes() -> None:
     ).research("deduplication", max_results=10)
 
     assert fetched == [
-        "https://example.com/a",
+        "https://EXAMPLE.com:443/a#fragment",
         "https://example.org/copy",
         "https://example.net/unique",
     ]
@@ -193,9 +224,134 @@ def test_research_deduplicates_canonical_urls_and_content_hashes() -> None:
     assert result.verify_citations() is True
     assert result.verify_citation(
         1,
-        url="https://example.com/a?utm_campaign=ignored",
+        url="https://example.com/a",
         content_hash=content_sha256("same body"),
     )
+
+
+def test_research_preserves_signed_url_and_query_order_for_network_fetch() -> None:
+    signed_url = (
+        "https://files.example.com/object?part=2&X-Amz-Signature=a%2Fb%2Bc&part=1"
+    )
+    network_calls: list[tuple[str, int]] = []
+    now = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+
+    def search(_query: str, **_kwargs) -> ActionResult:
+        return _result(data={"results": [{"url": signed_url, "title": "Signed"}]})
+
+    def fetch(
+        url: str,
+        *,
+        headers: dict | None = None,
+        max_size: int,
+        timeout: float,
+    ) -> ActionResult:
+        assert headers is None
+        assert 0 < timeout <= 8
+        network_calls.append((url, max_size))
+        # Deliberately exceed the injected action's contract: the researcher
+        # still enforces its own hard storage boundary.
+        return _result(
+            output="x" * (MAX_SOURCE_BYTES + 100),
+            data={"url": url, "status": 200, "headers": {}},
+        )
+
+    result = RealtimeWebResearch(
+        search_action=search,
+        fetch_action=fetch,
+        cache=SQLiteWebCache(),
+        clock=lambda: now,
+    ).research("signed resource")
+
+    assert network_calls == [(signed_url, MAX_SOURCE_BYTES)]
+    assert result.sources[0].url == signed_url
+    assert result.sources[0].canonical_url.endswith(
+        "?part=2&X-Amz-Signature=a%2Fb%2Bc&part=1"
+    )
+    assert result.sources[0].content_size_bytes == MAX_SOURCE_BYTES
+    assert result.sources[0].is_excerpt is True
+    assert result.citations[0]["is_excerpt"] is True
+    assert "excerpt" in result.warnings[0]
+
+
+def test_research_stops_at_total_deadline_with_partial_sources() -> None:
+    elapsed = [0.0]
+    now = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+    fetched: list[str] = []
+
+    def search(_query: str, **kwargs) -> ActionResult:
+        assert kwargs["max_results"] == 10
+        assert kwargs["timeout"] == 2
+        return _result(
+            data={
+                "results": [
+                    {"url": "https://example.com/one"},
+                    {"url": "https://example.com/two"},
+                ]
+            }
+        )
+
+    def fetch(url: str, **kwargs) -> ActionResult:
+        assert kwargs["timeout"] == 2
+        fetched.append(url)
+        elapsed[0] = 5.0
+        return _result(output="one", data={"url": url, "status": 200, "headers": {}})
+
+    result = RealtimeWebResearch(
+        search_action=search,
+        fetch_action=fetch,
+        cache=SQLiteWebCache(),
+        clock=lambda: now,
+        monotonic=lambda: elapsed[0],
+        total_timeout_seconds=4,
+        request_timeout_seconds=2,
+    ).research("deadline", max_results=99)
+
+    assert fetched == ["https://example.com/one"]
+    assert len(result.sources) == 1
+    assert "deadline" in result.warnings[-1].casefold()
+
+
+def test_not_modified_without_cache_retries_unconditional_get() -> None:
+    now = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+    request_headers: list[dict | None] = []
+
+    def search(_query: str, **_kwargs) -> ActionResult:
+        return _result(data={"results": [{"url": "https://example.com/retry"}]})
+
+    def fetch(url: str, **kwargs) -> ActionResult:
+        request_headers.append(kwargs["headers"])
+        if len(request_headers) == 1:
+            return _result(data={"url": url, "status": 304, "headers": {}})
+        return _result(
+            output="complete body",
+            data={"url": url, "status": 200, "headers": {}, "truncated": False},
+        )
+
+    result = RealtimeWebResearch(
+        search_action=search,
+        fetch_action=fetch,
+        cache=SQLiteWebCache(),
+        clock=lambda: now,
+    ).research("retry")
+
+    assert request_headers == [None, None]
+    assert result.sources[0].content == "complete body"
+    assert result.sources[0].content_hash == content_sha256("complete body")
+
+
+@pytest.mark.parametrize(
+    ("href", "expected"),
+    [
+        ("//example.com/path?q=1", "https://example.com/path?q=1"),
+        (
+            "//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Freport%3Fb%3D2%26a%3D1",
+            "https://example.com/report?b=2&a=1",
+        ),
+    ],
+)
+def test_ddg_result_url_normalization(href: str, expected: str) -> None:
+    assert web_actions._normalize_ddg_result_url(href) == expected
 
 
 def test_web_research_action_is_read_only_and_returns_numbered_citations(
@@ -221,11 +377,13 @@ def test_web_research_action_is_read_only_and_returns_numbered_citations(
 
     assert action_result.success is True
     assert action_result.data["citations"][0]["marker"] == "[1]"
+    assert "content" not in action_result.data["sources"][0]
     assert json.loads(action_result.output)["sources"][0]["citation"] == "[1]"
     assert "content" not in json.loads(action_result.output)["sources"][0]
     assert spec is not None
     assert spec.risk == "LOW"
     assert spec.capability == "READ_ONLY"
+    assert spec.parameters["properties"]["max_results"]["maximum"] == 10
 
 
 def test_web_fetch_exposes_not_modified_for_cache_revalidation(

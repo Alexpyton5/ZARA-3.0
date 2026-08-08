@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote, urlsplit, urlunsplit
 
+from core.url_security import MAX_URL_LENGTH
+
 DEFAULT_CACHE_TTL_SECONDS = 15 * 60
 DEFAULT_CACHE_MAX_ENTRIES = 500
 DEFAULT_MAX_RESULTS = 5
@@ -28,8 +30,14 @@ MAX_SOURCE_BYTES = 512 * 1024
 MAX_TITLE_CHARS = 512
 MAX_SNIPPET_CHARS = 2_000
 MAX_WARNING_CHARS = 1_000
-MAX_TOTAL_TIMEOUT_SECONDS = 50.0
-MAX_REQUEST_TIMEOUT_SECONDS = 8.0
+MAX_TOTAL_TIMEOUT_SECONDS = 40.0
+MAX_REQUEST_TIMEOUT_SECONDS = 5.0
+MAX_QUERY_CHARS = 1_000
+MAX_QUERY_BYTES = 4_096
+MAX_REGION_CHARS = 32
+MAX_REGION_BYTES = 128
+MAX_VALIDATOR_BYTES = 512
+MAX_IPC_PAYLOAD_BYTES = 128 * 1024
 
 
 def utc_now() -> datetime:
@@ -47,7 +55,11 @@ def _require_utc(value: datetime, field_name: str) -> datetime:
 
 
 def _datetime_to_text(value: datetime) -> str:
-    return _require_utc(value, "datetime").isoformat().replace("+00:00", "Z")
+    return (
+        _require_utc(value, "datetime")
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def _datetime_from_text(value: str, field_name: str) -> datetime:
@@ -67,14 +79,45 @@ def _optional_datetime(value: Any, field_name: str) -> datetime | None:
     if isinstance(value, datetime):
         return _require_utc(value, field_name)
     if isinstance(value, str):
+        if len(value) > 64:
+            raise ValueError(f"{field_name} exceeds the safe length")
         return _datetime_from_text(value, field_name)
     raise TypeError(f"{field_name} must be a datetime, ISO-8601 string, or None")
+
+
+def validate_research_inputs(query: str, region: str) -> tuple[str, str]:
+    """Validate bounded user-controlled search text without echoing it in errors."""
+
+    if not isinstance(query, str):
+        raise TypeError("query must be a string")
+    if len(query) > MAX_QUERY_CHARS:
+        raise ValueError(f"query exceeds {MAX_QUERY_CHARS} characters")
+    if len(query.encode("utf-8")) > MAX_QUERY_BYTES:
+        raise ValueError(f"query exceeds {MAX_QUERY_BYTES} UTF-8 bytes")
+    normalized_query = query.strip()
+    if not normalized_query:
+        raise ValueError("query cannot be empty")
+
+    if not isinstance(region, str):
+        raise TypeError("region must be a string")
+    if len(region) > MAX_REGION_CHARS:
+        raise ValueError(f"region exceeds {MAX_REGION_CHARS} characters")
+    if len(region.encode("utf-8")) > MAX_REGION_BYTES:
+        raise ValueError(f"region exceeds {MAX_REGION_BYTES} UTF-8 bytes")
+    normalized_region = region.strip()
+    if not normalized_region:
+        raise ValueError("region cannot be empty")
+    return normalized_query, normalized_region
 
 
 def canonicalize_url(url: str) -> str:
     """Return a stable HTTP(S) URL suitable for cache keys and deduplication."""
 
-    raw = str(url or "").strip()
+    if not isinstance(url, str):
+        raise TypeError("URL must be a string")
+    if len(url) > MAX_URL_LENGTH:
+        raise ValueError(f"URL exceeds {MAX_URL_LENGTH} characters")
+    raw = url.strip()
     parts = urlsplit(raw)
     scheme = parts.scheme.lower()
     if scheme not in {"http", "https"} or not parts.hostname:
@@ -279,6 +322,20 @@ class ResearchResult:
             indent=2,
         )
 
+    def to_ipc_dict(self) -> dict[str, Any]:
+        """Return bounded provenance without raw bodies or duplicated metadata."""
+
+        payload = self.to_dict(include_content=False)
+        payload["citations"] = [
+            {
+                "number": source.citation_number,
+                "marker": source.citation,
+                "source_index": source.citation_number - 1,
+            }
+            for source in self.sources
+        ]
+        return payload
+
 
 @dataclass(frozen=True, slots=True)
 class CacheLookup:
@@ -387,6 +444,7 @@ class SQLiteWebCache:
                     etag = excluded.etag,
                     last_modified = excluded.last_modified,
                     is_excerpt = excluded.is_excerpt
+                WHERE excluded.retrieved_at >= realtime_web_cache.retrieved_at
                 """,
                 (
                     record.canonical_url,
@@ -417,7 +475,7 @@ class SQLiteWebCache:
                     WHERE canonical_url IN (
                         SELECT canonical_url
                         FROM realtime_web_cache
-                        ORDER BY julianday(retrieved_at) ASC, canonical_url ASC
+                        ORDER BY retrieved_at ASC, canonical_url ASC
                         LIMIT ?
                     )
                     """,
@@ -440,7 +498,34 @@ class SQLiteWebCache:
             last_modified=last_modified or record.last_modified,
             from_cache=True,
         )
-        self.put(refreshed)
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                """
+                UPDATE realtime_web_cache
+                SET retrieved_at = ?, etag = ?, last_modified = ?
+                WHERE canonical_url = ?
+                  AND content_hash = ?
+                  AND retrieved_at = ?
+                """,
+                (
+                    _datetime_to_text(refreshed.retrieved_at),
+                    refreshed.etag,
+                    refreshed.last_modified,
+                    record.canonical_url,
+                    record.content_hash,
+                    _datetime_to_text(record.retrieved_at),
+                ),
+            )
+            if cursor.rowcount == 1:
+                return refreshed
+            row = self._connection.execute(
+                "SELECT * FROM realtime_web_cache WHERE canonical_url = ?",
+                (record.canonical_url,),
+            ).fetchone()
+        if row is not None:
+            return self._row_to_record(row)
+        # Eviction may race with revalidation. The caller can still use its
+        # verified representation, but stale data is not reinserted.
         return refreshed
 
     def clear(self) -> None:
@@ -537,16 +622,16 @@ class RealtimeWebResearch:
         region: str = "wt-wt",
         force_refresh: bool = False,
     ) -> ResearchResult:
-        normalized_query = str(query or "").strip()
-        if not normalized_query:
-            raise ValueError("query cannot be empty")
+        normalized_query, normalized_region = validate_research_inputs(query, region)
+        if type(force_refresh) is not bool:
+            raise TypeError("force_refresh must be a boolean")
         limit = max(1, min(int(max_results), MAX_RESEARCH_RESULTS))
         started_at = _require_utc(self.clock(), "clock result")
         deadline = self.monotonic() + self.total_timeout_seconds
         search_result = self.search_action(
             normalized_query,
             max_results=limit,
-            region=region,
+            region=normalized_region,
             timeout=self._network_timeout(deadline),
         )
         if not search_result.success:
@@ -564,7 +649,14 @@ class RealtimeWebResearch:
             if self.monotonic() >= deadline:
                 warnings.append("Research deadline reached before all sources were fetched")
                 break
-            raw_url = str(candidate.get("url") or "").strip()
+            candidate_url = candidate.get("url")
+            if not isinstance(candidate_url, str):
+                warnings.append("Skipped result with a non-string URL")
+                continue
+            if len(candidate_url) > MAX_URL_LENGTH:
+                warnings.append(f"Skipped URL exceeding {MAX_URL_LENGTH} characters")
+                continue
+            raw_url = candidate_url.strip()
             try:
                 canonical_url = canonicalize_url(raw_url)
             except ValueError as exc:
@@ -621,7 +713,13 @@ class RealtimeWebResearch:
             raw_results = parsed.get("results") if isinstance(parsed, Mapping) else parsed
         if not isinstance(raw_results, Sequence) or isinstance(raw_results, (str, bytes)):
             return []
-        return [item for item in raw_results if isinstance(item, Mapping)]
+        candidates: list[Mapping[str, Any]] = []
+        for item in raw_results:
+            if isinstance(item, Mapping):
+                candidates.append(item)
+            if len(candidates) >= MAX_RESEARCH_RESULTS:
+                break
+        return candidates
 
     def _get_source(
         self,
@@ -652,13 +750,18 @@ class RealtimeWebResearch:
         )
         status = self._fetch_status(fetch_result)
         response_headers = self._fetch_headers(fetch_result)
+        reported_response_url = self._fetch_url(fetch_result)
         if status == 304 and cached is not None:
-            return self.cache.revalidate(
-                cached.record,
-                retrieved_at=now,
-                etag=self._header(response_headers, "etag"),
-                last_modified=self._header(response_headers, "last-modified"),
+            response_canonical = (
+                canonicalize_url(reported_response_url) if reported_response_url else None
             )
+            if response_canonical == cached.record.canonical_url:
+                return self.cache.revalidate(
+                    cached.record,
+                    retrieved_at=now,
+                    etag=self._header(response_headers, "etag"),
+                    last_modified=self._header(response_headers, "last-modified"),
+                )
         if status == 304:
             # A validator-free 304 has no representation to reuse.  Retry once
             # as an unconditional GET and never create an empty cache record.
@@ -670,13 +773,14 @@ class RealtimeWebResearch:
             )
             status = self._fetch_status(fetch_result)
             response_headers = self._fetch_headers(fetch_result)
+            reported_response_url = self._fetch_url(fetch_result)
             if status == 304:
                 raise RuntimeError("Server returned 304 without a cached representation")
         if not fetch_result.success:
             raise RuntimeError(fetch_result.error or "Web fetch failed")
 
         response_data = fetch_result.data if isinstance(fetch_result.data, Mapping) else {}
-        response_url = str(response_data.get("url") or request_url)
+        response_url = reported_response_url or request_url
         canonical_url = canonicalize_url(response_url)
         raw_content = str(fetch_result.output or "")
         hard_truncated = len(raw_content.encode("utf-8")) > MAX_SOURCE_BYTES
@@ -724,16 +828,88 @@ class RealtimeWebResearch:
         return {}
 
     @staticmethod
+    def _fetch_url(result: _ActionResultLike) -> str | None:
+        if isinstance(result.data, Mapping):
+            value = result.data.get("url")
+            if isinstance(value, str) and value:
+                return value
+        return None
+
+    @staticmethod
     def _header(headers: Mapping[str, Any], name: str) -> str | None:
         expected = name.casefold()
         for raw_name, raw_value in headers.items():
             if str(raw_name).casefold() == expected and raw_value not in (None, ""):
-                return str(raw_value)
+                if not isinstance(raw_value, str):
+                    raise ValueError("Response validator must be a string")
+                if len(raw_value) > MAX_VALIDATOR_BYTES:
+                    raise ValueError("Response validator exceeds the safe character limit")
+                if len(raw_value.encode("utf-8")) > MAX_VALIDATOR_BYTES:
+                    raise ValueError("Response validator exceeds the safe byte limit")
+                return raw_value
         return None
 
 
 # Compatibility-friendly alias: both names describe the same injected cache.
 SQLiteResearchCache = SQLiteWebCache
+
+
+def run_realtime_research_worker(
+    connection: Any,
+    cache_path: str,
+    query: str,
+    max_results: int,
+    region: str,
+    force_refresh: bool,
+) -> None:
+    """Spawn-safe worker entrypoint; the parent enforces the hard deadline."""
+
+    import os
+    from contextlib import redirect_stderr, redirect_stdout
+
+    cache: SQLiteWebCache | None = None
+    try:
+        # Cover the complete child entrypoint: neither action-registration logs
+        # nor a broken Pipe during shutdown may leak into the sidecar IPC.
+        with open(os.devnull, "w", encoding="utf-8") as sink:
+            with redirect_stdout(sink), redirect_stderr(sink):
+                try:
+                    cache = SQLiteWebCache(cache_path)
+                    result = RealtimeWebResearch(cache=cache).research(
+                        query,
+                        max_results=max_results,
+                        region=region,
+                        force_refresh=force_refresh,
+                    )
+                    payload = result.to_ipc_dict()
+                    payload_bytes = json.dumps(
+                        payload, ensure_ascii=False, separators=(",", ":")
+                    ).encode("utf-8")
+                    if len(payload_bytes) > MAX_IPC_PAYLOAD_BYTES - 64:
+                        raise RuntimeError("Research metadata exceeds the IPC payload limit")
+                    message = {"ok": True, "payload": payload}
+                except Exception as exc:
+                    message = {"ok": False, "error": _bounded(str(exc), 500)}
+                try:
+                    wire_message = json.dumps(
+                        message, ensure_ascii=False, separators=(",", ":")
+                    ).encode("utf-8")
+                    if len(wire_message) > MAX_IPC_PAYLOAD_BYTES:
+                        wire_message = b'{"ok":false,"error":"Research IPC payload exceeded"}'
+                    connection.send_bytes(wire_message)
+                except (BrokenPipeError, EOFError, OSError):
+                    pass
+                finally:
+                    if cache is not None:
+                        cache.close()
+                    connection.close()
+    except Exception:
+        # Even failures while establishing output redirection stay inside the
+        # supervised child. The parent observes EOF and fails closed.
+        try:
+            connection.close()
+        except Exception:
+            pass
 
 
 __all__ = [
@@ -742,11 +918,17 @@ __all__ = [
     "DEFAULT_CACHE_TTL_SECONDS",
     "DEFAULT_MAX_RESULTS",
     "MAX_RESEARCH_RESULTS",
+    "MAX_QUERY_BYTES",
+    "MAX_QUERY_CHARS",
+    "MAX_REGION_BYTES",
+    "MAX_REGION_CHARS",
+    "MAX_IPC_PAYLOAD_BYTES",
     "MAX_REQUEST_TIMEOUT_SECONDS",
     "MAX_SNIPPET_CHARS",
     "MAX_SOURCE_BYTES",
     "MAX_TITLE_CHARS",
     "MAX_TOTAL_TIMEOUT_SECONDS",
+    "MAX_VALIDATOR_BYTES",
     "RealtimeWebResearch",
     "ResearchResult",
     "SQLiteResearchCache",
@@ -755,4 +937,6 @@ __all__ = [
     "canonicalize_url",
     "content_sha256",
     "utc_now",
+    "validate_research_inputs",
+    "run_realtime_research_worker",
 ]

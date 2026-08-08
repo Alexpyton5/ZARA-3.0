@@ -179,6 +179,9 @@ def create_pyinstaller_spec() -> Path:
     # Usar forward slashes para evitar erros de escape (\\U, \\u) no spec
     pathex_str = str(PROJECT_ROOT).replace("\\", "/")
     main_script_str = str(PROJECT_ROOT / MAIN_SCRIPT).replace("\\", "/")
+    multiprocessing_hook_str = str(
+        PROJECT_ROOT / "core" / "pyinstaller_multiprocessing_hook.py"
+    ).replace("\\", "/")
 
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 
@@ -192,7 +195,7 @@ a = Analysis(
     hiddenimports={all_hidden_imports},
     hookspath=[],
     hooksconfig={{}},
-    runtime_hooks=[],
+    runtime_hooks=['{multiprocessing_hook_str}'],
     excludes={EXCLUDES},
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

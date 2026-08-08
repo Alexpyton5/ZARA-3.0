@@ -4,19 +4,28 @@ Web Action — Web search and HTTP requests.
 from __future__ import annotations
 
 import json
+import multiprocessing
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from urllib.parse import parse_qs, urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit, urlunsplit
 
 import httpx
 
 from core.action_registry import ActionResult, action, get_registry
 from core.paths import data_dir
-from core.realtime_web import RealtimeWebResearch, SQLiteWebCache
+from core.realtime_web import (
+    MAX_IPC_PAYLOAD_BYTES,
+    MAX_QUERY_CHARS,
+    MAX_REGION_CHARS,
+    run_realtime_research_worker,
+    validate_research_inputs,
+)
 from core.url_security import (
+    MAX_URL_LENGTH,
     URLSecurityError,
+    ValidatedPublicURL,
     validate_connected_peer,
     validate_public_http_url,
 )
@@ -26,6 +35,15 @@ DDG_HTML_URL = "https://html.duckduckgo.com/html/"
 MAX_REDIRECTS = 5
 MAX_FETCH_BYTES = 5 * 1024 * 1024
 MAX_SEARCH_BYTES = 2 * 1024 * 1024
+MAX_HEADER_COUNT = 16
+MAX_HEADER_NAME_BYTES = 64
+MAX_HEADER_VALUE_BYTES = 1_024
+MAX_HEADER_TOTAL_BYTES = 4_096
+MAX_RESPONSE_HEADER_VALUE_BYTES = 2_048
+MAX_RESPONSE_HEADER_COUNT = 64
+MAX_RESPONSE_HEADER_TOTAL_BYTES = 16_384
+MAX_RESEARCH_PROCESS_SECONDS = 45.0
+MAX_RESEARCH_PROCESSES = 2
 REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _ALLOWED_FETCH_HEADERS = frozenset(
     {
@@ -42,19 +60,89 @@ _EXPOSED_RESPONSE_HEADERS = frozenset(
 )
 
 
-def _sanitize_fetch_headers(headers: dict | None) -> dict[str, str]:
+def _sanitize_fetch_headers(headers: Mapping | None) -> dict[str, str]:
     safe: dict[str, str] = {
+        "Accept-Encoding": "identity",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
-    for raw_name, raw_value in (headers or {}).items():
-        name = str(raw_name).strip()
-        value = str(raw_value)
+    if headers is None:
+        supplied: Mapping = {}
+    elif isinstance(headers, Mapping):
+        supplied = headers
+    else:
+        raise URLSecurityError("Request headers must be an object")
+    if len(supplied) > MAX_HEADER_COUNT:
+        raise URLSecurityError(f"Request headers exceed {MAX_HEADER_COUNT} entries")
+
+    total_bytes = 0
+    for raw_name, raw_value in supplied.items():
+        if not isinstance(raw_name, str) or not isinstance(raw_value, str):
+            raise URLSecurityError("Request header names and values must be strings")
+        if len(raw_name) > MAX_HEADER_NAME_BYTES or len(raw_value) > MAX_HEADER_VALUE_BYTES:
+            raise URLSecurityError("Request header exceeds the safe character limit")
+        name = raw_name.strip()
+        value = raw_value
+        name_bytes = len(name.encode("utf-8"))
+        value_bytes = len(value.encode("utf-8"))
+        if not name or name_bytes > MAX_HEADER_NAME_BYTES:
+            raise URLSecurityError("Request header name exceeds the safe limit")
+        if value_bytes > MAX_HEADER_VALUE_BYTES:
+            raise URLSecurityError("Request header value exceeds the safe limit")
+        total_bytes += name_bytes + value_bytes
+        if total_bytes > MAX_HEADER_TOTAL_BYTES:
+            raise URLSecurityError("Request headers exceed the total byte limit")
         if name.lower() not in _ALLOWED_FETCH_HEADERS:
             raise URLSecurityError(f"Request header is not allowed for read-only fetch: {name}")
         if not name or any(char in name + value for char in ("\r", "\n")):
             raise URLSecurityError("Request headers contain unsafe characters")
         safe[name] = value
     return safe
+
+
+def _identity_request_headers(headers: Mapping[str, str] | None) -> dict[str, str]:
+    safe = dict(headers or {})
+    for name, value in safe.items():
+        if name.casefold() == "accept-encoding" and value.strip().casefold() != "identity":
+            raise URLSecurityError("Only identity response encoding is allowed")
+    if not any(name.casefold() == "accept-encoding" for name in safe):
+        safe["Accept-Encoding"] = "identity"
+    return safe
+
+
+def _require_identity_response(response: httpx.Response) -> None:
+    raw_encoding = response.headers.get("content-encoding", "")
+    if len(raw_encoding) > 32:
+        raise URLSecurityError("Response content encoding header exceeds the safe limit")
+    encoding = raw_encoding.strip().casefold()
+    if encoding not in {"", "identity"}:
+        raise URLSecurityError(f"Compressed response encoding is not allowed: {encoding}")
+
+
+def _validate_response_headers(response: httpx.Response) -> None:
+    total_bytes = 0
+    header_items = getattr(response.headers, "multi_items", response.headers.items)
+    for count, (name, value) in enumerate(header_items(), start=1):
+        if count > MAX_RESPONSE_HEADER_COUNT:
+            raise URLSecurityError("Response headers exceed the safe count limit")
+        if len(name) > MAX_HEADER_NAME_BYTES or len(value) > MAX_RESPONSE_HEADER_VALUE_BYTES:
+            raise URLSecurityError("Response header exceeds the safe character limit")
+        total_bytes += len(name.encode("utf-8")) + len(value.encode("utf-8"))
+        if total_bytes > MAX_RESPONSE_HEADER_TOTAL_BYTES:
+            raise URLSecurityError("Response headers exceed the safe total byte limit")
+
+
+def _pinned_url(target: ValidatedPublicURL, address: str) -> str:
+    logical = urlsplit(target.url)
+    display_address = f"[{address}]" if ":" in address else address
+    return urlunsplit(
+        (
+            logical.scheme,
+            f"{display_address}:{target.port}",
+            logical.path,
+            logical.query,
+            "",
+        )
+    )
 
 
 @contextmanager
@@ -70,28 +158,67 @@ def _public_stream(
 ) -> Iterator[httpx.Response]:
     """Open a streamed response while validating DNS, peers and every redirect."""
 
-    current = validate_public_http_url(url)
+    current = validate_public_http_url(url, deadline=deadline)
     request_method = method.upper()
     request_content = content
     request_form = form_data
+    request_headers = _identity_request_headers(headers)
 
     for redirect_count in range(MAX_REDIRECTS + 1):
-        timeout: float | None = None
-        if deadline is not None:
-            timeout = deadline - time.monotonic()
-            if timeout <= 0:
-                raise TimeoutError("Web request deadline reached")
-        request_kwargs = {
-            "headers": headers,
-            "content": request_content,
-            "data": request_form,
-        }
-        if timeout is not None:
-            request_kwargs["timeout"] = timeout
-        request = client.build_request(request_method, current.url, **request_kwargs)
-        response = client.send(request, stream=True, follow_redirects=False)
+        response: httpx.Response | None = None
+        connected_address: str | None = None
+        last_connect_error: Exception | None = None
+        logical_parts = urlsplit(current.url)
+        for address in current.addresses:
+            timeout: float | None = None
+            if deadline is not None:
+                timeout = deadline - time.monotonic()
+                if timeout <= 0:
+                    raise TimeoutError("Web request deadline reached")
+            outbound_headers = dict(request_headers)
+            outbound_headers["Host"] = logical_parts.netloc
+            outbound_headers["Connection"] = "close"
+            extensions: dict[str, object] = {"zara_logical_url": current.url}
+            if logical_parts.scheme == "https":
+                extensions["sni_hostname"] = current.host
+            request_kwargs = {
+                "headers": outbound_headers,
+                "content": request_content,
+                "data": request_form,
+                "extensions": extensions,
+            }
+            if timeout is not None:
+                request_kwargs["timeout"] = timeout
+            request = client.build_request(
+                request_method,
+                _pinned_url(current, address),
+                **request_kwargs,
+            )
+            try:
+                response = client.send(request, stream=True, follow_redirects=False)
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                last_connect_error = exc
+                continue
+            connected_address = address
+            break
+        if response is None or connected_address is None:
+            if last_connect_error is not None:
+                raise last_connect_error
+            raise URLSecurityError("Validated URL has no pinned public address")
         try:
-            validate_connected_peer(response)
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("Web request deadline reached after send")
+            validate_connected_peer(
+                response,
+                expected_addresses=(connected_address,),
+                require_peer=True,
+            )
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("Web request deadline reached after peer validation")
+            _validate_response_headers(response)
+            _require_identity_response(response)
+            _public_response_headers(response)
+            response.request.url = httpx.URL(current.url)
         except Exception:
             response.close()
             raise
@@ -112,7 +239,17 @@ def _public_stream(
             raise URLSecurityError(f"Too many redirects (maximum: {MAX_REDIRECTS})")
 
         # Resolve and validate each new target before the next network request.
-        current = validate_public_http_url(urljoin(current.url, location))
+        redirected = validate_public_http_url(
+            urljoin(current.url, location),
+            deadline=deadline,
+        )
+        if redirected.url != current.url:
+            request_headers = {
+                name: value
+                for name, value in request_headers.items()
+                if name.casefold() not in {"if-none-match", "if-modified-since"}
+            }
+        current = redirected
         if status_code == 303 or (status_code in {301, 302} and request_method == "POST"):
             request_method = "GET"
             request_content = None
@@ -129,15 +266,18 @@ def _read_limited_bytes(
 
     if limit < 1:
         raise ValueError("Response byte limit must be positive")
+    _require_identity_response(response)
     buffer = bytearray()
     sentinel_limit = limit + 1
-    iterator = iter(response.iter_bytes())
+    iterator = iter(response.iter_raw())
     while True:
         if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError("Web response deadline reached")
         try:
             chunk = next(iterator)
         except StopIteration:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("Web response deadline reached after read") from None
             break
         if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError("Web response deadline reached")
@@ -150,15 +290,23 @@ def _read_limited_bytes(
         if len(buffer) >= sentinel_limit:
             break
     truncated = len(buffer) > limit
+    if deadline is not None and time.monotonic() >= deadline:
+        raise TimeoutError("Web response deadline reached after read")
     return bytes(buffer[:limit]), truncated
 
 
 def _public_response_headers(response: httpx.Response) -> dict[str, str]:
-    return {
-        name: value
-        for name, value in response.headers.items()
-        if name.lower() in _EXPOSED_RESPONSE_HEADERS
-    }
+    _validate_response_headers(response)
+    exposed: dict[str, str] = {}
+    for name, value in response.headers.items():
+        if name.lower() not in _EXPOSED_RESPONSE_HEADERS:
+            continue
+        if len(value) > MAX_RESPONSE_HEADER_VALUE_BYTES:
+            raise URLSecurityError("Response header exceeds the safe character limit")
+        if len(value.encode("utf-8")) > MAX_RESPONSE_HEADER_VALUE_BYTES:
+            raise URLSecurityError("Response header exceeds the safe byte limit")
+        exposed[name] = value
+    return exposed
 
 
 def _normalize_ddg_result_url(href: str) -> str:
@@ -182,9 +330,24 @@ def _normalize_ddg_result_url(href: str) -> str:
     parameters={
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "Search query"},
-            "max_results": {"type": "integer", "description": "Max results (default: 10)", "default": 10},
-            "region": {"type": "string", "description": "Region code (default: wt-wt)", "default": "wt-wt"},
+            "query": {
+                "type": "string",
+                "description": "Search query",
+                "maxLength": MAX_QUERY_CHARS,
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Max results (default: 10)",
+                "default": 10,
+                "minimum": 1,
+                "maximum": 10,
+            },
+            "region": {
+                "type": "string",
+                "description": "Region code (default: wt-wt)",
+                "default": "wt-wt",
+                "maxLength": MAX_REGION_CHARS,
+            },
             "timeout": {
                 "type": "number",
                 "description": "Total search deadline in seconds",
@@ -204,18 +367,25 @@ def web_search_action(
 ) -> ActionResult:
     """Search web via DuckDuckGo HTML."""
     try:
-        max_results = max(1, min(int(max_results), 50))
+        query, region = validate_research_inputs(query, region)
+        max_results = max(1, min(int(max_results), 10))
         params = {
             "q": query,
             "kl": region,
         }
         headers = {
+            "Accept-Encoding": "identity",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
         safe_timeout = max(0.1, min(float(timeout), 30.0))
         deadline = time.monotonic() + safe_timeout
 
-        with httpx.Client(timeout=safe_timeout, follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(
+            timeout=safe_timeout,
+            follow_redirects=False,
+            trust_env=False,
+            limits=httpx.Limits(max_keepalive_connections=0),
+        ) as client:
             with _public_stream(
                 client,
                 "POST",
@@ -299,9 +469,22 @@ def web_search_action(
     parameters={
         "type": "object",
         "properties": {
-            "url": {"type": "string", "description": "URL to fetch"},
+            "url": {
+                "type": "string",
+                "description": "URL to fetch",
+                "maxLength": MAX_URL_LENGTH,
+            },
             "method": {"type": "string", "description": "Read-only HTTP method", "default": "GET", "enum": ["GET", "HEAD"]},
-            "headers": {"type": "object", "description": "Safe read-only request headers"},
+            "headers": {
+                "type": "object",
+                "description": "Safe read-only request headers",
+                "maxProperties": MAX_HEADER_COUNT,
+                "propertyNames": {"maxLength": MAX_HEADER_NAME_BYTES},
+                "additionalProperties": {
+                    "type": "string",
+                    "maxLength": MAX_HEADER_VALUE_BYTES,
+                },
+            },
             "timeout": {"type": "number", "description": "Timeout in seconds (default: 30)", "default": 30},
             "max_size": {"type": "integer", "description": "Max response size in bytes (hard maximum: 5MB)", "default": 5242880, "minimum": 1, "maximum": 5242880},
         },
@@ -328,7 +511,12 @@ def web_fetch_action(
         safe_limit = max(1, min(int(max_size), MAX_FETCH_BYTES))
         deadline = time.monotonic() + safe_timeout
 
-        with httpx.Client(timeout=safe_timeout, follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(
+            timeout=safe_timeout,
+            follow_redirects=False,
+            trust_env=False,
+            limits=httpx.Limits(max_keepalive_connections=0),
+        ) as client:
             with _public_stream(
                 client,
                 safe_method,
@@ -367,20 +555,84 @@ def web_fetch_action(
         return ActionResult(success=False, error=str(e))
 
 
-_realtime_research_lock = threading.Lock()
-_realtime_researcher: RealtimeWebResearch | None = None
+_realtime_process_slots = threading.BoundedSemaphore(MAX_RESEARCH_PROCESSES)
 
 
-def _get_realtime_researcher() -> RealtimeWebResearch:
-    """Create the persistent default researcher only when the action is used."""
+def _stop_research_process(process) -> None:
+    if process.pid is None:
+        return
+    process.join(timeout=0.5)
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=1.0)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=1.0)
+    if process.is_alive():
+        raise RuntimeError("Research process could not be terminated")
+    process.close()
 
-    global _realtime_researcher
-    if _realtime_researcher is None:
-        with _realtime_research_lock:
-            if _realtime_researcher is None:
-                cache = SQLiteWebCache(data_dir() / "realtime_web_cache.sqlite3")
-                _realtime_researcher = RealtimeWebResearch(cache=cache)
-    return _realtime_researcher
+
+def _supervise_realtime_research(
+    query: str,
+    *,
+    max_results: int,
+    region: str,
+    force_refresh: bool,
+) -> dict:
+    """Run all network/DNS work in a process with a hard parent deadline."""
+
+    if not _realtime_process_slots.acquire(timeout=1.0):
+        raise RuntimeError("Research worker capacity is busy")
+    receive_connection = None
+    send_connection = None
+    process = None
+    try:
+        context = multiprocessing.get_context("spawn")
+        receive_connection, send_connection = context.Pipe(duplex=False)
+        process = context.Process(
+            target=run_realtime_research_worker,
+            args=(
+                send_connection,
+                str(data_dir() / "realtime_web_cache.sqlite3"),
+                query,
+                max_results,
+                region,
+                force_refresh,
+            ),
+            name="zara-realtime-web",
+            daemon=False,
+        )
+        process.start()
+        send_connection.close()
+        if not receive_connection.poll(MAX_RESEARCH_PROCESS_SECONDS):
+            raise TimeoutError("Research process exceeded its hard deadline")
+        try:
+            message = receive_connection.recv()
+        except EOFError as exc:
+            raise RuntimeError("Research process exited without a result") from exc
+        if not isinstance(message, Mapping):
+            raise RuntimeError("Research process returned an invalid message")
+        if not message.get("ok"):
+            error = message.get("error")
+            raise RuntimeError(error if isinstance(error, str) else "Research process failed")
+        payload = message.get("payload")
+        if not isinstance(payload, dict):
+            raise RuntimeError("Research process returned an invalid payload")
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > MAX_IPC_PAYLOAD_BYTES:
+            raise RuntimeError("Research process payload exceeds the safe limit")
+        return payload
+    finally:
+        try:
+            if receive_connection is not None:
+                receive_connection.close()
+            if send_connection is not None:
+                send_connection.close()
+            if process is not None:
+                _stop_research_process(process)
+        finally:
+            _realtime_process_slots.release()
 
 
 @action(
@@ -392,7 +644,11 @@ def _get_realtime_researcher() -> RealtimeWebResearch:
     parameters={
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "Research query"},
+            "query": {
+                "type": "string",
+                "description": "Research query",
+                "maxLength": MAX_QUERY_CHARS,
+            },
             "max_results": {
                 "type": "integer",
                 "description": "Maximum cited sources (default: 5)",
@@ -404,6 +660,7 @@ def _get_realtime_researcher() -> RealtimeWebResearch:
                 "type": "string",
                 "description": "Search region code (default: wt-wt)",
                 "default": "wt-wt",
+                "maxLength": MAX_REGION_CHARS,
             },
             "force_refresh": {
                 "type": "boolean",
@@ -423,17 +680,20 @@ def web_research_action(
     """Collect live sources without generating or inferring an answer."""
 
     try:
-        result = _get_realtime_researcher().research(
+        query, region = validate_research_inputs(query, region)
+        safe_max_results = max(1, min(int(max_results), 10))
+        payload = _supervise_realtime_research(
             query,
-            max_results=max_results,
+            max_results=safe_max_results,
             region=region,
             force_refresh=force_refresh,
         )
-        # IPC receives provenance and hashes, not up to megabytes of raw pages.
-        payload = result.to_dict(include_content=False)
+        sources = payload.get("sources")
+        source_count = len(sources) if isinstance(sources, list) else 0
+        markers = " ".join(f"[{number}]" for number in range(1, source_count + 1))
         return ActionResult(
             success=True,
-            output=result.to_json(include_content=False),
+            output=f"Collected {source_count} cited web sources {markers}".strip(),
             data=payload,
         )
     except Exception as exc:
@@ -449,7 +709,11 @@ def web_research_action(
     parameters={
         "type": "object",
         "properties": {
-            "url": {"type": "string", "description": "URL to download"},
+            "url": {
+                "type": "string",
+                "description": "URL to download",
+                "maxLength": MAX_URL_LENGTH,
+            },
             "dest": {"type": "string", "description": "Destination path"},
             "overwrite": {"type": "boolean", "description": "Overwrite if exists (default: true)", "default": True},
         },
@@ -465,12 +729,17 @@ def web_download_action(url: str, dest: str, overwrite: bool = True) -> ActionRe
         if dest_path.exists() and not overwrite:
             return ActionResult(success=False, error=f"File exists: {dest}")
 
-        with httpx.Client(timeout=60.0, follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(
+            timeout=60.0,
+            follow_redirects=False,
+            trust_env=False,
+            limits=httpx.Limits(max_keepalive_connections=0),
+        ) as client:
             with _public_stream(client, "GET", url) as resp:
                 resp.raise_for_status()
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(dest_path, "wb") as f:
-                    for chunk in resp.iter_bytes(chunk_size=8192):
+                    for chunk in resp.iter_raw(chunk_size=8192):
                         f.write(chunk)
 
         size = dest_path.stat().st_size

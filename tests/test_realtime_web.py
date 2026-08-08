@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -10,6 +9,8 @@ import pytest
 import core.actions.web as web_actions
 from core.action_registry import ActionResult, get_registry
 from core.realtime_web import (
+    MAX_QUERY_CHARS,
+    MAX_REGION_CHARS,
     MAX_SOURCE_BYTES,
     RealtimeWebResearch,
     ResearchResult,
@@ -18,6 +19,7 @@ from core.realtime_web import (
     canonicalize_url,
     content_sha256,
 )
+from core.url_security import MAX_URL_LENGTH
 
 
 def _result(
@@ -95,6 +97,36 @@ def test_sqlite_cache_evicts_oldest_entries_deterministically() -> None:
     assert cache.lookup("https://example.com/c", now=now) is not None
 
 
+def test_cache_rejects_older_writes_and_stale_revalidation_races() -> None:
+    old_time = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+    new_time = old_time + timedelta(seconds=10)
+    cache = SQLiteWebCache()
+    old = _source(retrieved_at=old_time)
+    cache.put(old)
+
+    new_content = "new representation"
+    newer = replace(
+        old,
+        content=new_content,
+        content_hash=content_sha256(new_content),
+        retrieved_at=new_time,
+        etag='"v2"',
+    )
+    cache.put(newer)
+    cache.put(old)
+    race_result = cache.revalidate(
+        old,
+        retrieved_at=new_time + timedelta(seconds=10),
+        etag='"v1"',
+    )
+
+    stored = cache.lookup(old.url, now=new_time)
+    assert stored is not None
+    assert stored.record.content == new_content
+    assert stored.record.etag == '"v2"'
+    assert race_result.content == new_content
+
+
 def test_research_revalidates_stale_cache_with_http_validators() -> None:
     current_time = [datetime(2026, 8, 8, 12, 0, tzinfo=UTC)]
     fetch_calls: list[dict | None] = []
@@ -120,7 +152,7 @@ def test_research_revalidates_stale_cache_with_http_validators() -> None:
         timeout: float,
     ) -> ActionResult:
         assert max_size == MAX_SOURCE_BYTES
-        assert 0 < timeout <= 8
+        assert 0 < timeout <= 5
         fetch_calls.append(headers)
         if len(fetch_calls) == 1:
             return _result(
@@ -200,7 +232,7 @@ def test_research_deduplicates_canonical_urls_and_content_hashes() -> None:
     ) -> ActionResult:
         assert headers is None
         assert max_size == MAX_SOURCE_BYTES
-        assert 0 < timeout <= 8
+        assert 0 < timeout <= 5
         fetched.append(url)
         body = "same body" if "unique" not in url else "different body"
         return _result(output=body, data={"url": url, "status": 200, "headers": {}})
@@ -247,7 +279,7 @@ def test_research_preserves_signed_url_and_query_order_for_network_fetch() -> No
         timeout: float,
     ) -> ActionResult:
         assert headers is None
-        assert 0 < timeout <= 8
+        assert 0 < timeout <= 5
         network_calls.append((url, max_size))
         # Deliberately exceed the injected action's contract: the researcher
         # still enforces its own hard storage boundary.
@@ -340,6 +372,115 @@ def test_not_modified_without_cache_retries_unconditional_get() -> None:
     assert result.sources[0].content_hash == content_sha256("complete body")
 
 
+def test_cross_origin_not_modified_cannot_revalidate_old_cache() -> None:
+    now = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+    cache = SQLiteWebCache(ttl_seconds=0)
+    cached = replace(_source(retrieved_at=now - timedelta(seconds=10)), etag='"old"')
+    cache.put(cached)
+    calls: list[dict | None] = []
+
+    def search(_query: str, **_kwargs) -> ActionResult:
+        return _result(data={"results": [{"url": cached.url}]})
+
+    def fetch(_url: str, **kwargs) -> ActionResult:
+        calls.append(kwargs["headers"])
+        if len(calls) == 1:
+            return _result(
+                data={
+                    "url": "https://other.example/final",
+                    "status": 304,
+                    "headers": {"etag": '"other"'},
+                }
+            )
+        return _result(
+            output="new origin body",
+            data={
+                "url": "https://other.example/final",
+                "status": 200,
+                "headers": {},
+            },
+        )
+
+    result = RealtimeWebResearch(
+        search_action=search,
+        fetch_action=fetch,
+        cache=cache,
+        clock=lambda: now,
+    ).research("cross origin")
+
+    assert calls == [{"If-None-Match": '"old"'}, None]
+    assert result.sources[0].canonical_url == "https://other.example/final"
+    assert result.sources[0].content == "new origin body"
+
+
+def test_research_input_limits_fail_before_search_or_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oversized_query = "q" * (MAX_QUERY_CHARS + 1)
+    oversized_region = "r" * (MAX_REGION_CHARS + 1)
+    search_calls: list[str] = []
+
+    def search(query: str, **_kwargs) -> ActionResult:
+        search_calls.append(query)
+        return _result(data={"results": []})
+
+    researcher = RealtimeWebResearch(
+        search_action=search,
+        fetch_action=lambda *_args, **_kwargs: _result(),
+        cache=SQLiteWebCache(),
+    )
+    with pytest.raises(ValueError, match="query exceeds"):
+        researcher.research(oversized_query)
+    with pytest.raises(ValueError, match="region exceeds"):
+        researcher.research("safe", region=oversized_region)
+    with pytest.raises(ValueError, match="URL exceeds"):
+        canonicalize_url("https://example.com/" + "x" * MAX_URL_LENGTH)
+    assert search_calls == []
+
+    def supervisor(*_args, **_kwargs):
+        pytest.fail("process must not start")
+
+    monkeypatch.setattr(web_actions, "_supervise_realtime_research", supervisor)
+    action_result = web_actions.web_research_action(oversized_query)
+    assert action_result.success is False
+    assert oversized_query not in action_result.error
+
+
+def test_action_schemas_publish_runtime_input_bounds() -> None:
+    registry = get_registry()
+    research = registry.get_spec("web_research")
+    search = registry.get_spec("web_search")
+    fetch = registry.get_spec("web_fetch")
+
+    assert research is not None and search is not None and fetch is not None
+    assert research.parameters["properties"]["query"]["maxLength"] == MAX_QUERY_CHARS
+    assert research.parameters["properties"]["region"]["maxLength"] == MAX_REGION_CHARS
+    assert search.parameters["properties"]["max_results"]["maximum"] == 10
+    assert fetch.parameters["properties"]["url"]["maxLength"] == MAX_URL_LENGTH
+    assert fetch.parameters["properties"]["headers"]["maxProperties"] == 16
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {f"X-{index}": "v" for index in range(17)},
+        {"Accept": "v" * 1_025},
+        {
+            "Accept": "a" * 900,
+            "Accept-Language": "b" * 900,
+            "Cache-Control": "c" * 900,
+            "If-Modified-Since": "d" * 900,
+            "If-None-Match": "e" * 900,
+        },
+    ],
+)
+def test_fetch_header_limits_fail_before_network(headers: dict[str, str]) -> None:
+    result = web_actions.web_fetch_action("https://example.com/", headers=headers)
+
+    assert result.success is False
+    assert "limit" in result.error or "exceed" in result.error
+
+
 @pytest.mark.parametrize(
     ("href", "expected"),
     [
@@ -365,12 +506,11 @@ def test_web_research_action_is_read_only_and_returns_numbered_citations(
         retrieved_at=now,
     )
 
-    class FakeResearcher:
-        def research(self, query: str, **_kwargs) -> ResearchResult:
-            assert query == "current facts"
-            return expected
+    def supervise(query: str, **_kwargs) -> dict:
+        assert query == "current facts"
+        return expected.to_ipc_dict()
 
-    monkeypatch.setattr(web_actions, "_get_realtime_researcher", lambda: FakeResearcher())
+    monkeypatch.setattr(web_actions, "_supervise_realtime_research", supervise)
 
     action_result = web_actions.web_research_action("current facts")
     spec = get_registry().get_spec("web_research")
@@ -378,12 +518,99 @@ def test_web_research_action_is_read_only_and_returns_numbered_citations(
     assert action_result.success is True
     assert action_result.data["citations"][0]["marker"] == "[1]"
     assert "content" not in action_result.data["sources"][0]
-    assert json.loads(action_result.output)["sources"][0]["citation"] == "[1]"
-    assert "content" not in json.loads(action_result.output)["sources"][0]
+    assert action_result.output == "Collected 1 cited web sources [1]"
     assert spec is not None
     assert spec.risk == "LOW"
     assert spec.capability == "READ_ONLY"
     assert spec.parameters["properties"]["max_results"]["maximum"] == 10
+
+
+def test_supervisor_terminates_worker_at_hard_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    class FakeConnection:
+        def __init__(self, *, receives: bool) -> None:
+            self.receives = receives
+            self.closed = False
+
+        def poll(self, timeout: float) -> bool:
+            assert self.receives is True
+            assert timeout == web_actions.MAX_RESEARCH_PROCESS_SECONDS
+            return False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.pid = None
+            self.alive = False
+            self.terminated = False
+            self.closed = False
+
+        def start(self) -> None:
+            self.pid = 123
+            self.alive = True
+
+        def join(self, timeout: float) -> None:
+            assert timeout in {0.5, 1.0}
+
+        def is_alive(self) -> bool:
+            return self.alive
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.alive = False
+
+        def kill(self) -> None:
+            self.alive = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    receive = FakeConnection(receives=True)
+    send = FakeConnection(receives=False)
+    process = FakeProcess()
+
+    class FakeContext:
+        def Pipe(self, *, duplex: bool):
+            assert duplex is False
+            return receive, send
+
+        def Process(self, **_kwargs):
+            return process
+
+    monkeypatch.setattr(web_actions.multiprocessing, "get_context", lambda _mode: FakeContext())
+    monkeypatch.setattr(web_actions, "data_dir", lambda: tmp_path)
+
+    with pytest.raises(TimeoutError, match="hard deadline"):
+        web_actions._supervise_realtime_research(
+            "bounded",
+            max_results=1,
+            region="wt-wt",
+            force_refresh=False,
+        )
+
+    assert process.terminated is True
+    assert process.closed is True
+    assert receive.closed is True
+    assert send.closed is True
+
+
+def test_spawn_worker_round_trip_fails_closed_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(web_actions, "data_dir", lambda: tmp_path)
+
+    with pytest.raises(RuntimeError, match="query cannot be empty"):
+        web_actions._supervise_realtime_research(
+            "",
+            max_results=1,
+            region="wt-wt",
+            force_refresh=False,
+        )
 
 
 def test_web_fetch_exposes_not_modified_for_cache_revalidation(
@@ -395,7 +622,7 @@ def test_web_fetch_exposes_not_modified_for_cache_revalidation(
         headers = {"etag": '"revision-1"'}
         encoding = "utf-8"
 
-        def iter_bytes(self):
+        def iter_raw(self):
             return iter(())
 
         def raise_for_status(self) -> None:

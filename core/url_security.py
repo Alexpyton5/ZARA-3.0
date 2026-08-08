@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -77,7 +78,9 @@ def _resolver_addresses(
     host: str,
     port: int,
     resolver: Callable[..., Iterable[tuple[Any, ...]]],
+    deadline: float | None = None,
 ) -> tuple[str, ...]:
+    _ensure_deadline(deadline, "before DNS resolution")
     try:
         records = resolver(
             host,
@@ -87,6 +90,7 @@ def _resolver_addresses(
         )
     except OSError as exc:
         raise URLSecurityError(f"Could not resolve public host {host!r}: {exc}") from exc
+    _ensure_deadline(deadline, "after DNS resolution")
 
     addresses: set[str] = set()
     for record in records:
@@ -101,18 +105,29 @@ def _resolver_addresses(
     return tuple(sorted(addresses))
 
 
+def _ensure_deadline(deadline: float | None, stage: str) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise URLSecurityError(f"URL validation deadline reached {stage}")
+
+
 def validate_public_http_url(
     url: str,
     *,
     resolver: Callable[..., Iterable[tuple[Any, ...]]] | None = None,
+    deadline: float | None = None,
 ) -> ValidatedPublicURL:
     """Validate and normalize an outbound public HTTP(S) URL.
 
     All resolved addresses must be globally routable. Rejecting a hostname when
     *any* answer is private prevents an attacker from mixing a public answer
     with a loopback/private target.
+
+    ``deadline`` is checked around the OS resolver, but ``getaddrinfo`` itself
+    cannot be cancelled portably.  Hard deadlines for research are provided by
+    the supervised worker process that can be terminated as a unit.
     """
 
+    _ensure_deadline(deadline, "before URL parsing")
     raw = str(url or "").strip()
     if not raw:
         raise URLSecurityError("URL is required")
@@ -156,9 +171,15 @@ def validate_public_http_url(
     try:
         literal = ipaddress.ip_address(ascii_host)
     except ValueError:
-        addresses = _resolver_addresses(ascii_host, port, resolver or socket.getaddrinfo)
+        addresses = _resolver_addresses(
+            ascii_host,
+            port,
+            resolver or socket.getaddrinfo,
+            deadline,
+        )
     else:
         addresses = (_validate_ip(str(literal)),)
+    _ensure_deadline(deadline, "after address validation")
 
     display_host = f"[{ascii_host}]" if ":" in ascii_host else ascii_host
     netloc = display_host if explicit_port is None else f"{display_host}:{explicit_port}"
@@ -166,7 +187,12 @@ def validate_public_http_url(
     return ValidatedPublicURL(normalized, ascii_host, port, addresses)
 
 
-def validate_connected_peer(response: object) -> None:
+def validate_connected_peer(
+    response: object,
+    *,
+    expected_addresses: Iterable[str] | None = None,
+    require_peer: bool = False,
+) -> None:
     """Best-effort validation of the socket peer exposed by httpx/httpcore.
 
     Normal httpx network streams expose ``server_addr``. Mock transports do not,
@@ -177,10 +203,14 @@ def validate_connected_peer(response: object) -> None:
 
     extensions = getattr(response, "extensions", None)
     if not isinstance(extensions, dict):
+        if require_peer:
+            raise URLSecurityError("Connected peer address is unavailable")
         return
     stream = extensions.get("network_stream")
     get_extra_info = getattr(stream, "get_extra_info", None)
     if not callable(get_extra_info):
+        if require_peer:
+            raise URLSecurityError("Connected peer address is unavailable")
         return
     try:
         peer = get_extra_info("server_addr")
@@ -188,4 +218,12 @@ def validate_connected_peer(response: object) -> None:
         raise URLSecurityError(f"Could not validate connected peer: {exc}") from exc
     if peer:
         address = peer[0] if isinstance(peer, tuple) else str(peer)
-        _validate_ip(str(address))
+        validated = _validate_ip(str(address))
+        if expected_addresses is not None:
+            expected = {_validate_ip(item) for item in expected_addresses}
+            if validated not in expected:
+                raise URLSecurityError(
+                    f"Connected peer {validated} does not match the pinned address"
+                )
+    elif require_peer:
+        raise URLSecurityError("Connected peer address is unavailable")

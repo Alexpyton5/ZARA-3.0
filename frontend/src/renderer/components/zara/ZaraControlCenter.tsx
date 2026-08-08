@@ -8,6 +8,7 @@ import {
 import { VoiceParticleSphere, VoiceState } from './VoiceParticleSphere';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
 import { ZaraLab } from './ZaraLab';
+import { normalizeReminderEvent } from '../../../reminderEvents';
 
 interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; timestamp: number; }
 interface Toast { id: number; text: string; kind?: 'ok' | 'warn' | 'error'; }
@@ -73,6 +74,16 @@ export const ZaraControlCenter: React.FC = () => {
       }));
     }));
     if (api.on?.supercerebroChange) offs.push(api.on.supercerebroChange((active) => setSupercerebro(Boolean(active))));
+    if (api.on?.reminderFired) offs.push(api.on.reminderFired((rawReminder) => {
+      const reminder = normalizeReminderEvent(rawReminder);
+      if (!reminder) return;
+      setMessages((old) => [...old, {
+        role: 'assistant',
+        content: `🔔 Lembrete: ${reminder.text}`,
+        timestamp: Date.now(),
+      }]);
+      notify(`🔔 ${reminder.text}`);
+    }));
 
     const engineListPromise = api.engine?.list?.();
     if (engineListPromise) {
@@ -109,7 +120,7 @@ export const ZaraControlCenter: React.FC = () => {
       window.clearInterval(refreshTimer);
       offs.forEach((off) => off());
     };
-  }, []);
+  }, [notify]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });

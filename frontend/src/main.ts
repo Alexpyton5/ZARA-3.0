@@ -1,10 +1,11 @@
 // Electron Main Process — ZARA 3.0 Neural Interface
 // Renderer is allowed to open independently; Python sidecar connects when ready.
 
-import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { existsSync } from 'fs'
+import { normalizeReminderEvent } from './reminderEvents'
 
 let pythonProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
@@ -94,6 +95,8 @@ function startPythonSidecar(): Promise<void> {
     const env = { ...process.env }
     delete env.PYTHONPATH
     env.PYTHONUNBUFFERED = '1'
+    env.PYTHONUTF8 = '1'
+    env.PYTHONIOENCODING = 'utf-8'
 
     const args = app.isPackaged ? [] : ['-u', mainScript]
     const child = spawn(pythonExe, args, {
@@ -421,6 +424,29 @@ function handlePythonEvent(msg: any): void {
     case 'supercerebro-change':
       mainWindow?.webContents.send('supercerebro-change', msg.active)
       break
+    case 'reminder-created':
+      mainWindow?.webContents.send('reminder-created', msg.data)
+      break
+    case 'reminder-fired': {
+      const reminder = normalizeReminderEvent(msg.data)
+      if (!reminder) {
+        console.warn('[Electron] Ignoring malformed reminder-fired event')
+        break
+      }
+      mainWindow?.webContents.send('reminder-fired', reminder)
+      const shouldShowNative = !mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused()
+      if (shouldShowNative && Notification.isSupported()) {
+        const notification = new Notification({ title: 'Lembrete da ZARA', body: reminder.text })
+        notification.on('click', () => {
+          if (!mainWindow || mainWindow.isDestroyed()) return
+          if (mainWindow.isMinimized()) mainWindow.restore()
+          mainWindow.show()
+          mainWindow.focus()
+        })
+        notification.show()
+      }
+      break
+    }
     default:
       console.log('[Electron] Ignoring backend event:', msg.type)
   }
@@ -526,6 +552,11 @@ function setupIPC(): void {
   ipcMain.handle('lab-send', (_event, payload) => sendToPython('lab-send', payload))
   ipcMain.handle('lab-proposal-create', (_event, payload) => sendToPython('lab-proposal-create', payload))
   ipcMain.handle('lab-proposal-decide', (_event, payload) => sendToPython('lab-proposal-decide', payload))
+
+  // Persistent local reminders
+  ipcMain.handle('reminder-create', (_event, payload) => sendToPython('reminder-create', payload))
+  ipcMain.handle('reminder-list', (_event, state?: string) => sendToPython('reminder-list', state ? { state } : {}))
+  ipcMain.handle('reminder-cancel', (_event, id: string) => sendToPython('reminder-cancel', { id }))
 
   ipcMain.handle('window-minimize', () => mainWindow?.minimize())
   ipcMain.handle('window-maximize', () => {

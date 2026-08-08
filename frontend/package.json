@@ -11,7 +11,8 @@
     "electron:dev": "npm run build:electron && concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron dist-electron/main.js\"",
     "electron:build": "npm run build && npm run build:electron && electron-builder",
     "lint": "eslint src --ext ts,tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-tests/tests/*.test.js"
   },
   "dependencies": {
     "lucide-react": "^1.29.0",

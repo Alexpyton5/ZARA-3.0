@@ -17,6 +17,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 os.environ.pop("PYTHONPATH", None)
 
 
+def configure_utf8_stdio() -> None:
+    """Match Electron's UTF-8 pipes on Windows and other supported platforms."""
+    for stream_name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def setup_environment():
     """Create only user-writable runtime directories."""
     from core.paths import config_dir, data_dir, logs_dir, memory_dir, user_data_dir
@@ -61,6 +70,7 @@ async def run_ipc_handler():
 
 def main() -> int:
     """Main entry point."""
+    configure_utf8_stdio()
     print("=" * 60)
     print("  ZARA 3.0 — NEURAL INTERFACE")
     print("  Python Sidecar Starting...")

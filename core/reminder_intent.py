@@ -40,6 +40,7 @@ _TIME_PATTERNS = [
 @dataclass
 class IntentResult:
     kind: str  # reminder | not_reminder | needs_clarification
+    reminder_id: str = ""
     message: str = ""
     due_at_utc: float | None = None
     human_due: str = ""
@@ -93,9 +94,10 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
 
     if engine is not None:
         try:
-            engine.create(message, due, timezone="local", source="voice")
+            reminder = engine.create(message, due, timezone="local", source="voice")
             return IntentResult(
                 kind="reminder",
+                reminder_id=reminder.id,
                 message=message,
                 due_at_utc=due,
                 human_due=human_due,

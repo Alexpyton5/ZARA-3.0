@@ -5,7 +5,7 @@ const reactHooks = require('eslint-plugin-react-hooks')
 
 module.exports = [
   {
-    ignores: ['dist/', 'dist-electron/', 'dist-frontend/', 'release/', 'node_modules/', '*.config.*'],
+    ignores: ['dist/', 'dist-electron/', 'dist-frontend/', 'dist-tests/', 'release/', 'node_modules/', '*.config.*'],
   },
   js.configs.recommended,
   {
@@ -50,7 +50,7 @@ module.exports = [
     },
   },
   {
-    files: ['src/main.ts', 'src/preload.ts'],
+    files: ['src/main.ts', 'src/preload.ts', 'src/reminderEvents.ts'],
     languageOptions: {
       parser: typescriptParser,
       ecmaVersion: 2022,

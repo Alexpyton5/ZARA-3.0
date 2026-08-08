@@ -76,6 +76,7 @@ class IPCMessage:
     tone: float | None = None
     speaking: bool | None = None
     active: bool | None = None
+    data: Any | None = None
 
 
 class IPCHandler:
@@ -105,6 +106,7 @@ class IPCHandler:
         self.lab = None
         self._lab_background_tasks: set[asyncio.Task] = set()
         self.reminder_engine = None  # initialized in async init
+        self._event_loop: asyncio.AbstractEventLoop | None = None
         self.user_memory = None      # initialized in async init
         self.project_memory = None   # initialized in async init
 
@@ -167,6 +169,7 @@ class IPCHandler:
         the desktop interface from opening.
         """
         essential_errors: list[str] = []
+        self._event_loop = asyncio.get_running_loop()
 
         try:
             self.orchestrator = ZaraOrchestrator()
@@ -244,7 +247,7 @@ class IPCHandler:
         try:
             from core.reminder_engine import ReminderEngine
             self.reminder_engine = ReminderEngine(
-                on_fire=self._on_reminder_fire,
+                on_fire=self._schedule_reminder_fire,
             )
             self.reminder_engine.start()
             print("[IPC] Reminder Core initialized")
@@ -412,7 +415,7 @@ class IPCHandler:
             res = detect_reminder_intent(text, self.reminder_engine)
             if res.kind == "reminder":
                 await self.send_event('reminder-created', {
-                    'id': "created", 'text': res.message,
+                    'id': res.reminder_id, 'text': res.message,
                     'due_at': res.due_at_utc, 'state': 'SCHEDULED',
                 })
                 return res.reply
@@ -480,9 +483,26 @@ class IPCHandler:
             else:
                 await self.send_event('state-change', 'STANDBY')
 
+    def _schedule_reminder_fire(self, reminder) -> None:
+        """Move a scheduler-thread callback safely onto the IPC event loop."""
+        loop = self._event_loop
+        if loop is None or loop.is_closed():
+            print(f"[Reminder] Event loop unavailable for {reminder.id}")
+            return
+
+        future = asyncio.run_coroutine_threadsafe(self._on_reminder_fire(reminder), loop)
+
+        def report_delivery_error(completed) -> None:
+            try:
+                completed.result()
+            except Exception as exc:
+                print(f"[Reminder] Delivery failed: {exc}")
+
+        future.add_done_callback(report_delivery_error)
+
     async def _on_reminder_fire(self, reminder) -> None:
         """Reminder fired: speak it and notify the UI."""
-        text = reminder.text
+        text = reminder.message
         print(f"[Reminder] FIRED: {text}")
         await self.send_event('reminder-fired', {
             'id': reminder.id,
@@ -514,13 +534,13 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'success': True,
                 'id': r.id,
-                'text': r.text,
-                'due_at': r.due_at,
+                'text': r.message,
+                'due_at': r.due_at_utc,
                 'timezone': r.timezone,
                 'state': r.state,
             })
             await self.send_event('reminder-created', {
-                'id': r.id, 'text': r.text, 'due_at': r.due_at, 'state': r.state,
+                'id': r.id, 'text': r.message, 'due_at': r.due_at_utc, 'state': r.state,
             })
         except Exception as exc:
             await self.send_error(msg, f"reminder-create: {exc}")
@@ -752,7 +772,7 @@ class IPCHandler:
             active = data.get('active') if isinstance(data, dict) else data
             await self.send(IPCMessage(type=event_type, active=bool(active)))
         else:
-            print(f"[IPC] Ignoring unsupported event type: {event_type}")
+            await self.send(IPCMessage(type=event_type, data=data))
 
     # ============================================================
     # HANDLERS
@@ -930,12 +950,6 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': reminder_reply,
                 'engine': 'reminder',
-            })
-            await self.send_event('message', {
-                'role': 'assistant',
-                'content': reminder_reply,
-                'engine': 'reminder',
-                'timestamp': datetime.now().isoformat(),
             })
             return
 
@@ -1358,7 +1372,7 @@ async def main() -> int:
 
     async def send_to_electron(msg: IPCMessage):
         """Send message to Electron via stdout"""
-        print(json.dumps(asdict(msg)), flush=True)
+        print(serialize_ipc_message(msg), flush=True)
 
     handler = IPCHandler(send_to_electron)
     await handler.initialize()
@@ -1374,6 +1388,11 @@ async def main() -> int:
 
     print("[ZARA] IPC Handler shutting down", flush=True)
     return 0
+
+
+def serialize_ipc_message(msg: IPCMessage) -> str:
+    """Serialize one UTF-8-safe IPC frame without escaping Portuguese text."""
+    return json.dumps(asdict(msg), ensure_ascii=False)
 
 
 async def _run_unix_ipc(handler: IPCHandler):

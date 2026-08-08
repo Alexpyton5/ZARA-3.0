@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import type { ReminderEvent } from '../../reminderEvents';
+
 interface ZaraWindowControl {
   minimize: () => Promise<void>;
   maximize: () => Promise<void>;
@@ -22,6 +24,11 @@ declare global {
         createProposal?: (payload: { title: string; summary: string; risk: string; owner: string }) => Promise<any>;
         decideProposal?: (payload: { id: string; decision: 'APPROVE' | 'REJECT' }) => Promise<any>;
       };
+      reminders?: {
+        create?: (payload: { text: string; due_at: number; timezone?: string }) => Promise<unknown>;
+        list?: (state?: string) => Promise<unknown>;
+        cancel?: (id: string) => Promise<unknown>;
+      };
       window?: ZaraWindowControl;
       on?: {
         stateChange?: (callback: (state: string) => void) => () => void;
@@ -29,6 +36,8 @@ declare global {
         metrics?: (callback: (metrics: any) => void) => () => void;
         voiceLevel?: (callback: (level: number, tone: number, speaking: boolean) => void) => () => void;
         supercerebroChange?: (callback: (active: boolean) => void) => () => void;
+        reminderCreated?: (callback: (reminder: ReminderEvent) => void) => () => void;
+        reminderFired?: (callback: (reminder: ReminderEvent) => void) => () => void;
       };
     };
   }

@@ -16,6 +16,7 @@ __pycache__/
 frontend/node_modules/
 frontend/dist-frontend/
 frontend/dist-electron/
+frontend/dist-tests/
 frontend/release/
 build-sidecar/
 dist-sidecar/

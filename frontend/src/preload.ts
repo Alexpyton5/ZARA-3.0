@@ -2,6 +2,7 @@
 // This runs in the renderer process but has access to Node.js APIs
 
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ReminderEvent } from './reminderEvents'
 
 // Define the API we want to expose to the renderer
 const zaraAPI = {
@@ -57,6 +58,12 @@ const zaraAPI = {
     decideProposal: (payload: { id: string; decision: 'APPROVE' | 'REJECT' }) => ipcRenderer.invoke('lab-proposal-decide', payload),
   },
 
+  reminders: {
+    create: (payload: { text: string; due_at: number; timezone?: string }) => ipcRenderer.invoke('reminder-create', payload),
+    list: (state?: string) => ipcRenderer.invoke('reminder-list', state),
+    cancel: (id: string) => ipcRenderer.invoke('reminder-cancel', id),
+  },
+
   // Window controls
   window: {
     minimize: () => ipcRenderer.invoke('window-minimize'),
@@ -90,6 +97,16 @@ const zaraAPI = {
       const handler = (_event: any, active: boolean) => callback(active)
       ipcRenderer.on('supercerebro-change', handler)
       return () => ipcRenderer.off('supercerebro-change', handler)
+    },
+    reminderCreated: (callback: (reminder: ReminderEvent) => void) => {
+      const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)
+      ipcRenderer.on('reminder-created', handler)
+      return () => ipcRenderer.off('reminder-created', handler)
+    },
+    reminderFired: (callback: (reminder: ReminderEvent) => void) => {
+      const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)
+      ipcRenderer.on('reminder-fired', handler)
+      return () => ipcRenderer.off('reminder-fired', handler)
     },
   },
 }

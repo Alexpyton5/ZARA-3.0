@@ -32,6 +32,13 @@ def _install_public_dns(monkeypatch: pytest.MonkeyPatch, calls: list[str] | None
     monkeypatch.setattr(url_security.socket, "getaddrinfo", resolve)
 
 
+def _public_peer_extensions() -> dict[str, object]:
+    stream = SimpleNamespace(
+        get_extra_info=lambda name: (PUBLIC_V4, 443) if name == "server_addr" else None
+    )
+    return {"network_stream": stream}
+
+
 def test_public_url_is_normalized_and_dns_is_rechecked(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
     _install_public_dns(monkeypatch, calls)
@@ -123,11 +130,15 @@ def test_fetch_blocks_private_redirect_before_second_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _install_public_dns(monkeypatch)
-    requests: list[str] = []
+    requests: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(str(request.url))
-        return httpx.Response(302, headers={"location": "http://127.0.0.1/secret"})
+        requests.append((str(request.url), request.headers["host"]))
+        return httpx.Response(
+            302,
+            headers={"location": "http://127.0.0.1/secret"},
+            extensions=_public_peer_extensions(),
+        )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     monkeypatch.setattr(web_actions.httpx, "Client", lambda **_kwargs: client)
@@ -136,7 +147,7 @@ def test_fetch_blocks_private_redirect_before_second_request(
 
     assert result.success is False
     assert "non-public" in result.error
-    assert requests == ["https://example.com/start"]
+    assert requests == [(f"https://{PUBLIC_V4}/start", "example.com")]
 
 
 def test_fetch_revalidates_dns_for_public_redirect(
@@ -144,16 +155,21 @@ def test_fetch_revalidates_dns_for_public_redirect(
 ) -> None:
     dns_calls: list[str] = []
     _install_public_dns(monkeypatch, dns_calls)
-    requests: list[str] = []
+    requests: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(str(request.url))
-        if request.url.host == "example.com":
-            return httpx.Response(302, headers={"location": "https://example.org/final"})
+        requests.append((str(request.url), request.headers["host"]))
+        if request.headers["host"] == "example.com":
+            return httpx.Response(
+                302,
+                headers={"location": "https://example.org/final"},
+                extensions=_public_peer_extensions(),
+            )
         return httpx.Response(
             200,
             headers={"content-type": "text/plain; charset=utf-8"},
             stream=httpx.ByteStream(b"verified"),
+            extensions=_public_peer_extensions(),
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
@@ -163,7 +179,10 @@ def test_fetch_revalidates_dns_for_public_redirect(
 
     assert result.success is True
     assert result.output == "verified"
-    assert requests == ["https://example.com/start", "https://example.org/final"]
+    assert requests == [
+        (f"https://{PUBLIC_V4}/start", "example.com"),
+        (f"https://{PUBLIC_V4}/final", "example.org"),
+    ]
     assert dns_calls == ["example.com", "example.org"]
 
 
@@ -192,6 +211,7 @@ def test_gzip_bomb_is_rejected_before_decoder_or_stream_read(
             200,
             headers={"content-encoding": "gzip"},
             stream=stream,
+            extensions=_public_peer_extensions(),
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
@@ -228,9 +248,17 @@ def test_redirect_drops_conditional_validators_and_keeps_identity_encoding(
 
     def handler(request: httpx.Request) -> httpx.Response:
         observed.append(request)
-        if request.url.host == "example.com":
-            return httpx.Response(302, headers={"location": "https://example.org/final"})
-        return httpx.Response(304, stream=httpx.ByteStream(b""))
+        if request.headers["host"] == "example.com":
+            return httpx.Response(
+                302,
+                headers={"location": "https://example.org/final"},
+                extensions=_public_peer_extensions(),
+            )
+        return httpx.Response(
+            304,
+            stream=httpx.ByteStream(b""),
+            extensions=_public_peer_extensions(),
+        )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     monkeypatch.setattr(web_actions.httpx, "Client", lambda **_kwargs: client)
@@ -274,6 +302,7 @@ def test_fetch_stops_stream_before_accumulating_past_limit(
             200,
             headers={"content-type": "text/plain; charset=utf-8"},
             stream=stream,
+            extensions=_public_peer_extensions(),
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler))

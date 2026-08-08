@@ -21,12 +21,16 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
                 except FileNotFoundError:
                     # Use pycaw if available
                     try:
-                        from comtypes import CLSCTX_ALL
+                        from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
                         from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-                        devices = AudioUtilities.GetSpeakers()
-                        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                        volume = interface.QueryInterface(IAudioEndpointVolume)
-                        volume.SetMasterVolumeLevelScalar(level / 100, None)
+                        CoInitialize()
+                        try:
+                            devices = AudioUtilities.GetSpeakers()
+                            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                            volume = interface.QueryInterface(IAudioEndpointVolume)
+                            volume.SetMasterVolumeLevelScalar(level / 100, None)
+                        finally:
+                            CoUninitialize()
                     except ImportError:
                         return ActionResult(success=False, error="pycaw or nircmd required for volume control")
 
@@ -34,13 +38,18 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
                 try:
                     subprocess.run(["nircmd.exe", "mutesysvolume", "1" if mute else "0"], check=True, capture_output=True)
                 except FileNotFoundError:
+                    # Use pycaw if available
                     try:
-                        from comtypes import CLSCTX_ALL
+                        from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
                         from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-                        devices = AudioUtilities.GetSpeakers()
-                        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                        volume = interface.QueryInterface(IAudioEndpointVolume)
-                        volume.SetMute(mute, None)
+                        CoInitialize()
+                        try:
+                            devices = AudioUtilities.GetSpeakers()
+                            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                            volume = interface.QueryInterface(IAudioEndpointVolume)
+                            volume.SetMute(mute, None)
+                        finally:
+                            CoUninitialize()
                     except ImportError:
                         return ActionResult(success=False, error="pycaw or nircmd required for mute control")
 

@@ -43,6 +43,10 @@ class PcVoiceIntentDetector:
              self._search, "web_search", None),
 
             # Volume
+            (r'\b(?:coloque|coloca|defina|ponha|deixe|set)\s+(?:o\s+)?volume\s+(?:em|para|a)\s+(\d{1,3})\s*%?\b',
+             self._volume_level, "os_volume", None),
+            (r'\bvolume\s+(\d{1,3})\s*%?\b',
+             self._volume_level, "os_volume", None),
             (r'\b(aumente?|suba|up|mais\s+volume|increase?)\s+(o\s+)?volume\b',
              self._volume_up, "os_volume", "up"),
             (r'\b(diminua?|baixe|down|menos\s+volume|decrease?|lower)\s+(o\s+)?volume\b',
@@ -113,6 +117,9 @@ class PcVoiceIntentDetector:
 
     def _volume_down(self, m):
         return "down"
+
+    def _volume_level(self, m):
+        return m.group(1)
 
     def _scroll_down(self, m):
         return "down"

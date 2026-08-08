@@ -31,3 +31,6 @@ ZARA-UPDATE-*/
 .zara-dev/
 *.log
 nul
+
+# Temporary probe artifacts (may contain runtime DBs with personal data)
+_codex_*

@@ -16,6 +16,23 @@ from typing import Any
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+def _read_windows_volume() -> float | None:
+    """Read current master volume (0-100) via pycaw. Returns None if unavailable."""
+    try:
+        from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        CoInitialize()
+        try:
+            devices = AudioUtilities.GetSpeakers()
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            volume = interface.QueryInterface(IAudioEndpointVolume)
+            return round(volume.GetMasterVolumeLevelScalar() * 100)
+        finally:
+            CoUninitialize()
+    except Exception:
+        return None
+
 # Import existing ZARA components
 try:
     from core.action_registry import execute_action, execute_confirmed_action
@@ -468,6 +485,45 @@ class IPCHandler:
         except Exception:
             return None
 
+    async def _try_pc_intent(self, text: str) -> str | None:
+        """Deterministic PC intent (ZARA-COMPUTER-CONTROL-VOLUME-001).
+
+        Maps voice/text PC commands to existing os_volume action through
+        the existing capability gate (Supercérebro). Returns the ZARA reply
+        or None so the normal brain handles it. Never an LLM decision.
+        """
+        try:
+            if not (text or "").strip():
+                return None
+            from core.pc_voice_intent import PcVoiceIntentDetector
+            detector = PcVoiceIntentDetector(pc_control_allowed=bool(self.supercerebro_active))
+            res = detector.detect(text)
+            if not res.is_pc_intent:
+                return None
+            if res.blocked:
+                return res.reply or "Para controlar o computador, ative o Supercérebro."
+            from core.action_registry import execute_action
+            params = {}
+            if res.action == "os_volume":
+                if res.param in ("up", "down"):
+                    current = _read_windows_volume()
+                    if current is None:
+                        return "Não consegui ler o volume do sistema."
+                    params["level"] = max(0, min(100, current + (10 if res.param == "up" else -10)))
+                else:
+                    try:
+                        params["level"] = max(0, min(100, int(float(res.param))))
+                    except (TypeError, ValueError):
+                        return None
+            result = await execute_action(res.action, **params)
+            if result is not None and getattr(result, "success", False):
+                level = params.get("level")
+                return f"Volume definido para {level}%." if level is not None else "Pronto."
+            error = str(getattr(result, "error", "") or "")
+            return f"Não consegui executar essa ação. {error}".strip()
+        except Exception:
+            return None
+
     async def _process_voice_message(self, text: str):
         """Process voice message through orchestrator/model router"""
         try:
@@ -482,6 +538,18 @@ class IPCHandler:
                     'timestamp': datetime.now().isoformat(),
                 })
                 await self._speak_response(reminder_reply)
+                return
+            # ZARA-COMPUTER-CONTROL-VOLUME-001: PC intent antes do LLM.
+            pc_reply = await self._try_pc_intent(text)
+            if pc_reply:
+                await self._append_conversation_message("assistant", pc_reply, "pc_control")
+                await self.send_event('message', {
+                    'role': 'assistant',
+                    'content': pc_reply,
+                    'engine': 'pc_control',
+                    'timestamp': datetime.now().isoformat(),
+                })
+                await self._speak_response(pc_reply)
                 return
             # ZARA-USER-MEMORY-CONTEXT-001: enriquece com memorias relevantes
             text = await self._enrich_with_memory(text)
@@ -1041,6 +1109,16 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': reminder_reply,
                 'engine': 'reminder',
+            })
+            return
+
+        # ZARA-COMPUTER-CONTROL-VOLUME-001: texto e voz usam o MESMO intent handler.
+        pc_reply = await self._try_pc_intent(text)
+        if pc_reply:
+            await self._append_conversation_message("assistant", pc_reply, "pc_control")
+            await self.send_response(msg.request_id, {
+                'response': pc_reply,
+                'engine': 'pc_control',
             })
             return
 

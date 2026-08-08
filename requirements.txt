@@ -38,6 +38,7 @@ kokoro-onnx>=0.3.0
 
 # Audio I/O
 sounddevice>=0.4.6
+pycaw>=20240210
 numpy>=1.24.0
 scipy>=1.10.0
 

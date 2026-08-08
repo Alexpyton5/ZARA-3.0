@@ -127,6 +127,9 @@ class IPCHandler:
         self.user_memory = None      # initialized in async init
         self.project_memory = None   # initialized in async init
         self.conversation_history = None  # Home transcript; separate from model memory
+        self._shutdown_requested = False
+        self._shutdown_started = False
+        self._shutdown_complete = False
 
     def _set_supercerebro_state(self, active: bool) -> None:
         """Mirror Supercerebro state into the physical capability gate.
@@ -146,6 +149,75 @@ class IPCHandler:
         connected = bool(self.hermes and self.hermes.enabled and self.hermes.is_connected)
         if not connected:
             self._set_supercerebro_state(False)
+
+    @property
+    def shutdown_requested(self) -> bool:
+        return self._shutdown_requested
+
+    async def _disable_supercerebro(self) -> None:
+        """Revoke local permission first, then clean only ZARA-owned Hermes."""
+        self._set_supercerebro_state(False)
+        if self.hermes:
+            try:
+                await self.hermes.disable_supercerebro()
+            except Exception as exc:
+                print(f"[IPC] Hermes disable warning: {exc}")
+
+    async def shutdown(self) -> None:
+        """Deterministically release runtime resources; safe to call repeatedly."""
+        self._shutdown_requested = True
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
+
+        # Fail closed synchronously before any cleanup that can await or fail.
+        self._set_supercerebro_state(False)
+
+        for task in list(self._lab_background_tasks):
+            task.cancel()
+        if self._lab_background_tasks:
+            await asyncio.gather(*self._lab_background_tasks, return_exceptions=True)
+        self._lab_background_tasks.clear()
+
+        if self._voice_loop_task and not self._voice_loop_task.done():
+            self._voice_loop_task.cancel()
+            await asyncio.gather(self._voice_loop_task, return_exceptions=True)
+        self._voice_loop_task = None
+
+        if self.gemini_live_voice:
+            try:
+                await self.gemini_live_voice.stop()
+            except Exception as exc:
+                print(f"[IPC] Gemini Live shutdown warning: {exc}")
+        if self.voice_pipeline:
+            try:
+                self.voice_pipeline.stop()
+            except Exception as exc:
+                print(f"[IPC] Voice pipeline shutdown warning: {exc}")
+        self.voice_active = False
+        self.voice_mode = "off"
+
+        if self.tts_manager:
+            try:
+                self.tts_manager.interrupt()
+                if self.tts_manager.gemini:
+                    await self.tts_manager.gemini.close()
+            except Exception as exc:
+                print(f"[IPC] TTS shutdown warning: {exc}")
+
+        if self.reminder_engine:
+            try:
+                await asyncio.to_thread(self.reminder_engine.stop)
+            except Exception as exc:
+                print(f"[IPC] Reminder shutdown warning: {exc}")
+
+        if self.hermes:
+            try:
+                await self.hermes.shutdown()
+            except Exception as exc:
+                print(f"[IPC] Hermes shutdown warning: {exc}")
+
+        self._shutdown_complete = True
 
     def _load_runtime_preferences(self) -> None:
         """Load non-secret runtime preferences from the existing config file."""
@@ -882,6 +954,7 @@ class IPCHandler:
             'project-memory-list': self.handle_project_memory_list,
             'conversation-history-list': self.handle_conversation_history_list,
             'conversation-history-clear': self.handle_conversation_history_clear,
+            'shutdown': self.handle_shutdown,
         }
 
         handler = handler_map.get(msg.type)
@@ -1065,9 +1138,13 @@ class IPCHandler:
                 self._set_supercerebro_state(False)
                 await self.send_error(msg, "Hermes integration is unavailable")
                 return
-            connected = await self.hermes.enable_supercerebro()
+            try:
+                connected = await self.hermes.enable_supercerebro()
+            except Exception as exc:
+                connected = False
+                print(f"[IPC] Hermes enable warning: {exc}")
             if not connected:
-                self._set_supercerebro_state(False)
+                await self._disable_supercerebro()
                 await self.send_event('supercerebro-change', False)
                 await self.send_error(msg, "Hermes Gateway is offline")
                 return
@@ -1075,12 +1152,7 @@ class IPCHandler:
         else:
             # Revoke local permission before touching the remote integration.
             # A disconnect error must never leave PC control enabled.
-            self._set_supercerebro_state(False)
-            if self.hermes:
-                try:
-                    await self.hermes.disable_supercerebro()
-                except Exception as exc:
-                    print(f"[IPC] Hermes disable warning: {exc}")
+            await self._disable_supercerebro()
 
         print(f"[IPC] Supercerebro {'enabled' if self.supercerebro_active else 'disabled'}")
         await self.send_event('supercerebro-change', self.supercerebro_active)
@@ -1089,6 +1161,12 @@ class IPCHandler:
             'active': self.supercerebro_active,
             'connected': bool(self.hermes and self.hermes.is_connected),
         })
+
+    async def handle_shutdown(self, msg: IPCMessage):
+        """Acknowledge Electron shutdown and make both IPC loops exit."""
+        self._shutdown_requested = True
+        await self._disable_supercerebro()
+        await self.send_response(msg.request_id, {'success': True, 'shutting_down': True})
 
     async def handle_send_message(self, msg: IPCMessage):
         payload = msg.payload or {}
@@ -1554,11 +1632,16 @@ async def main() -> int:
     print("[ZARA] IPC Handler ready", flush=True)
     print("SYS: Interface neural pronta", flush=True)  # Signal ready
 
-    # Windows-compatible stdin reading
-    if sys.platform == 'win32':
-        await _run_windows_ipc(handler)
-    else:
-        await _run_unix_ipc(handler)
+    try:
+        # Windows-compatible stdin reading
+        if sys.platform == 'win32':
+            await _run_windows_ipc(handler)
+        else:
+            await _run_unix_ipc(handler)
+    finally:
+        # stdin EOF is also an ownership signal: Electron disappeared, so all
+        # resources launched by this sidecar must be released.
+        await handler.shutdown()
 
     print("[ZARA] IPC Handler shutting down", flush=True)
     return 0
@@ -1574,28 +1657,123 @@ async def _run_unix_ipc(handler: IPCHandler):
     loop = asyncio.get_event_loop()
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+    transport, _ = await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
     try:
-        while True:
-            line = await reader.readline()
-            if not line:
-                break
-
-            try:
-                data = json.loads(line.decode().strip())
-                msg = IPCMessage(**data)
-                await handler.handle_message(msg)
-            except json.JSONDecodeError:
-                continue
-            except Exception as e:
-                print(f"[IPC] Parse error: {e}", file=sys.stderr)
+        await _consume_ipc_reader(handler, reader)
     except KeyboardInterrupt:
         pass
+    finally:
+        transport.close()
+
+
+async def _consume_ipc_reader(handler: IPCHandler, reader: asyncio.StreamReader) -> None:
+    while not handler.shutdown_requested:
+        line = await reader.readline()
+        if not line:
+            break
+        try:
+            data = json.loads(line.decode().strip())
+            msg = IPCMessage(**data)
+            await handler.handle_message(msg)
+        except json.JSONDecodeError:
+            continue
+        except Exception as exc:
+            print(f"[IPC] Parse error: {exc}", file=sys.stderr)
+
+
+def _windows_stdin_is_pipe() -> bool:
+    """Distinguish Electron's pipe from an interactive development console."""
+    try:
+        import ctypes
+        import msvcrt
+
+        file_type_pipe = 0x0003
+        handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+        return ctypes.windll.kernel32.GetFileType(handle) == file_type_pipe
+    except (AttributeError, OSError, ValueError):
+        return False
 
 
 async def _run_windows_ipc(handler: IPCHandler):
-    """Windows IPC using thread-based stdin reading"""
+    """Use non-blocking pipe polling in packaged mode; threads only for a console."""
+    if _windows_stdin_is_pipe():
+        await _run_windows_pipe_ipc(handler)
+    else:
+        await _run_windows_console_ipc(handler)
+
+
+async def _run_windows_pipe_ipc(handler: IPCHandler) -> None:
+    """Poll Electron's named pipe without any thread blocked in ``sys.stdin``.
+
+    Both a blocked TextIO thread and Proactor ``connect_read_pipe`` prevent or
+    break multiprocessing bootstrap in this PyInstaller onefile application.
+    ``PeekNamedPipe`` tells us when a direct ``os.read`` is safe, allowing the
+    event loop to remain responsive and making broken-pipe EOF deterministic.
+    """
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    max_buffer_bytes = 1024 * 1024
+    poll_interval_seconds = 0.02
+    broken_pipe_errors = {6, 109, 232, 233}
+    stdin_fd = sys.stdin.fileno()
+    msvcrt.setmode(stdin_fd, os.O_BINARY)
+    handle = msvcrt.get_osfhandle(stdin_fd)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    peek_named_pipe = kernel32.PeekNamedPipe
+    peek_named_pipe.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPVOID,
+    ]
+    peek_named_pipe.restype = wintypes.BOOL
+    buffer = bytearray()
+
+    while not handler.shutdown_requested:
+        available = wintypes.DWORD(0)
+        ok = peek_named_pipe(handle, None, 0, None, ctypes.byref(available), None)
+        if not ok:
+            error = ctypes.get_last_error()
+            if error in broken_pipe_errors:
+                break
+            raise OSError(error, "PeekNamedPipe failed for Electron stdin")
+
+        if available.value == 0:
+            await asyncio.sleep(poll_interval_seconds)
+            continue
+
+        chunk = os.read(stdin_fd, min(int(available.value), 64 * 1024))
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > max_buffer_bytes:
+            raise ValueError("Electron IPC input exceeded the 1 MiB safety limit")
+
+        while b"\n" in buffer and not handler.shutdown_requested:
+            raw_line, _, remainder = buffer.partition(b"\n")
+            buffer = bytearray(remainder)
+            await _handle_ipc_bytes(handler, raw_line)
+
+
+async def _handle_ipc_bytes(handler: IPCHandler, raw_line: bytes) -> None:
+    if not raw_line.strip():
+        return
+    try:
+        data = json.loads(raw_line.decode("utf-8").strip())
+        await handler.handle_message(IPCMessage(**data))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return
+    except Exception as exc:
+        print(f"[IPC] Parse error: {exc}", file=sys.stderr)
+
+
+async def _run_windows_console_ipc(handler: IPCHandler) -> None:
+    """Interactive/source fallback where Proactor cannot wrap a console."""
     import queue
     import threading
 
@@ -1612,12 +1790,16 @@ async def _run_windows_ipc(handler: IPCHandler):
                     stdin_queue.put(line.strip())
         except Exception:
             pass
+        finally:
+            # Before this signal existed, a closed Electron pipe left the
+            # Windows loop sleeping forever inside the PyInstaller child.
+            stop_event.set()
 
     reader_thread = threading.Thread(target=read_stdin, daemon=True)
     reader_thread.start()
 
     try:
-        while not stop_event.is_set():
+        while not stop_event.is_set() and not handler.shutdown_requested:
             try:
                 # Never block the asyncio loop waiting for stdin. Voice-level
                 # callbacks and other async work need this loop to stay free.

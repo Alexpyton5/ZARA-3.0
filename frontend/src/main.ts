@@ -6,11 +6,20 @@ import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { existsSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
+import {
+  captureOwnedChild,
+  isOwnedChildLive,
+  terminateOwnedProcessTree,
+  type OwnedChildProcess,
+} from './processLifecycle'
 
 let pythonProcess: ChildProcess | null = null
+let pythonOwnedProcess: OwnedChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let isPythonReady = false
 let pythonReadinessPromise: Promise<void> | null = null
+let pythonStopPromise: Promise<void> | null = null
+let allowApplicationQuit = false
 let pythonRequestId = 0
 const pendingRequests = new Map<string, { resolve: (value: any) => void; reject: (err: Error) => void }>()
 
@@ -105,6 +114,14 @@ function startPythonSidecar(): Promise<void> {
       windowsHide: true,
     })
     pythonProcess = child
+    try {
+      pythonOwnedProcess = captureOwnedChild(child, pythonExe)
+    } catch (error) {
+      child.kill()
+      pythonProcess = null
+      settleReject(error instanceof Error ? error : new Error(String(error)))
+      return
+    }
 
     let stdoutBuffer = ''
     let stderrBuffer = ''
@@ -155,6 +172,7 @@ function startPythonSidecar(): Promise<void> {
     child.on('error', (error) => {
       console.error('[Python] Spawn error:', error)
       if (pythonProcess === child) pythonProcess = null
+      if (pythonOwnedProcess?.child === child) pythonOwnedProcess = null
       isPythonReady = false
       settleReject(error)
     })
@@ -163,6 +181,7 @@ function startPythonSidecar(): Promise<void> {
       console.log('[Python] Exited with code:', code)
       const wasReady = isPythonReady
       if (pythonProcess === child) pythonProcess = null
+      if (pythonOwnedProcess?.child === child) pythonOwnedProcess = null
       isPythonReady = false
       rejectPendingRequests('Python process exited')
       if (!wasReady) {
@@ -173,6 +192,7 @@ function startPythonSidecar(): Promise<void> {
     setTimeout(() => {
       if (!isPythonReady) {
         settleReject(new Error('Python sidecar startup timeout (45s)'))
+        if (pythonProcess === child) void stopPython()
       }
     }, 45000)
   })
@@ -585,19 +605,84 @@ app.whenReady().then(() => {
   })
 })
 
-function stopPython(): void {
-  if (pythonProcess) {
-    pythonProcess.kill()
-    pythonProcess = null
+function waitForProcessExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const finish = (exited: boolean) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      child.off('exit', onExit)
+      resolve(exited)
+    }
+    const onExit = () => finish(true)
+    child.once('exit', onExit)
+    timer = setTimeout(() => finish(false), timeoutMs)
+  })
+}
+
+async function stopOwnedPythonProcess(child: ChildProcess, owned: OwnedChildProcess): Promise<void> {
+  if (!isOwnedChildLive(owned)) return
+
+  // Cooperative shutdown lets Python revoke permissions and stop a gateway it
+  // owns.  Closing stdin also guarantees cleanup when the JSON frame is not
+  // consumed because the backend is still booting.
+  try {
+    const requestId = `shutdown-${Date.now()}-${++pythonRequestId}`
+    child.stdin?.write(JSON.stringify({ type: 'shutdown', request_id: requestId, payload: {} }) + '\n')
+    child.stdin?.end()
+  } catch (error) {
+    console.warn('[Electron] Could not request graceful Python shutdown:', error)
   }
+
+  if (await waitForProcessExit(child, 5000)) return
+
+  console.warn('[Electron] Graceful sidecar shutdown timed out; terminating owned tree', {
+    pid: owned.pid,
+    executablePath: owned.executablePath,
+  })
+  const treeStopped = await terminateOwnedProcessTree(owned)
+  if (!treeStopped && isOwnedChildLive(owned)) {
+    // This uses Node's retained process handle and therefore cannot target an
+    // unrelated PID.  It is only a final root fallback; stdin EOF remains the
+    // child-side guarantee for the real PyInstaller process.
+    child.kill()
+  }
+  await waitForProcessExit(child, 2000)
+}
+
+function stopPython(): Promise<void> {
+  if (pythonStopPromise) return pythonStopPromise
+
+  const child = pythonProcess
+  const owned = pythonOwnedProcess
+  pythonProcess = null
+  pythonOwnedProcess = null
   isPythonReady = false
   pythonReadinessPromise = null
   rejectPendingRequests('Application shutting down')
+
+  pythonStopPromise = child && owned
+    ? stopOwnedPythonProcess(child, owned)
+    : Promise.resolve()
+  return pythonStopPromise.finally(() => {
+    pythonStopPromise = null
+  })
 }
 
-app.on('before-quit', stopPython)
+app.on('before-quit', (event) => {
+  if (allowApplicationQuit) return
+  event.preventDefault()
+  void stopPython()
+    .catch((error) => console.error('[Electron] Sidecar shutdown failed:', error))
+    .finally(() => {
+      allowApplicationQuit = true
+      app.quit()
+    })
+})
 app.on('window-all-closed', () => {
-  stopPython()
   if (process.platform !== 'darwin') app.quit()
 })
 

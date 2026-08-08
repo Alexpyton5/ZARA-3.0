@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:electron": "tsc -p tsconfig.node.json",
+    "test:lifecycle": "npm run build:electron && node --test tests/processLifecycle.test.cjs",
     "preview": "vite preview",
     "electron:dev": "npm run build:electron && concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron dist-electron/main.js\"",
     "electron:build": "npm run build && npm run build:electron && electron-builder",

@@ -95,41 +95,60 @@ class HermesIntegration:
     async def enable_supercerebro(self) -> bool:
         """Enable ZARA -> Hermes routing and ensure the local gateway is reachable.
 
-        This never terminates or takes ownership of Hermes Desktop; it only
-        controls whether ZARA is allowed to route requests through the gateway.
+        A pre-existing Hermes Desktop gateway is never adopted or terminated.
+        When ZARA has to launch a gateway, the lifecycle helper retains exact
+        ownership so failed activation, toggle OFF, and shutdown can clean it.
         """
-        if self.client is None:
-            self.client = httpx.AsyncClient(
-                base_url=self.gateway_url,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                timeout=30.0,
-            )
+        try:
+            if self.client is None:
+                self.client = httpx.AsyncClient(
+                    base_url=self.gateway_url,
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    timeout=30.0,
+                )
 
-        if not await self.health_check():
-            try:
+            if not await self.health_check():
                 from integrations.hermes.ensure_gateway import start_gateway
-                started = await asyncio.to_thread(start_gateway, self.gateway_url)
-            except Exception as exc:
-                print(f"[Hermes] Could not start gateway: {exc}")
-                started = False
-            if not started or not await self.health_check():
-                self.enabled = False
-                return False
 
-        # Refresh capabilities when the gateway becomes available.
-        await self.load_skills()
-        await self.configure_agent_teams()
-        await self.extend_tool_registry()
-        self.register_zara_tools()
-        self.enabled = True
-        print("[Hermes] Supercerebro enabled")
-        return True
+                started = await asyncio.to_thread(start_gateway, self.gateway_url)
+                if not started or not await self.health_check():
+                    await self._stop_owned_gateway()
+                    self.enabled = False
+                    self.is_connected = False
+                    return False
+
+            # Refresh capabilities before exposing the enabled state.  Any
+            # exception here is an activation failure and must be fail-closed.
+            await self.load_skills()
+            await self.configure_agent_teams()
+            await self.extend_tool_registry()
+            self.register_zara_tools()
+            self.enabled = True
+            print("[Hermes] Supercerebro enabled")
+            return True
+        except Exception as exc:
+            self.enabled = False
+            self.is_connected = False
+            await self._stop_owned_gateway()
+            print(f"[Hermes] Supercerebro activation failed: {exc}")
+            return False
 
     async def disable_supercerebro(self) -> bool:
-        """Disable ZARA -> Hermes routing without shutting down Hermes Desktop."""
+        """Disable routing and stop only a gateway launched by this ZARA."""
         self.enabled = False
+        self.is_connected = False
+        stopped = await self._stop_owned_gateway()
         print("[Hermes] Supercerebro disabled")
-        return True
+        return stopped
+
+    async def _stop_owned_gateway(self) -> bool:
+        from integrations.hermes.ensure_gateway import stop_gateway
+
+        try:
+            return await asyncio.to_thread(stop_gateway)
+        except Exception as exc:
+            print(f"[Hermes] Owned gateway cleanup warning: {exc}")
+            return False
 
     async def load_skills(self):
         """Load all available skills from Hermes."""
@@ -383,10 +402,13 @@ class HermesIntegration:
 
     async def shutdown(self):
         """Shutdown Hermes integration."""
+        # Revoke routing before any awaited I/O and clean up only our gateway.
+        self.enabled = False
+        self.is_connected = False
+        await self._stop_owned_gateway()
         if self.client:
             await self.client.aclose()
             self.client = None
-        self.is_connected = False
 
 
 # Global instance

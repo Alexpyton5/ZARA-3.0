@@ -50,7 +50,7 @@ module.exports = [
     },
   },
   {
-    files: ['src/main.ts', 'src/preload.ts', 'src/reminderEvents.ts'],
+    files: ['src/main.ts', 'src/preload.ts', 'src/reminderEvents.ts', 'src/processLifecycle.ts'],
     languageOptions: {
       parser: typescriptParser,
       ecmaVersion: 2022,
@@ -60,6 +60,7 @@ module.exports = [
         console: 'readonly',
         process: 'readonly',
         setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
       parserOptions: {
         project: './tsconfig.node.json',

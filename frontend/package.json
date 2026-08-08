@@ -1,0 +1,73 @@
+{
+  "name": "zara-frontend",
+  "version": "3.0.0",
+  "description": "ZARA 3.0 Neural Interface - Electron + React + Three.js",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:electron": "tsc -p tsconfig.node.json",
+    "preview": "vite preview",
+    "electron:dev": "npm run build:electron && concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron dist-electron/main.js\"",
+    "electron:build": "npm run build && npm run build:electron && electron-builder",
+    "lint": "eslint src --ext ts,tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^1.29.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.1.2",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/three": "^0.160.0",
+    "@typescript-eslint/eslint-plugin": "^8.66.0",
+    "@typescript-eslint/parser": "^8.66.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.0",
+    "concurrently": "^8.2.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.0.0",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "wait-on": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.zara.neural-interface",
+    "productName": "ZARA 3.0",
+    "files": [
+      "dist-electron/**/*",
+      "dist-frontend/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "../dist-sidecar/zara-backend.exe",
+        "to": "backend/zara-backend.exe"
+      },
+      {
+        "from": "public/zara.ico",
+        "to": "assets/zara.ico"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/zara.ico",
+      "signAndEditExecutable": false
+    }
+  },
+  "allowScripts": {
+    "electron@28.3.3": true,
+    "esbuild@0.21.5": true
+  }
+}

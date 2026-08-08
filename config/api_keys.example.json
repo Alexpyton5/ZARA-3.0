@@ -1,0 +1,21 @@
+{
+  "gemini_api_key": "",
+  "zai_api_key": "",
+  "xai_api_key": "",
+  "groq_api_key": "",
+  "nvidia_api_key": "",
+  "hermes_ativo": false,
+  "hermes_url": "http://127.0.0.1:8642",
+  "hermes_api_key": "",
+  "hermes_timeout": 120,
+  "assistant_name": "ZARA",
+  "wake_word": "ZARA",
+  "wake_word_mode": false,
+  "clipboard_monitoring": false,
+  "gemini_tts_for_local": false,
+  "allow_gemini_fallback": true,
+  "ai_engine": "auto",
+  "voice_mode": "gemini_live",
+  "gemini_live_model": "gemini-3.1-flash-live-preview",
+  "gemini_live_voice": "Kore"
+}

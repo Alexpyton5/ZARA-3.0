@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""
+ZARA 3.0 — Neural Interface Entry Point
+Python sidecar for Electron frontend. Handles IPC via stdin/stdout.
+"""
+
+import asyncio
+import os
+import sys
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Force local venv isolation
+os.environ.pop("PYTHONPATH", None)
+
+
+def setup_environment():
+    """Create only user-writable runtime directories."""
+    from core.paths import config_dir, data_dir, logs_dir, memory_dir, user_data_dir
+
+    user_data_dir()
+    config_dir()
+    data_dir()
+    logs_dir()
+    memory_dir()
+
+
+def check_dependencies() -> bool:
+    """Check essential dependencies and report optional capabilities separately."""
+    import importlib.util
+
+    essential = [
+        "httpx", "pydantic", "pydantic_settings", "psutil",
+    ]
+    optional = [
+        "cv2", "mss", "PIL", "pytesseract", "vosk", "pvporcupine",
+        "kokoro_onnx", "sounddevice", "numpy", "scipy", "playwright",
+        "pyperclip", "watchdog",
+    ]
+
+    missing_essential = [pkg for pkg in essential if importlib.util.find_spec(pkg) is None]
+    missing_optional = [pkg for pkg in optional if importlib.util.find_spec(pkg) is None]
+
+    if missing_optional:
+        print(f"[ZARA] Optional capabilities unavailable: {', '.join(missing_optional)}")
+    if missing_essential:
+        print(f"[ERROR] Missing essential dependencies: {', '.join(missing_essential)}")
+        print("Run: uv pip install -r requirements.txt")
+        return False
+    return True
+
+
+async def run_ipc_handler():
+    """Run the IPC handler (main entry point for Python sidecar)"""
+    from core.ipc_handlers import main as ipc_main
+    await ipc_main()
+
+
+def main() -> int:
+    """Main entry point."""
+    print("=" * 60)
+    print("  ZARA 3.0 — NEURAL INTERFACE")
+    print("  Python Sidecar Starting...")
+    print("=" * 60)
+
+    setup_environment()
+
+    if not check_dependencies():
+        return 1
+
+    try:
+        asyncio.run(run_ipc_handler())
+    except KeyboardInterrupt:
+        print("\n[ZARA] Shutdown requested")
+    except Exception as e:
+        print(f"[ERROR] Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+    print("[ZARA] Goodbye")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

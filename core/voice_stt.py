@@ -1,0 +1,505 @@
+"""
+Voice STT — Vosk offline speech recognition + Porcupine wake word.
+Thread-safe, async-friendly, designed for ZARA 3.0 neural interface.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import queue
+import threading
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+# Optional imports - gracefully handle missing deps
+try:
+    import vosk
+    VOSK_AVAILABLE = True
+except ImportError:
+    VOSK_AVAILABLE = False
+    vosk = None
+
+try:
+    import pvporcupine
+    PORCUPINE_AVAILABLE = True
+except ImportError:
+    PORCUPINE_AVAILABLE = False
+    pvporcupine = None
+
+try:
+    import sounddevice as sd
+    SOUNDDEVICE_AVAILABLE = True
+except ImportError:
+    SOUNDDEVICE_AVAILABLE = False
+    sd = None
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    np = None
+
+from core.paths import user_data_dir
+
+
+@dataclass
+class VoiceConfig:
+    """Voice pipeline configuration."""
+    # Vosk
+    vosk_model_path: str = ""  # Auto-download if empty
+    vosk_sample_rate: int = 16000
+
+    # Porcupine
+    porcupine_access_key: str = ""  # Required for Porcupine
+    wake_words: list[str] = None  # ["ZARA", "SARA", "HEY ZARA"]
+    porcupine_sensitivity: float = 0.6
+
+    # Audio
+    input_device: int | None = None
+    channels: int = 1
+    chunk_size: int = 4096
+
+    # VAD (Voice Activity Detection)
+    vad_threshold: float = 0.02
+    vad_silence_chunks: int = 30  # ~0.5s at 16kHz/4096
+
+    def __post_init__(self):
+        if self.wake_words is None:
+            self.wake_words = ["ZARA", "SARA"]
+
+
+class VoskSTT:
+    """Offline speech-to-text using Vosk."""
+
+    def __init__(self, config: VoiceConfig):
+        if not VOSK_AVAILABLE:
+            raise RuntimeError("Vosk not installed. Run: uv pip install vosk")
+
+        self.config = config
+        self.model: vosk.Model | None = None
+        self.recognizer: vosk.KaldiRecognizer | None = None
+        self._load_model()
+
+    def _load_model(self):
+        """Load or download Vosk model."""
+        if self.config.vosk_model_path and Path(self.config.vosk_model_path).exists():
+            model_path = self.config.vosk_model_path
+        else:
+            # Default to user data dir
+            model_dir = user_data_dir() / "models" / "vosk"
+            model_dir.mkdir(parents=True, exist_ok=True)
+
+            # Check for Portuguese model
+            pt_model = model_dir / "vosk-model-small-pt-0.3"
+            en_model = model_dir / "vosk-model-small-en-us-0.15"
+
+            if pt_model.exists():
+                model_path = str(pt_model)
+            elif en_model.exists():
+                model_path = str(en_model)
+            else:
+                # Download Portuguese model (small ~40MB)
+                import urllib.request
+                print("[Vosk] Downloading Portuguese model...")
+                url = "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip"
+                zip_path = model_dir / "vosk-pt.zip"
+                urllib.request.urlretrieve(url, zip_path)
+
+                import zipfile
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    zf.extractall(model_dir)
+                zip_path.unlink()
+                model_path = str(pt_model)
+
+        self.model = vosk.Model(model_path)
+        self.recognizer = vosk.KaldiRecognizer(self.model, self.config.vosk_sample_rate)
+        self.recognizer.SetWords(True)
+        print(f"[Vosk] Model loaded: {model_path}")
+
+    def recognize(self, audio_data: bytes) -> str | None:
+        """Recognize speech from audio bytes. Returns text or None."""
+        if self.recognizer.AcceptWaveform(audio_data):
+            result = json.loads(self.recognizer.Result())
+            return result.get("text", "").strip()
+        return None
+
+    def partial_recognize(self, audio_data: bytes) -> str | None:
+        """Get partial recognition result (for live feedback)."""
+        self.recognizer.AcceptWaveform(audio_data)
+        result = json.loads(self.recognizer.PartialResult())
+        return result.get("partial", "").strip()
+
+    def reset(self):
+        """Reset recognizer for new utterance."""
+        self.recognizer = vosk.KaldiRecognizer(self.model, self.config.vosk_sample_rate)
+        self.recognizer.SetWords(True)
+
+
+class PorcupineWakeWord:
+    """Wake word detection using Porcupine."""
+
+    def __init__(self, config: VoiceConfig):
+        if not PORCUPINE_AVAILABLE:
+            raise RuntimeError("Porcupine not installed. Run: uv pip install pvporcupine")
+
+        if not config.porcupine_access_key:
+            raise ValueError("Porcupine access key required. Get free key at https://console.picovoice.ai/")
+
+        self.config = config
+        self.handle: pvporcupine.Porcupine | None = None
+        self._init_porcupine()
+
+    def _init_porcupine(self):
+        """Initialize Porcupine with built-in keywords."""
+        # Map wake words to Porcupine built-in keywords
+        keyword_map = {
+            "ZARA": "jarvis",      # Closest built-in
+            "SARA": "alexa",       # Closest built-in
+            "HEY ZARA": "hey google",
+            "OK ZARA": "ok google",
+            "COMPUTER": "computer",
+        }
+
+        keywords = []
+        sensitivities = []
+
+        for ww in self.config.wake_words:
+            kw = keyword_map.get(ww.upper(), "jarvis")
+            if kw not in keywords:
+                keywords.append(kw)
+                sensitivities.append(self.config.porcupine_sensitivity)
+
+        self.handle = pvporcupine.create(
+            access_key=self.config.porcupine_access_key,
+            keywords=keywords,
+            sensitivities=sensitivities,
+        )
+        print(f"[Porcupine] Initialized with keywords: {keywords}")
+
+    def process(self, pcm: bytes) -> int:
+        """Process audio frame. Returns keyword index if detected, -1 otherwise."""
+        if not NUMPY_AVAILABLE:
+            # Convert bytes to int16 array manually
+            import struct
+            pcm_array = struct.unpack(f"{len(pcm)//2}h", pcm)
+        else:
+            pcm_array = np.frombuffer(pcm, dtype=np.int16)
+
+        return self.handle.process(pcm_array)
+
+    @property
+    def frame_length(self) -> int:
+        return self.handle.frame_length if self.handle else 512
+
+    @property
+    def sample_rate(self) -> int:
+        return self.handle.sample_rate if self.handle else 16000
+
+    def delete(self):
+        if self.handle:
+            self.handle.delete()
+            self.handle = None
+
+
+class AudioInput:
+    """Cross-platform audio input using sounddevice."""
+
+    def __init__(self, config: VoiceConfig):
+        if not SOUNDDEVICE_AVAILABLE:
+            raise RuntimeError("sounddevice not installed. Run: uv pip install sounddevice")
+
+        self.config = config
+        self.stream: sd.RawInputStream | None = None
+        self.queue: queue.Queue[bytes] = queue.Queue(maxsize=100)
+        self._running = False
+
+    def start(self):
+        """Start audio capture."""
+        if self._running:
+            return
+
+        def callback(indata, frames, time, status):
+            if status:
+                print(f"[Audio] Status: {status}")
+            if self._running:
+                try:
+                    self.queue.put_nowait(bytes(indata))
+                except queue.Full:
+                    pass  # Drop frame if queue full
+
+        self.stream = sd.RawInputStream(
+            samplerate=self.config.vosk_sample_rate,
+            blocksize=self.config.chunk_size,
+            device=self.config.input_device,
+            channels=self.config.channels,
+            dtype="int16",
+            callback=callback,
+        )
+        self.stream.start()
+        self._running = True
+        print(f"[Audio] Started: {self.config.vosk_sample_rate}Hz, {self.config.channels}ch")
+
+    def stop(self):
+        """Stop audio capture."""
+        self._running = False
+        if self.stream:
+            self.stream.stop()
+            self.stream.close()
+            self.stream = None
+        # Clear queue
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+            except queue.Empty:
+                break
+        print("[Audio] Stopped")
+
+    def read(self, timeout: float = 0.1) -> bytes | None:
+        """Read audio chunk from queue."""
+        try:
+            return self.queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args):
+        self.stop()
+
+
+class VoicePipeline:
+    """
+    Complete voice pipeline: Wake word -> STT -> Callback.
+    Designed to run in background thread with async callbacks.
+    """
+
+    def __init__(
+        self,
+        config: VoiceConfig,
+        on_wake: Callable[[], None],
+        on_speech: Callable[[str], None],
+        on_partial: Callable[[str], None] = None,
+        on_level: Callable[[float], None] = None,
+    ):
+        self.config = config
+        self.on_wake = on_wake
+        self.on_speech = on_speech
+        self.on_partial = on_partial
+        self.on_level = on_level
+
+        self.vosk: VoskSTT | None = None
+        self.porcupine: PorcupineWakeWord | None = None
+        self.audio: AudioInput | None = None
+
+        self._thread: threading.Thread | None = None
+        self._running = False
+        self._state = "SLEEPING"  # SLEEPING, LISTENING, PROCESSING
+        self._silence_chunks = 0
+        self._speech_buffer: list[bytes] = []
+        self._event_loop: asyncio.AbstractEventLoop | None = None
+
+    def initialize(self):
+        """Initialize all components."""
+        print("[Voice] Initializing...")
+
+        # Initialize Vosk STT
+        self.vosk = VoskSTT(self.config)
+
+        # Initialize Porcupine wake word (if access key provided)
+        if self.config.porcupine_access_key:
+            try:
+                self.porcupine = PorcupineWakeWord(self.config)
+            except Exception as e:
+                print(f"[Voice] Porcupine init failed: {e}")
+                self.porcupine = None
+
+        # Initialize audio input
+        self.audio = AudioInput(self.config)
+
+        print("[Voice] Initialized")
+
+    def start(self):
+        """Start explicit microphone listening in a background thread."""
+        if self._running:
+            self._state = "LISTENING"
+            return
+
+        if not self.vosk or not self.audio:
+            self.initialize()
+
+        try:
+            self._event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._event_loop = None
+
+        self._state = "LISTENING"
+        self._speech_buffer = []
+        self._silence_chunks = 0
+        self._running = True
+        self.audio.start()
+        self._thread = threading.Thread(target=self._run_loop, daemon=True, name="VoicePipeline")
+        self._thread.start()
+        print("[Voice] Pipeline started (LISTENING)")
+
+    def stop(self):
+        """Stop the voice pipeline."""
+        self._running = False
+        if self.audio:
+            self.audio.stop()
+        if self._thread:
+            self._thread.join(timeout=2)
+        if self.porcupine:
+            self.porcupine.delete()
+        self._state = "STOPPED"
+        print("[Voice] Pipeline stopped")
+
+    def _dispatch(self, callback, *args) -> None:
+        """Dispatch a callback safely onto the asyncio loop captured at start()."""
+        if callback is None:
+            return
+        loop = self._event_loop
+        if loop is None or loop.is_closed():
+            return
+        asyncio.run_coroutine_threadsafe(self._safe_call(callback, *args), loop)
+
+    def resume_listening(self) -> None:
+        """Return to listening after ZARA finishes processing/speaking."""
+        if self._running:
+            self._speech_buffer = []
+            self._silence_chunks = 0
+            if self.vosk:
+                self.vosk.reset()
+            self._state = "LISTENING"
+
+    def _run_loop(self):
+        """Main processing loop (runs in background thread)."""
+        print("[Voice] Loop started")
+
+        while self._running:
+            try:
+                # Read audio chunk
+                chunk = self.audio.read(timeout=0.1)
+                if chunk is None:
+                    continue
+
+                # Process wake word (if Porcupine available)
+                if self.porcupine and self._state == "SLEEPING":
+                    keyword_idx = self.porcupine.process(chunk)
+                    if keyword_idx >= 0:
+                        print(f"[Voice] Wake word detected! (keyword {keyword_idx})")
+                        self._state = "LISTENING"
+                        self._speech_buffer = []
+                        self._silence_chunks = 0
+                        self.vosk.reset()
+                        # Call wake callback in main thread
+                        self._dispatch(self.on_wake)
+                        continue
+
+                # Process speech (when listening)
+                if self._state == "LISTENING":
+                    # Voice Activity Detection
+                    if NUMPY_AVAILABLE:
+                        audio_level = np.abs(np.frombuffer(chunk, dtype=np.int16)).mean() / 32768.0
+                    else:
+                        import struct
+                        samples = struct.unpack(f"{len(chunk)//2}h", chunk)
+                        audio_level = sum(abs(s) for s in samples) / len(samples) / 32768.0
+
+                    # Normalize microphone energy for the renderer. Raw mean
+                    # levels are usually small, so scale into a useful 0..1 range.
+                    normalized_level = min(1.0, max(0.0, float(audio_level) * 10.0))
+                    self._dispatch(self.on_level, normalized_level)
+
+                    is_speech = audio_level > self.config.vad_threshold
+
+                    if is_speech:
+                        self._speech_buffer.append(chunk)
+                        self._silence_chunks = 0
+
+                        # Partial recognition for live feedback
+                        if self.on_partial:
+                            partial = self.vosk.partial_recognize(chunk)
+                            if partial:
+                                self._dispatch(self.on_partial, partial)
+                    else:
+                        self._silence_chunks += 1
+                        self._speech_buffer.append(chunk)
+
+                        # End of utterance detected
+                        if self._silence_chunks >= self.config.vad_silence_chunks:
+                            self._process_utterance()
+
+            except Exception as e:
+                print(f"[Voice] Loop error: {e}")
+                import traceback
+                traceback.print_exc()
+
+        print("[Voice] Loop ended")
+
+    def _process_utterance(self):
+        """Process collected speech buffer."""
+        if not self._speech_buffer:
+            return
+
+        # Combine all chunks
+        audio_data = b"".join(self._speech_buffer)
+        self._speech_buffer = []
+
+        # Final recognition
+        text = self.vosk.recognize(audio_data)
+
+        # If no final result, try partial
+        if not text:
+            text = self.vosk.partial_recognize(audio_data)
+
+        if text and len(text) > 1:
+            print(f"[Voice] Recognized: {text}")
+            self._state = "PROCESSING"
+            # Call speech callback in main thread
+            self._dispatch(self.on_speech, text)
+        else:
+            print("[Voice] No speech recognized")
+            if self._running:
+                self._state = "LISTENING"
+
+    async def _safe_call(self, callback, *args):
+        """Safely call async callback."""
+        try:
+            if asyncio.iscoroutinefunction(callback):
+                await callback(*args)
+            else:
+                callback(*args)
+        except Exception as e:
+            print(f"[Voice] Callback error: {e}")
+
+    @property
+    def state(self) -> str:
+        return self._state
+
+    def interrupt(self):
+        """Interrupt current listening (e.g., user pressed stop)."""
+        self._state = "SLEEPING"
+        self._speech_buffer = []
+        self._silence_chunks = 0
+        if self.vosk:
+            self.vosk.reset()
+        print("[Voice] Interrupted")
+
+
+# Factory function for easy creation
+def create_voice_pipeline(
+    on_wake: Callable[[], None],
+    on_speech: Callable[[str], None],
+    on_partial: Callable[[str], None] = None,
+    on_level: Callable[[float], None] = None,
+    access_key: str = "",
+) -> VoicePipeline:
+    """Create voice pipeline with default config."""
+    config = VoiceConfig()
+    if access_key:
+        config.porcupine_access_key = access_key
+    return VoicePipeline(config, on_wake, on_speech, on_partial, on_level)

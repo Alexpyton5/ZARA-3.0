@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "outDir": "dist-electron",
+    "rootDir": "src"
+  },
+  "include": ["src/main.ts", "src/preload.ts"]
+}

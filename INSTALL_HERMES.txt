@@ -1,0 +1,28 @@
+ZARA UPDATE — GEMINI LIVE / KORE + AI ENGINE SELECTOR
+
+BASE REQUIRED
+- Apply only to the source root that built the currently working CLEAN-002 app.
+- Make a backup before overlay.
+
+SECRETS
+- Do NOT overwrite or print config/api_keys.json.
+- Preserve the existing provider keys.
+- Packaged ZARA also reads %LOCALAPPDATA%\ZARA3\config\api_keys.json.
+
+DEPENDENCY
+Use the exact Python interpreter/environment used to build zara-backend.exe:
+  python -m pip install --upgrade "google-genai>=2.13.0"
+
+BUILD ORDER
+1) frontend: npm run typecheck
+2) root: python build_exe.py
+3) frontend: npm run electron:build
+4) test release\win-unpacked\ZARA 3.0.exe
+
+VOICE TEST
+- Gemini key configured -> microphone starts Gemini 3.1 Flash Live with Kore.
+- Verify LISTENING, SPEAKING, transcript, barge-in and particle reaction.
+
+ENGINE TEST
+- AI ENGINE must list AUTO plus only cloud providers whose key exists.
+- Supercérebro remains a separate Hermes Gateway switch and takes priority when ON.

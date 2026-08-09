@@ -24,6 +24,15 @@ _BLOCKED_OUTCOME_MARKERS = (
     "not allowed",
 )
 
+CONVERSATIONAL_SYSTEM_PROMPT = (
+    "Você é ZARA, a assistente pessoal de Alex. Responda em português do Brasil "
+    "quando ele falar em português. Em conversa casual, soe humana, direta e "
+    "acolhedora: normalmente use de uma a três frases curtas. Não transforme uma "
+    "pergunta simples em lista, tutorial ou palestra, salvo quando Alex pedir ou "
+    "quando isso for realmente necessário. Responda primeiro ao que foi perguntado "
+    "e não encerre toda resposta com outra pergunta. Seja precisa e não invente certezas."
+)
+
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
@@ -224,7 +233,7 @@ class ZaraOrchestrator:
                 payload = {
                     "model": model_config.id,
                     "messages": [
-                        {"role": "system", "content": "You are ZARA, a helpful AI assistant. Be concise and accurate."},
+                        {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
                         {"role": "user", "content": message}
                     ],
                     "stream": stream,
@@ -275,7 +284,7 @@ class ZaraOrchestrator:
         payload = {
             "model": model_config.api_model,
             "messages": [
-                {"role": "system", "content": "You are ZARA, a helpful AI assistant. Be concise and accurate."},
+                {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
                 {"role": "user", "content": message}
             ],
             "max_tokens": model_config.max_tokens,
@@ -312,7 +321,7 @@ class ZaraOrchestrator:
 
         payload = {
             "systemInstruction": {
-                "parts": [{"text": "Você é ZARA, uma assistente pessoal útil, objetiva e precisa. Responda em português do Brasil quando o usuário falar em português."}]
+                "parts": [{"text": CONVERSATIONAL_SYSTEM_PROMPT}]
             },
             "contents": [
                 {"role": "user", "parts": [{"text": message}]}

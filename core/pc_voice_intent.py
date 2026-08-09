@@ -43,13 +43,16 @@ class PcVoiceIntentDetector:
              self._search, "web_search", None),
 
             # Volume
-            (r'\b(?:coloque|coloca|defina|ponha|deixe|set)\s+(?:o\s+)?volume\s+(?:em|para|a)\s+(\d{1,3})\s*%?\b',
+            (r'\b(?:coloque|coloca|colocar|defina|define|ponha|põe|deixe|ajuste|set)\s+'
+             r'(?:o\s+)?(?:volume|som)\s+(?:em|para|a|no)\s+(\d{1,3})\s*%?\b',
              self._volume_level, "os_volume", None),
-            (r'\bvolume\s+(\d{1,3})\s*%?\b',
+            (r'\b(?:volume|som)\s+(?:em\s+|no\s+)?(\d{1,3})\s*%?\b',
              self._volume_level, "os_volume", None),
-            (r'\b(aumente?|suba|up|mais\s+volume|increase?)\s+(o\s+)?volume\b',
+            (r'\b(?:(?:aumente?|aumenta|suba|sobe|eleve|up|increase?)\s+'
+             r'(?:(?:um|mais)\s+pouco\s+)?(?:o\s+)?(?:volume|som)|mais\s+(?:volume|som))\b',
              self._volume_up, "os_volume", "up"),
-            (r'\b(diminua?|baixe|down|menos\s+volume|decrease?|lower)\s+(o\s+)?volume\b',
+            (r'\b(?:(?:diminua?|diminui|baixe|baixa|abaixe|abaixa|reduza|reduz|down|decrease?|lower)\s+'
+             r'(?:(?:só\s+)?um\s+pouco\s+)?(?:o\s+)?(?:volume|som)|menos\s+(?:volume|som))\b',
              self._volume_down, "os_volume", "down"),
 
             # Scroll

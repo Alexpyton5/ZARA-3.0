@@ -18,6 +18,7 @@ declare global {
         list?: (limit?: number) => Promise<any>;
         clear?: () => Promise<any>;
       };
+      memoryGalaxy?: { list?: () => Promise<any> };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
       system?: { metrics?: () => Promise<any>; info?: () => Promise<any> };
       voice?: { start?: () => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any> };

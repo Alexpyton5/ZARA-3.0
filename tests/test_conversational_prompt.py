@@ -51,9 +51,51 @@ async def test_openai_compatible_uses_shared_conversational_prompt():
 
 
 @pytest.mark.asyncio
+async def test_openai_history_preserves_order_and_drops_current_message_duplicate():
+    client = _Client()
+    await ZaraOrchestrator()._call_openai_compatible(
+        "current",
+        _model(ModelProvider.GROQ),
+        "test-key",
+        client,
+        [
+            {"role": "user", "content": "previous"},
+            {"role": "assistant", "content": "answer"},
+            {"role": "user", "content": "current"},
+        ],
+    )
+    assert client.payload["messages"][1:] == [
+        {"role": "user", "content": "previous"},
+        {"role": "assistant", "content": "answer"},
+        {"role": "user", "content": "current"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_gemini_uses_shared_conversational_prompt():
     client = _Client()
     await ZaraOrchestrator()._call_gemini(
         "oi", _model(ModelProvider.GEMINI), "test-key", client
     )
     assert client.payload["systemInstruction"]["parts"][0]["text"] == CONVERSATIONAL_SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_gemini_history_maps_assistant_role_to_model():
+    client = _Client()
+    await ZaraOrchestrator()._call_gemini(
+        "current",
+        _model(ModelProvider.GEMINI),
+        "test-key",
+        client,
+        [
+            {"role": "user", "content": "previous"},
+            {"role": "assistant", "content": "answer"},
+            {"role": "user", "content": "current"},
+        ],
+    )
+    assert client.payload["contents"] == [
+        {"role": "user", "parts": [{"text": "previous"}]},
+        {"role": "model", "parts": [{"text": "answer"}]},
+        {"role": "user", "parts": [{"text": "current"}]},
+    ]

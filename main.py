@@ -36,6 +36,23 @@ def setup_environment():
     logs_dir()
     memory_dir()
 
+    # Advisory single-writer guard: warn (never kill) if another live ZARA
+    # process already owns this data dir. Fail-open by design.
+    try:
+        from core.single_writer import acquire_writer_lock
+
+        lock = acquire_writer_lock(data_dir())
+        if lock.blocked:
+            print(
+                "[ZARA][WARN] Outro processo ZARA (PID "
+                f"{lock.conflict_pid}) ja usa este data dir: {data_dir()}. "
+                "Risco de dois writers no mesmo SQLite/WAL. "
+                "Use ZARA3_HOME para isolar um runtime de teste."
+            )
+        return lock
+    except Exception:
+        return None
+
 
 def check_dependencies() -> bool:
     """Check essential dependencies and report optional capabilities separately."""
@@ -76,7 +93,7 @@ def main() -> int:
     print("  Python Sidecar Starting...")
     print("=" * 60)
 
-    setup_environment()
+    writer_lock = setup_environment()
 
     if not check_dependencies():
         return 1
@@ -92,6 +109,8 @@ def main() -> int:
         return 1
 
     print("[ZARA] Goodbye")
+    if writer_lock is not None:
+        writer_lock.release()
     return 0
 
 

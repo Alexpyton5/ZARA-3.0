@@ -1,12 +1,652 @@
 from __future__ import annotations
 
+import os
 import platform
+import re
+import shutil
 import subprocess
+import time
+import uuid
+from pathlib import Path
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 from core.action_registry import ActionResult, action
 
+_SAFE_WINDOWS_APPS = {
+    "calculator": {
+        "display_name": "Calculadora",
+        "opened_reply": "Calculadora aberta e verificada.",
+        "executable": "calc.exe",
+        "process_names": {"calc.exe", "calculator.exe", "calculatorapp.exe"},
+    },
+    "notepad": {
+        "display_name": "Bloco de Notas",
+        "opened_reply": "Bloco de Notas aberto e verificado.",
+        "executable": "notepad.exe",
+        "process_names": {"notepad.exe"},
+    },
+    "chrome": {
+        "display_name": "Chrome",
+        "opened_reply": "Chrome aberto e verificado.",
+        "executable": "chrome.exe",
+        "process_names": {"chrome.exe"},
+    },
+    "task_manager": {
+        "display_name": "Gerenciador de Tarefas",
+        "opened_reply": "Gerenciador de Tarefas aberto e verificado.",
+        "executable": "taskmgr.exe",
+        "process_names": {"taskmgr.exe"},
+    },
+    "settings": {
+        "display_name": "Configurações",
+        "opened_reply": "Configurações abertas e verificadas.",
+        "executable": "ms-settings:",
+        "process_names": {"systemsettings.exe"},
+    },
+    "paint": {
+        "display_name": "Paint",
+        "opened_reply": "Paint aberto e verificado.",
+        "executable": "mspaint.exe",
+        "process_names": {"mspaint.exe"},
+    },
+    "snipping_tool": {
+        "display_name": "Ferramenta de Captura",
+        "opened_reply": "Ferramenta de Captura aberta e verificada.",
+        "executable": "snippingtool.exe",
+        "process_names": {"snippingtool.exe"},
+    },
+    "edge": {
+        "display_name": "Microsoft Edge",
+        "opened_reply": "Microsoft Edge aberto e verificado.",
+        "executable": "msedge.exe",
+        "process_names": {"msedge.exe"},
+    },
+    "spotify": {
+        "display_name": "Spotify",
+        "opened_reply": "Spotify aberto e verificado.",
+        "executable": "spotify:",
+        "process_names": {"spotify.exe"},
+    },
+}
 
-@action(name="os_volume", category="os", description="Get or set system volume", capability="PC_CONTROL")
+_WINDOWS_MEDIA_COMMANDS = {
+    "media_next": 11,
+    "media_previous": 12,
+    "media_play_pause": 14,
+}
+
+_WINDOWS_KNOWN_FOLDER_IDS = {
+    "downloads": "374DE290-123F-4565-9164-39C4925E467B",
+    "documents": "FDD39AD0-238F-46AF-ADB4-6C85480369C7",
+    "desktop": "B4BFCC3A-DB2C-424C-B029-7FE99A87C641",
+    "pictures": "33E28130-4E1E-4676-835A-98395C3BC3BB",
+}
+
+_SAFE_FOLDER_NAMES = {
+    "downloads": "Downloads",
+    "documents": "Documentos",
+    "desktop": "Área de Trabalho",
+    "pictures": "Imagens",
+    "zara_root": "pasta da ZARA",
+}
+
+_BROWSER_PROCESS_NAMES = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe"}
+_SAFE_CLOSE_APPS = {
+    "calculator", "notepad", "chrome", "task_manager", "settings", "paint",
+    "snipping_tool", "edge", "spotify",
+}
+_SAFE_CLOSE_TITLE_TOKENS = {
+    "calculator": {"calculadora", "calculator"},
+    "notepad": {"bloco de notas", "notepad"},
+    "chrome": {"google chrome", "chrome"},
+    "task_manager": {"gerenciador de tarefas", "task manager"},
+    "settings": {"configurações", "settings"},
+    "paint": {"paint"},
+    "snipping_tool": {"ferramenta de captura", "snipping tool"},
+    "edge": {"microsoft edge", "edge"},
+    "spotify": {"spotify"},
+}
+
+
+def _normalize_browser_url(raw: str) -> str | None:
+    value = str(raw or "").strip()
+    if not value or any(ord(char) < 32 for char in value) or "\\" in value:
+        return None
+    if "://" not in value:
+        value = f"https://{value}"
+    try:
+        parsed = urlsplit(value)
+        if parsed.scheme.casefold() not in {"http", "https"} or not parsed.hostname:
+            return None
+        if parsed.username or parsed.password:
+            return None
+        host = parsed.hostname.encode("idna").decode("ascii").casefold()
+        labels = host.split(".")
+        if len(labels) < 2 or any(not label or not label.replace("-", "").isalnum() for label in labels):
+            return None
+        port = parsed.port
+        netloc = host if port is None else f"{host}:{port}"
+        path = parsed.path or "/"
+        if path.casefold().endswith((".exe", ".cmd", ".bat", ".ps1", ".msi")):
+            return None
+        return urlunsplit((parsed.scheme.casefold(), netloc, path, parsed.query, ""))
+    except (UnicodeError, ValueError):
+        return None
+
+
+@action(name="browser_open_url", category="os", description="Open a validated HTTP(S) URL in the default browser", capability="PC_CONTROL")
+def browser_open_url_action(url: str) -> ActionResult:
+    normalized = _normalize_browser_url(url)
+    if normalized is None:
+        return ActionResult(success=False, error="URL bloqueada: use somente um destino HTTP/HTTPS público válido.")
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Abertura no navegador padrão disponível somente no Windows.")
+    before = _running_app_pids(_BROWSER_PROCESS_NAMES)
+    try:
+        os.startfile(normalized)  # type: ignore[attr-defined]
+    except OSError as exc:
+        return ActionResult(success=False, error=f"Falha ao enviar URL ao navegador padrão: {exc}")
+    time.sleep(0.35)
+    after = _running_app_pids(_BROWSER_PROCESS_NAMES)
+    return ActionResult(
+        success=True,
+        output="Destino enviado ao navegador padrão.",
+        data={
+            "url": normalized,
+            "dispatch": "DISPATCH_PROVEN",
+            "browser_process_present": bool(after),
+            "preexisting_browser_pids": sorted(before),
+            "observed_browser_pids": sorted(after),
+            "target_page_proven": False,
+        },
+    )
+
+
+@action(name="browser_search", category="os", description="Search safely in the default browser", capability="PC_CONTROL")
+def browser_search_action(query: str) -> ActionResult:
+    text = str(query or "").strip()
+    if not text or len(text) > 500 or any(ord(char) < 32 for char in text):
+        return ActionResult(success=False, error="Consulta de pesquisa inválida.")
+    url = f"https://www.google.com/search?q={quote_plus(text)}"
+    result = browser_open_url_action(url)
+    if result.success:
+        result.output = "Pesquisa enviada ao navegador padrão."
+        result.data = {**(result.data or {}), "search_url": url}
+    return result
+
+
+def _resolve_windows_app_command(app: str) -> list[str] | None:
+    """Resolve only a canonical allow-listed app id to a fixed executable."""
+    spec = _SAFE_WINDOWS_APPS.get(app)
+    if spec is None:
+        return None
+
+    executable = str(spec["executable"])
+    resolved = shutil.which(executable)
+    if resolved:
+        return [resolved]
+    if app in {"settings", "spotify"}:
+        return [executable]
+    if app not in {"chrome", "edge"}:
+        return [executable]
+
+    relative = "Google/Chrome/Application/chrome.exe" if app == "chrome" else "Microsoft/Edge/Application/msedge.exe"
+    candidates = [
+        Path(os.environ.get("PROGRAMFILES", "")) / relative,
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) / relative,
+        Path(os.environ.get("LOCALAPPDATA", "")) / relative,
+    ]
+    for candidate in candidates:
+        if str(candidate) and candidate.is_file():
+            return [str(candidate)]
+    return None
+
+
+def _running_app_pids(process_names: set[str]) -> set[int]:
+    """Return PIDs for an allow-listed process-name set."""
+    import psutil
+
+    normalized = {name.casefold() for name in process_names}
+    found: set[int] = set()
+    for process in psutil.process_iter(["pid", "name"]):
+        try:
+            name = str(process.info.get("name") or "").casefold()
+            if name in normalized:
+                found.add(int(process.info["pid"]))
+        except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
+            continue
+    return found
+
+
+def _known_windows_folder(folder_id: str) -> Path | None:
+    """Resolve a fixed Windows Known Folder GUID via SHGetKnownFolderPath."""
+    import ctypes
+    from ctypes import wintypes
+
+    guid_text = _WINDOWS_KNOWN_FOLDER_IDS.get(folder_id)
+    if guid_text is None:
+        return None
+
+    class Guid(ctypes.Structure):
+        _fields_ = [
+            ("data1", wintypes.DWORD),
+            ("data2", wintypes.WORD),
+            ("data3", wintypes.WORD),
+            ("data4", ctypes.c_ubyte * 8),
+        ]
+
+    raw = uuid.UUID(guid_text).bytes_le
+    guid = Guid.from_buffer_copy(raw)
+    resolved = ctypes.c_wchar_p()
+    result = ctypes.windll.shell32.SHGetKnownFolderPath(
+        ctypes.byref(guid), 0, None, ctypes.byref(resolved)
+    )
+    if result != 0 or not resolved.value:
+        return None
+    try:
+        return Path(resolved.value)
+    finally:
+        ctypes.windll.ole32.CoTaskMemFree(resolved)
+
+
+def _resolve_safe_folder(folder: str) -> Path | None:
+    """Resolve only canonical allow-listed folder ids to existing directories."""
+    canonical = str(folder or "").strip().casefold()
+    if canonical not in _SAFE_FOLDER_NAMES:
+        return None
+    if canonical == "zara_root":
+        from core.paths import project_root
+
+        candidate = project_root()
+    elif platform.system() == "Windows":
+        candidate = _known_windows_folder(canonical)
+    else:
+        return None
+    if candidate is None:
+        return None
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    return resolved if resolved.is_dir() and resolved.is_absolute() else None
+
+
+@action(
+    name="os_open",
+    category="os",
+    description="Open a known safe folder from an explicit allow-list",
+    capability="LOCAL_PC_CONTROL",
+)
+def os_open_action(folder: str) -> ActionResult:
+    canonical = str(folder or "").strip().casefold()
+    if canonical not in _SAFE_FOLDER_NAMES:
+        return ActionResult(
+            success=False,
+            error="Pasta não autorizada. Use Downloads, Documentos, Área de Trabalho, Imagens ou pasta da ZARA.",
+            data={"folder": canonical, "allowlisted": False},
+        )
+    path = _resolve_safe_folder(canonical)
+    if path is None:
+        return ActionResult(
+            success=False,
+            error=f"{_SAFE_FOLDER_NAMES[canonical]} não existe ou não pôde ser resolvida com segurança.",
+            data={"folder": canonical, "allowlisted": True, "exists": False},
+        )
+
+    before = _running_app_pids({"explorer.exe"})
+    try:
+        os.startfile(str(path))  # type: ignore[attr-defined]
+    except OSError as exc:
+        return ActionResult(success=False, error=f"Falha ao solicitar abertura da pasta: {exc}")
+    time.sleep(0.25)
+    after = _running_app_pids({"explorer.exe"})
+    verification = "EXPLORER_PROCESS_PRESENT" if after else "DISPATCH_ONLY"
+    return ActionResult(
+        success=True,
+        output=f"Solicitação para abrir {_SAFE_FOLDER_NAMES[canonical]} enviada ao Explorer.",
+        data={
+            "folder": canonical,
+            "path": str(path),
+            "allowlisted": True,
+            "preexisting_explorer_pids": sorted(before),
+            "observed_explorer_pids": sorted(after),
+            "verification": verification,
+        },
+    )
+
+
+def _send_windows_media_command(action_name: str) -> None:
+    """Send one fixed WM_APPCOMMAND media action; no user text is accepted."""
+    import ctypes
+
+    command = _WINDOWS_MEDIA_COMMANDS[action_name]
+    hwnd_broadcast = 0xFFFF
+    wm_appcommand = 0x0319
+    ctypes.windll.user32.SendMessageW(hwnd_broadcast, wm_appcommand, 0, command << 16)
+
+
+def _read_windows_mute() -> bool | None:
+    """Read the master endpoint mute state with COM lifecycle isolation."""
+    try:
+        from comtypes import CoInitialize, CoUninitialize
+        from pycaw.pycaw import AudioUtilities
+
+        from core.windows_audio import get_endpoint_volume
+
+        CoInitialize()
+        try:
+            devices = AudioUtilities.GetSpeakers()
+            volume = get_endpoint_volume(devices)
+            return bool(volume.GetMute())
+        finally:
+            CoUninitialize()
+    except Exception:
+        return None
+
+
+def _set_windows_mute(muted: bool) -> bool:
+    """Set master endpoint mute through pycaw and return whether it ran."""
+    try:
+        from comtypes import CoInitialize, CoUninitialize
+        from pycaw.pycaw import AudioUtilities
+
+        from core.windows_audio import get_endpoint_volume
+
+        CoInitialize()
+        try:
+            devices = AudioUtilities.GetSpeakers()
+            volume = get_endpoint_volume(devices)
+            volume.SetMute(bool(muted), None)
+            return True
+        finally:
+            CoUninitialize()
+    except Exception:
+        return False
+
+
+def _media_semantic_state() -> dict | None:
+    """Best-effort semantic playback readback using backends ALREADY present.
+
+    Returns None when no semantic backend is available (winsdk/WinRT GSMTC is
+    NOT installed and must not be installed). The pycaw fallback reports which
+    processes currently hold an ACTIVE render session, which is a real, if
+    coarse, playback signal — enough to prove play/pause transitions.
+    """
+    if platform.system() != "Windows":
+        return None
+    try:
+        from pycaw.pycaw import AudioUtilities
+    except Exception:
+        return None
+    try:
+        active = []
+        for session in AudioUtilities.GetAllSessions():
+            try:
+                if int(session.State) != 1:  # 1 == AudioSessionStateActive
+                    continue
+                proc = session.Process
+                active.append(proc.name() if proc else "system")
+            except Exception:
+                continue
+        return {"backend": "pycaw_session_state", "active_render_sessions": sorted(active)}
+    except Exception:
+        return None
+
+
+def _media_action(action_name: str, reply: str) -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de mídia disponível somente no Windows.")
+    try:
+        before = _media_semantic_state()
+        _send_windows_media_command(action_name)
+        after = _media_semantic_state() if before is not None else None
+
+        if before is None or after is None:
+            # Regra #11 / Tarefa 054: NAO declarar sucesso sem readback semantico.
+            # WM_APPCOMMAND emite o evento mas nao prove o estado da midia.
+            return ActionResult(
+                success=False,
+                error="MEDIA_COMMAND_SENT_NOT_PROVEN",
+                output=reply,
+                data={
+                    "action": action_name,
+                    "transport": "WM_APPCOMMAND",
+                    "state_verified": False,
+                    "readback": "UNAVAILABLE",
+                },
+            )
+
+        changed = before != after
+        if not changed:
+            # Readback existe mas nada mudou: continua NAO PROVADO.
+            return ActionResult(
+                success=False,
+                error="MEDIA_COMMAND_SENT_NOT_PROVEN",
+                output=reply,
+                data={
+                    "action": action_name,
+                    "transport": "WM_APPCOMMAND",
+                    "state_verified": False,
+                    "readback": "NO_SEMANTIC_CHANGE",
+                    "before": before,
+                    "after": after,
+                },
+            )
+
+        return ActionResult(
+            success=True,
+            output=reply,
+            data={
+                "action": action_name,
+                "transport": "WM_APPCOMMAND",
+                "state_verified": True,
+                "readback": "SEMANTIC_CHANGE_CONFIRMED",
+                "before": before,
+                "after": after,
+            },
+        )
+    except Exception as exc:
+        return ActionResult(success=False, error=f"Falha no controle de mídia: {exc}")
+
+
+@action(name="media_play_pause", category="os", description="Toggle media play/pause", capability="LOCAL_PC_CONTROL")
+def media_play_pause_action() -> ActionResult:
+    return _media_action("media_play_pause", "Comando play/pause enviado.")
+
+
+@action(name="media_next", category="os", description="Skip to next media track", capability="LOCAL_PC_CONTROL")
+def media_next_action() -> ActionResult:
+    return _media_action("media_next", "Comando de próxima faixa enviado.")
+
+
+@action(name="media_previous", category="os", description="Return to previous media track", capability="LOCAL_PC_CONTROL")
+def media_previous_action() -> ActionResult:
+    return _media_action("media_previous", "Comando de faixa anterior enviado.")
+
+
+@action(name="audio_status", category="os", description="Read the real default Windows audio endpoint and active render sessions", capability="READ_ONLY")
+def audio_status_action() -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Status de áudio disponível somente no Windows.")
+    try:
+        from comtypes import CoInitialize, CoUninitialize
+        from pycaw.pycaw import AudioUtilities
+
+        from core.windows_audio import get_endpoint_volume
+        CoInitialize()
+        try:
+            endpoint = AudioUtilities.GetSpeakers()
+            endpoint_id = str(getattr(endpoint, "id", "") or endpoint.GetId())
+            name = ""
+            for device in AudioUtilities.GetAllDevices():
+                if str(device.id) == endpoint_id:
+                    name = str(device.FriendlyName or "")
+                    break
+            volume = get_endpoint_volume(endpoint)
+            level = int(round(float(volume.GetMasterVolumeLevelScalar()) * 100))
+            muted = bool(volume.GetMute())
+            sessions = _media_semantic_state() or {"backend": "unavailable", "active_render_sessions": []}
+        finally:
+            CoUninitialize()
+        return ActionResult(success=True, output=f"Saída padrão: {name or 'dispositivo sem nome'}, volume {level}%, {'mudo' if muted else 'com som'}.", data={"default_output_id": endpoint_id, "default_output_name": name, "volume": level, "muted": muted, "media": sessions, "metadata_backend": "NOT_AVAILABLE", "verified": True})
+    except Exception as exc:
+        return ActionResult(success=False, error=f"Não consegui ler o status de áudio: {exc}")
+
+
+def _audio_mute_action(desired: bool) -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de mudo disponível somente no Windows.")
+    before = _read_windows_mute()
+    if before is None:
+        return ActionResult(success=False, error="Não foi possível ler o estado de mudo do Windows.")
+    if not _set_windows_mute(desired):
+        return ActionResult(success=False, error="Não foi possível alterar o estado de mudo do Windows.")
+    after = _read_windows_mute()
+    if after is None or after is not desired:
+        return ActionResult(
+            success=False,
+            error="A alteração foi enviada, mas o estado de mudo não pôde ser confirmado.",
+            data={"original_muted": before, "requested_muted": desired, "verified_muted": after},
+        )
+    return ActionResult(
+        success=True,
+        output="Mudo ativado." if desired else "Mudo desativado.",
+        data={"original_muted": before, "requested_muted": desired, "verified_muted": after},
+    )
+
+
+@action(name="audio_mute", category="os", description="Mute master audio", capability="LOCAL_PC_CONTROL")
+def audio_mute_action() -> ActionResult:
+    return _audio_mute_action(True)
+
+
+@action(name="audio_unmute", category="os", description="Unmute master audio", capability="LOCAL_PC_CONTROL")
+def audio_unmute_action() -> ActionResult:
+    return _audio_mute_action(False)
+
+
+@action(
+    name="os_app",
+    category="os",
+    description="Open a known safe Windows application from an explicit allow-list",
+    capability="LOCAL_PC_CONTROL",
+)
+def os_app_action(app: str) -> ActionResult:
+    """Open and verify one canonical allow-listed Windows application."""
+    canonical = str(app or "").strip().casefold()
+    spec = _SAFE_WINDOWS_APPS.get(canonical)
+    if spec is None:
+        return ActionResult(
+            success=False,
+            error="Aplicativo não autorizado. Use um aplicativo conhecido da lista segura.",
+            data={"app": canonical, "allowlisted": False},
+        )
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Abertura de aplicativos disponível somente no Windows.")
+
+    command = _resolve_windows_app_command(canonical)
+    if not command:
+        return ActionResult(
+            success=False,
+            error=f"{spec['display_name']} não foi encontrado neste computador.",
+            data={"app": canonical, "allowlisted": True},
+        )
+
+    process_names = set(spec["process_names"])
+    before = _running_app_pids(process_names)
+    try:
+        # ShellExecute is the reliable Windows path for both classic and
+        # packaged GUI apps. The target still comes exclusively from the
+        # canonical allow-list above; user text never reaches this call.
+        os.startfile(command[0])  # type: ignore[attr-defined]
+    except OSError as exc:
+        return ActionResult(success=False, error=f"Falha ao abrir {spec['display_name']}: {exc}")
+
+    observed: set[int] = set()
+    deadline = time.monotonic() + 4.0
+    while time.monotonic() < deadline:
+        observed = _running_app_pids(process_names)
+        if observed:
+            break
+        time.sleep(0.1)
+
+    created = observed - before
+    if not observed:
+        return ActionResult(
+            success=False,
+            error=f"Não foi possível verificar o processo de {spec['display_name']} após a abertura.",
+            data={
+                "app": canonical,
+                "allowlisted": True,
+                "launcher_pid": None,
+                "preexisting_pids": sorted(before),
+                "observed_pids": [],
+                "created_pids": [],
+                "verified": False,
+            },
+        )
+
+    hwnd = None
+    window_deadline = time.monotonic() + 4.0
+    while hwnd is None and time.monotonic() < window_deadline:
+        hwnd = _window_for_pids(observed)
+        if hwnd is None:
+            time.sleep(0.1)
+
+    return ActionResult(
+        success=True,
+        output=str(spec["opened_reply"]),
+        data={
+            "app": canonical,
+            "allowlisted": True,
+            "launcher_pid": None,
+            "preexisting_pids": sorted(before),
+            "observed_pids": sorted(observed),
+            "created_pids": sorted(created),
+            "hwnd": hwnd,
+            "window_pid": _window_pid(hwnd) if hwnd is not None else None,
+            "verified": True,
+        },
+    )
+
+
+@action(
+    name="os_close_safe_app",
+    category="os",
+    description="Close one explicit low-risk allow-listed application window",
+    capability="LOCAL_PC_CONTROL",
+)
+def os_close_safe_app_action(app: str) -> ActionResult:
+    canonical = str(app or "").strip().casefold()
+    if canonical not in _SAFE_CLOSE_APPS:
+        return ActionResult(
+            success=False,
+            error="Fechamento não autorizado: o aplicativo pode conter trabalho não salvo.",
+            data={"app": canonical, "allowlisted": False},
+        )
+    spec = _SAFE_WINDOWS_APPS[canonical]
+    pids = _running_app_pids(set(spec["process_names"]))
+    target = _window_for_safe_app(canonical, pids)
+    if target is None:
+        return ActionResult(success=False, error=f"Nenhuma janela de {spec['display_name']} foi encontrada.")
+    import ctypes
+
+    before_pid = _window_pid(target)
+    if not ctypes.windll.user32.PostMessageW(target, 0x0010, 0, 0):  # WM_CLOSE
+        return ActionResult(success=False, error="O Windows recusou o fechamento seguro da janela.")
+    deadline = time.monotonic() + 3.0
+    while ctypes.windll.user32.IsWindow(target) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    if ctypes.windll.user32.IsWindow(target):
+        return ActionResult(success=False, error="O fechamento foi enviado, mas a janela permaneceu aberta.")
+    return ActionResult(
+        success=True,
+        output=f"Aplicativo fechado e verificado: {spec['display_name']}.",
+        data={"app": canonical, "hwnd": target, "pid": before_pid, "verified_closed": True},
+    )
+
+
+@action(name="os_volume", category="os", description="Get or set system volume", capability="LOCAL_PC_CONTROL")
 def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
     """Get or set system volume."""
     try:
@@ -21,13 +661,14 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
                 except FileNotFoundError:
                     # Use pycaw if available
                     try:
-                        from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
-                        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                        from comtypes import CoInitialize, CoUninitialize
+                        from pycaw.pycaw import AudioUtilities
+
+                        from core.windows_audio import get_endpoint_volume
                         CoInitialize()
                         try:
                             devices = AudioUtilities.GetSpeakers()
-                            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                            volume = interface.QueryInterface(IAudioEndpointVolume)
+                            volume = get_endpoint_volume(devices)
                             volume.SetMasterVolumeLevelScalar(level / 100, None)
                         finally:
                             CoUninitialize()
@@ -40,13 +681,14 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
                 except FileNotFoundError:
                     # Use pycaw if available
                     try:
-                        from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
-                        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                        from comtypes import CoInitialize, CoUninitialize
+                        from pycaw.pycaw import AudioUtilities
+
+                        from core.windows_audio import get_endpoint_volume
                         CoInitialize()
                         try:
                             devices = AudioUtilities.GetSpeakers()
-                            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                            volume = interface.QueryInterface(IAudioEndpointVolume)
+                            volume = get_endpoint_volume(devices)
                             volume.SetMute(mute, None)
                         finally:
                             CoUninitialize()
@@ -72,36 +714,885 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
         return ActionResult(success=False, error=str(e))
 
 
-@action(name="os_brightness", category="os", description="Get or set screen brightness", capability="PC_CONTROL")
-def os_brightness_action(level: int = None) -> ActionResult:
-    """Get or set screen brightness (Windows only)."""
+def _physical_monitor_handles() -> list[int]:
+    """Enumerate DXVA2 physical monitor handles without shell or Registry."""
+    import ctypes
+    from ctypes import wintypes
+
+    class PhysicalMonitor(ctypes.Structure):
+        _fields_ = [
+            ("handle", wintypes.HANDLE),
+            ("description", wintypes.WCHAR * 128),
+        ]
+
+    handles: list[int] = []
+    callback_type = ctypes.WINFUNCTYPE(
+        wintypes.BOOL,
+        wintypes.HANDLE,
+        wintypes.HDC,
+        ctypes.POINTER(wintypes.RECT),
+        wintypes.LPARAM,
+    )
+
+    def collect(display_handle, _hdc, _rect, _data):
+        count = wintypes.DWORD()
+        if not ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(
+            display_handle, ctypes.byref(count)
+        ):
+            return True
+        monitors = (PhysicalMonitor * count.value)()
+        if ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(
+            display_handle, count.value, monitors
+        ):
+            handles.extend(int(monitor.handle) for monitor in monitors if monitor.handle)
+        return True
+
+    callback = callback_type(collect)
+    ctypes.windll.user32.EnumDisplayMonitors(None, None, callback, 0)
+    return handles
+
+
+def _read_windows_brightness() -> int | None:
+    """Read brightness from the first DDC/CI-capable physical monitor."""
+    import ctypes
+    from ctypes import wintypes
+
+    handles = _physical_monitor_handles()
     try:
-        system = platform.system()
-        if system != "Windows":
-            return ActionResult(success=False, error="Brightness control only implemented for Windows")
+        for handle in handles:
+            minimum = wintypes.DWORD()
+            current = wintypes.DWORD()
+            maximum = wintypes.DWORD()
+            if ctypes.windll.dxva2.GetMonitorBrightness(
+                wintypes.HANDLE(handle),
+                ctypes.byref(minimum),
+                ctypes.byref(current),
+                ctypes.byref(maximum),
+            ):
+                span = maximum.value - minimum.value
+                if span > 0:
+                    return round((current.value - minimum.value) * 100 / span)
+        return None
+    finally:
+        for handle in handles:
+            ctypes.windll.dxva2.DestroyPhysicalMonitor(wintypes.HANDLE(handle))
 
-        if level is None:
-            return ActionResult(success=False, error="Level required")
 
-        # Use WMI to set brightness
+def _set_windows_brightness(level: int) -> bool:
+    """Set all DDC/CI-capable monitors to a clamped percentage."""
+    import ctypes
+    from ctypes import wintypes
+
+    target = max(0, min(100, int(level)))
+    handles = _physical_monitor_handles()
+    changed = False
+    try:
+        for handle in handles:
+            minimum = wintypes.DWORD()
+            current = wintypes.DWORD()
+            maximum = wintypes.DWORD()
+            native_handle = wintypes.HANDLE(handle)
+            if not ctypes.windll.dxva2.GetMonitorBrightness(
+                native_handle,
+                ctypes.byref(minimum),
+                ctypes.byref(current),
+                ctypes.byref(maximum),
+            ):
+                continue
+            native_target = minimum.value + round((maximum.value - minimum.value) * target / 100)
+            if ctypes.windll.dxva2.SetMonitorBrightness(native_handle, native_target):
+                changed = True
+        return changed
+    finally:
+        for handle in handles:
+            ctypes.windll.dxva2.DestroyPhysicalMonitor(wintypes.HANDLE(handle))
+
+
+def _wmi_read_brightness() -> int | None:
+    """Fallback brightness read via WMI (laptop panels without DDC/CI)."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness"
+             " -ErrorAction Stop).CurrentBrightness"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
+        )
+        val = (out.stdout or "").strip().splitlines()
+        for line in val:
+            line = line.strip()
+            if line.isdigit():
+                return max(0, min(100, int(line)))
+    except Exception:
+        pass
+    return None
+
+
+def _wmi_set_brightness(level: int) -> bool:
+    """Fallback brightness set via WMI. Returns True only if the write succeeded."""
+    import subprocess
+
+    target = max(0, min(100, int(level)))
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "$m = Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods"
+             " -ErrorAction Stop; if ($m) { $m.WmiSetBrightness(1, "
+             f"{target}) | Out-Null; 'OK' }} else {{ 'NO_METHOD' }}"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=25,
+        )
+        return "OK" in (out.stdout or "")
+    except Exception:
+        return False
+
+
+def _brightness_action(level: int) -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de brilho disponível somente no Windows.")
+    target = max(0, min(100, int(level)))
+
+    # Preferred path: DDC/CI (external monitors). Fallback: WMI (laptop panels).
+    backend = "ddcci"
+    before = _read_windows_brightness()
+    if before is None:
+        before = _wmi_read_brightness()
+        backend = "wmi" if before is not None else "none"
+
+    if before is None:
+        return ActionResult(
+            success=False,
+            error="Este monitor não oferece controle seguro de brilho (sem DDC/CI nem WMI).",
+            data={"supported": False},
+        )
+
+    if backend == "ddcci":
+        wrote = _set_windows_brightness(target)
+        if not wrote:
+            # DDC/CI read worked but the write was refused: try WMI before failing.
+            wrote = _wmi_set_brightness(target)
+            if wrote:
+                backend = "wmi"
+    else:
+        wrote = _wmi_set_brightness(target)
+
+    if not wrote:
+        return ActionResult(success=False, error="O monitor recusou a alteração de brilho.")
+
+    after = _read_windows_brightness() if backend == "ddcci" else _wmi_read_brightness()
+    if after is None:
+        return ActionResult(
+            success=False,
+            error="A alteração foi enviada, mas o brilho não pôde ser confirmado.",
+            data={"original": before, "target": target, "observed": None, "backend": backend},
+        )
+    return ActionResult(
+        success=True,
+        output=f"Brilho definido para {after}%.",
+        data={"supported": True, "original": before, "target": target,
+              "observed": after, "backend": backend},
+    )
+
+
+@action(name="os_brightness", category="os", description="Get or set screen brightness", capability="LOCAL_PC_CONTROL")
+def os_brightness_action(level: int = None) -> ActionResult:
+    if level is None:
+        current = _read_windows_brightness() if platform.system() == "Windows" else None
+        if current is None and platform.system() == "Windows":
+            current = _wmi_read_brightness()
+        if current is None:
+            return ActionResult(success=False, error="Brilho não suportado neste monitor.")
+        return ActionResult(
+            success=True,
+            output=f"Brilho atual: {current}%",
+            data={"level": current, "observed": current},
+        )
+    return _brightness_action(level)
+
+
+@action(name="os_brightness_absolute", category="os", description="Set absolute screen brightness", capability="LOCAL_PC_CONTROL")
+def os_brightness_absolute_action(level: int) -> ActionResult:
+    return _brightness_action(level)
+
+
+def _relative_brightness(delta: int) -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de brilho disponível somente no Windows.")
+    current = _read_windows_brightness()
+    if current is None:
+        current = _wmi_read_brightness()
+    if current is None:
+        return ActionResult(
+            success=False,
+            error="Não há referência de brilho: este monitor não oferece DDC/CI nem WMI.",
+            data={"supported": False},
+        )
+    return _brightness_action(max(0, min(100, current + delta)))
+
+
+@action(name="os_brightness_up", category="os", description="Increase screen brightness by 10", capability="LOCAL_PC_CONTROL")
+def os_brightness_up_action() -> ActionResult:
+    return _relative_brightness(10)
+
+
+@action(name="os_brightness_down", category="os", description="Decrease screen brightness by 10", capability="LOCAL_PC_CONTROL")
+def os_brightness_down_action() -> ActionResult:
+    return _relative_brightness(-10)
+
+
+def _night_light_not_supported(detail: str = "") -> ActionResult:
+    return ActionResult(
+        success=False,
+        error=detail or "Luz noturna não possui uma API segura suportada; nenhuma alteração foi feita.",
+        data={"supported": False, "safe_status": "NOT_SUPPORTED_SAFE"},
+    )
+
+
+# Nomes/AutomationIds semânticos expostos pelo app Configurações do Windows.
+_NIGHT_LIGHT_AUTOMATION_IDS = (
+    "SystemSettings_Display_BlueLight_ManualToggle_Toggle",
+    "SystemSettings_Display_BlueLight_ManualToggle_ToggleSwitch",
+)
+# Botão manual (Windows 11 pt-BR): não expõe TogglePattern, mas o Name é o estado.
+_NIGHT_LIGHT_BUTTON_AUTOMATION_IDS = (
+    "SystemSettings_Display_BlueLight_ManualToggleOn_Button",
+    "SystemSettings_Display_BlueLight_ManualToggleOff_Button",
+)
+# Name do botão manual -> estado ATUAL da luz noturna.
+_NIGHT_LIGHT_BUTTON_NAME_STATE = {
+    "ativar agora": False,
+    "turn on now": False,
+    "desativar agora": True,
+    "turn off now": True,
+}
+
+_NIGHT_LIGHT_SETTINGS_URI = "ms-settings:nightlight"
+
+
+class _ToggleControl:
+    """Envelope fino sobre um elemento UIA que expõe TogglePattern."""
+
+    kind = "TogglePattern"
+
+    def __init__(self, element, toggle_pattern, describe: str = ""):
+        self._element = element
+        self._pattern = toggle_pattern
+        self.describe = describe
+
+    def get_toggle_state(self):
+        """True=ligado, False=desligado, None=estado não legível (indeterminado/erro)."""
         try:
-            import wmi
-            w = wmi.WMI(namespace="wmi")
-            for monitor in w.WmiMonitorBrightnessMethods():
-                monitor.WmiSetBrightness(level, 0)
-            return ActionResult(success=True, output=f"Brightness set to {level}%")
-        except ImportError:
-            return ActionResult(success=False, error="wmi module required for brightness control")
-    except Exception as e:
-        return ActionResult(success=False, error=str(e))
+            state = int(self._pattern.CurrentToggleState)
+        except Exception:
+            return None
+        if state == 1:
+            return True
+        if state == 0:
+            return False
+        return None
+
+    def toggle(self) -> bool:
+        try:
+            self._pattern.Toggle()
+            return True
+        except Exception:
+            return False
+
+
+class _ManualButtonControl:
+    """Botão manual de Luz noturna: estado lido do Name acessível, ação por InvokePattern."""
+
+    kind = "InvokePattern+AccessibleName"
+
+    def __init__(self, element, invoke_pattern, describe: str = ""):
+        self._element = element
+        self._pattern = invoke_pattern
+        self.describe = describe
+
+    def get_toggle_state(self):
+        try:
+            name = str(self._element.CurrentName or "").strip().casefold()
+        except Exception:
+            return None
+        return _NIGHT_LIGHT_BUTTON_NAME_STATE.get(name)
+
+    def toggle(self) -> bool:
+        try:
+            self._pattern.Invoke()
+            return True
+        except Exception:
+            return False
+
+
+def _open_night_light_settings() -> bool:
+    """Abre a página correta de Configurações (uso permitido do URI)."""
+    try:
+        os.startfile(_NIGHT_LIGHT_SETTINGS_URI)  # noqa: S606
+        return True
+    except Exception:
+        return False
+
+
+def _uia_client():
+    try:
+        import comtypes.client
+
+        try:
+            from comtypes.gen import UIAutomationClient as UIA
+        except Exception:
+            comtypes.client.GetModule("UIAutomationCore.dll")
+            from comtypes.gen import UIAutomationClient as UIA
+        automation = comtypes.client.CreateObject(
+            "{ff48dba4-60ef-4201-aa87-54103eef594e}",
+            interface=UIA.IUIAutomation,
+        )
+        return automation, UIA
+    except Exception:
+        return None, None
+
+
+def _find_night_light_toggle(timeout: float = 8.0):
+    """Localiza semanticamente o controle de Luz noturna via UI Automation.
+
+    Preferência: TogglePattern. Fallback: botão manual com AutomationId conhecido,
+    cujo estado é lido pelo Name acessível. Nunca usa coordenadas nem clique cego.
+    """
+    if platform.system() != "Windows":
+        return None
+    automation, UIA = _uia_client()
+    if automation is None:
+        return None
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            root = automation.GetRootElement()
+            condition = automation.CreateTrueCondition()
+            found = root.FindAll(UIA.TreeScope_Descendants, condition)
+            count = int(found.Length)
+        except Exception:
+            count, found = 0, None
+
+        fallback = None
+        for index in range(count):
+            try:
+                element = found.GetElement(index)
+                automation_id = str(element.CurrentAutomationId or "")
+            except Exception:
+                continue
+
+            if automation_id in _NIGHT_LIGHT_AUTOMATION_IDS:
+                try:
+                    pattern = element.GetCurrentPattern(UIA.UIA_TogglePatternId)
+                    pattern = pattern.QueryInterface(UIA.IUIAutomationTogglePattern)
+                except Exception:
+                    pattern = None
+                if pattern is not None:
+                    return _ToggleControl(element, pattern, describe=automation_id)
+
+            if fallback is None and automation_id in _NIGHT_LIGHT_BUTTON_AUTOMATION_IDS:
+                try:
+                    pattern = element.GetCurrentPattern(UIA.UIA_InvokePatternId)
+                    pattern = pattern.QueryInterface(UIA.IUIAutomationInvokePattern)
+                except Exception:
+                    pattern = None
+                if pattern is not None:
+                    fallback = _ManualButtonControl(element, pattern, describe=automation_id)
+
+        if fallback is not None:
+            return fallback
+        time.sleep(0.5)
+    return None
+
+
+def _night_light_set(desired: bool) -> ActionResult:
+    if platform.system() != "Windows":
+        return _night_light_not_supported("Luz noturna disponível somente no Windows.")
+
+    _open_night_light_settings()
+    control = _find_night_light_toggle()
+    if control is None:
+        return _night_light_not_supported(
+            "Não encontrei o controle acessível de Luz noturna; nenhuma alteração foi feita."
+        )
+
+    before = control.get_toggle_state()
+    if before is None:
+        return _night_light_not_supported(
+            "O controle de Luz noturna não expõe estado legível; nenhuma alteração foi feita."
+        )
+
+    if before == desired:
+        return ActionResult(
+            success=True,
+            output="Luz noturna já estava " + ("ligada." if desired else "desligada."),
+            data={"supported": True, "before": before, "after": before, "changed": False},
+        )
+
+    if not control.toggle():
+        return ActionResult(
+            success=False,
+            error="O controle de Luz noturna recusou a alteração.",
+            data={"supported": True, "before": before, "after": before, "changed": False},
+        )
+
+    after = None
+    deadline = time.monotonic() + 6.0
+    while time.monotonic() < deadline:
+        # Re-localiza o controle: o app Configurações troca o elemento/AutomationId
+        # ao mudar de estado, então reler o mesmo nó cacheado não é confiável.
+        fresh = _find_night_light_toggle(timeout=1.0)
+        after = fresh.get_toggle_state() if fresh is not None else control.get_toggle_state()
+        if after == desired:
+            break
+        time.sleep(0.3)
+
+    if after != desired:
+        return ActionResult(
+            success=False,
+            error="A alteração foi enviada, mas o estado da Luz noturna não pôde ser confirmado.",
+            data={"supported": True, "before": before, "after": after, "changed": False},
+        )
+
+    return ActionResult(
+        success=True,
+        output="Luz noturna " + ("ligada." if desired else "desligada.") + " Estado confirmado.",
+        data={"supported": True, "before": before, "after": after, "changed": True},
+    )
+
+
+@action(name="os_night_light_on", category="os", description="Enable Windows night light when safely supported", capability="LOCAL_PC_CONTROL")
+def os_night_light_on_action() -> ActionResult:
+    return _night_light_set(True)
+
+
+@action(name="os_night_light_off", category="os", description="Disable Windows night light when safely supported", capability="LOCAL_PC_CONTROL")
+def os_night_light_off_action() -> ActionResult:
+    return _night_light_set(False)
+
+
+_CRITICAL_WINDOW_PROCESSES = {
+    "dwm.exe",
+    "explorer.exe",
+    "lockapp.exe",
+    "searchhost.exe",
+    "sihost.exe",
+    "startmenuexperiencehost.exe",
+    "winlogon.exe",
+}
+
+
+def _window_process_name(hwnd: int) -> str:
+    import psutil
+
+    try:
+        return psutil.Process(_window_pid(hwnd)).name().casefold()
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        return ""
+
+
+def _window_pid(hwnd: int) -> int:
+    import ctypes
+
+    pid = ctypes.c_ulong()
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(pid.value)
+
+
+def _eligible_window(hwnd: int) -> bool:
+    import ctypes
+
+    if not hwnd or not ctypes.windll.user32.IsWindow(hwnd):
+        return False
+    if not ctypes.windll.user32.IsWindowVisible(hwnd):
+        return False
+    if ctypes.windll.user32.GetWindowTextLengthW(hwnd) <= 0:
+        return False
+    if ctypes.windll.user32.GetWindow(hwnd, 4):
+        return False
+    if ctypes.windll.user32.GetWindowLongW(hwnd, -20) & 0x80:
+        return False
+    return _window_process_name(hwnd) not in _CRITICAL_WINDOW_PROCESSES
+
+
+def _foreground_window() -> int | None:
+    import ctypes
+
+    hwnd = int(ctypes.windll.user32.GetForegroundWindow() or 0)
+    return hwnd if _eligible_window(hwnd) else None
+
+
+def _window_state(hwnd: int) -> str:
+    import ctypes
+
+    if ctypes.windll.user32.IsIconic(hwnd):
+        return "minimized"
+    if ctypes.windll.user32.IsZoomed(hwnd):
+        return "maximized"
+    return "restored"
+
+
+def _window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    """Return the observed outer window rectangle for an exact HWND."""
+    import ctypes
+
+    class Rect(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+    rect = Rect()
+    if not ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return None
+    return int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
+
+
+def _window_work_area(hwnd: int) -> tuple[int, int, int, int] | None:
+    """Read the work area of the monitor containing the target window."""
+    import ctypes
+
+    class Rect(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+    class MonitorInfo(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", Rect),
+                    ("rcWork", Rect), ("dwFlags", ctypes.c_ulong)]
+
+    monitor = ctypes.windll.user32.MonitorFromWindow(hwnd, 2)  # nearest monitor
+    info = MonitorInfo()
+    info.cbSize = ctypes.sizeof(MonitorInfo)
+    if not monitor or not ctypes.windll.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        return None
+    work = info.rcWork
+    return int(work.left), int(work.top), int(work.right), int(work.bottom)
+
+
+def _set_window_rect(hwnd: int, target: tuple[int, int, int, int]) -> bool:
+    import ctypes
+
+    ctypes.windll.user32.ShowWindow(hwnd, 9)
+    return bool(ctypes.windll.user32.SetWindowPos(hwnd, 0, *target, 0x0004 | 0x0010))
+
+
+def _window_geometry_action(command: str, hwnd: int | None = None) -> ActionResult:
+    """Move/resize one unequivocal HWND and prove the resulting geometry."""
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de janelas disponível somente no Windows.")
+    if hwnd is None or not _eligible_window(hwnd):
+        return ActionResult(success=False, error="Não tenho uma janela recente e inequívoca para mover.")
+    if command not in {"left", "right", "larger"}:
+        return ActionResult(success=False, error="Geometria de janela não permitida.")
+    before = _window_rect(hwnd)
+    work = _window_work_area(hwnd)
+    if before is None or work is None:
+        return ActionResult(success=False, error="Não consegui ler a posição da janela.")
+    wl, wt, wr, wb = work
+    work_width, work_height = wr - wl, wb - wt
+    if command in {"left", "right"}:
+        width = max(1, work_width // 2)
+        target = (wl if command == "left" else wr - width, wt, width, work_height)
+    else:
+        bl, bt, br, bb = before
+        width = min(work_width, max(br - bl + work_width // 5, work_width // 2))
+        height = min(work_height, max(bb - bt + work_height // 5, work_height // 2))
+        target = (wl + (work_width - width) // 2, wt + (work_height - height) // 2, width, height)
+    if not _set_window_rect(hwnd, target):
+        return ActionResult(success=False, error="O Windows recusou a mudança da janela.")
+    time.sleep(0.15)
+    after = _window_rect(hwnd)
+    expected_rect = (target[0], target[1], target[0] + target[2], target[1] + target[3])
+    verified = after is not None and all(abs(a - b) <= 2 for a, b in zip(after, expected_rect))
+    if not verified:
+        return ActionResult(success=False, error="A nova posição da janela não pôde ser confirmada.", data={"hwnd": hwnd, "before": before, "after": after, "expected": expected_rect})
+    labels = {"left": "lado esquerdo", "right": "lado direito", "larger": "maior"}
+    return ActionResult(success=True, output=f"Janela ajustada para {labels[command]} e verificada.", data={"hwnd": hwnd, "pid": _window_pid(hwnd), "before": before, "after": after, "work_area": work, "verified": True})
+
+
+def _window_for_pids(pids: set[int]) -> int | None:
+    import ctypes
+
+    for hwnd in _eligible_windows():
+        pid = ctypes.c_ulong()
+        ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value in pids:
+            return hwnd
+    return None
+
+
+def _window_text(hwnd: int) -> str:
+    import ctypes
+
+    length = int(ctypes.windll.user32.GetWindowTextLengthW(hwnd) or 0)
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    ctypes.windll.user32.GetWindowTextW(hwnd, buffer, len(buffer))
+    return buffer.value
+
+
+def _window_for_safe_app(app: str, pids: set[int]) -> int | None:
+    direct = _window_for_pids(pids)
+    if direct is not None:
+        return direct
+    tokens = _SAFE_CLOSE_TITLE_TOKENS.get(app, set())
+    for hwnd in _eligible_windows():
+        title = _window_text(hwnd).strip().casefold()
+        if any(token == title or f" - {token}" in title for token in tokens):
+            return hwnd
+    return None
+
+
+def _window_state_action(command: str, hwnd: int | None = None) -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de janelas disponível somente no Windows.")
+    if hwnd is not None and not _eligible_window(hwnd):
+        return ActionResult(success=False, error="A janela contextual não existe mais ou deixou de ser segura.")
+    target = hwnd if hwnd is not None else _foreground_window()
+    if target is None:
+        return ActionResult(success=False, error="Nenhuma janela ativa segura foi identificada.")
+    import ctypes
+
+    show_codes = {"minimize": 6, "maximize": 3, "restore": 9}
+    expected = {"minimize": "minimized", "maximize": "maximized", "restore": "restored"}
+    before = _window_state(target)
+    ctypes.windll.user32.ShowWindow(target, show_codes[command])
+    time.sleep(0.12)
+    after = _window_state(target)
+    # SW_RESTORE returns a window minimized from maximized back to maximized.
+    # Its real postcondition is "no longer minimized"; the other commands
+    # still require their exact requested state.
+    verified = after != "minimized" if command == "restore" else after == expected[command]
+    if not verified:
+        return ActionResult(success=False, error="O estado da janela não pôde ser confirmado.")
+    state_labels = {"minimized": "minimizada", "maximized": "maximizada", "restored": "restaurada"}
+    return ActionResult(
+        success=True,
+        output=f"Janela {state_labels[after]} e verificada.",
+        data={"hwnd": target, "pid": _window_pid(target), "process": _window_process_name(target), "before": before, "after": after, "verified": True},
+    )
+
+
+@action(name="window_minimize", category="os", description="Minimize the safe active window", capability="LOCAL_PC_CONTROL")
+def window_minimize_action(hwnd: int | None = None) -> ActionResult:
+    return _window_state_action("minimize", hwnd)
+
+
+@action(name="window_maximize", category="os", description="Maximize the safe active window", capability="LOCAL_PC_CONTROL")
+def window_maximize_action(hwnd: int | None = None) -> ActionResult:
+    return _window_state_action("maximize", hwnd)
+
+
+@action(name="window_restore", category="os", description="Restore the safe active window", capability="LOCAL_PC_CONTROL")
+def window_restore_action(hwnd: int | None = None) -> ActionResult:
+    return _window_state_action("restore", hwnd)
+
+
+@action(name="window_move", category="os", description="Move an unequivocal recent window to one monitor side", capability="LOCAL_PC_CONTROL")
+def window_move_action(side: str, hwnd: int | None = None) -> ActionResult:
+    return _window_geometry_action(str(side or "").strip().casefold(), hwnd)
+
+
+@action(name="window_resize_larger", category="os", description="Make an unequivocal recent window larger", capability="LOCAL_PC_CONTROL")
+def window_resize_larger_action(hwnd: int | None = None) -> ActionResult:
+    return _window_geometry_action("larger", hwnd)
+
+
+@action(name="window_close", category="os", description="Close an unequivocal recent safe window and verify it disappeared", capability="LOCAL_PC_CONTROL")
+def window_close_action(hwnd: int | None = None) -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de janelas disponível somente no Windows.")
+    if hwnd is None or not _eligible_window(hwnd):
+        return ActionResult(success=False, error="Não tenho uma janela recente e inequívoca para fechar.")
+    import ctypes
+
+    title = _window_text(hwnd).strip()
+    process = _window_process_name(hwnd)
+    protected = f"{title} {process}".casefold()
+    if any(token in protected for token in ("chatgpt", "zara room", "zara.exe")):
+        return ActionResult(success=False, error="Essa janela está protegida e não será fechada.", data={"hwnd": hwnd, "status": "PROTECTED"})
+    pid = _window_pid(hwnd)
+    if not ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0):
+        return ActionResult(success=False, error="O Windows recusou o fechamento da janela.")
+    for _ in range(10):
+        time.sleep(0.1)
+        if not ctypes.windll.user32.IsWindow(hwnd):
+            return ActionResult(success=True, output="Janela fechada e verificada.", data={"hwnd": hwnd, "pid": pid, "process": process, "title": title, "verified": True})
+    return ActionResult(success=False, error="Solicitei o fechamento, mas a janela continua aberta.", data={"hwnd": hwnd, "pid": pid, "verified": False})
+
+
+def _eligible_windows() -> list[int]:
+    import ctypes
+
+    found: list[int] = []
+    callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def collect(hwnd, _data):
+        native = int(hwnd or 0)
+        if _eligible_window(native):
+            found.append(native)
+        return True
+
+    ctypes.windll.user32.EnumWindows(callback_type(collect), 0)
+    return found
+
+
+_NAMED_WINDOW_TARGETS = {"chrome", "zara", "vscode", "project"}
+
+
+def _focus_window_verified(hwnd: int) -> bool:
+    """Focus an exact HWND using Windows thread queues, then verify foreground."""
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    if int(user32.GetForegroundWindow() or 0) == hwnd:
+        return True
+    user32.ShowWindow(hwnd, 9)
+    foreground = int(user32.GetForegroundWindow() or 0)
+    current_thread = int(kernel32.GetCurrentThreadId())
+    foreground_thread = int(user32.GetWindowThreadProcessId(foreground, None) or 0)
+    target_thread = int(user32.GetWindowThreadProcessId(hwnd, None) or 0)
+    attached: list[int] = []
+    try:
+        for thread_id in {foreground_thread, target_thread}:
+            if thread_id and thread_id != current_thread:
+                if user32.AttachThreadInput(current_thread, thread_id, True):
+                    attached.append(thread_id)
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
+        user32.SetFocus(hwnd)
+    finally:
+        for thread_id in reversed(attached):
+            user32.AttachThreadInput(current_thread, thread_id, False)
+    time.sleep(0.15)
+    return int(user32.GetForegroundWindow() or 0) == hwnd
+
+
+def _window_matches_named_target(hwnd: int, target: str) -> bool:
+    import psutil
+    from core.paths import project_root
+
+    process = _window_process_name(hwnd)
+    title = _window_text(hwnd).strip().casefold()
+    try:
+        command = " ".join(psutil.Process(_window_pid(hwnd)).cmdline()).casefold()
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        command = ""
+    project_name = project_root().name.casefold()
+    if target == "chrome":
+        return process == "chrome.exe"
+    if target == "vscode":
+        return process in {"code.exe", "code - insiders.exe"} or "visual studio code" in title
+    if target == "zara":
+        return (
+            "zara" in title
+            or "zara" in process
+            or ("dist-electron" in command and "main.js" in command and project_name in command)
+        )
+    if target == "project":
+        return project_name in title
+    return False
+
+
+@action(name="window_focus_named", category="os", description="Focus one unambiguous allowlisted window by semantic app name", capability="LOCAL_PC_CONTROL")
+def window_focus_named_action(target: str) -> ActionResult:
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de janelas disponível somente no Windows.")
+    canonical = str(target or "").strip().casefold()
+    if canonical not in _NAMED_WINDOW_TARGETS:
+        return ActionResult(success=False, error="Alvo de janela não permitido.")
+    candidates = [
+        hwnd for hwnd in _eligible_windows()
+        if _window_matches_named_target(hwnd, canonical)
+    ]
+    foreground = _foreground_window()
+    if foreground in candidates:
+        selected = foreground
+        selection = "ALREADY_FOREGROUND"
+    elif len(candidates) == 1:
+        selected = candidates[0]
+        selection = "UNAMBIGUOUS"
+    elif not candidates:
+        return ActionResult(
+            success=False,
+            error=f"Não encontrei uma janela aberta de {canonical}.",
+            data={"status": "NOT_FOUND", "target": canonical, "candidate_count": 0},
+        )
+    else:
+        return ActionResult(
+            success=False,
+            error=f"Encontrei mais de uma janela de {canonical}. Diga qual delas.",
+            data={"status": "AMBIGUOUS", "target": canonical, "candidate_count": len(candidates)},
+        )
+    if selection != "ALREADY_FOREGROUND" and not _focus_window_verified(selected):
+        return ActionResult(
+            success=False,
+            error="A janela foi localizada, mas o foco não pôde ser confirmado.",
+            data={"status": "POSTCONDITION_FAILED", "target": canonical, "hwnd": selected},
+        )
+    labels = {"chrome": "Chrome", "zara": "ZARA", "vscode": "VS Code", "project": "projeto"}
+    return ActionResult(
+        success=True,
+        output=f"{labels[canonical]} em primeiro plano.",
+        data={
+            "status": "FOREGROUND_CONFIRMED",
+            "target": canonical,
+            "hwnd": selected,
+            "pid": _window_pid(selected),
+            "process": _window_process_name(selected),
+            "title": _window_text(selected),
+            "selection": selection,
+            "verified": True,
+        },
+    )
+
+
+@action(name="window_switch", category="os", description="Switch to the next safe window", capability="LOCAL_PC_CONTROL")
+def window_switch_action() -> ActionResult:
+    return ActionResult(
+        success=False,
+        error="Diga qual janela devo trazer para a frente; não alterno às cegas.",
+        data={"status": "EXPLICIT_TARGET_REQUIRED"},
+    )
+
+
+@action(name="window_switch_next", category="os", description="Switch to the next safe window", capability="LOCAL_PC_CONTROL")
+def window_switch_next_action() -> ActionResult:
+    return window_switch_action()
+
+
+_DESTRUCTIVE_POWER_ACTIONS = frozenset({
+    "shutdown", "poweroff", "restart", "reboot",
+    "sleep", "suspend", "hibernate", "logoff", "logout", "signout",
+})
+
+
+def _destructive_power_allowed() -> bool:
+    """Dedicated kill-switch for destructive OS power actions.
+
+    Default is DENY: even a valid HIGH-risk confirmation proof is not enough to
+    physically power off / restart / suspend / log off the machine. The operator
+    must explicitly opt in via ZARA_ALLOW_OS_POWER=1 for the running process.
+    """
+    return os.environ.get("ZARA_ALLOW_OS_POWER", "").strip() == "1"
 
 
 @action(name="os_power", category="os", description="Power management: shutdown, restart, sleep, hibernate", risk="HIGH", capability="SYSTEM_POWER")
 def os_power_action(action_type: str) -> ActionResult:
     """Power management actions."""
     try:
+        action_type = (action_type or "").lower().strip()
+
+        if action_type in _DESTRUCTIVE_POWER_ACTIONS and not _destructive_power_allowed():
+            return ActionResult(
+                success=False,
+                error="POWER_ACTION_DENIED",
+                data={
+                    "status": "DENIED",
+                    "action_type": action_type,
+                    "reason": "DESTRUCTIVE_POWER_DISABLED",
+                },
+            )
+
         system = platform.system()
-        action_type = action_type.lower()
 
         if action_type in ("shutdown", "poweroff"):
             if system == "Windows":
@@ -139,19 +1630,178 @@ def os_power_action(action_type: str) -> ActionResult:
         return ActionResult(success=False, error=str(e))
 
 
-@action(name="os_clipboard", category="os", description="Get or set clipboard content", risk="MEDIUM", capability="PC_CONTROL")
+_CLIPBOARD_SENSITIVE = re.compile(
+    r"(?i)(password|senha|passphrase|api[_ -]?key|secret|token|bearer\s+|"
+    r"sk-[a-z0-9]{8}|-----BEGIN [A-Z ]+PRIVATE KEY-----)"
+)
+
+_INPUT_BLOCKED_PROCESSES = {
+    "cmd.exe", "powershell.exe", "pwsh.exe", "windowsterminal.exe",
+    "conhost.exe", "wt.exe", "code.exe", "codex.exe",
+}
+_INPUT_BLOCKED_TITLE = re.compile(
+    r"(?i)(password|senha|login|pagamento|payment|checkout|administrador|administrator|terminal|powershell|command prompt|prompt de comando)"
+)
+
+
+def _focused_editable_field() -> dict | None:
+    """Return one exact, non-sensitive focused editable UIA field."""
+    if platform.system() != "Windows":
+        return None
+    try:
+        import comtypes.client
+        try:
+            from comtypes.gen import UIAutomationClient as UIA
+        except Exception:
+            comtypes.client.GetModule("UIAutomationCore.dll")
+            from comtypes.gen import UIAutomationClient as UIA
+        automation = comtypes.client.CreateObject(
+            "{ff48dba4-60ef-4201-aa87-54103eef594e}", interface=UIA.IUIAutomation
+        )
+        element = automation.GetFocusedElement()
+        hwnd = _foreground_window()
+        if element is None or hwnd is None or int(element.CurrentProcessId or 0) != _window_pid(hwnd):
+            return None
+        process = _window_process_name(hwnd)
+        title = _window_text(hwnd).strip()
+        control_type = int(element.CurrentControlType or 0)
+        if process in _INPUT_BLOCKED_PROCESSES or _INPUT_BLOCKED_TITLE.search(title):
+            return None
+        if bool(element.CurrentIsPassword) or control_type not in {
+            int(UIA.UIA_EditControlTypeId), int(UIA.UIA_DocumentControlTypeId)
+        }:
+            return None
+        return {"automation": automation, "UIA": UIA, "element": element, "hwnd": hwnd,
+                "pid": _window_pid(hwnd), "process": process, "title": title,
+                "control_type": control_type}
+    except Exception:
+        return None
+
+
+def _uia_field_text(field: dict) -> str | None:
+    element, UIA = field["element"], field["UIA"]
+    try:
+        pattern = element.GetCurrentPattern(UIA.UIA_ValuePatternId)
+        return str(pattern.QueryInterface(UIA.IUIAutomationValuePattern).CurrentValue or "")
+    except Exception:
+        try:
+            pattern = element.GetCurrentPattern(UIA.UIA_TextPatternId)
+            text_pattern = pattern.QueryInterface(UIA.IUIAutomationTextPattern)
+            return str(text_pattern.DocumentRange.GetText(-1) or "").rstrip("\r\n")
+        except Exception:
+            return None
+
+
+def _send_unicode_text(text: str) -> bool:
+    # Clipboard-backed Unicode insertion is substantially more reliable across
+    # Chromium/Electron/classic Win32 fields than synthesizing a keyboard layout.
+    # Preserve the user's clipboard exactly and never log its previous value.
+    import pyperclip
+    previous = str(pyperclip.paste() or "")
+    try:
+        pyperclip.copy(text)
+        if str(pyperclip.paste() or "") != text:
+            return False
+        _send_fixed_hotkey((0x11, 0x56))
+        return True
+    finally:
+        time.sleep(0.05)
+        pyperclip.copy(previous)
+
+
+def _send_fixed_hotkey(keys: tuple[int, ...]) -> None:
+    import ctypes
+    for key in keys:
+        ctypes.windll.user32.keybd_event(key, 0, 0, 0)
+    for key in reversed(keys):
+        ctypes.windll.user32.keybd_event(key, 0, 0x0002, 0)
+
+
+@action(name="input_type_text", category="os", description="Type exact Unicode text into one safe focused field", capability="LOCAL_PC_CONTROL")
+def input_type_text_action(text: str) -> ActionResult:
+    value = str(text or "")
+    if not value or len(value) > 2000 or any(ord(ch) < 32 for ch in value):
+        return ActionResult(success=False, error="Texto inválido para digitação segura.")
+    field = _focused_editable_field()
+    if field is None:
+        return ActionResult(success=False, error="Não identifiquei um campo editável seguro e inequívoco.", data={"status": "SAFE_FIELD_REQUIRED"})
+    before = _uia_field_text(field)
+    if before is None or not _send_unicode_text(value):
+        return ActionResult(success=False, error="Não consegui digitar com readback seguro.")
+    time.sleep(0.15)
+    after = _uia_field_text(field)
+    mode = "append" if after == before + value else "replace_all" if after == value else ""
+    if after is None or not mode:
+        return ActionResult(success=False, error="O conteúdo digitado não pôde ser confirmado.", data={"before_length": len(before), "after_length": len(after or ""), "verified": False})
+    return ActionResult(success=True, output="Texto digitado e confirmado.", data={"hwnd": field["hwnd"], "pid": field["pid"], "process": field["process"], "before_length": len(before), "after_length": len(after), "mode": mode, "verified": True})
+
+
+_SAFE_INPUT_HOTKEYS = {
+    "select_all": (0x11, 0x41), "copy": (0x11, 0x43), "paste": (0x11, 0x56),
+    "find": (0x11, 0x46), "undo": (0x11, 0x5A), "redo": (0x11, 0x59),
+}
+
+
+@action(name="input_hotkey", category="os", description="Execute one allowlisted hotkey in a safe focused field", capability="LOCAL_PC_CONTROL")
+def input_hotkey_action(command: str) -> ActionResult:
+    canonical = str(command or "").strip().casefold()
+    if canonical not in _SAFE_INPUT_HOTKEYS:
+        return ActionResult(success=False, error="Atalho não permitido.")
+    field = _focused_editable_field()
+    if field is None:
+        return ActionResult(success=False, error="Não identifiquei um campo seguro e inequívoco.", data={"status": "SAFE_FIELD_REQUIRED"})
+    before = _uia_field_text(field)
+    if before is None:
+        return ActionResult(success=False, error="O conteúdo do campo não pôde ser lido.")
+    import pyperclip
+    clipboard_before = str(pyperclip.paste() or "") if canonical in {"copy", "paste"} else ""
+    if canonical == "paste" and (_CLIPBOARD_SENSITIVE.search(clipboard_before) or len(clipboard_before) > 4000):
+        return ActionResult(success=False, error="Colagem bloqueada: conteúdo sensível ou grande demais.", data={"status": "BLOCKED_SAFETY"})
+    _send_fixed_hotkey(_SAFE_INPUT_HOTKEYS[canonical])
+    time.sleep(0.15)
+    after = _uia_field_text(field)
+    verified = False
+    if canonical == "copy":
+        observed_clipboard = str(pyperclip.paste() or "")
+        verified = bool(observed_clipboard) and observed_clipboard in before
+    elif canonical == "paste":
+        verified = after is not None and len(after) >= len(before) + len(clipboard_before)
+    elif canonical in {"undo", "redo"}:
+        verified = after is not None and after != before
+    else:
+        verified = True  # selection/find UIA has no portable state; later copy/find supplies readback
+    if not verified:
+        return ActionResult(success=False, error="O atalho foi enviado, mas o efeito não pôde ser confirmado.", data={"verified": False})
+    return ActionResult(success=True, output="Atalho seguro executado.", data={"hwnd": field["hwnd"], "command": canonical, "before_length": len(before), "after_length": len(after or ""), "verified": True})
+
+
+@action(name="os_clipboard_read", category="os", description="Read safe clipboard text", capability="READ_ONLY")
+def os_clipboard_read_action() -> ActionResult:
+    """Read clipboard text without exposing content that resembles a secret."""
+    try:
+        import pyperclip
+        content = str(pyperclip.paste() or "")
+        if _CLIPBOARD_SENSITIVE.search(content):
+            return ActionResult(success=True, output="A área de transferência contém conteúdo sensível; não vou lê-lo em voz alta.", data={"sensitive": True, "length": len(content)})
+        return ActionResult(success=True, output=content or "A área de transferência está vazia.", data={"clipboard": content, "sensitive": False})
+    except ImportError:
+        return ActionResult(success=False, error="pyperclip not installed")
+    except Exception as exc:
+        return ActionResult(success=False, error=str(exc))
+
+
+@action(name="os_clipboard", category="os", description="Set or clear clipboard content", risk="MEDIUM", capability="LOCAL_PC_CONTROL")
 def os_clipboard_action(text: str = None, get: bool = False) -> ActionResult:
-    """Get or set clipboard content."""
+    """Set clipboard content and verify it by immediate local readback."""
     try:
         import pyperclip
 
-        if get:
-            content = pyperclip.paste()
-            return ActionResult(success=True, output=content, data={"clipboard": content})
-
         if text is not None:
             pyperclip.copy(text)
-            return ActionResult(success=True, output="Copied to clipboard")
+            observed = str(pyperclip.paste() or "")
+            if observed != text:
+                return ActionResult(success=False, error="CLIPBOARD_READBACK_MISMATCH", data={"verified": False})
+            return ActionResult(success=True, output="Área de transferência limpa." if text == "" else "Copiado.", data={"verified": True, "length": len(observed), "cleared": text == ""})
 
         return ActionResult(success=False, error="Either 'text' or 'get=true' required")
     except ImportError:
@@ -160,29 +1810,58 @@ def os_clipboard_action(text: str = None, get: bool = False) -> ActionResult:
         return ActionResult(success=False, error=str(e))
 
 
-@action(name="os_notify", category="os", description="Show system notification")
+@action(name="os_notify", category="os", description="Show system notification", risk="LOW", capability="LOCAL_PC_CONTROL")
 def os_notify_action(title: str, message: str = "", timeout: int = 5) -> ActionResult:
     """Show system notification."""
     try:
+        safe_title = " ".join(str(title or "").split())
+        safe_message = " ".join(str(message or "").split())
+        safe_timeout = max(1, min(int(timeout), 15))
+        if not safe_title or len(safe_title) > 80 or len(safe_message) > 300:
+            return ActionResult(success=False, error="Notificação inválida ou grande demais.")
         system = platform.system()
 
         if system == "Windows":
             try:
                 import win10toast
                 toaster = win10toast.ToastNotifier()
-                toaster.show_toast(title, message, duration=timeout)
-                return ActionResult(success=True, output="Notification sent")
+                toaster.show_toast(safe_title, safe_message, duration=safe_timeout)
+                return ActionResult(
+                    success=True,
+                    output="Notificação enviada ao Windows.",
+                    data={"dispatch": "PROVEN", "backend": "win10toast", "visual_verified": False},
+                )
             except ImportError:
-                # Fallback to PowerShell
-                ps_script = f"""
+                # Fixed script: user text is read from environment variables,
+                # never interpolated into executable PowerShell source.
+                ps_script = """
                 Add-Type -AssemblyName System.Windows.Forms
                 $notify = New-Object System.Windows.Forms.NotifyIcon
                 $notify.Icon = [System.Drawing.SystemIcons]::Information
                 $notify.Visible = $true
-                $notify.ShowBalloonTip({timeout * 1000}, "{title}", "{message}", [System.Windows.Forms.ToolTipIcon]::Info)
+                $notify.ShowBalloonTip([int]$env:ZARA_NOTIFY_MS, $env:ZARA_NOTIFY_TITLE, $env:ZARA_NOTIFY_MESSAGE, [System.Windows.Forms.ToolTipIcon]::Info)
+                Start-Sleep -Milliseconds ([int]$env:ZARA_NOTIFY_MS)
+                $notify.Dispose()
                 """
-                subprocess.run(["powershell", "-Command", ps_script], check=True)
-                return ActionResult(success=True, output="Notification sent (PowerShell fallback)")
+                env = os.environ.copy()
+                env.update({
+                    "ZARA_NOTIFY_TITLE": safe_title,
+                    "ZARA_NOTIFY_MESSAGE": safe_message,
+                    "ZARA_NOTIFY_MS": str(safe_timeout * 1000),
+                })
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+                    check=True,
+                    timeout=safe_timeout + 5,
+                    env=env,
+                    creationflags=creationflags,
+                )
+                return ActionResult(
+                    success=True,
+                    output="Notificação enviada ao Windows.",
+                    data={"dispatch": "PROVEN", "backend": "powershell_notifyicon", "visual_verified": False},
+                )
 
         elif system == "Linux":
             subprocess.run(["notify-send", "-t", str(timeout * 1000), title, message], check=True)

@@ -17,7 +17,8 @@ import re
 import sqlite3
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,6 +43,13 @@ CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state);
 """
 
 OVERDUE_WINDOW_SECONDS = 24 * 3600  # dispara como overdue se atraso <= 24h
+
+
+class ReminderPersistenceError(RuntimeError):
+    """Raised when create -> commit -> readback cannot be proven for an ID.
+
+    BUG-001: nunca responder sucesso sem prova de persistencia do MESMO id.
+    """
 
 
 @dataclass
@@ -81,10 +89,14 @@ class ReminderEngine:
         self._thread: threading.Thread | None = None
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.db_path, timeout=15.0)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._connect() as conn:
@@ -107,15 +119,54 @@ class ReminderEngine:
                      timezone=timezone, created_at=now, source=source)
         r.updated_at = now
         with self._lock:
+            try:
+                with self._connect() as conn:
+                    conn.execute(
+                        "INSERT INTO reminders (id, message, due_at_utc, timezone, state, "
+                        "created_at, updated_at, source) VALUES (?,?,?,?,?,?,?,?)",
+                        (r.id, r.message, r.due_at_utc, r.timezone, r.state,
+                         r.created_at, r.updated_at, r.source),
+                    )
+                    conn.commit()
+            except Exception as exc:  # commit/insert falhou -> NUNCA sucesso
+                raise ReminderPersistenceError(
+                    f"commit falhou para o lembrete {r.id}: {exc}"
+                ) from exc
+
+        # readback obrigatorio do MESMO id (prova de persistencia)
+        try:
+            stored = self.get(r.id)
+        except Exception as exc:
+            raise ReminderPersistenceError(
+                f"readback falhou para o lembrete {r.id}: {exc}"
+            ) from exc
+        if stored is None:
+            raise ReminderPersistenceError(
+                f"readback nao encontrou o lembrete {r.id} apos o commit"
+            )
+        if (
+            stored.id != r.id
+            or stored.message != r.message
+            or abs(float(stored.due_at_utc) - float(r.due_at_utc)) > 1e-6
+            or stored.state != r.state
+        ):
+            raise ReminderPersistenceError(
+                f"readback divergente para o lembrete {r.id}: "
+                f"gravado={stored.to_row()} esperado={r.to_row()}"
+            )
+        return stored
+
+    def complete(self, rid: str) -> bool:
+        """Mark one unambiguous scheduled reminder complete by its exact id."""
+        with self._lock:
             with self._connect() as conn:
-                conn.execute(
-                    "INSERT INTO reminders (id, message, due_at_utc, timezone, state, "
-                    "created_at, updated_at, source) VALUES (?,?,?,?,?,?,?,?)",
-                    (r.id, r.message, r.due_at_utc, r.timezone, r.state,
-                     r.created_at, r.updated_at, r.source),
+                cur = conn.execute(
+                    "UPDATE reminders SET state='COMPLETED', updated_at=? "
+                    "WHERE id=? AND state='SCHEDULED'",
+                    (time.time(), rid),
                 )
                 conn.commit()
-        return r
+                return cur.rowcount > 0
 
     def get(self, rid: str) -> Reminder | None:
         with self._lock:
@@ -279,7 +330,23 @@ def parse_natural_due(text: str, now: datetime | None = None) -> float | None:
         day = now + timedelta(days=1 if m.group(1).startswith("amanh") else 0)
         hh = int(m.group(2))
         mm = int(m.group(3) or 0)
+        if not 0 <= hh <= 23 or not 0 <= mm <= 59:
+            return None
         due = day.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if due <= now:
+            return None
+        return due.timestamp()
+
+    # horário explícito para hoje: "às 16" / "as 16:30"
+    m = re.fullmatch(r"(?:às|as)\s*(\d{1,2})(?::(\d{2}))?", t)
+    if m:
+        hh = int(m.group(1))
+        mm = int(m.group(2) or 0)
+        if not 0 <= hh <= 23 or not 0 <= mm <= 59:
+            return None
+        due = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if due <= now:
+            return None
         return due.timestamp()
 
     # apenas 'em 30 minutos'

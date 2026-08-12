@@ -34,3 +34,16 @@ nul
 
 # Temporary probe artifacts (may contain runtime DBs with personal data)
 _codex_*
+
+# Room relay runtime data (append-only history, gitignored)
+tools/room_relay/relay_store/
+
+# ZARA-PROTECT-WORK-001 (2026-08-12)
+# Linhagens de candidato pesam ~7.7 GB. Nunca entram no git.
+frontend/release-candidate-*/
+.pnpm-store/
+.opencode/
+data/
+lembretes/
+model-routing-skill.zip
+ZARA-DIAGNOSTICO.txt

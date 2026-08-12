@@ -9,12 +9,14 @@ from core.actions import (  # noqa: F401
     browser,
     code,
     files,
+    media_apps,
     os_ops,
     scheduler,
     system,
     terminal,
     vision,
     web,
+    windows_radios,
 )
 
 __all__ = [

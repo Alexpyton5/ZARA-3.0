@@ -7,6 +7,7 @@ from time import time
 
 import pytest
 
+import core.ipc_handlers as ipc_handlers
 from core.conversation_history import MAX_CONTENT_CHARS, ConversationHistory
 from core.ipc_handlers import IPCHandler, IPCMessage
 
@@ -61,6 +62,27 @@ def test_clear_physically_removes_transcript_database(tmp_path: Path) -> None:
     assert store.list_recent() == []
 
 
+def test_ipc_constructor_initializes_home_history_that_survives_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "history.sqlite3"
+    monkeypatch.setattr(ipc_handlers, "ConversationHistory", lambda: ConversationHistory(path))
+
+    async def send(_: IPCMessage) -> None:
+        pass
+
+    first = IPCHandler(send)
+    assert first.conversation_history is not None
+    first.conversation_history.append("user", "available before initialize")
+
+    restarted = IPCHandler(send)
+    assert restarted.conversation_history is not None
+    messages = restarted.conversation_history.list_recent()
+    assert [(item["role"], item["content"]) for item in messages] == [
+        ("user", "available before initialize"),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_history_ipc_lists_and_clears_real_store(tmp_path: Path) -> None:
     sent: list[IPCMessage] = []
@@ -97,7 +119,11 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
     class Orchestrator:
         last_engine_used = "fake_engine"
 
-        async def process_message(self, text: str, engine: str) -> str:
+        async def process_message(self, text: str, engine: str, history=None) -> str:
+            assert history == [
+                {"role": "user", "content": "previous question"},
+                {"role": "assistant", "content": "previous answer"},
+            ]
             assert text == "Como está o projeto?"
             assert engine == "auto_smart"
             return "Tudo certo, Alex."
@@ -111,7 +137,14 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
         IPCMessage(
             type="send-message",
             request_id="chat",
-            payload={"message": "Como está o projeto?", "engine": "auto_smart"},
+            payload={
+                "message": "Como está o projeto?",
+                "engine": "auto_smart",
+                "history": [
+                    {"role": "user", "content": "previous question"},
+                    {"role": "assistant", "content": "previous answer"},
+                ],
+            },
         )
     )
 

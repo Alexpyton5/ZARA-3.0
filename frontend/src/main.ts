@@ -11,6 +11,7 @@ let pythonProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let isPythonReady = false
 let pythonReadinessPromise: Promise<void> | null = null
+let isStoppingPython = false
 let pythonRequestId = 0
 const pendingRequests = new Map<string, { resolve: (value: any) => void; reject: (err: Error) => void }>()
 
@@ -23,8 +24,9 @@ function getPythonExecutable(): string {
 
 function getMainScript(): string {
   if (app.isPackaged) return ''
-  // In development app.getAppPath() is the frontend directory.
-  return join(app.getAppPath(), '..', 'main.py')
+  // In development app.getAppPath() resolves to the compiled electron dir
+  // (frontend/dist-electron), so main.py at the project ROOT is two levels up.
+  return join(app.getAppPath(), '..', '..', 'main.py')
 }
 
 function getFrontendDistPath(): string {
@@ -57,17 +59,23 @@ function rejectPendingRequests(reason: string): void {
 
 function startPythonSidecar(): Promise<void> {
   if (pythonProcess && isPythonReady) return Promise.resolve()
+  if (pythonProcess && pythonReadinessPromise) return pythonReadinessPromise
+  if (pythonProcess) return Promise.reject(new Error('Python sidecar já está iniciando'))
+  if (isStoppingPython) return Promise.reject(new Error('Python sidecar está encerrando'))
 
   return new Promise((resolve, reject) => {
     let settled = false
+    let startupTimer: ReturnType<typeof setTimeout> | null = null
     const settleResolve = () => {
       if (settled) return
       settled = true
+      if (startupTimer) clearTimeout(startupTimer)
       resolve()
     }
     const settleReject = (error: Error) => {
       if (settled) return
       settled = true
+      if (startupTimer) clearTimeout(startupTimer)
       reject(error)
     }
 
@@ -97,6 +105,7 @@ function startPythonSidecar(): Promise<void> {
     env.PYTHONUNBUFFERED = '1'
     env.PYTHONUTF8 = '1'
     env.PYTHONIOENCODING = 'utf-8'
+    env.ZARA_PARENT_PID = String(process.pid)
 
     const args = app.isPackaged ? [] : ['-u', mainScript]
     const child = spawn(pythonExe, args, {
@@ -161,8 +170,9 @@ function startPythonSidecar(): Promise<void> {
 
     child.on('exit', (code) => {
       console.log('[Python] Exited with code:', code)
+      if (pythonProcess !== child) return
       const wasReady = isPythonReady
-      if (pythonProcess === child) pythonProcess = null
+      pythonProcess = null
       isPythonReady = false
       rejectPendingRequests('Python process exited')
       if (!wasReady) {
@@ -170,9 +180,10 @@ function startPythonSidecar(): Promise<void> {
       }
     })
 
-    setTimeout(() => {
-      if (!isPythonReady) {
+    startupTimer = setTimeout(() => {
+      if (pythonProcess === child && !isPythonReady) {
         settleReject(new Error('Python sidecar startup timeout (45s)'))
+        child.kill()
       }
     }, 45000)
   })
@@ -539,6 +550,7 @@ function setupIPC(): void {
   ipcMain.handle('interrupt', () => sendToPython('interrupt'))
   ipcMain.handle('conversation-history-list', (_event, payload) => sendToPython('conversation-history-list', payload))
   ipcMain.handle('conversation-history-clear', () => sendToPython('conversation-history-clear'))
+  ipcMain.handle('memory-galaxy-list', () => sendToPython('memory-galaxy-list'))
   ipcMain.handle('action-execute', executeActionWithConfirmation)
   ipcMain.handle('action-list', () => sendToPython('action-list'))
   ipcMain.handle('system-metrics', () => sendToPython('system-metrics'))
@@ -570,29 +582,56 @@ function setupIPC(): void {
   ipcMain.handle('window-close', () => mainWindow?.close())
 }
 
-app.whenReady().then(() => {
-  // The interface is independent from backend startup. This guarantees that a
-  // sidecar failure is visible to the user instead of producing a black window.
-  setupIPC()
-  pythonReadinessPromise = startPythonSidecar()
-  void pythonReadinessPromise.catch((error) => {
-    console.error('[Electron] Python backend unavailable:', error)
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  // Another ZARA instance is already running: do not start a second sidecar
+  // (which would open the same SQLite/WAL data dir). Quit immediately.
+  console.warn('[Electron] Outra instancia da ZARA ja esta em execucao. Encerrando esta.')
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
   })
-  createWindow()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  app.whenReady().then(() => {
+    // The interface is independent from backend startup. This guarantees that a
+    // sidecar failure is visible to the user instead of producing a black window.
+    setupIPC()
+    pythonReadinessPromise = startPythonSidecar()
+    void pythonReadinessPromise.catch((error) => {
+      console.error('[Electron] Python backend unavailable:', error)
+    })
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-})
+}
 
 function stopPython(): void {
-  if (pythonProcess) {
-    pythonProcess.kill()
-    pythonProcess = null
-  }
+  const child = pythonProcess
+  pythonProcess = null
   isPythonReady = false
   pythonReadinessPromise = null
+  if (!child) return
+  isStoppingPython = true
   rejectPendingRequests('Application shutting down')
+  // Closing stdin gives the owned Python sidecar a clean EOF. Force-stop only
+  // this exact child if it does not exit within the short grace period.
+  child.stdin?.end()
+  const forceTimer = setTimeout(() => {
+    if (child.exitCode === null) child.kill()
+    isStoppingPython = false
+  }, 1500)
+  forceTimer.unref()
+  child.once('exit', () => {
+    clearTimeout(forceTimer)
+    isStoppingPython = false
+  })
 }
 
 app.on('before-quit', stopPython)

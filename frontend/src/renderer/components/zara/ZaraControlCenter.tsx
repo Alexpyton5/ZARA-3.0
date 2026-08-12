@@ -50,6 +50,7 @@ export const ZaraControlCenter: React.FC = () => {
   const toastIdRef = useRef(0);
   const historyReadyRef = useRef(false);
   const pendingHistoryMessagesRef = useRef<ChatMessage[]>([]);
+  const autoVoiceStartedRef = useRef(false);
 
   const notify = useCallback((text: string, kind: Toast['kind'] = 'ok') => {
     toastIdRef.current += 1;
@@ -145,6 +146,23 @@ export const ZaraControlCenter: React.FC = () => {
       }).catch(() => setSupercerebro(false));
     };
     refreshBackend();
+    if (!autoVoiceStartedRef.current) {
+      autoVoiceStartedRef.current = true;
+      setState('PROCESSING');
+      api.voice?.start?.().then((result: any) => {
+        if (result?.mode === 'gemini_live') {
+          setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
+        } else if (result?.mode) {
+          setVoiceLabel(String(result.mode).toUpperCase());
+        }
+        setVoiceOn(true);
+        setState(result?.wake_mode ? 'IDLE' : 'LISTENING');
+      }).catch(() => {
+        setVoiceOn(false);
+        setState('STANDBY');
+        notify('Voz automática indisponível; o chat de texto continua ativo.', 'warn');
+      });
+    }
     const refreshTimer = window.setInterval(refreshBackend, 5000);
     return () => {
       window.clearInterval(refreshTimer);
@@ -182,6 +200,7 @@ export const ZaraControlCenter: React.FC = () => {
         await window.zaraIPC?.voice?.stop?.();
         setVoiceOn(false); setState('STANDBY'); setVoiceLevel(0.02);
       } else {
+        setState('PROCESSING');
         const result: any = await window.zaraIPC?.voice?.start?.();
         if (result?.mode === 'gemini_live') {
           setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
@@ -191,6 +210,7 @@ export const ZaraControlCenter: React.FC = () => {
         setVoiceOn(true); setState('LISTENING');
       }
     } catch {
+      setVoiceOn(false); setState('STANDBY');
       notify('O módulo de voz ainda não está disponível.', 'error');
     }
   };

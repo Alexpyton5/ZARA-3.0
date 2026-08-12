@@ -94,8 +94,8 @@ class AutonomyEngine:
 
     @staticmethod
     def _default_db_path() -> Path:
-        local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-        return local / "ZARA3" / "data" / "autonomy" / "zara_autonomy.db"
+        from core.paths import user_data_dir
+        return user_data_dir() / "data" / "autonomy" / "zara_autonomy.db"
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

@@ -233,8 +233,9 @@ exe = EXE(
 
 
 def run_pyinstaller(spec_path: Path) -> bool:
-    """Run PyInstaller (uses installed pyinstaller; does NOT pip install)."""
+    """Run PyInstaller from this exact Python environment; never resolve it via PATH."""
     print("[BUILD] Running PyInstaller...")
+    print(f"[BUILD] Python environment: {sys.executable}")
 
     # Verifica se pyinstaller existe; se nao, BLOCKED (nao instala sozinho)
     try:
@@ -245,7 +246,7 @@ def run_pyinstaller(spec_path: Path) -> bool:
         return False
 
     result = run_cmd([
-        "pyinstaller", "--clean", "--noconfirm",
+        sys.executable, "-m", "PyInstaller", "--clean", "--noconfirm",
         "--distpath", str(DIST_DIR),
         "--workpath", str(BUILD_DIR / "work"),
         str(spec_path),

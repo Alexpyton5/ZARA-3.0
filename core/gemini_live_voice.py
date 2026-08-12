@@ -7,8 +7,8 @@ Wake-gate behavior (ZARA-VOICE-WAKE-GATE-001):
 - IDLE: mic audio is NOT streamed to Gemini. A local Vosk detector (grammar
   reduced to the wake word) listens for "zara"/"sara" only.
 - WAKE -> LISTENING: after the wake word, mic audio streams to Gemini.
-- SPEAKING: while ZARA's own reply is playing, mic audio is suppressed so the
-  assistant never transcribes/loops its own voice.
+- SPEAKING: Gemini Live keeps receiving microphone audio so server-side VAD can
+  interrupt Kore. Only local fallback TTS suppresses recognition.
 - turn complete -> short cooldown -> IDLE again.
 - If Vosk is unavailable the gate degrades to the previous always-streaming
   behavior (no regression on machines without the model).
@@ -43,7 +43,9 @@ class GeminiLiveVoiceConfig:
         "Você é ZARA, a assistente pessoal de Alex. RESPONDA EM PORTUGUÊS DO BRASIL quando "
         "Alex falar em português. Fale naturalmente, com respostas úteis, objetivas e humanas. "
         "Você deve responder inequivocamente em português do Brasil. Não diga que executou "
-        "ações no computador quando nenhuma ferramenta confirmou a execução."
+        "ações no computador quando nenhuma ferramenta confirmou a execução. "
+        "Quando receber texto iniciado por FALE_EXATAMENTE:, pronuncie somente o texto "
+        "depois dos dois-pontos, sem acrescentar nenhuma palavra."
     )
 
 
@@ -57,16 +59,21 @@ class GeminiLiveVoice:
         on_state: AsyncCallback | None = None,
         on_level: AsyncCallback | None = None,
         on_turn: AsyncCallback | None = None,
+        on_interrupt: AsyncCallback | None = None,
         on_error: AsyncCallback | None = None,
     ) -> None:
         self.config = config
         self.on_state = on_state
         self.on_level = on_level
         self.on_turn = on_turn
+        self.on_interrupt = on_interrupt
         self.on_error = on_error
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._audio_queue: asyncio.Queue[bytes] | None = None
+        self._speech_queue: asyncio.Queue[str] | None = None
+        self._speech_done: asyncio.Event | None = None
+        self._play_generated_audio = False
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
         self._ready = asyncio.Event()
@@ -78,6 +85,8 @@ class GeminiLiveVoice:
         self._output_text = ""
         self._connected = False
         self._last_state = "STANDBY"
+        self._stream_generation = 0
+        self._audio_frames_received = 0
         # --- Wake-gate state (ZARA-VOICE-WAKE-GATE-001) ---
         self._gate_open = False          # True only while LISTENING (mic -> Gemini)
         self._wake_detector: Any | None = None  # lazy Vosk grammar detector
@@ -171,6 +180,44 @@ class GeminiLiveVoice:
         self._gate_open = False
         await self._emit_state("IDLE")
 
+    def pause_input(self) -> None:
+        """Drop microphone frames while ZARA speaks through local TTS."""
+        self._gate_until_idle = True
+        queue = self._audio_queue
+        if queue is not None:
+            while not queue.empty():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+    def resume_input(self) -> None:
+        self._gate_until_idle = False
+
+    async def speak(self, text: str, timeout: float = 25.0) -> bool:
+        """Speak verified ZARA text with the configured Gemini Live voice."""
+        value = str(text or "").strip()
+        if not value or not self.active or self._speech_queue is None or self._speech_done is None:
+            return False
+        self._speech_done.clear()
+        await self._speech_queue.put(value)
+        try:
+            await asyncio.wait_for(self._speech_done.wait(), timeout=timeout)
+            return True
+        except TimeoutError:
+            return False
+        finally:
+            self._play_generated_audio = False
+
+    async def interrupt_speech(self) -> None:
+        """Stop only the current generated reply and keep the live session usable."""
+        self._play_generated_audio = False
+        await asyncio.to_thread(self._flush_output)
+        if self._speech_done is not None:
+            self._speech_done.set()
+        await self._emit_level(0.0, False)
+        await self._emit_state("LISTENING")
+
     @property
     def active(self) -> bool:
         return bool(self._task and not self._task.done())
@@ -187,12 +234,29 @@ class GeminiLiveVoice:
 
         self._loop = asyncio.get_running_loop()
         self._audio_queue = asyncio.Queue(maxsize=64)
+        self._speech_queue = asyncio.Queue(maxsize=8)
+        self._speech_done = asyncio.Event()
         self._stop = asyncio.Event()
         self._ready = asyncio.Event()
         self._ready_error = None
-        self._task = asyncio.create_task(self._run(), name="zara-gemini-live")
+        self._stream_generation += 1
+        generation = self._stream_generation
+        self._audio_frames_received = 0
+        self._task = asyncio.create_task(self._run(generation), name="zara-gemini-live")
 
-        await asyncio.wait_for(self._ready.wait(), timeout=timeout)
+        try:
+            await asyncio.wait_for(self._ready.wait(), timeout=timeout)
+        except TimeoutError as exc:
+            self._stream_generation += 1
+            self._stop.set()
+            task = self._task
+            if task and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            self._task = None
+            self._connected = False
+            print("[VOICE_TRACE] stage=MIC_OPEN_RESULT result=TIMEOUT", flush=True)
+            raise RuntimeError("VOICE_START_TIMEOUT") from exc
         if self._ready_error:
             await self.stop()
             raise RuntimeError(str(self._ready_error)) from self._ready_error
@@ -200,7 +264,8 @@ class GeminiLiveVoice:
 
     async def stop(self) -> None:
         self._stop.set()
-        self._close_input_stream()
+        self._stream_generation += 1
+        await asyncio.to_thread(self._close_input_stream)
         task = self._task
         if task and not task.done():
             try:
@@ -213,7 +278,7 @@ class GeminiLiveVoice:
                     pass
         self._task = None
         self._connected = False
-        self._close_output_stream()
+        await asyncio.to_thread(self._close_output_stream)
         self._gate_open = False
         self._gate_until_idle = False
         self._wake_rolling = b""
@@ -236,7 +301,7 @@ class GeminiLiveVoice:
             "session_state": self._last_state,
         }
 
-    async def _run(self) -> None:
+    async def _run(self, generation: int) -> None:
         try:
             try:
                 import sounddevice as sd
@@ -247,8 +312,13 @@ class GeminiLiveVoice:
                     "Gemini Live requer google-genai e sounddevice instalados"
                 ) from exc
 
-            self._open_streams(sd)
+            print("[VOICE_TRACE] stage=MIC_DEVICE_ENUMERATION result=START", flush=True)
+            opened = await asyncio.to_thread(self._open_streams, sd, generation)
+            if not opened:
+                return
+            print("[VOICE_TRACE] stage=MIC_OPEN_RESULT result=PASS", flush=True)
             if self.config.wake_word_enabled:
+                print("[VOICE_TRACE] stage=WAKE_ENGINE_LOAD result=START", flush=True)
                 self._ensure_wake_detector()
             client = genai.Client(api_key=self.config.api_key)
             first_connection = True
@@ -294,15 +364,19 @@ class GeminiLiveVoice:
                             name="zara-gemini-live-send",
                         )
                         receive_task = asyncio.create_task(
-                            self._receive_loop(session),
+                            self._receive_loop(session, sd),
                             name="zara-gemini-live-receive",
+                        )
+                        speech_task = asyncio.create_task(
+                            self._send_speech_loop(session, types),
+                            name="zara-gemini-live-speech",
                         )
                         stop_task = asyncio.create_task(
                             self._stop.wait(),
                             name="zara-gemini-live-stop-wait",
                         )
                         done, pending = await asyncio.wait(
-                            {send_task, receive_task, stop_task},
+                            {send_task, receive_task, speech_task, stop_task},
                             return_when=asyncio.FIRST_COMPLETED,
                         )
                         for pending_task in pending:
@@ -341,12 +415,12 @@ class GeminiLiveVoice:
             await self._emit_error(exc)
         finally:
             self._connected = False
-            self._close_input_stream()
-            self._close_output_stream()
+            await asyncio.to_thread(self._close_input_stream)
+            await asyncio.to_thread(self._close_output_stream)
             await self._emit_state("STANDBY")
             await self._emit_level(0.0, False)
 
-    def _open_streams(self, sd: Any) -> None:
+    def _open_streams(self, sd: Any, generation: int) -> bool:
         if self._loop is None or self._audio_queue is None:
             raise RuntimeError("Voice loop não inicializado")
 
@@ -360,40 +434,70 @@ class GeminiLiveVoice:
                 # PortAudio status is informational unless the callback fails.
                 pass
             raw = bytes(indata)
+            self._audio_frames_received += 1
+            if self._audio_frames_received == 1:
+                print("[VOICE_TRACE] stage=AUDIO_FRAMES_RECEIVED result=PASS", flush=True)
             level = self._pcm_level(raw)
             loop = self._loop
             if loop and not loop.is_closed():
                 loop.call_soon_threadsafe(self._queue_audio, raw, level)
 
-        self._input_stream = sd.RawInputStream(
-            samplerate=self.config.input_sample_rate,
-            blocksize=blocksize,
-            channels=1,
-            dtype="int16",
-            device=self.config.input_device,
-            callback=mic_callback,
+        devices = sd.query_devices()
+        default_devices = getattr(getattr(sd, "default", None), "device", (None, None))
+        print(
+            "[VOICE_TRACE] stage=SELECTED_INPUT_DEVICE "
+            f"configured={self.config.input_device is not None} "
+            f"default_index={default_devices[0] if default_devices else None} "
+            f"device_count={len(devices)}",
+            flush=True,
         )
-        self._output_stream = sd.RawOutputStream(
-            samplerate=self.config.output_sample_rate,
-            channels=1,
-            dtype="int16",
-            device=self.config.output_device,
-        )
-        self._input_stream.start()
-        self._output_stream.start()
+        input_stream = None
+        output_stream = None
+        try:
+            input_stream = sd.RawInputStream(
+                samplerate=self.config.input_sample_rate,
+                blocksize=blocksize,
+                channels=1,
+                dtype="int16",
+                device=self.config.input_device,
+                callback=mic_callback,
+            )
+            input_stream.start()
+            if generation != self._stream_generation or self._stop.is_set():
+                self._close_stream_pair(input_stream, output_stream)
+                return False
+            self._input_stream = input_stream
+            self._output_stream = output_stream
+            return True
+        except Exception:
+            self._close_stream_pair(input_stream, output_stream)
+            raise
+
+    @staticmethod
+    def _close_stream_pair(input_stream: Any, output_stream: Any) -> None:
+        for stream in (input_stream, output_stream):
+            if stream is None:
+                continue
+            try:
+                stream.stop()
+            except Exception:
+                pass
+            try:
+                stream.close()
+            except Exception:
+                pass
 
     def _queue_audio(self, raw: bytes, level: float) -> None:
         queue = self._audio_queue
         if queue is None or self._stop.is_set():
             return
 
+        if self._gate_until_idle:
+            asyncio.create_task(self._emit_level(0.0, False))
+            return
+
         # --- Wake-gate (ZARA-VOICE-WAKE-GATE-001) ---
         if self.config.wake_word_enabled and self._wake_detector is not None:
-            if self._gate_until_idle:
-                # ZARA is still speaking: drop mic audio entirely so her own
-                # voice never re-enters the session (self-listening loop fix).
-                asyncio.create_task(self._emit_level(0.0, False))
-                return
             if not self._gate_open:
                 # IDLE: only run the local wake detector; nothing reaches Gemini.
                 woke = self._check_wake_word(raw)
@@ -430,7 +534,21 @@ class GeminiLiveVoice:
                 )
             )
 
-    async def _receive_loop(self, session: Any) -> None:
+    async def _send_speech_loop(self, session: Any, types: Any) -> None:
+        if self._speech_queue is None:
+            return
+        while not self._stop.is_set():
+            text = await self._speech_queue.get()
+            self._play_generated_audio = True
+            await session.send_client_content(
+                turns=types.Content(
+                    role="user",
+                    parts=[types.Part(text=f"FALE_EXATAMENTE: {text}")],
+                ),
+                turn_complete=True,
+            )
+
+    async def _receive_loop(self, session: Any, sd: Any) -> None:
         while not self._stop.is_set():
             async for response in session.receive():
                 if self._stop.is_set():
@@ -451,6 +569,9 @@ class GeminiLiveVoice:
 
                 if getattr(content, "interrupted", False):
                     self._flush_output()
+                    self._play_generated_audio = False
+                    if self._speech_done is not None:
+                        self._speech_done.set()
                     self._gate_until_idle = False
                     if self.config.wake_word_enabled and self._wake_detector is not None:
                         self._gate_open = False
@@ -458,6 +579,7 @@ class GeminiLiveVoice:
                     else:
                         await self._emit_state("LISTENING")
                     await self._emit_level(0.0, False)
+                    await self._call(self.on_interrupt)
 
                 input_tx = getattr(content, "input_transcription", None)
                 if input_tx and getattr(input_tx, "text", None):
@@ -473,26 +595,27 @@ class GeminiLiveVoice:
 
                 model_turn = getattr(content, "model_turn", None)
                 if model_turn:
-                    # ZARA is about to speak: suppress mic so her own voice
-                    # never loops back into the session.
-                    self._gate_until_idle = True
-                    if self._gate_open:
-                        self._gate_open = False
+                    # Gemini Live is used as the low-latency transcription
+                    # transport. Its generated audio is intentionally muted;
+                    # the recognized text is routed through ZARA's local
+                    # intent/action/postcondition pipeline and spoken once.
                     for part in getattr(model_turn, "parts", []) or []:
                         inline = getattr(part, "inline_data", None)
                         audio_data = getattr(inline, "data", None) if inline else None
-                        if audio_data:
+                        if audio_data and self._play_generated_audio:
+                            if self._output_stream is None:
+                                await asyncio.to_thread(self._ensure_output_stream, sd)
                             audio_bytes = bytes(audio_data)
                             await self._emit_state("SPEAKING")
                             await self._emit_level(self._pcm_level(audio_bytes), True)
-                            if self._output_stream is not None:
-                                await asyncio.to_thread(self._output_stream.write, audio_bytes)
+                            await asyncio.to_thread(self._output_stream.write, audio_bytes)
 
                 if getattr(content, "turn_complete", False):
                     await self._finish_turn()
+                    if self._play_generated_audio and self._speech_done is not None:
+                        self._speech_done.set()
                     # Return to wake mode after a short cooldown so Alex can
                     # say "Zara" again without the previous turn bleeding in.
-                    self._gate_until_idle = False
                     self._gate_open = False
                     await asyncio.sleep(self.config.wake_cooldown_seconds)
                     if not self._stop.is_set():
@@ -504,7 +627,12 @@ class GeminiLiveVoice:
         self._input_text = ""
         self._output_text = ""
         if user_text or model_text:
-            await self._call(self.on_turn, user_text, model_text)
+            # Do not block the receive loop: deterministic action routing may
+            # ask this same Live session to speak the verified result.
+            asyncio.create_task(
+                self._call(self.on_turn, user_text, model_text),
+                name="zara-gemini-live-routed-turn",
+            )
         await self._emit_level(0.0, False)
         # With the wake gate the turn completes back into IDLE (cooldown is
         # applied by the caller); legacy mode keeps LISTENING.
@@ -512,6 +640,18 @@ class GeminiLiveVoice:
             await self._emit_state("IDLE")
         else:
             await self._emit_state("LISTENING")
+
+    def _ensure_output_stream(self, sd: Any) -> None:
+        if self._output_stream is not None:
+            return
+        stream = sd.RawOutputStream(
+            samplerate=self.config.output_sample_rate,
+            channels=1,
+            dtype="int16",
+            device=self.config.output_device,
+        )
+        stream.start()
+        self._output_stream = stream
 
     def _flush_output(self) -> None:
         stream = self._output_stream

@@ -40,6 +40,7 @@ except ImportError:
     HTTPX_AVAILABLE = False
 
 from core.paths import user_data_dir
+from core.voice_stt import VoiceNotConfiguredError
 
 
 @dataclass
@@ -105,7 +106,7 @@ class KokoroTTS:
 
     def __init__(self, config: TTSConfig):
         if not KOKORO_AVAILABLE:
-            raise RuntimeError("Kokoro ONNX not installed. Run: uv pip install kokoro-onnx")
+            raise VoiceNotConfiguredError("TTS_BACKEND_NOT_CONFIGURED: kokoro-onnx não instalado.")
 
         self.config = config
         self.model: kokoro_onnx.Kokoro | None = None
@@ -123,17 +124,13 @@ class KokoroTTS:
             model_path = str(model_dir / "kokoro-v0.19.onnx")
             voices_path = str(model_dir / "voices.json")
 
-            # Download if not exists
-            if not Path(model_path).exists():
-                print("[Kokoro] Downloading model...")
-                import urllib.request
-                url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/kokoro-v0.19.onnx"
-                urllib.request.urlretrieve(url, model_path)
-
-            if not Path(voices_path).exists():
-                print("[Kokoro] Downloading voices...")
-                url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/voices.json"
-                urllib.request.urlretrieve(url, voices_path)
+            # Never download weights autonomously — report NOT_CONFIGURED.
+            missing = [p for p in (model_path, voices_path) if not Path(p).exists()]
+            if missing:
+                raise VoiceNotConfiguredError(
+                    "TTS_MODEL_NOT_CONFIGURED: pesos Kokoro ausentes em "
+                    f"{model_dir}. Configure kokoro_model_path/kokoro_voices_path manualmente."
+                )
 
         self.model = kokoro_onnx.Kokoro(model_path, voices_path)
         print(f"[Kokoro] Model loaded: {model_path}")

@@ -15,6 +15,21 @@ import psutil
 from core.action_registry import ActionResult, action, get_registry
 
 
+@action(name="system_time", category="system", description="Read the local system clock", capability="READ_ONLY")
+def system_time_action() -> ActionResult:
+    """Return the current timezone-aware local clock without model inference."""
+    observed = datetime.now().astimezone()
+    return ActionResult(
+        success=True,
+        output=f"Agora são {observed:%H:%M}.",
+        data={
+            "local_iso": observed.isoformat(),
+            "timezone": observed.tzname() or "LOCAL",
+            "verified": True,
+        },
+    )
+
+
 @action(
     name="system_info",
     category="system",
@@ -30,6 +45,13 @@ from core.action_registry import ActionResult, action, get_registry
 def system_info_action(detailed: bool = False) -> ActionResult:
     """Get system information."""
     try:
+        boot_timestamp = psutil.boot_time()
+        battery = psutil.sensors_battery()
+        adapters = []
+        for name, stats in psutil.net_if_stats().items():
+            adapters.append({"name": name, "is_up": bool(stats.isup), "speed_mbps": int(stats.speed or 0), "mtu": int(stats.mtu or 0)})
+        system_drive = os.environ.get("SystemDrive", "C:") + os.sep if platform.system() == "Windows" else os.sep
+        disk = psutil.disk_usage(system_drive)
         info = {
             "platform": platform.system(),
             "platform_version": platform.version(),
@@ -38,7 +60,18 @@ def system_info_action(detailed: bool = False) -> ActionResult:
             "processor": platform.processor(),
             "python_version": sys.version.split()[0],
             "hostname": platform.node(),
-            "boot_time": datetime.fromtimestamp(psutil.boot_time()).isoformat(),
+            "boot_time": datetime.fromtimestamp(boot_timestamp).isoformat(),
+            "uptime_seconds": max(0, int(datetime.now().timestamp() - boot_timestamp)),
+            "battery": None if battery is None else {
+                "percent": float(battery.percent),
+                "plugged": bool(battery.power_plugged),
+                "seconds_left": None if battery.secsleft in {psutil.POWER_TIME_UNKNOWN, psutil.POWER_TIME_UNLIMITED} else int(battery.secsleft),
+            },
+            "network": {
+                "connected": any(adapter["is_up"] and not adapter["name"].casefold().startswith("loopback") for adapter in adapters),
+                "adapters": adapters,
+            },
+            "disk": {"path": system_drive, "total": disk.total, "used": disk.used, "free": disk.free, "percent": disk.percent},
         }
 
         if detailed:

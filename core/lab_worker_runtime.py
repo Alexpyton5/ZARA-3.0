@@ -30,9 +30,9 @@ class LabWorkerRuntime:
         self.openclaw_council_dir = self.worker_root / "openclaw-council"
         self.openclaw_council_dir.mkdir(parents=True, exist_ok=True)
         self.health_path = self.worker_root / "worker_health.json"
+        from core.paths import user_data_dir
         self.workshop_state = (
-            Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-            / "ZARA3" / "lab-workspaces" / "state" / "workshop_state.json"
+            user_data_dir() / "lab-workspaces" / "state" / "workshop_state.json"
         )
 
     def _health(self) -> dict[str, Any]:

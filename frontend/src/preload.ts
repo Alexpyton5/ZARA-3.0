@@ -31,6 +31,10 @@ const zaraAPI = {
     clear: () => ipcRenderer.invoke('conversation-history-clear'),
   },
 
+  memoryGalaxy: {
+    list: () => ipcRenderer.invoke('memory-galaxy-list'),
+  },
+
   // Actions
   action: {
     execute: (action: string, params: Record<string, any>) => ipcRenderer.invoke('action-execute', action, params),

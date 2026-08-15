@@ -113,6 +113,53 @@ def test_supercerebro_off_keeps_sanitized_read_only_available():
     assert result.output == "safe"
 
 
+def test_supercerebro_off_allows_closed_local_pc_control():
+    registry = _isolated_registry()
+    registry.register(
+        "local_volume",
+        lambda level: f"volume={level}",
+        capability="LOCAL_PC_CONTROL",
+    )
+
+    result = registry.execute("local_volume", level=35)
+
+    assert result.success
+    assert result.output == "volume=35"
+
+
+def test_local_pc_control_does_not_bypass_medium_risk_gate():
+    registry = _isolated_registry()
+    calls: list[str] = []
+    registry.register(
+        "local_clipboard_write",
+        lambda: calls.append("ran") or "done",
+        risk="MEDIUM",
+        capability="LOCAL_PC_CONTROL",
+    )
+
+    blocked = registry.execute("local_clipboard_write")
+    confirmed = registry.execute("local_clipboard_write", confirm=True)
+
+    assert not blocked.success
+    assert confirmed.success
+    assert calls == ["ran"]
+
+
+@pytest.mark.parametrize("capability", ["PC_CONTROL", "REMOTE_PC_CONTROL", "AGENTIC_PC_CONTROL"])
+def test_supercerebro_off_blocks_remote_or_agentic_domains(capability):
+    registry = _isolated_registry()
+    calls: list[str] = []
+    registry.register("remote_action", lambda: calls.append("ran") or "done", capability=capability)
+
+    blocked = registry.execute("remote_action")
+    registry.pc_control_allowed = True
+    allowed = registry.execute("remote_action")
+
+    assert not blocked.success
+    assert allowed.success
+    assert calls == ["ran"]
+
+
 def test_registration_normalizes_known_policy_values():
     registry = _isolated_registry()
     registry.register("normalized", lambda: "done", risk="high", capability="pc_control")

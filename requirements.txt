@@ -36,6 +36,10 @@ pvporcupine>=3.0.0
 # Voice TTS (Local Neural)
 kokoro-onnx>=0.3.0
 
+# Voice TTS (Neural gratuita, sem chave e sem cota; exige internet)
+edge-tts>=6.1.0
+miniaudio>=1.59        # decodifica o MP3 da Edge em streaming
+
 # Audio I/O
 sounddevice>=0.4.6
 pycaw>=20240210

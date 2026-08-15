@@ -5,6 +5,10 @@ config/api_keys.json.bak_*
 .env.*
 !*.example.json
 
+# Ambiente Python proprio da ZARA (ZARA-PYTHON-PROPRIO-001)
+# Criado por tools/preparar_python.py. Nunca versionado: e ~2 GB de wheels.
+.venv/
+
 # Python caches and test output
 __pycache__/
 *.py[cod]
@@ -34,3 +38,26 @@ nul
 
 # Temporary probe artifacts (may contain runtime DBs with personal data)
 _codex_*
+
+# Room relay runtime data (append-only history, gitignored)
+tools/room_relay/relay_store/
+
+# ZARA-PROTECT-WORK-001 (2026-08-12)
+# Linhagens de candidato pesam ~7.7 GB. Nunca entram no git.
+frontend/release-candidate-*/
+.pnpm-store/
+.opencode/
+data/
+lembretes/
+model-routing-skill.zip
+ZARA-DIAGNOSTICO.txt
+
+# Graphify code graph (regenerate with: graphify update .)
+graphify-out/
+
+# Backups de chave feitos pelos scripts (ex.: api_keys.json.antes-do-telegram).
+# A regra antiga cobria so o nome exato, e um backup com sufixo teria levado as
+# chaves reais do Alex para dentro do repositorio - onde ficariam no historico
+# para sempre, mesmo depois de apagadas.
+config/api_keys*
+!config/api_keys.example.json

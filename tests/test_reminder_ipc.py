@@ -95,7 +95,7 @@ async def test_scheduler_thread_delivers_fired_event_once(tmp_path):
 
 
 def test_ipc_serialization_round_trips_portuguese_without_mojibake():
-    original = "validação, café, pão e amanhã às 09:30"
+    original = "Olá ZARA, validação, informação, você está funcionando?"
     frame = serialize_ipc_message(
         IPCMessage(type="reminder-fired", data={"text": original})
     )

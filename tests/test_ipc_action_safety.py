@@ -30,6 +30,9 @@ class FakeHermes:
         self.enabled = False
         self.is_connected = False
 
+    async def get_agent_status(self) -> dict:
+        return {"connected": self.is_connected, "enabled": self.enabled}
+
 
 @pytest.fixture(autouse=True)
 def restore_global_policy():
@@ -98,6 +101,44 @@ def test_failed_enable_is_fail_closed():
     assert not handler.supercerebro_active
     assert not get_registry().pc_control_allowed
     assert sent[-1].error == "Hermes Gateway is offline"
+
+
+def test_enable_return_value_cannot_override_disconnected_readback():
+    class MisleadingHermes(FakeHermes):
+        async def enable_supercerebro(self) -> bool:
+            self.enable_calls += 1
+            self.enabled = False
+            self.is_connected = False
+            return True
+
+    handler, sent = _handler()
+    handler.hermes = MisleadingHermes()
+
+    asyncio.run(handler.handle_supercerebro_toggle(
+        IPCMessage(type="supercerebro-toggle", request_id="1", payload={"active": True})
+    ))
+
+    assert handler.supercerebro_active is False
+    assert get_registry().pc_control_allowed is False
+    assert sent[-1].error == "Hermes Gateway is offline"
+
+
+def test_status_revokes_gate_when_gateway_dies():
+    handler, sent = _handler()
+    hermes = FakeHermes()
+    handler.hermes = hermes
+    handler._set_supercerebro_state(True)
+    hermes.enabled = True
+    hermes.is_connected = False
+
+    asyncio.run(handler.handle_supercerebro_status(
+        IPCMessage(type="supercerebro-status", request_id="status")
+    ))
+
+    assert handler.supercerebro_active is False
+    assert get_registry().pc_control_allowed is False
+    assert sent[-1].response["active"] is False
+    assert sent[-1].response["connected"] is False
 
 
 def test_disable_revokes_permission_even_if_remote_disable_fails():

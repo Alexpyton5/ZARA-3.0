@@ -1,0 +1,226 @@
+================================================================ 
+BUILD - 13/08/2026 10:50:09,75                                            
+================================================================ 
+---- [1] COMPREENSAO ----                                        
+==============================================================================================
+AUDITORIA DE COMPREENSAO — fala natural  (Supercerebro OFF, nada executado)
+==============================================================================================
+
+--- VOLUME ---
+  OK   diminui o volume                             -> os_volume
+  OK   abaixa o volume                              -> os_volume
+  OK   aumenta o volume                             -> os_volume
+  OK   sobe o volume                                -> os_volume
+  OK   coloca o volume em 30                        -> os_volume
+  OK   poe o volume a 50                            -> os_volume
+  OK   volume 20                                    -> os_volume
+  OK   muta                                         -> audio_mute
+  OK   tira o som                                   -> audio_mute
+  OK   volta o som                                  -> audio_unmute
+  OK   deixa mudo                                   -> audio_mute
+
+--- BRILHO ---
+  OK   diminui o brilho                             -> os_brightness_down
+  OK   abaixa o brilho ai                           -> os_brightness_down
+  OK   aumenta o brilho                             -> os_brightness_up
+  OK   coloca o brilho em 70                        -> os_brightness_absolute
+  OK   escurece                                     -> os_brightness_down
+  OK   clareia                                      -> os_brightness_up
+
+--- NIGHT ---
+  OK   ativa o modo noturno                         -> os_night_light_on
+  OK   liga a luz noturna                           -> os_night_light_on
+  OK   desliga o modo noturno                       -> os_night_light_off
+  OK   tira o modo noturno                          -> os_night_light_off
+
+--- WIFI ---
+  OK   liga o wifi                                  -> os_wifi_on
+  OK   desliga o wifi                               -> os_wifi_off
+  OK   ativa o wi-fi                                -> os_wifi_on
+  NAO  o wifi ta ligado?                            -> None
+
+--- BLUET ---
+  OK   liga o bluetooth                             -> os_bluetooth_on
+  OK   desliga o bluetooth                          -> os_bluetooth_off
+
+--- APPS ---
+  OK   abre o chrome                                -> os_app
+  OK   abre a calculadora                           -> os_app
+  OK   abre o bloco de notas                        -> os_app
+  OK   fecha o chrome                               -> os_close_safe_app
+  OK   abre o spotify                               -> os_app
+  OK   abre a pasta downloads                       -> os_open
+  OK   abre meus documentos                         -> os_open
+
+--- JANELA ---
+  OK   minimiza                                     -> window_minimize
+  OK   minimiza essa janela                         -> window_minimize
+  OK   maximiza                                     -> window_maximize
+  OK   restaura a janela                            -> window_restore
+  BLOQ fecha essa janela                            -> window_close
+  NAO  move a janela pra esquerda                   -> None
+  NAO  aumenta essa janela                          -> None
+  OK   vai pra proxima janela                       -> window_switch_next
+  OK   foca no chrome                               -> window_focus_named
+
+--- YOUTUBE ---
+  OK   abre o youtube                               -> youtube_open
+  OK   va para o youtube                            -> youtube_open
+  OK   procura pink floyd no youtube                -> youtube_search
+  OK   toca pink floyd                              -> youtube_play_by_name
+  OK   pausa                                        -> youtube_pause
+  OK   continua                                     -> youtube_resume
+  OK   proxima                                      -> youtube_next
+  OK   pula essa                                    -> youtube_next
+  OK   o que ta tocando?                            -> youtube_now_playing
+  OK   pula o anuncio                               -> youtube_skip_ad
+  OK   coloca outra dele                            -> youtube_another_by_artist
+  OK   avanca 30 segundos                           -> youtube_seek
+
+--- BROWSER ---
+  OK   abre uma aba nova                            -> browser_new_tab
+  OK   volta no navegador                           -> browser_back
+  OK   avanca no navegador                          -> browser_forward
+  OK   fecha essa aba                               -> browser_close_tab
+  OK   rola a pagina pra baixo                      -> browser_scroll
+  OK   o que diz essa pagina                        -> browser_read_page
+  BLOQ pesquisa receita de bolo                     -> browser_search
+
+--- SISTEMA ---
+  OK   que horas sao?                               -> system_time
+  OK   como esta o computador                       -> system_metrics
+  OK   quanto de bateria                            -> system_metrics
+  OK   lista os processos                           -> system_processes
+  OK   mostra as informacoes do sistema             -> system_info
+  OK   como esta o audio                            -> audio_status
+
+--- OUTROS ---
+  OK   tira uma captura de tela                     -> vision_screenshot
+  OK   copia isso pra area de transferencia         -> os_clipboard
+  OK   le a area de transferencia                   -> os_clipboard_read
+  OK   mostra uma notificacao dizendo oi            -> os_notify
+  NAO  digita bom dia                               -> None
+
+--- CONVERSA_NAO_E_COMANDO ---
+  OK   oi tudo bem                                  -> None
+  OK   me conta uma piada                           -> None
+  OK   o que voce acha disso                        -> None
+  OK   quem foi einstein                            -> None
+  OK   obrigado                                     -> None
+  OK   voce e legal                                 -> None
+
+==============================================================================================
+comandos entendidos : 67
+comandos PERDIDOS   : 6
+falsos positivos    : 0  (conversa virando comando)
+==============================================================================================
+                                                                 
+---- [2] TESTES ----                                             
+============================= test session starts =============================
+platform win32 -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.14.2, flet-0.86.5, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 641 items
+
+tests\test_action_confirmation.py .........                              [  1%]
+tests\test_action_metadata_safety.py ..                                  [  1%]
+tests\test_action_registry_safety.py .....................               [  4%]
+tests\test_audio_status.py ..                                            [  5%]
+tests\test_brightness_control.py ..................................      [ 10%]
+tests\test_browser_dispatch.py ......F...........                        [ 13%]
+tests\test_clipboard_voice.py ....                                       [ 14%]
+tests\test_compound_pc_intent.py .....                                   [ 14%]
+tests\test_conversation_history.py ......                                [ 15%]
+tests\test_conversational_prompt.py .....                                [ 16%]
+tests\test_file_actions.py .......                                       [ 17%]
+tests\test_file_voice_intent.py ..................                       [ 20%]
+tests\test_folder_control.py .......................                     [ 24%]
+tests\test_gemini_live_voice_responsiveness.py .........                 [ 25%]
+tests\test_ipc_action_safety.py ............                             [ 27%]
+tests\test_jarvis_multi_action.py ......                                 [ 28%]
+tests\test_lab_message_order_133.py ..                                   [ 28%]
+tests\test_lab_opencode_bridge.py ............                           [ 30%]
+tests\test_lab_send_routing.py ........                                  [ 31%]
+tests\test_lab_worker_truth.py .                                         [ 31%]
+tests\test_media_app_controls.py ....................................... [ 37%]
+..                                                                       [ 38%]
+tests\test_media_control.py ...........................                  [ 42%]
+tests\test_media_semantic_217.py .....                                   [ 43%]
+tests\test_memory_galaxy.py ..                                           [ 43%]
+tests\test_mentor_relay_identity.py .............                        [ 45%]
+tests\test_notification_screenshot_control.py .....                      [ 46%]
+tests\test_observability_017.py ..                                       [ 46%]
+tests\test_open_app_intent.py ..................FF.FF....F               [ 51%]
+tests\test_operational_context.py .............                          [ 53%]
+tests\test_operational_recall.py .....                                   [ 53%]
+tests\test_os_power_gate_207.py ..............                           [ 56%]
+tests\test_provider_failover.py ..................                       [ 58%]
+tests\test_realtime_web.py .......................                       [ 62%]
+tests\test_relay_truth_229.py ..............                             [ 64%]
+tests\test_reminder_engine.py ..                                         [ 64%]
+tests\test_reminder_integrity_bug001.py ......                           [ 65%]
+tests\test_reminder_ipc.py ....                                          [ 66%]
+tests\test_reminder_isolation_236.py ...........                         [ 68%]
+tests\test_reminder_persistence_016.py ...                               [ 68%]
+tests\test_room_relay.py ..........                                      [ 70%]
+tests\test_room_relay_watch.py .....                                     [ 70%]
+tests\test_router_integrity.py ...............                           [ 73%]
+tests\test_safe_app_close.py .........                                   [ 74%]
+tests\test_safe_input_controls.py ....                                   [ 75%]
+tests\test_self_knowledge.py ................                            [ 77%]
+tests\test_single_writer_105.py ......                                   [ 78%]
+tests\test_supercerebro_truth_233.py ........................            [ 82%]
+tests\test_system_information_real.py ...                                [ 82%]
+tests\test_system_voice_intents.py ..........                            [ 84%]
+tests\test_voice_not_configured_213.py .......                           [ 85%]
+tests\test_voice_pipeline_safety.py ....                                 [ 86%]
+tests\test_volume_context.py .........                                   [ 87%]
+tests\test_web_security.py ..............................                [ 92%]
+tests\test_window_control.py .................................           [ 97%]
+tests\test_windows_ipc_eof.py ....                                       [ 98%]
+tests\test_windows_radios.py ............                                [100%]
+
+================================== FAILURES ===================================
+_ test_browser_intents[procure por Python asyncio-browser_search-python asyncio] _
+tests\test_browser_dispatch.py:24: in test_browser_intents
+    assert result.action == action
+E   AssertionError: assert '' == 'browser_search'
+E     
+E     - browser_search
+_ test_unknown_or_injected_app_request_is_blocked_without_execution[abra powershell] _
+tests\test_open_app_intent.py:55: in test_unknown_or_injected_app_request_is_blocked_without_execution
+    assert result.is_pc_intent is True
+E   AssertionError: assert False is True
+E    +  where False = PcVoiceResult(is_pc_intent=False, action='', param='', blocked=False, physical_effect=0, reply='', contextual=False).is_pc_intent
+_ test_unknown_or_injected_app_request_is_blocked_without_execution[abra o regedit] _
+tests\test_open_app_intent.py:55: in test_unknown_or_injected_app_request_is_blocked_without_execution
+    assert result.is_pc_intent is True
+E   AssertionError: assert False is True
+E    +  where False = PcVoiceResult(is_pc_intent=False, action='', param='', blocked=False, physical_effect=0, reply='', contextual=False).is_pc_intent
+_ test_unknown_or_injected_app_request_is_blocked_without_execution[abra calc && powershell] _
+tests\test_open_app_intent.py:55: in test_unknown_or_injected_app_request_is_blocked_without_execution
+    assert result.is_pc_intent is True
+E   AssertionError: assert False is True
+E    +  where False = PcVoiceResult(is_pc_intent=False, action='', param='', blocked=False, physical_effect=0, reply='', contextual=False).is_pc_intent
+_ test_unknown_or_injected_app_request_is_blocked_without_execution[execute powershell] _
+tests\test_open_app_intent.py:55: in test_unknown_or_injected_app_request_is_blocked_without_execution
+    assert result.is_pc_intent is True
+E   AssertionError: assert False is True
+E    +  where False = PcVoiceResult(is_pc_intent=False, action='', param='', blocked=False, physical_effect=0, reply='', contextual=False).is_pc_intent
+_____________________ test_ipc_never_executes_unknown_app _____________________
+tests\test_open_app_intent.py:136: in test_ipc_never_executes_unknown_app
+    assert "não está autorizado" in reply
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: argument of type 'NoneType' is not iterable
+=========================== short test summary info ===========================
+FAILED tests/test_browser_dispatch.py::test_browser_intents[procure por Python asyncio-browser_search-python asyncio]
+FAILED tests/test_open_app_intent.py::test_unknown_or_injected_app_request_is_blocked_without_execution[abra powershell]
+FAILED tests/test_open_app_intent.py::test_unknown_or_injected_app_request_is_blocked_without_execution[abra o regedit]
+FAILED tests/test_open_app_intent.py::test_unknown_or_injected_app_request_is_blocked_without_execution[abra calc && powershell]
+FAILED tests/test_open_app_intent.py::test_unknown_or_injected_app_request_is_blocked_without_execution[execute powershell]
+FAILED tests/test_open_app_intent.py::test_ipc_never_executes_unknown_app - T...
+======================= 6 failed, 635 passed in 15.86s ========================
+PYTEST FALHOU                                                  

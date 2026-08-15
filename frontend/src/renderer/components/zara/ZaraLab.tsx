@@ -1,9 +1,15 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity, BadgeCheck, BrainCircuit, Check, ChevronRight, CircleDot,
+  Activity, BadgeCheck, BrainCircuit, Check, ChevronRight, ChevronDown, CircleDot,
   Clock3, Code2, FlaskConical, GitBranch, LoaderCircle, MessageSquareText,
   RefreshCw, Send, ShieldCheck, Sparkles, UserRound, Wrench, X
 } from 'lucide-react';
+import {
+  initialAutoScrollState,
+  onJumpToLatest,
+  onMessages as onMessagesDecision,
+  onScroll as onScrollDecision,
+} from '../../lib/autoScroll';
 
 type Worker = {
   id: string;
@@ -129,6 +135,29 @@ export const ZaraLab: React.FC = () => {
   const [proposalOwner, setProposalOwner] = useState('opencode');
   const [proposalBusy, setProposalBusy] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(initialAutoScrollState.sticky);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(initialAutoScrollState.showJumpToLatest);
+
+  // BUG-002: so acompanha o fim quando o usuario esta perto do fim.
+  const metricsOf = (el: HTMLDivElement | null) =>
+    el ? { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight } : null;
+
+  const onChatScroll = () => {
+    const next = onScrollDecision(
+      { sticky: stickToBottomRef.current, showJumpToLatest },
+      metricsOf(chatScrollRef.current),
+    );
+    stickToBottomRef.current = next.sticky;
+    setShowJumpToLatest(next.showJumpToLatest);
+  };
+
+  const jumpToLatest = () => {
+    const { state } = onJumpToLatest();
+    stickToBottomRef.current = state.sticky;
+    setShowJumpToLatest(state.showJumpToLatest);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  };
 
   const refresh = useCallback(async (quiet = false) => {
     try {
@@ -154,7 +183,16 @@ export const ZaraLab: React.FC = () => {
   }, [refresh]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const { state, scrollToBottom } = onMessagesDecision({
+      sticky: stickToBottomRef.current,
+      showJumpToLatest,
+    });
+    stickToBottomRef.current = state.sticky;
+    setShowJumpToLatest(state.showJumpToLatest);
+    if (scrollToBottom) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lab.messages]);
 
   const chatWorkers = useMemo(() => lab.workers.filter((w) => w.id !== 'alex'), [lab.workers]);
@@ -224,7 +262,7 @@ export const ZaraLab: React.FC = () => {
         {lab.workers.map((worker) => {
           const Icon = participantIcon(worker.id);
           return (
-            <button key={worker.id} className={`lab-person ${target === worker.id ? 'selected' : ''}`} disabled={worker.id === 'alex'} onClick={() => worker.id !== 'alex' && setTarget(worker.id)} title={worker.detail}>
+            <button key={worker.id} className={`lab-person ${target === worker.id ? 'selected' : ''}`} disabled={worker.id === 'alex' || !worker.can_chat} onClick={() => worker.can_chat && worker.id !== 'alex' && setTarget(worker.id)} title={worker.detail}>
               <div className="lab-person-icon"><Icon size={16}/></div>
               <div><strong>{worker.name}</strong><span>{worker.role}</span></div>
               <em className={`worker-state state-${stateClass(worker.state)}`}><i/>{worker.state}</em>
@@ -242,17 +280,26 @@ export const ZaraLab: React.FC = () => {
               {selectedWorker?.id === 'mentor' && lab.mentor_relay?.pending ? ` • ${lab.mentor_relay.pending} PENDING` : ''}
             </em>
           </header>
-          <div className="lab-chat-scroll">
+          <div className="lab-chat-area">
+          <div className="lab-chat-scroll" ref={chatScrollRef} onScroll={onChatScroll}>
             {loading && <div className="lab-empty"><LoaderCircle className="spin" size={18}/> CARREGANDO LABORATÓRIO...</div>}
             {!loading && lab.messages.length === 0 && <div className="lab-empty">O Conselho está pronto. Converse com ZARA, Mentor ou OpenClaw.</div>}
             {lab.messages.map((m) => {
               const Icon = participantIcon(m.author);
               const isAlex = m.author === 'alex';
+              // Mensagens importadas pelo relay externo trazem o relay_id no id.
+              // Marcamos a origem real em vez de simular presenca do agente.
+              const viaRelay = m.id.startsWith('mentor-relay-');
               return (
-                <article className={`lab-message ${isAlex ? 'alex' : ''} ${m.kind === 'status' ? 'status' : ''}`} key={m.id}>
+                <article className={`lab-message ${isAlex ? 'alex' : ''} ${m.kind === 'status' ? 'status' : ''} ${viaRelay ? 'via-relay' : ''}`} key={m.id}>
                   <div className="lab-message-avatar"><Icon size={15}/></div>
                   <div className="lab-message-content">
-                    <div><strong>{m.author.toUpperCase()}</strong><span>→ @{m.target.toUpperCase()}</span><time>{readableTime(m.created_at)}</time></div>
+                    <div>
+                      <strong>{m.author.toUpperCase()}</strong>
+                      {viaRelay && <span className="lab-relay-tag" title="Recebida pelo relay externo, nao significa agente conectado">VIA RELAY</span>}
+                      <span>→ @{m.target.toUpperCase()}</span>
+                      <time>{readableTime(m.created_at)}</time>
+                    </div>
                     <p>{m.content}</p>
                   </div>
                 </article>
@@ -260,9 +307,15 @@ export const ZaraLab: React.FC = () => {
             })}
             <div ref={chatEndRef}/>
           </div>
+          {showJumpToLatest && (
+            <button type="button" className="lab-jump-latest" onClick={jumpToLatest}>
+              <ChevronDown size={12}/> Ir para última mensagem
+            </button>
+          )}
+          </div>
           <form className="lab-composer" onSubmit={sendMessage}>
             <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Destinatário">
-              {chatWorkers.map((w) => <option key={w.id} value={w.id}>@{w.name} • {w.state}</option>)}
+              {chatWorkers.map((w) => <option key={w.id} value={w.id} disabled={!w.can_chat}>@{w.name} • {w.state}</option>)}
             </select>
             <input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Discuta uma ideia com o Conselho..."/>
             <button type="submit" disabled={!message.trim() || sending}>{sending ? <LoaderCircle className="spin" size={17}/> : <Send size={17}/>}</button>

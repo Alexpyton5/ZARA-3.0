@@ -31,6 +31,10 @@ const zaraAPI = {
     clear: () => ipcRenderer.invoke('conversation-history-clear'),
   },
 
+  memoryGalaxy: {
+    list: () => ipcRenderer.invoke('memory-galaxy-list'),
+  },
+
   // Actions
   action: {
     execute: (action: string, params: Record<string, any>) => ipcRenderer.invoke('action-execute', action, params),
@@ -48,6 +52,12 @@ const zaraAPI = {
     start: () => ipcRenderer.invoke('voice-start'),
     stop: () => ipcRenderer.invoke('voice-stop'),
     status: () => ipcRenderer.invoke('voice-status'),
+    // ZARA-AEC-RENDERER-001: microfone limpo pelo AEC do Chromium, sem
+    // resposta do backend — é fluxo contínuo, não requisição.
+    sendMicChunk: (pcm: string) => ipcRenderer.send('voice-mic-chunk', pcm),
+    // ZARA-BOTAO-MUDO-005. Com argumento: define. Sem argumento: só consulta,
+    // que é como o botão descobre a cor certa quando o app abre.
+    mute: (mudo?: boolean) => ipcRenderer.invoke('voice-mute', mudo),
   },
 
   // Config
@@ -98,6 +108,15 @@ const zaraAPI = {
       const handler = (_event: any, level: number, tone: number, speaking: boolean) => callback(level, tone, speaking)
       ipcRenderer.on('voice-level', handler)
       return () => ipcRenderer.off('voice-level', handler)
+    },
+    // ZARA-AEC-RENDERER-001. `stop: true` significa cortar agora (barge-in),
+    // não silêncio.
+    voiceOutputAudio: (
+      callback: (data: { pcm?: string; sampleRate?: number; stop?: boolean }) => void,
+    ) => {
+      const handler = (_event: any, data: any) => callback(data || {})
+      ipcRenderer.on('voice-output-audio', handler)
+      return () => ipcRenderer.off('voice-output-audio', handler)
     },
     supercerebroChange: (callback: (active: boolean) => void) => {
       const handler = (_event: any, active: boolean) => callback(active)

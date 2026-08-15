@@ -24,6 +24,15 @@ _BLOCKED_OUTCOME_MARKERS = (
     "not allowed",
 )
 
+CONVERSATIONAL_SYSTEM_PROMPT = (
+    "Você é ZARA, a assistente pessoal de Alex. Responda em português do Brasil "
+    "quando ele falar em português. Em conversa casual, soe humana, direta e "
+    "acolhedora: normalmente use de uma a três frases curtas. Não transforme uma "
+    "pergunta simples em lista, tutorial ou palestra, salvo quando Alex pedir ou "
+    "quando isso for realmente necessário. Responda primeiro ao que foi perguntado "
+    "e não encerre toda resposta com outra pergunta. Seja precisa e não invente certezas."
+)
+
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
@@ -132,6 +141,7 @@ class ZaraOrchestrator:
         message: str,
         engine: str = None,
         context: dict = None,
+        history: list[dict] | None = None,
         require_tools: bool = False,
         stream: bool = False
     ) -> str:
@@ -145,7 +155,9 @@ class ZaraOrchestrator:
         if normalized_engine not in {"auto_smart", "auto_economy"}:
             self.last_route_policy = "manual"
             self.last_engine_used = normalized_engine
-            response = await self._call_model_direct(message, normalized_engine, stream)
+            response = await self._call_model_direct(
+                message, normalized_engine, stream, history=history
+            )
             if self._is_error_response(response):
                 self.model_router.mark_failure(normalized_engine, response)
                 self.model_router.record_usage(normalized_engine, success=False)
@@ -176,7 +188,9 @@ class ZaraOrchestrator:
         last_error = None
 
         for model in models_to_try:
-            response = await self._call_model_direct(message, model.id, stream)
+            response = await self._call_model_direct(
+                message, model.id, stream, history=history
+            )
             if response and not self._is_error_response(response):
                 self.model_router.mark_success(model.id)
                 self.model_router.record_usage(model.id, success=True)
@@ -193,10 +207,17 @@ class ZaraOrchestrator:
 
     @staticmethod
     def _is_error_response(response: object) -> bool:
-        normalized = str(response or "").lstrip().lower()
-        return (not response) or normalized.startswith(("error", "erro", "failed"))
+        normalized = str(response or "").strip().lower()
+        # Resposta vazia ou so com espacos = falha do provider, nunca sucesso.
+        return (not normalized) or normalized.startswith(("error", "erro", "failed"))
 
-    async def _call_model_direct(self, message: str, model_id: str, stream: bool = False) -> str:
+    async def _call_model_direct(
+        self,
+        message: str,
+        model_id: str,
+        stream: bool = False,
+        history: list[dict] | None = None,
+    ) -> str:
         """Call a specific model directly"""
         from core.model_router import get_model_config
 
@@ -206,12 +227,36 @@ class ZaraOrchestrator:
 
         # Check if Hermes (local)
         if model_config.provider == ModelProvider.HERMES:
-            return await self._call_hermes(message, model_config, stream)
+            return await self._call_hermes(message, model_config, stream, history)
 
         # For cloud models, use httpx to call API
-        return await self._call_cloud_model(message, model_config, stream)
+        return await self._call_cloud_model(message, model_config, stream, history)
 
-    async def _call_hermes(self, message: str, model_config, stream: bool = False) -> str:
+    @staticmethod
+    def _normalized_history(
+        history: list[dict] | None, current_message: str
+    ) -> list[dict[str, str]]:
+        """Keep valid recent turns and drop a duplicated current user message."""
+        normalized: list[dict[str, str]] = []
+        for turn in (history or [])[-16:]:
+            if not isinstance(turn, dict):
+                continue
+            role = str(turn.get("role", "")).strip().lower()
+            content = str(turn.get("content", "")).strip()
+            if role not in {"user", "assistant"} or not content:
+                continue
+            normalized.append({"role": role, "content": content})
+        if (
+            normalized
+            and normalized[-1]["role"] == "user"
+            and normalized[-1]["content"] == current_message.strip()
+        ):
+            normalized.pop()
+        return normalized
+
+    async def _call_hermes(
+        self, message: str, model_config, stream: bool = False, history=None
+    ) -> str:
         """Call Hermes Gateway"""
         try:
             import httpx
@@ -224,7 +269,8 @@ class ZaraOrchestrator:
                 payload = {
                     "model": model_config.id,
                     "messages": [
-                        {"role": "system", "content": "You are ZARA, a helpful AI assistant. Be concise and accurate."},
+                        {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
+                        *self._normalized_history(history, message),
                         {"role": "user", "content": message}
                     ],
                     "stream": stream,
@@ -250,7 +296,9 @@ class ZaraOrchestrator:
         except Exception as e:
             return f"Error calling Hermes: {e}"
 
-    async def _call_cloud_model(self, message: str, model_config, stream: bool = False) -> str:
+    async def _call_cloud_model(
+        self, message: str, model_config, stream: bool = False, history=None
+    ) -> str:
         """Call cloud model API (Groq, Gemini, NVIDIA, Z.AI)"""
         try:
             import os
@@ -263,19 +311,20 @@ class ZaraOrchestrator:
 
             async with httpx.AsyncClient(timeout=120.0) as client:
                 if model_config.provider == ModelProvider.GEMINI:
-                    return await self._call_gemini(message, model_config, api_key, client)
+                    return await self._call_gemini(message, model_config, api_key, client, history)
                 else:
-                    return await self._call_openai_compatible(message, model_config, api_key, client)
+                    return await self._call_openai_compatible(message, model_config, api_key, client, history)
 
         except Exception as e:
             return f"Error calling {model_config.provider.value}: {e}"
 
-    async def _call_openai_compatible(self, message: str, model_config, api_key: str, client: httpx.AsyncClient) -> str:
+    async def _call_openai_compatible(self, message: str, model_config, api_key: str, client: httpx.AsyncClient, history=None) -> str:
         """Call OpenAI-compatible API (Groq, NVIDIA, Z.AI)"""
         payload = {
             "model": model_config.api_model,
             "messages": [
-                {"role": "system", "content": "You are ZARA, a helpful AI assistant. Be concise and accurate."},
+                {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
+                *self._normalized_history(history, message),
                 {"role": "user", "content": message}
             ],
             "max_tokens": model_config.max_tokens,
@@ -306,15 +355,22 @@ class ZaraOrchestrator:
             error_text = (await resp.aread()).decode(errors="replace")
             return f"Error {resp.status_code}: {error_text[:800]}"
 
-    async def _call_gemini(self, message: str, model_config, api_key: str, client: httpx.AsyncClient) -> str:
+    async def _call_gemini(self, message: str, model_config, api_key: str, client: httpx.AsyncClient, history=None) -> str:
         """Call Gemini API"""
         model_name = model_config.api_model
 
         payload = {
             "systemInstruction": {
-                "parts": [{"text": "Você é ZARA, uma assistente pessoal útil, objetiva e precisa. Responda em português do Brasil quando o usuário falar em português."}]
+                "parts": [{"text": CONVERSATIONAL_SYSTEM_PROMPT}]
             },
             "contents": [
+                *[
+                    {
+                        "role": "model" if turn["role"] == "assistant" else "user",
+                        "parts": [{"text": turn["content"]}],
+                    }
+                    for turn in self._normalized_history(history, message)
+                ],
                 {"role": "user", "parts": [{"text": message}]}
             ],
             "generationConfig": {

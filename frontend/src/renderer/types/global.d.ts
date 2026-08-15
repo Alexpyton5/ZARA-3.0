@@ -18,9 +18,18 @@ declare global {
         list?: (limit?: number) => Promise<any>;
         clear?: () => Promise<any>;
       };
+      memoryGalaxy?: { list?: () => Promise<any> };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
       system?: { metrics?: () => Promise<any>; info?: () => Promise<any> };
-      voice?: { start?: () => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any> };
+      voice?: {
+        start?: () => Promise<any>;
+        stop?: () => Promise<any>;
+        status?: () => Promise<any>;
+        // ZARA-AEC-RENDERER-001
+        sendMicChunk?: (pcm: string) => void;
+        // ZARA-BOTAO-MUDO-001
+        mute?: (mudo?: boolean) => Promise<{ success: boolean; mudo: boolean }>;
+      };
       config?: { get?: () => Promise<any>; set?: (key: string, value: any) => Promise<any> };
       lab?: {
         state?: () => Promise<any>;
@@ -39,6 +48,10 @@ declare global {
         message?: (callback: (message: { role: string; content: string }) => void) => () => void;
         metrics?: (callback: (metrics: any) => void) => () => void;
         voiceLevel?: (callback: (level: number, tone: number, speaking: boolean) => void) => () => void;
+        // ZARA-AEC-RENDERER-001: PCM da Kore para o renderer tocar (far-end do AEC).
+        voiceOutputAudio?: (
+          callback: (data: { pcm?: string; sampleRate?: number; stop?: boolean }) => void,
+        ) => () => void;
         supercerebroChange?: (callback: (active: boolean) => void) => () => void;
         reminderCreated?: (callback: (reminder: ReminderEvent) => void) => () => void;
         reminderFired?: (callback: (reminder: ReminderEvent) => void) => () => void;

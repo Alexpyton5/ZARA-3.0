@@ -1,18 +1,40 @@
 // Electron Main Process — ZARA 3.0 Neural Interface
 // Renderer is allowed to open independently; Python sidecar connects when ready.
 
-import { app, BrowserWindow, dialog, ipcMain, Notification, shell, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, session, shell, Tray, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
 import { join } from 'path'
-import { spawn, ChildProcess } from 'child_process'
-import { existsSync } from 'fs'
+import { spawn, execFileSync, ChildProcess } from 'child_process'
+import { existsSync, writeFileSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
 
 let pythonProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let isPythonReady = false
 let pythonReadinessPromise: Promise<void> | null = null
+let isStoppingPython = false
+// ZARA-SIDECAR-ORFAO-001: guardado à parte porque em `will-quit` o objeto do
+// processo já pode ter sido descartado, e ainda assim precisamos do pid.
+let lastPythonPid: number | undefined
 let pythonRequestId = 0
 const pendingRequests = new Map<string, { resolve: (value: any) => void; reject: (err: Error) => void }>()
+
+// ZARA-BANDEJA-001
+//
+// Alex: "eu consigo me comunicar com voces sem o app aberto so pelo telegram?".
+// Não conseguia, e o motivo é estrutural: quem escuta o Telegram é o sidecar
+// dentro deste app. App fechado, ninguém escutando — e ele descobria isso
+// mandando mensagem e ficando sem resposta.
+//
+// Fechar a janela passa a ESCONDER a janela, não a encerrar a ZARA. O X vira
+// "some da minha frente", e sair de verdade fica no menu da bandeja. Assim o
+// Telegram funciona o dia inteiro sem ele precisar deixar uma janela aberta.
+//
+// Isto NÃO enfraquece a proteção contra sidecar órfão: `saindoDeVerdade` só
+// fica verdadeiro no caminho de saída explícito, e aí `before-quit` e
+// `will-quit` continuam matando a árvore de processos como antes.
+let tray: Tray | null = null
+let saindoDeVerdade = false
+const abriuMinimizada = process.argv.includes('--minimizada')
 
 function getPythonExecutable(): string {
   if (app.isPackaged) {
@@ -23,8 +45,9 @@ function getPythonExecutable(): string {
 
 function getMainScript(): string {
   if (app.isPackaged) return ''
-  // In development app.getAppPath() is the frontend directory.
-  return join(app.getAppPath(), '..', 'main.py')
+  // In development app.getAppPath() resolves to the compiled electron dir
+  // (frontend/dist-electron), so main.py at the project ROOT is two levels up.
+  return join(app.getAppPath(), '..', '..', 'main.py')
 }
 
 function getFrontendDistPath(): string {
@@ -57,17 +80,23 @@ function rejectPendingRequests(reason: string): void {
 
 function startPythonSidecar(): Promise<void> {
   if (pythonProcess && isPythonReady) return Promise.resolve()
+  if (pythonProcess && pythonReadinessPromise) return pythonReadinessPromise
+  if (pythonProcess) return Promise.reject(new Error('Python sidecar já está iniciando'))
+  if (isStoppingPython) return Promise.reject(new Error('Python sidecar está encerrando'))
 
   return new Promise((resolve, reject) => {
     let settled = false
+    let startupTimer: ReturnType<typeof setTimeout> | null = null
     const settleResolve = () => {
       if (settled) return
       settled = true
+      if (startupTimer) clearTimeout(startupTimer)
       resolve()
     }
     const settleReject = (error: Error) => {
       if (settled) return
       settled = true
+      if (startupTimer) clearTimeout(startupTimer)
       reject(error)
     }
 
@@ -97,6 +126,7 @@ function startPythonSidecar(): Promise<void> {
     env.PYTHONUNBUFFERED = '1'
     env.PYTHONUTF8 = '1'
     env.PYTHONIOENCODING = 'utf-8'
+    env.ZARA_PARENT_PID = String(process.pid)
 
     const args = app.isPackaged ? [] : ['-u', mainScript]
     const child = spawn(pythonExe, args, {
@@ -161,8 +191,9 @@ function startPythonSidecar(): Promise<void> {
 
     child.on('exit', (code) => {
       console.log('[Python] Exited with code:', code)
+      if (pythonProcess !== child) return
       const wasReady = isPythonReady
-      if (pythonProcess === child) pythonProcess = null
+      pythonProcess = null
       isPythonReady = false
       rejectPendingRequests('Python process exited')
       if (!wasReady) {
@@ -170,9 +201,10 @@ function startPythonSidecar(): Promise<void> {
       }
     })
 
-    setTimeout(() => {
-      if (!isPythonReady) {
+    startupTimer = setTimeout(() => {
+      if (pythonProcess === child && !isPythonReady) {
         settleReject(new Error('Python sidecar startup timeout (45s)'))
+        child.kill()
       }
     }, 45000)
   })
@@ -421,6 +453,11 @@ function handlePythonEvent(msg: any): void {
     case 'voice-level':
       mainWindow?.webContents.send('voice-level', msg.level, msg.tone, msg.speaking)
       break
+    // ZARA-AEC-RENDERER-001: a voz da Kore vem em PCM para o renderer tocar.
+    // É essa reprodução que dá ao AEC do Chromium o sinal de referência.
+    case 'voice-output-audio':
+      mainWindow?.webContents.send('voice-output-audio', msg.data)
+      break
     case 'supercerebro-change':
       mainWindow?.webContents.send('supercerebro-change', msg.active)
       break
@@ -456,6 +493,103 @@ function diagnosticHtml(message: string): string {
   const escapes: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
   const safe = message.replace(/[&<>"']/g, (char) => escapes[char] || char)
   return `<!doctype html><html><body style="margin:0;min-height:100vh;background:#020604;color:#d8ffe9;font-family:Segoe UI,sans-serif;padding:32px;box-sizing:border-box"><h2 style="color:#55ffad">ZARA — falha ao carregar a interface</h2><p>A janela Electron abriu corretamente, porém o renderer não pôde ser carregado.</p><pre style="white-space:pre-wrap;border:1px solid #1a6b4a;padding:16px;border-radius:8px;background:#06100b">${safe}</pre></body></html>`
+}
+
+// ZARA-BANDEJA-001 ---------------------------------------------------------
+
+function mostrarAJanela(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function sairDeVerdade(): void {
+  saindoDeVerdade = true
+  app.quit()
+}
+
+/** Está configurada para subir junto com o Windows? */
+function sobeComOWindows(): boolean {
+  try {
+    return app.getLoginItemSettings({ args: ['--minimizada'] }).openAtLogin
+  } catch {
+    return false
+  }
+}
+
+function definirInicioAutomatico(ligado: boolean): void {
+  try {
+    // `--minimizada` faz ela subir direto para a bandeja, sem abrir janela.
+    app.setLoginItemSettings({
+      openAtLogin: ligado,
+      args: ligado ? ['--minimizada'] : [],
+    })
+  } catch (erro) {
+    console.error('[Electron] nao consegui mudar o inicio automatico:', erro)
+  }
+}
+
+/** Liga o início automático UMA vez, e nunca mais decide por ele.
+ *
+ * O Alex pediu que a ZARA atenda o Telegram o dia inteiro, e isso exige ela
+ * ligada. Mas se ele desligar essa opção no menu da bandeja, religar na próxima
+ * abertura seria o app desfazendo a escolha dele — o mesmo defeito do botão de
+ * mudo que ele já reclamou. O carimbo em disco existe para isso: marca que a
+ * pergunta já foi respondida, e a resposta passa a ser dele.
+ */
+function ligarSozinhaNaPrimeiraVez(): void {
+  try {
+    const carimbo = join(app.getPath('userData'), 'inicio-automatico-decidido')
+    if (existsSync(carimbo)) return
+    definirInicioAutomatico(true)
+    writeFileSync(carimbo, new Date().toISOString(), 'utf-8')
+    atualizarMenuDaBandeja()
+    console.log('[Electron] inicio automatico ligado (primeira vez)')
+  } catch (erro) {
+    console.error('[Electron] nao consegui decidir o inicio automatico:', erro)
+  }
+}
+
+function montarBandeja(): void {
+  if (tray) return
+  const iconPath = getWindowIconPath()
+  if (!existsSync(iconPath)) {
+    // Sem ícone não há bandeja, e sem bandeja o X não pode esconder a janela —
+    // ela ficaria inalcançável. Melhor voltar ao comportamento antigo.
+    console.warn('[Electron] sem icone para a bandeja; a janela volta a fechar de verdade')
+    saindoDeVerdade = true
+    return
+  }
+
+  tray = new Tray(iconPath)
+  tray.setToolTip('ZARA — clique para abrir')
+  tray.on('click', mostrarAJanela)
+  tray.on('double-click', mostrarAJanela)
+  atualizarMenuDaBandeja()
+}
+
+function atualizarMenuDaBandeja(): void {
+  if (!tray) return
+  const ligado = sobeComOWindows()
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Abrir a ZARA', click: mostrarAJanela },
+    { type: 'separator' },
+    {
+      label: 'Ligar sozinha com o Windows',
+      type: 'checkbox',
+      checked: ligado,
+      click: () => {
+        definirInicioAutomatico(!ligado)
+        atualizarMenuDaBandeja()
+      },
+    },
+    { type: 'separator' },
+    { label: 'Sair (para de atender o Telegram)', click: sairDeVerdade },
+  ]))
 }
 
 function createWindow(): void {
@@ -496,6 +630,10 @@ function createWindow(): void {
   })
 
   const showWindow = () => {
+    // ZARA-BANDEJA-001: quando o Windows a inicia sozinha, ela sobe calada,
+    // direto para a bandeja. Uma janela pulando na frente do Alex toda vez que
+    // ele liga o computador seria pior que não ter início automático.
+    if (abriuMinimizada) return
     if (!windowRef.isDestroyed() && !windowRef.isVisible()) {
       windowRef.show()
       windowRef.focus()
@@ -504,6 +642,13 @@ function createWindow(): void {
   windowRef.once('ready-to-show', showWindow)
   windowRef.webContents.once('did-finish-load', showWindow)
   setTimeout(showWindow, 3000)
+
+  // ZARA-BANDEJA-001: o X esconde; sair de verdade é pelo menu da bandeja.
+  windowRef.on('close', (evento) => {
+    if (saindoDeVerdade) return
+    evento.preventDefault()
+    windowRef.hide()
+  })
 
   if (app.isPackaged) {
     const indexPath = join(getFrontendDistPath(), 'index.html')
@@ -537,8 +682,27 @@ function setupIPC(): void {
   ipcMain.handle('supercerebro-status', () => sendToPython('supercerebro-status'))
   ipcMain.handle('send-message', (_event, payload) => sendToPython('send-message', payload))
   ipcMain.handle('interrupt', () => sendToPython('interrupt'))
+  // ZARA-BOTAO-MUDO-001: calar a voz sem desligar o resto dela.
+  ipcMain.handle('voice-mute', (_e, mudo?: boolean) => sendToPython('voice-mute', { mudo }))
+
+  // ZARA-AEC-RENDERER-001. Microfone já limpo pelo AEC, ~23 blocos por segundo.
+  // Vai sem request_id de propósito: usar sendToPython criaria uma promessa
+  // pendente por bloco e o mapa de requisições cresceria sem parar, já que o
+  // backend não responde a chunk de áudio.
+  ipcMain.on('voice-mic-chunk', (_evento, pcm: string) => {
+    if (!pythonProcess || !isPythonReady || !pcm) return
+    try {
+      pythonProcess.stdin?.write(
+        JSON.stringify({ type: 'voice-mic-chunk', payload: { pcm } }) + '\n',
+      )
+    } catch {
+      // Backend caindo: o próximo bloco tenta de novo. Não vale derrubar a
+      // captura de áudio por causa de um bloco perdido.
+    }
+  })
   ipcMain.handle('conversation-history-list', (_event, payload) => sendToPython('conversation-history-list', payload))
   ipcMain.handle('conversation-history-clear', () => sendToPython('conversation-history-clear'))
+  ipcMain.handle('memory-galaxy-list', () => sendToPython('memory-galaxy-list'))
   ipcMain.handle('action-execute', executeActionWithConfirmation)
   ipcMain.handle('action-list', () => sendToPython('action-list'))
   ipcMain.handle('system-metrics', () => sendToPython('system-metrics'))
@@ -570,35 +734,131 @@ function setupIPC(): void {
   ipcMain.handle('window-close', () => mainWindow?.close())
 }
 
-app.whenReady().then(() => {
-  // The interface is independent from backend startup. This guarantees that a
-  // sidecar failure is visible to the user instead of producing a black window.
-  setupIPC()
-  pythonReadinessPromise = startPythonSidecar()
-  void pythonReadinessPromise.catch((error) => {
-    console.error('[Electron] Python backend unavailable:', error)
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  // Another ZARA instance is already running: do not start a second sidecar
+  // (which would open the same SQLite/WAL data dir). Quit immediately.
+  console.warn('[Electron] Outra instancia da ZARA ja esta em execucao. Encerrando esta.')
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // ZARA-BANDEJA-001: agora a janela pode estar escondida, não só minimizada.
+    // `focus()` numa janela escondida não mostra nada, e clicar no atalho
+    // pareceria não fazer efeito.
+    mostrarAJanela()
   })
-  createWindow()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  app.whenReady().then(() => {
+    // The interface is independent from backend startup. This guarantees that a
+    // sidecar failure is visible to the user instead of producing a black window.
+    setupIPC()
+
+    // ZARA-AEC-RENDERER-001. Sem isto o getUserMedia do renderer é negado no
+    // app empacotado e a ZARA fica surda em silêncio — sem erro visível.
+    // Autoriza só microfone; qualquer outra permissão continua negada.
+    session.defaultSession.setPermissionRequestHandler((_wc, permissao, responder) => {
+      responder(permissao === 'media')
+    })
+    session.defaultSession.setPermissionCheckHandler(
+      (_wc, permissao) => permissao === 'media',
+    )
+
+    pythonReadinessPromise = startPythonSidecar()
+    void pythonReadinessPromise.catch((error) => {
+      console.error('[Electron] Python backend unavailable:', error)
+    })
+    createWindow()
+    montarBandeja()
+    ligarSozinhaNaPrimeiraVez()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-})
-
-function stopPython(): void {
-  if (pythonProcess) {
-    pythonProcess.kill()
-    pythonProcess = null
-  }
-  isPythonReady = false
-  pythonReadinessPromise = null
-  rejectPendingRequests('Application shutting down')
 }
 
-app.on('before-quit', stopPython)
+// ZARA-SIDECAR-ORFAO-001
+// Observado duas vezes em 2026-08-13: fechar a janela deixava um
+// zara-backend.exe vivo, segurando o microfone e o banco. Duas causas, e as
+// duas precisavam de conserta:
+//
+//  1. `child.kill()` matava só o BOOTLOADER. O sidecar é PyInstaller onefile:
+//     o processo que criamos extrai o app e roda o programa de verdade num
+//     processo FILHO. Matar o pai deixa o filho vivo — foi exatamente o que
+//     apareceu na lista (pai de 7 MB morto, filho de 282 MB vivo).
+//  2. O timer levava `.unref()`, então o Node não segurava o processo por ele.
+//     Durante o encerramento o Electron morria antes dos 1,5 s e o kill nunca
+//     chegava a rodar.
+function killPythonTree(pid: number | undefined): void {
+  if (!pid) return
+  if (process.platform === 'win32') {
+    try {
+      // /T = árvore inteira, /F = à força. É o que alcança o filho do onefile.
+      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        timeout: 4000,
+      })
+    } catch {
+      // Já morreu, ou o pid sumiu. Os dois casos são o resultado desejado.
+    }
+    return
+  }
+  try {
+    process.kill(pid, 'SIGKILL')
+  } catch {
+    /* já morreu */
+  }
+}
+
+function stopPython(): void {
+  const child = pythonProcess
+  pythonProcess = null
+  isPythonReady = false
+  pythonReadinessPromise = null
+  if (!child) return
+  isStoppingPython = true
+  lastPythonPid = child.pid
+  rejectPendingRequests('Application shutting down')
+  // Closing stdin gives the owned Python sidecar a clean EOF. Force-stop only
+  // this exact child if it does not exit within the short grace period.
+  child.stdin?.end()
+  // Sem unref: durante o encerramento este timer PRECISA rodar, senão o
+  // sidecar sobrevive ao app.
+  const forceTimer = setTimeout(() => {
+    if (child.exitCode === null) killPythonTree(child.pid)
+    isStoppingPython = false
+  }, 1500)
+  child.once('exit', () => {
+    clearTimeout(forceTimer)
+    lastPythonPid = undefined
+    isStoppingPython = false
+  })
+}
+
+app.on('before-quit', () => {
+  // ZARA-BANDEJA-001: `before-quit` também dispara em logoff/desligamento do
+  // Windows, quando ninguém clicou em "Sair". Marcar aqui garante que o
+  // `close` da janela não cancele o encerramento e deixe o processo pendurado.
+  saindoDeVerdade = true
+  stopPython()
+})
 app.on('window-all-closed', () => {
+  // ZARA-BANDEJA-001: com a bandeja no ar, ficar sem janela é estado normal —
+  // é assim que ela atende o Telegram o dia inteiro. Encerrar aqui mataria o
+  // sidecar e o Alex voltaria a ficar sem resposta no celular.
+  if (tray && !saindoDeVerdade) return
   stopPython()
   if (process.platform !== 'darwin') app.quit()
+})
+
+// Última rede: `will-quit` é síncrono e roda depois de `before-quit`. Se o
+// sidecar ainda não saiu pelo EOF, ele morre aqui — antes de o Electron
+// desaparecer e transformá-lo em órfão.
+app.on('will-quit', () => {
+  if (lastPythonPid !== undefined) {
+    killPythonTree(lastPythonPid)
+    lastPythonPid = undefined
+  }
 })
 
 app.on('web-contents-created', (_event, contents) => {

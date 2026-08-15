@@ -1,4 +1,4 @@
-import React, { CSSProperties, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
   AudioLines, BrainCircuit, CalendarDays, ChevronDown, CircleDot, FlaskConical,
   Heart, LoaderCircle, MessageCircle, Mic, MicOff, Minimize, MoonStar, Send,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
 import { ZaraLab } from './ZaraLab';
+import { ZaraVoiceOrb } from './ZaraVoiceOrb';
 import { normalizeReminderEvent } from '../../../reminderEvents';
 import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
 import '../../styles/pearl.css';
@@ -349,13 +350,6 @@ export const ZaraControlCenter: React.FC = () => {
     setActiveNav(key);
   };
 
-  const orbStyle = {
-    '--voice-level': voiceLevel,
-    '--voice-glow': `${13 + voiceLevel * 25}px`,
-    '--voice-scale': 1.015 + voiceLevel * 0.055,
-    '--voice-halo': 1.1 + voiceLevel * 0.15,
-  } as CSSProperties;
-
   return (
     <div className={`pearl-desktop theme-${theme}`}>
       <section className="pearl-window" aria-label="Interface principal da ZARA">
@@ -398,9 +392,8 @@ export const ZaraControlCenter: React.FC = () => {
           ) : (
             <div className="pearl-home">
               <main className="pearl-center-stage">
-                <section className={`pearl-orb state-${state.toLowerCase()}`} style={orbStyle} aria-label={`Estado da ZARA: ${orbStateLabel[state]}`}>
-                  <div className="pearl-orb-halo" />
-                  <img className="pearl-orb-image" src="./zara-orb-pearl.png" alt=""/>
+                <section className={`pearl-orb state-${state.toLowerCase()}`} aria-label={`Estado da ZARA: ${orbStateLabel[state]}`}>
+                  <ZaraVoiceOrb state={state} level={voiceLevel} theme={theme} />
                 </section>
 
                 {messages.length > 0 && (

@@ -1,8 +1,8 @@
 import React, { CSSProperties, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AudioLines, BrainCircuit, CalendarDays, ChevronDown, CircleDot, FlaskConical,
-  Heart, LoaderCircle, MessageCircle, Mic, MicOff, Minimize, MoonStar, Send,
-  SlidersHorizontal, Square, SunMedium, Trash2, X
+  AudioLines, Bell, CalendarDays, ChevronDown, CircleDot, FlaskConical,
+  Heart, LoaderCircle, MessageCircle, Mic, MicOff, Send,
+  SlidersHorizontal, SquarePen, SunMedium
 } from 'lucide-react';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
 import { ZaraLab } from './ZaraLab';
@@ -16,6 +16,13 @@ type Theme = 'light' | 'dark';
 interface Toast { id: number; text: string; kind?: 'ok' | 'warn' | 'error'; }
 interface EngineOption { id: string; name: string; provider: string; status?: string; }
 interface MiniLabMessage { id: string; author: string; content: string; createdAt: number; }
+
+const ZaraMark: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <svg className={`zara-mark ${className}`} viewBox="0 0 124 96" role="img" aria-label="Símbolo ZA">
+    <path className="zara-mark-z" d="M13 17.5H74.5L28 77.5H91" />
+    <path className="zara-mark-a" d="M59 77.5 87 24l27 53.5H59Zm16-19h29" />
+  </svg>
+);
 
 const initialMessages: ChatMessage[] = [];
 
@@ -56,24 +63,21 @@ export const ZaraControlCenter: React.FC = () => {
   const [state, setState] = useState<VoiceState>('STANDBY');
   const [voiceLevel, setVoiceLevel] = useState(0.02);
   const [voiceOn, setVoiceOn] = useState(false);
-  const [supercerebro, setSupercerebro] = useState(false);
   const [galaxyOpen, setGalaxyOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [historyReady, setHistoryReady] = useState(false);
-  const [clearingHistory, setClearingHistory] = useState(false);
   const [input, setInput] = useState('');
   const [metrics, setMetrics] = useState({ cpu: 0, memory: 0, network: 0, storage: 0 });
   const [backendOnline, setBackendOnline] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
-  const [engines, setEngines] = useState<EngineOption[]>([]);
   const [selectedEngine, setSelectedEngine] = useState('auto_smart');
   const [voiceLabel, setVoiceLabel] = useState('GEMINI LIVE • KORE');
   const [miniLabMessages, setMiniLabMessages] = useState<MiniLabMessage[]>([]);
   const [miniLabInput, setMiniLabInput] = useState('');
   const [miniLabBusy, setMiniLabBusy] = useState(false);
   const [miniLabOnline, setMiniLabOnline] = useState(false);
-  const logRef = useRef<HTMLDivElement>(null);
+  const commandInputRef = useRef<HTMLInputElement>(null);
   const miniLabEndRef = useRef<HTMLDivElement>(null);
   const toastIdRef = useRef(0);
   const historyReadyRef = useRef(false);
@@ -118,7 +122,6 @@ export const ZaraControlCenter: React.FC = () => {
         storage: Number(nextMetrics?.storage ?? nextMetrics?.disk ?? current.storage),
       }));
     }));
-    if (api.on?.supercerebroChange) offs.push(api.on.supercerebroChange((active: boolean) => setSupercerebro(Boolean(active))));
     if (api.on?.reminderFired) offs.push(api.on.reminderFired((rawReminder: unknown) => {
       const reminder = normalizeReminderEvent(rawReminder);
       if (!reminder) return;
@@ -144,7 +147,6 @@ export const ZaraControlCenter: React.FC = () => {
     if (engineListPromise) {
       engineListPromise.then((result: any) => {
         const list: EngineOption[] = Array.isArray(result?.engines) ? result.engines : [];
-        setEngines(list);
         const ids = new Set(list.map((engine) => engine.id));
         const preferred = String(result?.current || localStorage.getItem('zara-ai-engine') || 'auto_smart');
         const next = ids.has(preferred) ? preferred : ids.has('auto_smart') ? 'auto_smart' : (list[0]?.id || 'auto_smart');
@@ -154,10 +156,6 @@ export const ZaraControlCenter: React.FC = () => {
         if (changePromise) void changePromise.catch(() => undefined);
         if (result?.voice?.voice) setVoiceLabel(`${result.voice.name || 'GEMINI LIVE'} • ${result.voice.voice}`.toUpperCase());
       }).catch(() => {
-        setEngines([
-          { id: 'auto_smart', name: 'AUTO • INTELIGENTE', provider: 'zara' },
-          { id: 'auto_economy', name: 'AUTO • ECONÔMICO', provider: 'zara' },
-        ]);
         setSelectedEngine('auto_smart');
       });
     }
@@ -170,7 +168,6 @@ export const ZaraControlCenter: React.FC = () => {
           network: Number(nextMetrics?.network ?? current.network), storage: Number(nextMetrics?.storage ?? nextMetrics?.disk ?? current.storage),
         }));
       }).catch(() => setBackendOnline(false));
-      api.supercerebro?.status?.().then((result: any) => setSupercerebro(Boolean(result?.active && result?.connected))).catch(() => setSupercerebro(false));
     };
 
     refreshBackend();
@@ -197,10 +194,6 @@ export const ZaraControlCenter: React.FC = () => {
     const timer = window.setInterval(() => void refreshMiniLab(), 3000);
     return () => window.clearInterval(timer);
   }, [refreshMiniLab]);
-
-  useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
 
   useEffect(() => {
     miniLabEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -273,70 +266,6 @@ export const ZaraControlCenter: React.FC = () => {
     }
   };
 
-  const clearConversationHistory = async () => {
-    if (clearingHistory || busy || voiceOn || !historyReady) return;
-    if (!window.confirm('Apagar definitivamente o histórico de conversas desta ZARA?')) return;
-    setClearingHistory(true);
-    try {
-      const clear = window.zaraIPC?.conversationHistory?.clear;
-      if (!clear) throw new Error('IPC de histórico indisponível');
-      const result: any = await clear();
-      if (!result?.success) throw new Error('Limpeza não confirmada');
-      setMessages([]);
-      notify('Histórico de conversas apagado.');
-    } catch {
-      notify('Não foi possível apagar o histórico.', 'error');
-    } finally {
-      setClearingHistory(false);
-    }
-  };
-
-  const changeEngine = async (engine: string) => {
-    const previous = selectedEngine;
-    setSelectedEngine(engine);
-    try {
-      const result: any = await window.zaraIPC?.engine?.change?.(engine);
-      if (!result?.success) throw new Error('Engine não confirmado pelo backend');
-      localStorage.setItem('zara-ai-engine', engine);
-    } catch {
-      setSelectedEngine(previous);
-      notify('Este motor não está disponível com as chaves atuais.', 'error');
-    }
-  };
-
-  const toggleSuper = async () => {
-    const next = !supercerebro;
-    try {
-      const toggle = window.zaraIPC?.supercerebro?.toggle;
-      if (!toggle) throw new Error('IPC do Supercérebro indisponível');
-      const result: any = await toggle(next);
-      if (!result || typeof result.active !== 'boolean') throw new Error('Resposta inválida do backend');
-      const actual = Boolean(result.active && (next ? result.connected : true));
-      setSupercerebro(actual);
-      notify(`Supercérebro ${actual ? 'ativado' : 'desativado'}.`);
-    } catch {
-      setSupercerebro(false);
-      notify('O gateway Hermes não confirmou a ativação.', 'error');
-    }
-  };
-
-  const runDiagnostics = async () => {
-    try {
-      const nextMetrics: any = await window.zaraIPC?.system?.metrics?.();
-      if (nextMetrics) {
-        setBackendOnline(true);
-        setMetrics((current) => ({
-          cpu: Number(nextMetrics.cpu ?? current.cpu), memory: Number(nextMetrics.ram ?? current.memory),
-          network: Number(nextMetrics.network ?? current.network), storage: Number(nextMetrics.storage ?? nextMetrics.disk ?? current.storage),
-        }));
-      }
-      notify('Métricas atualizadas.');
-    } catch {
-      setBackendOnline(false);
-      notify('Diagnóstico indisponível no backend atual.', 'error');
-    }
-  };
-
   const handleNavigation = (key: string) => {
     if (key === 'MEMORY CORE') {
       setGalaxyOpen(true);
@@ -361,16 +290,15 @@ export const ZaraControlCenter: React.FC = () => {
       <section className="pearl-window" aria-label="Interface principal da ZARA">
         <header className="pearl-titlebar">
           <div className="pearl-titlebar-drag" />
-          <div className="pearl-window-controls" aria-label="Controles da janela">
-            <button type="button" onClick={() => window.zaraIPC?.window?.minimize?.()} aria-label="Minimizar"><Minimize size={17}/></button>
-            <button type="button" onClick={() => window.zaraIPC?.window?.maximize?.()} aria-label="Maximizar ou restaurar"><Square size={13}/></button>
-            <button type="button" className="close" onClick={() => window.zaraIPC?.window?.close?.()} aria-label="Fechar"><X size={17}/></button>
+          <div className="pearl-title-actions" aria-label="Ações rápidas">
+            <button type="button" onClick={() => notify('Sem novas notificações.')} aria-label="Notificações"><Bell size={20}/></button>
+            <button type="button" onClick={() => commandInputRef.current?.focus()} aria-label="Nova conversa"><SquarePen size={20}/></button>
           </div>
         </header>
 
         <aside className="pearl-sidebar">
           <button type="button" className="pearl-brand" onClick={() => setActiveNav('HOME')} aria-label="Voltar para Hoje">
-            <img src="./zara-symbol.png" alt=""/>
+            <ZaraMark />
             <span>ZARA</span>
           </button>
 
@@ -384,10 +312,7 @@ export const ZaraControlCenter: React.FC = () => {
 
           <div className="pearl-sidebar-footer">
             <div className={`pearl-online ${backendOnline ? 'online' : ''}`}><i/><span>{backendOnline ? 'ONLINE' : 'OFFLINE'}</span></div>
-            <button type="button" className="pearl-diagnostics" onClick={() => void runDiagnostics()} title={`CPU ${metrics.cpu.toFixed(0)}% • Memória ${metrics.memory.toFixed(0)}%`} aria-label="Atualizar diagnóstico"><SlidersHorizontal size={18}/></button>
-            <button type="button" className="pearl-theme-toggle" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={theme === 'light' ? 'Ativar tema escuro' : 'Ativar tema claro'}>
-              {theme === 'light' ? <MoonStar size={17}/> : <SunMedium size={17}/>}<span>{theme === 'light' ? 'Escuro' : 'Claro'}</span>
-            </button>
+            <button type="button" className="pearl-diagnostics" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} title={`Alternar tema • CPU ${metrics.cpu.toFixed(0)}% • Memória ${metrics.memory.toFixed(0)}%`} aria-label={theme === 'light' ? 'Ativar tema escuro' : 'Ativar tema claro'}><SlidersHorizontal size={18}/></button>
             <div className="pearl-user"><span>A</span><div><strong>Alex</strong><small>{backendOnline ? 'ZARA conectada' : 'Modo local'}</small></div><ChevronDown size={16}/></div>
           </div>
         </aside>
@@ -403,20 +328,8 @@ export const ZaraControlCenter: React.FC = () => {
                   <img className="pearl-orb-image" src="./zara-orb-pearl.png" alt=""/>
                 </section>
 
-                {messages.length > 0 && (
-                  <section className="pearl-transcript" ref={logRef} aria-label="Conversa recente">
-                    <header><span>Conversa recente</span><button type="button" disabled={clearingHistory || busy || voiceOn || !historyReady} onClick={() => void clearConversationHistory()} aria-label="Limpar conversa"><Trash2 size={14}/></button></header>
-                    {messages.slice(-3).map((message, index) => (
-                      <article key={message.id || `${message.timestamp}-${index}`} className={message.role}>
-                        <strong>{message.role === 'assistant' ? 'ZARA' : message.role === 'system' ? 'Sistema' : 'Você'}</strong>
-                        <p>{message.content}</p><time>{timeLabel(message.timestamp)}</time>
-                      </article>
-                    ))}
-                  </section>
-                )}
-
                 <form className="pearl-command" onSubmit={send}>
-                  <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Como posso pensar com você hoje?" aria-label="Mensagem para ZARA"/>
+                  <input ref={commandInputRef} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Como posso pensar com você hoje?" aria-label="Mensagem para ZARA"/>
                   <button type="button" className={`pearl-mute ${voiceOn ? 'active' : ''}`} onClick={() => void toggleVoice()} aria-label={voiceOn ? 'Mutar microfone' : 'Ativar microfone'} title={voiceLabel}>
                     {voiceOn ? <Mic size={20}/> : <MicOff size={20}/>} 
                   </button>
@@ -432,12 +345,6 @@ export const ZaraControlCenter: React.FC = () => {
                 <div className="pearl-agenda-item"><span className="agenda-icon">▣</span><div><strong>Reunião de projeto</strong><small>10:00</small></div></div>
                 <div className="pearl-agenda-item"><span className="agenda-icon">⌁</span><div><strong>Viagem</strong><small>15:30&nbsp; · &nbsp;Guarulhos</small></div></div>
                 <div className="pearl-agenda-item priority"><span className="agenda-icon">☆</span><div><strong>Prioridade do dia</strong><small>Preparar relatório estratégico</small></div></div>
-                <div className="pearl-engine">
-                  <label htmlFor="pearl-engine">Motor de IA</label>
-                  <select id="pearl-engine" value={selectedEngine} disabled={supercerebro || engines.length === 0} onChange={(event) => void changeEngine(event.target.value)}>
-                    {engines.map((engine) => <option key={engine.id} value={engine.id}>{engine.name}</option>)}
-                  </select>
-                </div>
               </aside>
             </div>
           )}
@@ -445,18 +352,22 @@ export const ZaraControlCenter: React.FC = () => {
       </section>
 
       <aside className={`pearl-mini-lab ${miniLabOnline ? 'online' : ''}`} aria-label="Mini ZARA Lab">
-        <div className="pearl-lab-mini-controls" aria-hidden="true"><i/><i/><i/></div>
-        <div className="pearl-lab-watermark"><img src="./zara-symbol.png" alt=""/><span>ZARA</span></div>
+        <div className="pearl-lab-mini-controls" aria-label="Controles da janela">
+          <button type="button" onClick={() => window.zaraIPC?.window?.minimize?.()} aria-label="Minimizar"><span aria-hidden="true">—</span></button>
+          <button type="button" onClick={() => window.zaraIPC?.window?.maximize?.()} aria-label="Maximizar ou restaurar"><span className="maximize-glyph" aria-hidden="true"/></button>
+          <button type="button" className="close" onClick={() => window.zaraIPC?.window?.close?.()} aria-label="Fechar"><span aria-hidden="true">×</span></button>
+        </div>
+        <div className="pearl-lab-watermark"><ZaraMark/><span>ZARA</span></div>
         <div className="pearl-lab-participants" aria-label="Perfis de IA do laboratório">
           <div><span className="claude">C</span><small>Claude</small></div>
           <div><span className="openai">O</span><small>OpenAI</small></div>
-          <div><span className="zara"><img src="./zara-symbol.png" alt=""/></span><small>ZARA</small></div>
+          <div><span className="zara"><ZaraMark/></span><small>ZARA</small></div>
         </div>
 
         <div className="pearl-lab-messages">
           {miniLabMessages.length === 0 ? (
             <div className="pearl-lab-empty"><CircleDot size={15}/><span>{miniLabOnline ? 'O laboratório aguarda mensagens reais.' : 'ZARA Lab indisponível.'}</span></div>
-          ) : miniLabMessages.map((message) => (
+          ) : miniLabMessages.slice(-4).map((message) => (
             <article key={message.id} className={`from-${message.author.toLowerCase()}`}>
               <strong>{message.author === 'alex' ? 'Alex' : message.author.toUpperCase()}</strong>
               <p>{message.content}</p>
@@ -470,7 +381,6 @@ export const ZaraControlCenter: React.FC = () => {
           <input value={miniLabInput} onChange={(event) => setMiniLabInput(event.target.value)} placeholder="Participar da conversa..." aria-label="Mensagem para o ZARA Lab"/>
           <button type="submit" disabled={miniLabBusy || !miniLabInput.trim()} aria-label="Enviar para o ZARA Lab">{miniLabBusy ? <LoaderCircle className="spin" size={16}/> : <Send size={17}/>}</button>
         </form>
-        <button type="button" className={`pearl-hermes ${supercerebro ? 'active' : ''}`} onClick={() => void toggleSuper()}><BrainCircuit size={14}/><span>{supercerebro ? 'Hermes conectado' : 'Conectar Hermes'}</span></button>
       </aside>
 
       <div className="pearl-toast-stack">{toasts.map((toast) => <div key={toast.id} className={`pearl-toast ${toast.kind || 'ok'}`}>{toast.text}</div>)}</div>

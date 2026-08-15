@@ -63,20 +63,88 @@ def test_049_executing_an_unknown_action_still_raises():
 
 
 # ---------- 050 correcao ----------
+#
+# ZARA-TESTE-INSTAVEL-001 (2026-08-14)
+# Estes dois testes tocavam o NAVEGADOR DE VERDADE. Com o Chrome aberto numa
+# pagina, browser_scroll rolava mesmo e a resposta virava "Pagina rolada e
+# confirmada" — sucesso legitimo, mas o teste esperava recusa. Rodando 3 vezes
+# seguidas: passou 2, falhou 1.
+#
+# Um teste que depende do que esta aberto na tela do Alex nao prova nada: ele
+# mente nos dois sentidos. Agora o executor e controlado aqui dentro, e cada
+# teste prova UMA regra:
+#
+#   - executor falhou   -> a resposta DIZ que falhou, e nunca e None
+#   - executor foi bem  -> a resposta e a do executor, sem inventar
+#
+# O que a versao antiga protegia continua protegido: intent detectado jamais
+# cai no LLM, e falha jamais vira falso sucesso.
+def _resultado(*, success: bool, output: str = "", error: str = ""):
+    return type("Resultado", (), {
+        "success": success, "output": output, "error": error, "data": {},
+    })()
+
+
 @pytest.mark.asyncio
-async def test_050_unsupported_intent_returns_honest_message_not_none():
-    """Scroll reaches its executor and reports runtime failure honestly."""
+async def test_050_falha_do_executor_vira_recusa_honesta(monkeypatch):
+    """Se o scroll falhar de verdade, ela precisa dizer que falhou."""
+    async def falhou(*_a, **_k):
+        return _resultado(success=False, error="navegador nao respondeu")
+
+    monkeypatch.setattr("core.action_registry.execute_action", falhou)
+
     reply = await _handler()._try_pc_intent("role para baixo")
+
     assert reply is not None, "nao pode cair no LLM"
     assert "não consegui" in reply.lower()
 
 
 @pytest.mark.asyncio
-async def test_050_unsupported_intent_never_claims_success():
+async def test_050_falha_do_executor_nunca_vira_sucesso(monkeypatch):
+    async def falhou(*_a, **_k):
+        return _resultado(success=False, error="navegador nao respondeu")
+
+    monkeypatch.setattr("core.action_registry.execute_action", falhou)
+
     reply = await _handler()._try_pc_intent("role para cima")
+
     lowered = reply.lower()
-    for lie in ("pronto", "feito", "rolei", "concluído", "concluido"):
-        assert lie not in lowered
+    for mentira in ("pronto", "feito", "rolei", "concluído", "concluido", "confirmada"):
+        assert mentira not in lowered
+
+
+@pytest.mark.asyncio
+async def test_050_sucesso_do_executor_e_repassado_sem_invencao(monkeypatch):
+    """A outra metade: quando dá certo, a fala vem do executor, não do modelo."""
+    async def deu_certo(*_a, **_k):
+        return _resultado(success=True, output="Página rolada e confirmada.")
+
+    monkeypatch.setattr("core.action_registry.execute_action", deu_certo)
+
+    reply = await _handler()._try_pc_intent("role para baixo")
+
+    assert reply is not None
+    assert "rolada e confirmada" in reply.lower()
+
+
+@pytest.mark.asyncio
+async def test_050_nao_depende_do_navegador_da_maquina(monkeypatch):
+    """Trava a regressão: o teste não pode voltar a tocar o Chrome real.
+
+    Se alguém remover o controle do executor, esta chamada explode em vez de
+    silenciosamente virar instável de novo.
+    """
+    chamadas = []
+
+    async def registrando(nome, **kw):
+        chamadas.append(nome)
+        return _resultado(success=False, error="controlado pelo teste")
+
+    monkeypatch.setattr("core.action_registry.execute_action", registrando)
+
+    await _handler()._try_pc_intent("role para baixo")
+
+    assert chamadas == ["browser_scroll"], f"rota inesperada: {chamadas}"
 
 
 @pytest.mark.asyncio

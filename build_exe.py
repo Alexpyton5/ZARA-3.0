@@ -107,6 +107,8 @@ HIDDEN_IMPORTS = [
     "vosk",
     "pvporcupine",
     "kokoro_onnx",
+    "edge_tts",     # voz neural gratuita da cascata de TTS
+    "miniaudio",    # decodifica o MP3 da Edge em streaming (latencia baixa)
     "sounddevice",
     "PIL",          # Correcao: main.py exige PIL (find_spec); nao pode ser excluido
     "playwright",   # main.py testa com find_spec(); coletar como hidden import
@@ -159,7 +161,21 @@ def create_pyinstaller_spec() -> Path:
     kokoro_datas = collect_data_files("kokoro_onnx")
     language_tags_datas = collect_data_files("language_tags")
     genai_datas = collect_data_files("google.genai")
-    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas
+    # ZARA-VOICE-KORE-PACKAGING-001
+    # sounddevice carrega o PortAudio de _sounddevice_data/portaudio-binaries/.
+    # Era a UNICA biblioteca de voz sem coleta de dados/binarios aqui, entao o
+    # DLL nativo nunca entrava no EXE e "import sounddevice" falhava so no
+    # empacotado. Sem sounddevice o Gemini Live nao sobe e a ZARA cai calada
+    # na voz local — a causa da voz errada e da latencia.
+    sounddevice_datas = collect_data_files("sounddevice")
+    # ZARA-VOZ-GRATUITA-001: a Edge fala por WebSocket TLS. Sem os certificados
+    # do certifi dentro do EXE, a voz gratuita funciona no source e falha so no
+    # empacotado — exatamente o tipo de divergencia que build-release.md proibe.
+    certifi_datas = collect_data_files("certifi")
+    datas = (
+        porcupine_datas + kokoro_datas + language_tags_datas + genai_datas
+        + sounddevice_datas + certifi_datas
+    )
 
     # google-genai has a broad async/live module tree; collect it explicitly so
     # PyInstaller cannot miss modules imported dynamically by the SDK.
@@ -171,7 +187,13 @@ def create_pyinstaller_spec() -> Path:
 
     # Bibliotecas nativas do pvporcupine (se existirem — retornou 13 entradas)
     porcupine_binaries = collect_dynamic_libs("pvporcupine")
-    binaries = vosk_binaries + porcupine_binaries
+    # ZARA-VOICE-KORE-PACKAGING-001: PortAudio nativo do sounddevice.
+    sounddevice_binaries = collect_dynamic_libs("sounddevice")
+    # miniaudio e extensao nativa: decodifica o MP3 da Edge em streaming.
+    miniaudio_binaries = collect_dynamic_libs("miniaudio")
+    binaries = (
+        vosk_binaries + porcupine_binaries + sounddevice_binaries + miniaudio_binaries
+    )
 
     # Icon: sidecar sem icone (console tool)
     icon_arg = "None"

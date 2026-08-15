@@ -1,0 +1,451 @@
+:root {
+  --t-fundo: #0B0F0B;
+  --t-destaque: #8FC17F;
+  --t-segundo: #C0392B;
+  --t-luz: #EAF0E6;
+  --t-destaque-legivel: #8FC17F;
+  --t-sobre-destaque: #090B09;
+  --t-painel: color-mix(in srgb, var(--t-fundo) 92%, var(--t-luz));
+  --t-borda:  color-mix(in srgb, var(--t-fundo) 84%, var(--t-luz));
+  --t-texto:  color-mix(in srgb, var(--t-fundo) 10%, var(--t-luz));
+  --t-fraco:  color-mix(in srgb, var(--t-fundo) 28%, var(--t-luz));
+  --t-forca-padrao: .10;
+}
+
+html[data-zara-tema='escuro'] { color-scheme: dark; }
+html[data-zara-tema='claro'] { color-scheme: light; }
+/* Nos prints do Alex o padrao aparecia como papel de parede. Duas causas:
+   ladrilho de 48px (motivo, nao textura) e opacidade alta demais. O ladrilho
+   foi para 24px em padroes.css; aqui a forca cai junto.
+
+   "Sutil" tem de ser quase invisivel — e o ponto: presenca, nao decoracao.
+   Se em Sutil ele nao notar, esta certo. */
+html[data-zara-forca='sutil'] { --t-forca-padrao: .035; }
+html[data-zara-forca='media'] { --t-forca-padrao: .075; }
+html[data-zara-forca='forte'] { --t-forca-padrao: .14; }
+
+/* A pele conversa com a interface existente por suas variáveis públicas; assim
+   a tela atual continua sendo a mesma tela, apenas recebe a escolha do casal. */
+html[data-zara-aparencia='ativa'] {
+  --bg: var(--t-fundo);
+  --bg2: var(--t-painel);
+  --panel: var(--t-painel);
+  --panel2: var(--t-painel);
+  --line: var(--t-borda);
+  --line2: var(--t-destaque);
+  --green: var(--t-destaque);
+  --green2: var(--t-destaque);
+  --green3: var(--t-destaque);
+  --text: var(--t-texto);
+  --muted: var(--t-fraco);
+  --muted2: var(--t-fraco);
+}
+
+html[data-zara-aparencia='ativa'] body,
+html[data-zara-aparencia='ativa'] #root,
+html[data-zara-aparencia='ativa'] .zara-shell { background: var(--t-fundo); }
+html[data-zara-aparencia='ativa'] .zara-shell { border-color: var(--t-borda); }
+html[data-zara-aparencia='ativa'] :is(.topbar, .side-rail, .panel, .conversation-card, .command-bar, .core-card, .admin-card, .super-switch) {
+  background: var(--t-painel);
+  box-shadow: none;
+}
+html[data-zara-aparencia='ativa'] :is(.panel, .conversation-card, .command-bar, .core-card, .admin-card, .super-switch, .agent-row) {
+  border-color: var(--t-borda);
+}
+html[data-zara-tema='claro'] :is(.top-brand strong, .top-brand span, .side-nav button, .engine-picker select, .core-card strong, .admin-card strong, .panel header > span, .agent-row strong, .overview-row, .module-row, .quick-actions button, .conversation-card > header, .message-body p, .zara-input) {
+  color: var(--t-texto);
+}
+html[data-zara-tema='claro'] :is(.panel-caption, .agent-row span, .agent-row small, .admin-card span, .message-body time, .empty-log) {
+  color: var(--t-fraco);
+}
+
+/* A trama fica separada das superfícies para poder morar só na faixa, no
+   rodapé ou no fundo inteiro sem alterar a estrutura do Control Center. */
+html[data-zara-aparencia='ativa'] body::before {
+  content: '';
+  position: fixed;
+  z-index: 20;
+  pointer-events: none;
+  background-color: var(--t-segundo);
+  opacity: var(--t-forca-padrao);
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+html[data-zara-posicao='faixa-lateral'] body::before { inset: var(--header) auto 0 0; width: var(--side); }
+html[data-zara-posicao='rodape'] body::before { inset: auto 0 0; height: 82px; }
+html[data-zara-posicao='fundo-inteiro'] body::before { inset: 0; }
+html[data-zara-posicao='sem'] body::before,
+html[data-zara-padrao='sem'] body::before { display: none; }
+
+.padrao-amostra {
+  display: block;
+  background-color: var(--t-segundo);
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+.padrao-sem { opacity: 0; }
+
+/* Estes quatro desenhos continuam vetoriais em qualquer escala porque são
+   máscaras SVG de linha; a cor vem do segundo fio, nunca de uma cor escondida. */
+.padrao-zellige,
+html[data-zara-padrao='zellige'] body::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M24 0L30 10L48 12L38 24L48 36L30 38L24 48L18 38L0 36L10 24L0 12L18 10Z'/%3E%3Cpath d='M10 24H38M24 0V48'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M24 0L30 10L48 12L38 24L48 36L30 38L24 48L18 38L0 36L10 24L0 12L18 10Z'/%3E%3Cpath d='M10 24H38M24 0V48'/%3E%3C/g%3E%3C/svg%3E");
+  -webkit-mask-size: 48px 48px;
+  mask-size: 48px 48px;
+}
+.padrao-girih,
+html[data-zara-padrao='girih'] body::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='54' height='54' viewBox='0 0 54 54'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M27 0L35 16L54 19L40 32L43 54L27 43L11 54L14 32L0 19L19 16Z'/%3E%3Cpath d='M0 0L14 14M54 0L40 14M0 54L14 40M54 54L40 40'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='54' height='54' viewBox='0 0 54 54'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M27 0L35 16L54 19L40 32L43 54L27 43L11 54L14 32L0 19L19 16Z'/%3E%3Cpath d='M0 0L14 14M54 0L40 14M0 54L14 40M54 54L40 40'/%3E%3C/g%3E%3C/svg%3E");
+  -webkit-mask-size: 54px 54px;
+  mask-size: 54px 54px;
+}
+.padrao-mashrabiya,
+html[data-zara-padrao='mashrabiya'] body::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Ccircle cx='20' cy='20' r='10'/%3E%3Cpath d='M0 20L10 10L20 0L30 10L40 20L30 30L20 40L10 30ZM0 0L10 10M40 0L30 10M0 40L10 30M40 40L30 30'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Ccircle cx='20' cy='20' r='10'/%3E%3Cpath d='M0 20L10 10L20 0L30 10L40 20L30 30L20 40L10 30ZM0 0L10 10M40 0L30 10M0 40L10 30M40 40L30 30'/%3E%3C/g%3E%3C/svg%3E");
+  -webkit-mask-size: 40px 40px;
+  mask-size: 40px 40px;
+}
+.padrao-meandro,
+html[data-zara-padrao='meandro'] body::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24' viewBox='0 0 48 24'%3E%3Cpath d='M0 4H20V20H8V10H14V14M24 20H44V4H32V14H38V10M0 20H4M44 20H48' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24' viewBox='0 0 48 24'%3E%3Cpath d='M0 4H20V20H8V10H14V14M24 20H44V4H32V14H38V10M0 20H4M44 20H48' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+  -webkit-mask-size: 48px 24px;
+  mask-size: 48px 24px;
+}
+
+.padrao-onda-grega,
+html[data-zara-padrao='onda-grega'] body::before {
+  -webkit-mask-image: repeating-linear-gradient(135deg, #000 0 2px, transparent 2px 11px), repeating-linear-gradient(45deg, #000 0 2px, transparent 2px 11px);
+  mask-image: repeating-linear-gradient(135deg, #000 0 2px, transparent 2px 11px), repeating-linear-gradient(45deg, #000 0 2px, transparent 2px 11px);
+  -webkit-mask-size: 30px 18px;
+  mask-size: 30px 18px;
+}
+.padrao-losango,
+html[data-zara-padrao='losango'] body::before {
+  -webkit-mask-image: repeating-linear-gradient(60deg, #000 0 1px, transparent 1px 16px), repeating-linear-gradient(-60deg, #000 0 1px, transparent 1px 16px);
+  mask-image: repeating-linear-gradient(60deg, #000 0 1px, transparent 1px 16px), repeating-linear-gradient(-60deg, #000 0 1px, transparent 1px 16px);
+  -webkit-mask-size: 28px 28px;
+  mask-size: 28px 28px;
+}
+
+/* Os quatro tecidos são células repetidas por regra CSS. Não há desenho fixo:
+   mudar o tamanho da grade recompõe cada estrela, zigue-zague, cruz e trança. */
+.padrao-estrela,
+html[data-zara-padrao='estrela'] body::before {
+  -webkit-mask-image: conic-gradient(from 45deg at 50% 50%, #000 0 12.5%, transparent 0 37.5%, #000 0 62.5%, transparent 0 87.5%, #000 0);
+  mask-image: conic-gradient(from 45deg at 50% 50%, #000 0 12.5%, transparent 0 37.5%, #000 0 62.5%, transparent 0 87.5%, #000 0);
+  -webkit-mask-size: 18px 18px;
+  mask-size: 18px 18px;
+}
+.padrao-zigue-zague,
+html[data-zara-padrao='zigue-zague'] body::before {
+  -webkit-mask-image: linear-gradient(135deg, #000 25%, transparent 25%) 0 0, linear-gradient(225deg, #000 25%, transparent 25%) 0 0;
+  mask-image: linear-gradient(135deg, #000 25%, transparent 25%) 0 0, linear-gradient(225deg, #000 25%, transparent 25%) 0 0;
+  -webkit-mask-size: 18px 9px;
+  mask-size: 18px 9px;
+}
+.padrao-cruz,
+html[data-zara-padrao='cruz'] body::before {
+  -webkit-mask-image: linear-gradient(90deg, transparent 34%, #000 34% 66%, transparent 66%), linear-gradient(transparent 34%, #000 34% 66%, transparent 66%);
+  mask-image: linear-gradient(90deg, transparent 34%, #000 34% 66%, transparent 66%), linear-gradient(transparent 34%, #000 34% 66%, transparent 66%);
+  -webkit-mask-size: 16px 16px;
+  mask-size: 16px 16px;
+}
+.padrao-tranca,
+html[data-zara-padrao='tranca'] body::before {
+  -webkit-mask-image: repeating-linear-gradient(45deg, #000 0 3px, transparent 3px 9px), repeating-linear-gradient(-45deg, #000 0 3px, transparent 3px 9px);
+  mask-image: repeating-linear-gradient(45deg, #000 0 3px, transparent 3px 9px), repeating-linear-gradient(-45deg, #000 0 3px, transparent 3px 9px);
+  -webkit-mask-size: 24px 24px;
+  mask-size: 24px 24px;
+}
+
+.aparencia-backdrop {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .68);
+  color: var(--t-texto);
+  font-family: var(--ui);
+}
+.aparencia-painel {
+  width: min(1120px, 100%);
+  height: min(780px, 100%);
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 62px minmax(0, 1fr) 66px;
+  overflow: hidden;
+  border: 1px solid var(--t-borda);
+  border-radius: 3px;
+  background: var(--t-fundo);
+}
+.aparencia-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--t-borda);
+  background: var(--t-painel);
+}
+.aparencia-cabecalho > div { min-width: 0; display: flex; align-items: center; gap: 11px; }
+.aparencia-cabecalho svg { color: var(--t-destaque-legivel); }
+.aparencia-cabecalho span { font-size: 13px; letter-spacing: .16em; }
+.aparencia-cabecalho small { min-width: 0; overflow: hidden; color: var(--t-fraco); font-size: 10px; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
+.aparencia-cabecalho button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--t-fraco);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.aparencia-cabecalho button:hover { border-color: var(--t-borda); color: var(--t-texto); }
+.aparencia-conteudo {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(500px, 1.08fr) minmax(390px, .92fr);
+  gap: 1px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: var(--t-borda);
+}
+.aparencia-bloco,
+.aparencia-coluna-direita { min-width: 0; background: var(--t-fundo); }
+.aparencia-peles { padding: 22px; }
+.aparencia-coluna-direita { display: grid; grid-template-rows: auto auto minmax(180px, 1fr); gap: 1px; background: var(--t-borda); }
+.aparencia-padroes,
+.aparencia-disposicao { padding: 18px; }
+.aparencia-titulo-bloco { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 16px; }
+.aparencia-titulo-bloco > span {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--t-borda);
+  color: var(--t-destaque-legivel);
+  font: 10px/1 'Cascadia Mono', Consolas, monospace;
+}
+.aparencia-titulo-bloco h2 { margin: 0; color: var(--t-texto); font-size: 11px; font-weight: 500; letter-spacing: .13em; }
+.aparencia-titulo-bloco p { margin: 4px 0 0; color: var(--t-fraco); font-size: 9px; }
+.aparencia-titulo-bloco.compacto { align-items: center; margin-bottom: 9px; }
+.aparencia-titulo-bloco.compacto > span { width: 21px; height: 21px; font-size: 8px; }
+.aparencia-titulo-bloco.forca { margin-top: 14px; }
+
+.aparencia-grade-peles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.aparencia-grade-peles button {
+  min-width: 0;
+  height: 58px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 37px minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  column-gap: 9px;
+  align-items: end;
+  padding: 8px;
+  border: 1px solid var(--t-borda);
+  border-radius: 2px;
+  background: var(--t-painel);
+  color: var(--t-texto);
+  text-align: left;
+  cursor: pointer;
+}
+.aparencia-grade-peles button:hover,
+.aparencia-grade-peles button.ativa { border-color: var(--t-destaque); }
+.aparencia-grade-peles button > svg { position: absolute; top: 5px; right: 5px; color: var(--t-destaque-legivel); }
+.aparencia-amostra-pele {
+  grid-row: 1 / 3;
+  width: 37px;
+  height: 40px;
+  position: relative;
+  display: block;
+  border: 1px solid var(--t-borda);
+}
+.aparencia-amostra-pele i,
+.aparencia-amostra-pele b { position: absolute; right: 4px; width: 13px; height: 3px; }
+.aparencia-amostra-pele i { top: 9px; }
+.aparencia-amostra-pele b { bottom: 9px; }
+.aparencia-grade-peles strong { align-self: end; overflow: hidden; color: inherit; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.aparencia-grade-peles small { align-self: start; color: var(--t-fraco); font: 7px/1.3 'Cascadia Mono', Consolas, monospace; }
+
+.aparencia-cores-livres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 18px; }
+.aparencia-cores-livres label {
+  height: 64px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  column-gap: 9px;
+  padding: 8px;
+  border: 1px solid var(--t-borda);
+  background: var(--t-painel);
+  cursor: pointer;
+}
+.aparencia-cores-livres label > span { align-self: end; color: var(--t-texto); font-size: 8px; letter-spacing: .08em; }
+.aparencia-cores-livres input {
+  grid-row: 1 / 3;
+  width: 32px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--t-borda);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.aparencia-cores-livres input::-webkit-color-swatch-wrapper { padding: 3px; }
+.aparencia-cores-livres input::-webkit-color-swatch { border: 0; border-radius: 0; }
+.aparencia-cores-livres code { align-self: start; color: var(--t-fraco); font-size: 8px; }
+
+.aparencia-grade-padroes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.aparencia-grade-padroes button {
+  height: 52px;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 27px 1fr;
+  gap: 3px;
+  padding: 5px;
+  overflow: hidden;
+  border: 1px solid var(--t-borda);
+  border-radius: 2px;
+  background: var(--t-painel);
+  color: var(--t-fraco);
+  cursor: pointer;
+}
+.aparencia-grade-padroes button:hover,
+.aparencia-grade-padroes button.ativa { border-color: var(--t-destaque); color: var(--t-texto); }
+.aparencia-grade-padroes .padrao-amostra { width: 100%; height: 27px; opacity: .68; }
+.aparencia-grade-padroes strong { overflow: hidden; font-size: 7px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.aparencia-segmentos { display: grid; grid-template-columns: repeat(4, 1fr); }
+.aparencia-segmentos.tres { grid-template-columns: repeat(3, 1fr); }
+.aparencia-segmentos button {
+  height: 30px;
+  margin-left: -1px;
+  border: 1px solid var(--t-borda);
+  border-radius: 0;
+  background: var(--t-painel);
+  color: var(--t-fraco);
+  font-size: 8px;
+  cursor: pointer;
+}
+.aparencia-segmentos button:first-child { margin-left: 0; }
+.aparencia-segmentos button:hover,
+.aparencia-segmentos button.ativa { position: relative; border-color: var(--t-destaque); color: var(--t-texto); }
+
+.aparencia-previa {
+  min-height: 180px;
+  position: relative;
+  display: grid;
+  grid-template-rows: 35px 1fr 34px;
+  overflow: hidden;
+  padding: 0 16px;
+  background: var(--t-painel);
+  color: var(--t-texto);
+}
+.aparencia-preview-trama {
+  position: absolute;
+  z-index: 0;
+  opacity: var(--t-forca-padrao);
+}
+.aparencia-previa.posicao-faixa-lateral .aparencia-preview-trama { inset: 0 auto 0 0; width: 30%; }
+.aparencia-previa.posicao-rodape .aparencia-preview-trama { inset: auto 0 0; height: 31%; }
+.aparencia-previa.posicao-fundo-inteiro .aparencia-preview-trama { inset: 0; }
+.aparencia-previa.posicao-sem .aparencia-preview-trama { display: none; }
+.aparencia-previa > :not(.aparencia-preview-trama) { position: relative; z-index: 1; }
+.aparencia-previa > header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--t-borda); }
+.aparencia-previa > header span { color: var(--t-fraco); font-size: 8px; letter-spacing: .12em; }
+.aparencia-previa > header i { color: var(--t-destaque-legivel); font: normal 7px/1 'Cascadia Mono', Consolas, monospace; letter-spacing: .08em; }
+.aparencia-previa-conversa { display: grid; align-content: center; gap: 5px; padding: 10px 8px; }
+.aparencia-previa-conversa small { color: var(--t-fraco); font: 7px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .08em; }
+.aparencia-previa-conversa p { margin: 0 0 5px; color: var(--t-texto); font: 15px/1.35 Georgia, 'Times New Roman', serif; }
+.aparencia-previa-conversa code { color: var(--t-texto); font: 9px/1.4 'Cascadia Mono', Consolas, monospace; }
+.aparencia-previa > footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--t-borda); font: 7px/1 'Cascadia Mono', Consolas, monospace; letter-spacing: .05em; }
+.aparencia-confirmado { display: flex; align-items: center; gap: 6px; color: var(--t-destaque-legivel); }
+.aparencia-confirmado > i { width: 5px; height: 5px; background: var(--t-destaque); }
+.aparencia-nao-verificado { color: var(--t-fraco); }
+
+.aparencia-rodape {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 18px;
+  border-top: 1px solid var(--t-borda);
+  background: var(--t-painel);
+}
+.aparencia-persistencia { flex: 1; display: flex; align-items: center; gap: 7px; color: var(--t-fraco); font: 9px/1.3 'Cascadia Mono', Consolas, monospace; }
+.aparencia-persistencia.verificado { color: var(--t-destaque-legivel); }
+.aparencia-persistencia.nao-verificado { color: var(--t-fraco); }
+.aparencia-rodape button {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border-radius: 2px;
+  background: transparent;
+  font-size: 9px;
+  letter-spacing: .07em;
+  cursor: pointer;
+}
+.aparencia-restaurar { border: 1px solid var(--t-borda); color: var(--t-fraco); }
+.aparencia-restaurar:hover { color: var(--t-texto); }
+.aparencia-guardar { border: 1px solid var(--t-destaque); color: var(--t-destaque-legivel); }
+.aparencia-guardar:hover { background: var(--t-destaque); color: var(--t-sobre-destaque); }
+
+.aparencia-painel button:focus-visible,
+.aparencia-painel input:focus-visible { outline: 2px solid var(--t-destaque-legivel); outline-offset: 2px; }
+
+@media (max-width: 980px) {
+  .aparencia-conteudo { grid-template-columns: 1fr; }
+  .aparencia-grade-peles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .aparencia-backdrop { padding: 10px; }
+  .aparencia-painel { grid-template-rows: 54px minmax(0, 1fr) auto; }
+  .aparencia-cabecalho { padding: 0 12px; }
+  .aparencia-cabecalho small { display: none; }
+  .aparencia-peles,
+  .aparencia-padroes,
+  .aparencia-disposicao { padding: 14px; }
+  .aparencia-cores-livres { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
+  .aparencia-previa { grid-template-rows: 35px minmax(110px, 1fr) auto; }
+  .aparencia-previa > footer { min-height: 42px; flex-wrap: wrap; align-content: center; gap: 5px 14px; padding: 6px 0; line-height: 1.25; }
+  .aparencia-rodape { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 10px 12px; }
+  .aparencia-persistencia { grid-column: 1 / -1; min-width: 0; }
+  .aparencia-rodape button { width: 100%; height: auto; min-height: 40px; padding: 7px 9px; line-height: 1.25; }
+}
+
+@media (max-width: 520px) {
+  .aparencia-grade-peles { grid-template-columns: minmax(0, 1fr); }
+  .aparencia-cores-livres { grid-template-columns: minmax(0, 1fr); }
+  .aparencia-grade-padroes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-height: 720px) {
+  .aparencia-backdrop { padding: 12px; }
+  .aparencia-painel { grid-template-rows: 54px minmax(0, 1fr) 56px; }
+  .aparencia-peles { padding: 16px; }
+  .aparencia-padroes,
+  .aparencia-disposicao { padding: 13px; }
+  .aparencia-grade-peles button { height: 51px; }
+  .aparencia-cores-livres { margin-top: 11px; }
+}
+
+@media (max-width: 680px) and (max-height: 720px) {
+  .aparencia-backdrop { padding: 8px; }
+  .aparencia-painel { grid-template-rows: 52px minmax(0, 1fr) auto; }
+}

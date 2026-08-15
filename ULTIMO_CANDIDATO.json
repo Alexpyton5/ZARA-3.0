@@ -1,0 +1,12 @@
+{
+  "BUILD_ID": "release-candidate-botao-20260814-1242",
+  "BUILD_TIMESTAMP": "2026-08-14T12:43:04.447230-03:00",
+  "GIT_BRANCH": "codex/zara-voice-human-loop-001",
+  "GIT_COMMIT": "8e48b875db5cf66a34a2607b279f97e00ad379da",
+  "GIT_DIRTY": true,
+  "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-botao-20260814-1242\\win-unpacked\\ZARA 3.0.exe",
+  "EXE_SHA256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
+  "BACKEND_SHA256": "C2C912074D05837277FDC186580CBB87B855AAEE4AC5461CC8D5F036010BF4E8",
+  "ASAR_SHA256": "D40418F1185E378ECDEFD0AC27B3C9565774617671A65593B12F1E953F8A35C9",
+  "DELTA": "Botao de calar com estado visivel (verde fala, vermelho calada). Chave do Telegram nos dois lugares de config."
+}

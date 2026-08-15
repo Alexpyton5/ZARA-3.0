@@ -151,6 +151,14 @@ def browser_open_url_action(url: str) -> ActionResult:
     return ActionResult(
         success=True,
         output="Destino enviado ao navegador padrão.",
+        # ZARA-NAO-VERIFICADO-002. Achado 1 da auditoria do Codex, e ele estava
+        # certo: os dados aqui já diziam `target_page_proven: False`, mas o
+        # resultado saía com o selo verde de sempre.
+        #
+        # O que está provado é o DESPACHO — o Windows aceitou a URL. Não está
+        # provado que o navegador abriu a página certa, nem que abriu alguma. A
+        # frase "enviado ao navegador" é honesta; o selo é que mentia.
+        verificado=False,
         data={
             "url": normalized,
             "dispatch": "DISPATCH_PROVEN",
@@ -646,6 +654,48 @@ def os_close_safe_app_action(app: str) -> ActionResult:
     )
 
 
+# ZARA-BARRINHA-DE-VOLUME-001
+#
+# Alex: "quando eu peco para aumentar o volume eu quero que apareca a barrinha
+# de volume na tela descendo e subindo como acontece quando eu clico em diminuir
+# ou aumentar algo".
+#
+# A ZARA mudava o volume pela API de áudio do Windows, que é silenciosa: o
+# volume muda mas nada aparece na tela, e ele fica sem confirmação visual.
+# Quem faz o Windows desenhar aquela barrinha é a TECLA de mídia, não a API.
+#
+# Então, depois de ajustar o volume, mandamos um par de teclas que se anula
+# (sobe e desce, ou desce e sobe): o volume final continua exatamente o pedido e
+# a barrinha aparece. A ordem depende do nível para não esbarrar no 0 nem no 100
+# — nas pontas, um par na ordem errada deixaria de ser neutro.
+_VK_VOLUME_UP = 0xAF
+_VK_VOLUME_DOWN = 0xAE
+_KEYEVENTF_KEYUP = 0x0002
+
+
+def _tecla_de_midia(codigo: int) -> None:
+    import ctypes
+
+    ctypes.windll.user32.keybd_event(codigo, 0, 0, 0)
+    ctypes.windll.user32.keybd_event(codigo, 0, _KEYEVENTF_KEYUP, 0)
+
+
+def _mostrar_barrinha_de_volume(nivel_atual: int | None = None) -> bool:
+    """Faz o Windows desenhar o indicador de volume, sem alterar o valor."""
+    if platform.system() != "Windows":
+        return False
+    try:
+        perto_do_minimo = nivel_atual is not None and nivel_atual <= 5
+        primeira = _VK_VOLUME_UP if perto_do_minimo else _VK_VOLUME_DOWN
+        segunda = _VK_VOLUME_DOWN if perto_do_minimo else _VK_VOLUME_UP
+        _tecla_de_midia(primeira)
+        time.sleep(0.03)
+        _tecla_de_midia(segunda)
+        return True
+    except Exception:
+        return False
+
+
 @action(name="os_volume", category="os", description="Get or set system volume", capability="LOCAL_PC_CONTROL")
 def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
     """Get or set system volume."""
@@ -708,6 +758,12 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
                 subprocess.run(["osascript", "-e", f"set volume output volume {level}"], check=True)
             if mute is not None:
                 subprocess.run(["osascript", "-e", f"set volume output muted {str(mute).lower()}"], check=True)
+
+        # ZARA-BARRINHA-DE-VOLUME-001: confirmação visual, como quando ele mexe
+        # no volume pelo teclado. Só para mudança de nível — em mudo o próprio
+        # Windows já desenha o ícone.
+        if level is not None and mute is None:
+            _mostrar_barrinha_de_volume(level)
 
         return ActionResult(success=True, output="Volume adjusted")
     except Exception as e:
@@ -1105,9 +1161,124 @@ def _find_night_light_toggle(timeout: float = 8.0):
     return None
 
 
+# ZARA-LUZ-NOTURNA-SILENCIOSA-001
+#
+# Alex: "quando eu pedir pra ativar a luz noturna nao quero que abra nada só
+# ative e desative por baixo dos panos". A versão anterior abria o app
+# Configurações e clicava no botão por acessibilidade — visível, lento e frágil.
+#
+# O Windows guarda o estado da luz noturna num blob binário do CloudStore.
+# Formato conferido MEDINDO nesta máquina (ligada 43 bytes, desligada 41):
+#
+#   ligada    ... 2a 2b 0e 15 43 42 01 00 10 00 d0 0a 02 ...
+#   desligada ... 2a 2b 0e 13 43 42 01 00       d0 0a 02 ...
+#
+#   byte[18]   0x15 = ligada, 0x13 = desligada
+#   bytes 23,24 "10 00" existem só quando ligada
+#   bytes 10..14 carimbo de hora (varint de segundos epoch) — precisa mudar,
+#                senão o Windows ignora a escrita
+#
+# Escrever direto é instantâneo e não abre janela nenhuma. Se falhar, a rota
+# antiga por Configurações continua atrás como reserva.
+_LUZ_NOTURNA_CHAVE = (
+    r"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount"
+    r"\Current\default$windows.data.bluelightreduction.bluelightreductionstate"
+    r"\windows.data.bluelightreduction.bluelightreductionstate"
+)
+
+
+def _varint(numero: int) -> bytearray:
+    saida = bytearray()
+    while True:
+        parte = numero & 0x7F
+        numero >>= 7
+        saida.append(parte | (0x80 if numero else 0))
+        if not numero:
+            return saida
+
+
+def _luz_noturna_ler() -> bytearray | None:
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _LUZ_NOTURNA_CHAVE) as chave:
+            return bytearray(winreg.QueryValueEx(chave, "Data")[0])
+    except Exception:
+        return None
+
+
+def _luz_noturna_ligada(blob: bytearray) -> bool | None:
+    if blob is None or len(blob) < 19:
+        return None
+    if blob[18] == 0x15:
+        return True
+    if blob[18] == 0x13:
+        return False
+    return None  # layout desconhecido: não arrisca
+
+
+def _luz_noturna_por_registro(desejado: bool) -> ActionResult | None:
+    """Liga/desliga sem abrir nada. Devolve None quando não dá para confiar."""
+    blob = _luz_noturna_ler()
+    atual = _luz_noturna_ligada(blob) if blob is not None else None
+    if atual is None:
+        return None
+
+    if atual == desejado:
+        return ActionResult(
+            success=True,
+            output="Luz noturna já estava " + ("ligada." if desejado else "desligada."),
+            data={"supported": True, "before": atual, "after": atual,
+                  "changed": False, "via": "registro"},
+        )
+
+    novo = bytearray(blob)
+    novo[10:15] = _varint(int(time.time()))
+    if desejado:
+        novo[18] = 0x15
+        novo[23:23] = b"\x10\x00"
+    else:
+        novo[18] = 0x13
+        del novo[23:25]
+
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _LUZ_NOTURNA_CHAVE, 0, winreg.KEY_SET_VALUE
+        ) as chave:
+            winreg.SetValueEx(chave, "Data", 0, winreg.REG_BINARY, bytes(novo))
+    except Exception:
+        return None
+
+    # Postcondição real: relê o que o Windows deixou gravado.
+    depois = None
+    limite = time.monotonic() + 2.0
+    while time.monotonic() < limite:
+        depois = _luz_noturna_ligada(_luz_noturna_ler())
+        if depois == desejado:
+            break
+        time.sleep(0.15)
+
+    if depois != desejado:
+        return None  # não confirmou: deixa a rota antiga tentar
+
+    return ActionResult(
+        success=True,
+        output="Luz noturna " + ("ligada." if desejado else "desligada."),
+        data={"supported": True, "before": atual, "after": depois,
+              "changed": True, "via": "registro"},
+    )
+
+
 def _night_light_set(desired: bool) -> ActionResult:
     if platform.system() != "Windows":
         return _night_light_not_supported("Luz noturna disponível somente no Windows.")
+
+    # Caminho rápido e invisível primeiro.
+    rapido = _luz_noturna_por_registro(desired)
+    if rapido is not None:
+        return rapido
 
     _open_night_light_settings()
     control = _find_night_light_toggle()
@@ -1829,6 +2000,12 @@ def os_notify_action(title: str, message: str = "", timeout: int = 5) -> ActionR
                 return ActionResult(
                     success=True,
                     output="Notificação enviada ao Windows.",
+                    # ZARA-NAO-VERIFICADO-001: os dados aqui já diziam
+                    # "visual_verified: False" — o despacho é provado, a
+                    # aparição na tela não. A frase falava como se fosse
+                    # certeza; agora o resultado carrega a incerteza real e
+                    # ela sai da boca dela como ressalva.
+                    verificado=False,
                     data={"dispatch": "PROVEN", "backend": "win10toast", "visual_verified": False},
                 )
             except ImportError:
@@ -1860,12 +2037,18 @@ def os_notify_action(title: str, message: str = "", timeout: int = 5) -> ActionR
                 return ActionResult(
                     success=True,
                     output="Notificação enviada ao Windows.",
+                    # ZARA-NAO-VERIFICADO-002: o despacho e provado, a aparicao
+                    # na tela nao. Os dados ja sabiam disso; o selo e que mentia.
+                    verificado=False,
                     data={"dispatch": "PROVEN", "backend": "powershell_notifyicon", "visual_verified": False},
                 )
 
         elif system == "Linux":
             subprocess.run(["notify-send", "-t", str(timeout * 1000), title, message], check=True)
-            return ActionResult(success=True, output="Notification sent")
+            # Ultimo recurso: despachou e nao ha como conferir nada.
+            return ActionResult(
+                success=True, output="Notificação enviada ao Windows.", verificado=False
+            )
 
         elif system == "Darwin":
             script = f'display notification "{message}" with title "{title}"'

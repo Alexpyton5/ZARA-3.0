@@ -66,10 +66,16 @@ mesmo formato para continuar grepável.
 
 ## Gates antes de empacotar
 
+O Python da ZARA é `.venv\Scripts\python.exe`, criado por
+`tools/preparar_python.py` a partir de um CPython autocontido em
+`%LOCALAPPDATA%\ZARA3\toolchain\python`. Nunca usar `python` solto: até
+2026-08-13 o PATH resolvia para o venv do Hermes, e a ZARA buildava dentro do
+ambiente de outro projeto.
+
 ```
-python -m pytest -q
-python -m ruff check main.py core memory integrations tests build_exe.py
-python -m compileall -q main.py core memory integrations tests build_exe.py
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m ruff check main.py core memory integrations tests build_exe.py
+.venv\Scripts\python.exe -m compileall -q main.py core memory integrations tests build_exe.py
 ```
 
 Usar o Python **do projeto**, por caminho explícito. Nunca o Python do Hermes.

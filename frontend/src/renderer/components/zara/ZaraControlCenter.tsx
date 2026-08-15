@@ -1,15 +1,20 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Home, MessageCircle, Brain, Zap, Database, Box, SlidersHorizontal, Mic, Send,
+  Home, MessageCircle, Brain, Zap, Database, Box, SlidersHorizontal, Mic, MicOff, Send,
   Minimize, Square, X, Bell, Activity, Grid3X3, ShieldCheck, Cpu, Network,
   Search, RefreshCw, ChevronRight, Bot,
-  Palette, Wrench, BrainCircuit, CircleDot, LoaderCircle, Trash2
+  Palette, Wrench, BrainCircuit, CircleDot, LoaderCircle, Trash2,
+  Volume2, VolumeX
 } from 'lucide-react';
 import { VoiceParticleSphere, VoiceState } from './VoiceParticleSphere';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
+import { PainelAparencia } from './PainelAparencia';
+import { ConversaInstrumento } from './ConversaInstrumento';
 import { ZaraLab } from './ZaraLab';
 import { normalizeReminderEvent } from '../../../reminderEvents';
 import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
+import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
+import { APARENCIA_INICIAL } from '../../lib/aparencia';
 
 interface Toast { id: number; text: string; kind?: 'ok' | 'warn' | 'error'; }
 interface EngineOption { id: string; name: string; provider: string; free_tier?: string; status?: string; }
@@ -32,9 +37,12 @@ export const ZaraControlCenter: React.FC = () => {
   const [activeNav, setActiveNav] = useState('HOME');
   const [state, setState] = useState<VoiceState>('STANDBY');
   const [voiceLevel, setVoiceLevel] = useState(0.02);
+  const [mudo, setMudo] = useState(false);   // ZARA-BOTAO-MUDO-001
   const [voiceOn, setVoiceOn] = useState(false);
   const [supercerebro, setSupercerebro] = useState(false);
   const [galaxyOpen, setGalaxyOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [interfaceNova, setInterfaceNova] = useState(() => APARENCIA_INICIAL?.interfaceNova ?? false);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [historyReady, setHistoryReady] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
@@ -59,11 +67,33 @@ export const ZaraControlCenter: React.FC = () => {
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
+  // ZARA-AEC-RENDERER-001. Só abre o microfone aqui quando o backend disser que
+  // ele é o dono do áudio; no modo local o PortAudio já capturou, e duas
+  // capturas concorrentes brigariam pelo dispositivo.
+  const ligarAecSePreciso = useCallback(async (resultado: { audio_transport?: string } | null) => {
+    if (resultado?.audio_transport !== 'renderer') return;
+    const r = await iniciarAudioAec((pcm) => window.zaraIPC?.voice?.sendMicChunk?.(pcm));
+    if (!r.ok) {
+      notify('Não consegui abrir o microfone; a voz não vai ouvir você.', 'error');
+      return;
+    }
+    if (!r.aecAtivo) {
+      notify('Microfone aberto sem cancelamento de eco — ela pode se ouvir falar.', 'warn');
+    }
+  }, [notify]);
+
   useEffect(() => {
     const api = window.zaraIPC;
     if (!api) return;
     const offs: Array<() => void> = [];
     if (api.on?.stateChange) offs.push(api.on.stateChange((s) => setState(s as VoiceState)));
+    // ZARA-AEC-RENDERER-001: a voz da Kore toca AQUI, no mesmo processo que
+    // captura o microfone. É isso que dá ao AEC do Chromium o sinal de
+    // referência e impede a ZARA de responder ao próprio alto-falante.
+    if (api.on?.voiceOutputAudio) offs.push(api.on.voiceOutputAudio((data) => {
+      if (data?.stop) { cortarKore(); return; }
+      if (data?.pcm) tocarKore(data.pcm, data.sampleRate || 24000);
+    }));
     if (api.on?.voiceLevel) offs.push(api.on.voiceLevel((level, _tone, speaking) => {
       setVoiceLevel(Math.max(0, Math.min(1, level || 0)));
       if (speaking) setState('SPEAKING');
@@ -149,7 +179,8 @@ export const ZaraControlCenter: React.FC = () => {
     if (!autoVoiceStartedRef.current) {
       autoVoiceStartedRef.current = true;
       setState('PROCESSING');
-      api.voice?.start?.().then((result: any) => {
+      api.voice?.start?.().then(async (result: any) => {
+        await ligarAecSePreciso(result);
         if (result?.mode === 'gemini_live') {
           setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
         } else if (result?.mode) {
@@ -194,14 +225,49 @@ export const ZaraControlCenter: React.FC = () => {
     }
   };
 
+  // ZARA-BOTAO-MUDO-001
+  // ZARA-BOTAO-MUDO-003
+  // Alex: "o botao deve ser clicavel e permancer do jeito que eu clicar".
+  // A versão anterior só mudava depois que o backend respondesse — se a
+  // resposta demorasse ou falhasse, o botão parecia morto. Agora ele vira na
+  // hora, manda o estado EXATO que ele escolheu (não "alterna", que
+  // dessincroniza), e volta atrás só se o backend recusar.
+  const alternarMudo = async () => {
+    const desejado = !mudo;
+    setMudo(desejado);
+    try {
+      const r = await window.zaraIPC?.voice?.mute?.(desejado);
+      if (r && typeof r.mudo === 'boolean' && r.mudo !== desejado) setMudo(r.mudo);
+      notify(desejado ? 'Ela parou de falar. Continua ouvindo e executando.'
+                      : 'Ela voltou a falar.');
+    } catch {
+      setMudo(!desejado);   // não pegou: o botão volta a dizer a verdade
+      notify('Não consegui mudar isso agora.', 'error');
+    }
+  };
+
+  // ZARA-BOTAO-MUDO-005
+  // Alex: "eu tenho que ficar toda hora clicando em deixar vermelho é?".
+  // Não. O backend guarda a escolha; aqui o botão pergunta como ficou da última
+  // vez, para abrir já na cor certa em vez de voltar sempre para verde.
+  useEffect(() => {
+    let vivo = true;
+    window.zaraIPC?.voice?.mute?.()
+      .then((r) => { if (vivo && r && typeof r.mudo === 'boolean') setMudo(r.mudo); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
   const toggleVoice = async () => {
     try {
       if (voiceOn) {
         await window.zaraIPC?.voice?.stop?.();
+        pararAudioAec();
         setVoiceOn(false); setState('STANDBY'); setVoiceLevel(0.02);
       } else {
         setState('PROCESSING');
         const result: any = await window.zaraIPC?.voice?.start?.();
+        await ligarAecSePreciso(result);
         if (result?.mode === 'gemini_live') {
           setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
         } else if (result?.mode) {
@@ -290,11 +356,12 @@ export const ZaraControlCenter: React.FC = () => {
     catch { notify('System Scan indisponível no backend atual.', 'error'); }
   };
 
-  const implementedNav = new Set(['HOME', 'CONVERSATIONS', 'MEMORY CORE', 'SYSTEMS']);
+  const implementedNav = new Set(['HOME', 'CONVERSATIONS', 'MEMORY CORE', 'SYSTEMS', 'SETTINGS']);
 
   const handleNav = (label: string) => {
     if (!implementedNav.has(label)) return;
     if (label === 'MEMORY CORE') { setGalaxyOpen(true); return; }
+    if (label === 'SETTINGS') { setAppearanceOpen(true); return; }
     setActiveNav(label);
     if (label === 'SYSTEMS') void runDiagnostics();
   };
@@ -348,18 +415,82 @@ export const ZaraControlCenter: React.FC = () => {
         <ZaraLab />
       ) : (
         <>
-      <main className="center-stage">
+      <main className={`center-stage ${activeNav === 'HOME' && interfaceNova ? 'instrumento-ativo' : ''}`}>
+        {activeNav === 'HOME' && interfaceNova ? (
+          <ConversaInstrumento
+            mensagens={messages}
+            estado={state}
+            nivelVoz={voiceLevel}
+            historicoPronto={historyReady}
+          />
+        ) : (
         <section className="orb-zone">
           <VoiceParticleSphere level={voiceLevel} state={state}/>
           <div className={`voice-state state-${state.toLowerCase()}`}>{state === 'LISTENING' ? 'OUVINDO' : state === 'IDLE' ? 'EM ESPERA — diga ZARA' : state === 'SPEAKING' ? 'FALANDO' : state === 'THINKING' ? 'PROCESSANDO' : state === 'PROCESSING' ? 'RECONECTANDO' : ''}</div>
           <div className={`voice-engine-label ${voiceOn ? 'active' : ''}`}>{voiceLabel}</div>
         </section>
+        )}
         <form className="command-bar" onSubmit={send}>
-          <button type="button" className={`mic ${voiceOn ? 'active' : ''}`} onClick={toggleVoice} aria-label="Modo voz"><Mic size={20}/></button>
+          {/* ZARA-BOTAO-MIC-001
+              Alex: "eu faria o mesmo botao vermelho para travar o mic dela...
+              para ela nao responder coisa que nao pedi mas ela ouviu e levou
+              pra la consumindo tokens atoa".
+
+              O botão já existia e já ligava/desligava o microfone — o que não
+              existia era a COR. Sem ela, ele não tinha como saber se estava
+              sendo ouvido, e "não sei se está ligado" é o mesmo que desligado.
+
+              São dois botões e duas coisas diferentes, de propósito:
+                este  = ela OUVE ou não
+                o outro = ela FALA ou não */}
+          <button
+            type="button"
+            className={`mic ${voiceOn ? 'active' : ''}`}
+            onClick={toggleVoice}
+            aria-pressed={voiceOn}
+            aria-label={voiceOn ? 'Microfone ligado — clique para travar' : 'Microfone travado — clique para ela ouvir'}
+            title={voiceOn ? 'VERDE = ela está te ouvindo. Clique para travar o microfone.' : 'VERMELHO = microfone travado. Ela não ouve nada.'}
+            style={{
+              background: voiceOn ? '#12b866' : '#e0243a',
+              borderColor: voiceOn ? '#25e88a' : '#ff4d63',
+              color: '#ffffff',
+              boxShadow: voiceOn ? '0 0 14px rgba(18,184,102,.65)' : '0 0 14px rgba(224,36,58,.65)',
+              transition: 'background .15s ease, box-shadow .15s ease',
+            }}
+          >
+            {voiceOn ? <Mic size={20}/> : <MicOff size={20}/>}
+          </button>
+          {/* ZARA-BOTAO-MUDO-001 — calar a voz sem desligar a ZARA.
+              Ela continua ouvindo, entendendo e executando; só para de falar.
+              Alex pediu porque ela anunciava "o Claude respondeu" enquanto ele
+              estava lendo a resposta na tela. */}
+          <button
+            type="button"
+            className={`mic ${mudo ? 'muted' : 'active'}`}
+            onClick={alternarMudo}
+            aria-pressed={mudo}
+            aria-label={mudo ? 'Voz silenciada — clique para ela voltar a falar' : 'Silenciar a voz dela'}
+            title={mudo ? 'VERMELHO = calada. Clique para ela voltar a falar.' : 'VERDE = ela fala. Clique para calar (continua ouvindo e executando).'}
+            // ZARA-BOTAO-MUDO-004
+            // Alex: "o botao da zara nao fica verde ou vermelho".
+            // As classes `.mic.active`/`.mic.muted` não pintavam nada na folha de
+            // estilo, então o botão ficava igual nos dois estados. A cor vai aqui,
+            // no elemento, onde nenhum CSS de fora apaga.
+            style={{
+              background: mudo ? '#e0243a' : '#12b866',
+              borderColor: mudo ? '#ff4d63' : '#25e88a',
+              color: '#ffffff',
+              boxShadow: mudo ? '0 0 14px rgba(224,36,58,.65)' : '0 0 14px rgba(18,184,102,.65)',
+              transition: 'background .15s ease, box-shadow .15s ease',
+            }}
+          >
+            {mudo ? <VolumeX size={20}/> : <Volume2 size={20}/>}
+          </button>
           <input className="zara-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message ZARA..."/>
           <button type="submit" className="send" disabled={busy || !historyReady || !input.trim()} aria-label="Enviar">{busy ? <LoaderCircle className="spin" size={19}/> : <Send size={21}/>}</button>
         </form>
 
+        {!(activeNav === 'HOME' && interfaceNova) && (
         <section className="conversation-card">
           <header><span>CONVERSATION LOG</span><button type="button" disabled={clearingHistory || busy || voiceOn || !historyReady} onClick={clearConversationHistory}><Trash2 size={13}/> {clearingHistory ? 'CLEARING...' : 'CLEAR'}</button></header>
           <div className="conversation-scroll" ref={logRef}>
@@ -372,6 +503,7 @@ export const ZaraControlCenter: React.FC = () => {
             ))}
           </div>
         </section>
+        )}
       </main>
 
       <aside className="right-rail">
@@ -419,6 +551,11 @@ export const ZaraControlCenter: React.FC = () => {
       )}
 
       <div className="toast-stack">{toasts.map((t) => <div key={t.id} className={`toast ${t.kind || 'ok'}`}>{t.text}</div>)}</div>
+      <PainelAparencia
+        aberto={appearanceOpen}
+        onClose={() => setAppearanceOpen(false)}
+        onInterfaceNovaChange={setInterfaceNova}
+      />
       {galaxyOpen && <MemoryGalaxyModal onClose={() => setGalaxyOpen(false)}/>} 
     </div>
   );

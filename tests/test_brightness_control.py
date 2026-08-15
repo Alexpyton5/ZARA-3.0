@@ -141,6 +141,11 @@ def _patch_night_light(monkeypatch, control):
     monkeypatch.setattr(os_ops, "_open_night_light_settings", lambda: opened.append(True) or True)
     monkeypatch.setattr(os_ops, "_find_night_light_toggle", lambda *a, **k: control)
     monkeypatch.setattr(os_ops.time, "sleep", lambda _s: None)
+    # ZARA-LUZ-NOTURNA-SILENCIOSA-001: estes testes cobrem a ROTA RESERVA (o app
+    # Configurações). A rota rápida por registro é desligada aqui de propósito,
+    # senão ela atenderia primeiro e o caminho de reserva nunca seria exercido —
+    # e é justamente ele que precisa continuar honesto quando a rápida falhar.
+    monkeypatch.setattr(os_ops, "_luz_noturna_por_registro", lambda _desejado: None)
     return opened
 
 
@@ -243,13 +248,57 @@ def test_manual_button_control_reads_state_from_accessible_name():
     assert invoke.calls == 1
 
 
-def test_night_light_never_uses_registry_or_coordinates():
+def test_night_light_nunca_usa_clique_por_coordenada():
+    """Coordenada de tela é frágil: muda com resolução, idioma e tema.
+
+    A proibição original juntava duas coisas diferentes — clique cego E
+    registro. Clique cego continua proibido. Registro passou a ser permitido
+    (ZARA-LUZ-NOTURNA-SILENCIOSA-001) porque Alex pediu que nada abrisse na
+    tela, e porque a leitura do registro é verificável: dá para conferir o
+    resultado, coisa que um clique às cegas não permite.
+    """
     import inspect
 
-    source = inspect.getsource(os_ops._night_light_set)
-    source += inspect.getsource(os_ops._find_night_light_toggle)
-    for forbidden in ("winreg", "CloudStore", "click(", "SetCursorPos", "mouse_event"):
-        assert forbidden not in source
+    fontes = (
+        inspect.getsource(os_ops._night_light_set)
+        + inspect.getsource(os_ops._find_night_light_toggle)
+        + inspect.getsource(os_ops._luz_noturna_por_registro)
+    )
+    for proibido in ("SetCursorPos", "mouse_event", "click("):
+        assert proibido not in fontes
+
+
+def test_luz_noturna_confirma_o_resultado_antes_de_dizer_que_fez():
+    """A regra que a proibição antiga realmente protegia: nada de falso sucesso.
+
+    Escrever no registro e anunciar vitória sem reler seria exatamente a mentira
+    que este projeto combate. A rota rápida tem de reler o estado.
+    """
+    import inspect
+
+    fonte = inspect.getsource(os_ops._luz_noturna_por_registro)
+    assert "_luz_noturna_ler()" in fonte
+    assert "return None" in fonte  # desiste em vez de fingir que deu certo
+
+
+def test_luz_noturna_desiste_quando_o_formato_e_desconhecido(monkeypatch):
+    """Windows futuro pode mudar o blob. Nesse caso, cair para a rota antiga."""
+    monkeypatch.setattr(os_ops, "_luz_noturna_ler", lambda: bytearray(b"\x00" * 43))
+
+    assert os_ops._luz_noturna_por_registro(True) is None
+
+
+def test_luz_noturna_nao_mexe_quando_ja_esta_no_estado_pedido(monkeypatch):
+    ligada = bytearray(b"\x00" * 18 + b"\x15" + b"\x00" * 24)
+    escritas = []
+    monkeypatch.setattr(os_ops, "_luz_noturna_ler", lambda: bytearray(ligada))
+
+    resultado = os_ops._luz_noturna_por_registro(True)
+
+    assert resultado is not None
+    assert resultado.success is True
+    assert resultado.data["changed"] is False
+    assert escritas == []
 
 
 @pytest.mark.asyncio

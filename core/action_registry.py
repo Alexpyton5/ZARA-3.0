@@ -31,6 +31,29 @@ class ActionResult:
     error: str = ""
     data: Any = None
     duration_ms: float = 0
+    # ZARA-NAO-VERIFICADO-001
+    #
+    # Alex: *"tente deixar ela sem mentiras e sem chutes; se não souber, ela deve
+    # ser sempre transparente"*. E a regra que saiu da pesquisa da Apple:
+    # **ação executada mas não confirmada nunca aparece verde**.
+    #
+    # Até aqui só existiam dois estados: deu certo ou deu errado. Faltava o
+    # terceiro, que é o mais honesto e o mais comum na prática — *fiz, e não
+    # tenho como provar*. Mandar uma mensagem, apertar uma tecla num app de
+    # terceiro, disparar um atalho: nada disso devolve confirmação.
+    #
+    # Sem este campo, essas ações viravam sucesso liso, e "sucesso liso" sem
+    # prova é exatamente o falso sucesso que este projeto inteiro combate.
+    #
+    # `True`  = houve postcondição observada (releitura, estado do Windows).
+    # `False` = despachou e não deu para conferir. Não é falha: é incerteza,
+    #           e ela precisa aparecer como incerteza para Alex.
+    verificado: bool = True
+
+    @property
+    def incerto(self) -> bool:
+        """Deu certo até onde deu para ver, mas ninguém confirmou."""
+        return bool(self.success) and not self.verificado
 
     def __bool__(self) -> bool:
         return self.success

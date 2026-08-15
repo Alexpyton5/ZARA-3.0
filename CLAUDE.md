@@ -124,6 +124,10 @@ Relatório sem `KNOWN_BROKEN` não fecha tarefa.
 Regras detalhadas em `.claude/rules/`. Procedimentos multi-passo em `.claude/skills/`.
 Subagentes read-only em `.claude/agents/`.
 
+Comandos de fluxo de trabalho definidos por Alex em `CLAUDE_SKILLS.md`:
+`/grillme`, `/spec`, `/tickets`, `/implement`, `/review`. São de leitura obrigatória
+e suspendem o comportamento padrão quando invocados.
+
 ## Condição de sucesso
 
 Não é "mudei muitos arquivos". É:

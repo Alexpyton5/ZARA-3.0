@@ -15,10 +15,13 @@ description: Usa o snapshot de grafo do Graphify para mapeamento cross-file e an
 
 ## Fluxo obrigatório
 
-1. **Verifique a existência do snapshot antes de qualquer coisa.** Caminho esperado:
-   `C:/Users/alexp/ZARA-GRAPHIFY-SNAPSHOT/graphify-out/graph.json`.
-   **Este caminho ainda NÃO foi verificado.** Confirme que o arquivo existe e anote seu timestamp.
+1. **Verifique a existência do grafo antes de qualquer coisa.** Caminho canônico (verificado em
+   2026-08-13, gerado do source real deste repositório):
+   `C:/Users/alexp/Downloads/ZARA 3.0 CLEAN 002/graphify-out/graph.json`
+   Confirme que o arquivo existe e anote seu timestamp.
    Se não existir, diga isso, não invente conteúdo, e caia para busca direta no repositório.
+   O snapshot antigo `C:/Users/alexp/ZARA-GRAPHIFY-SNAPSHOT/graphify-out/graph.json` é uma cópia
+   congelada de 2026-08-11 e **não** é mais a fonte; não apagar (dado protegido), não usar.
 2. **Cheque a idade do snapshot.** Grafo mais velho que o último commit relevante descreve um
    passado. Rotule como possivelmente defasado e confirme achados lendo o arquivo real.
 3. **Graphify primeiro, grep depois**, para perguntas amplas. O grafo reduz o espaço de busca;
@@ -30,6 +33,26 @@ description: Usa o snapshot de grafo do Graphify para mapeamento cross-file e an
    decisão, com caminho absoluto. Nunca despeje o grafo inteiro nem listas longas de nós.
 7. **Feche com a lista de impacto:** arquivos que precisam mudar, arquivos que só precisam ser
    lidos, e caminhos de runtime que precisarão de teste físico.
+
+## Comandos (binário: `C:/Users/alexp/.local/bin/graphify.exe`, versão 0.9.39)
+
+Rodar sempre a partir da raiz do projeto. O grafo default é `graphify-out/graph.json`.
+
+```
+graphify query "quem chama _try_pc_intent" --budget 1500
+graphify affected "_speak_response" --depth 2
+graphify path "handle_send_message" "execute_action"
+graphify explain "PcVoiceIntentDetector"
+graphify god-nodes --top 10
+graphify update .            # re-extrai só o que mudou, sem LLM, sem custo de API
+```
+
+Também existe servidor MCP registrado em `.mcp.json` (`graphify-mcp.exe`), apontando para o
+mesmo `graph.json`. As ferramentas MCP e a CLI leem o mesmo arquivo — não são fontes distintas.
+
+**Atualizar o grafo depois de mudar código é obrigatório antes de confiar nele.**
+`graphify update .` é barato (AST local). Nunca rodar `label`/`cluster-only` com LLM sem Alex
+pedir: 138 comunidades = chamada de modelo paga.
 
 ## Regras de evidência
 

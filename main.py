@@ -65,6 +65,10 @@ def check_dependencies() -> bool:
         "cv2", "mss", "PIL", "pytesseract", "vosk", "pvporcupine",
         "kokoro_onnx", "sounddevice", "numpy", "scipy", "playwright",
         "pyperclip", "watchdog",
+        # Voz gratuita da cascata de TTS. Se estes sumirem no empacotado, a
+        # ZARA cai da Kore direto no SAPI robotico — e sem esta linha isso
+        # so apareceria no ouvido do Alex.
+        "edge_tts", "miniaudio",
     ]
 
     missing_essential = [pkg for pkg in essential if importlib.util.find_spec(pkg) is None]

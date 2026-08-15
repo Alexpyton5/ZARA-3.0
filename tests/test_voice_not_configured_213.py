@@ -81,9 +81,11 @@ def test_tts_missing_weights_is_not_configured_and_never_downloads(monkeypatch, 
 
 def test_tts_manager_no_engine_fails_honestly_not_silently(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_tts, "KOKORO_AVAILABLE", True)
+    monkeypatch.setattr(voice_tts, "EDGE_TTS_AVAILABLE", False)
     monkeypatch.setattr(voice_tts, "user_data_dir", lambda: tmp_path)
     mgr = TTSManager(TTSConfig(prefer_local=True, gemini_api_key=""))
     with pytest.raises(RuntimeError):
         mgr.initialize()
+    assert mgr.edge is None
     assert mgr.kokoro is None
     assert mgr.gemini is None

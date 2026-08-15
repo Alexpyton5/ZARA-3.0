@@ -4,7 +4,7 @@ import pytest
 
 from core.actions import os_ops
 from core.ipc_handlers import IPCHandler
-from core.pc_voice_intent import PcVoiceIntentDetector
+from core.pc_voice_intent import RESPOSTA_NAO_SEI, PcVoiceIntentDetector
 
 
 @pytest.mark.parametrize(
@@ -56,7 +56,8 @@ def test_unknown_or_injected_app_request_is_blocked_without_execution(phrase):
     assert result.action == "os_app"
     assert result.blocked is True
     assert result.physical_effect == 0
-    assert "não está autorizado" in result.reply
+    # ZARA-RECUSA-UNICA-001: uma frase so, sem oferecer calculadora.
+    assert result.reply == RESPOSTA_NAO_SEI
 
 
 def test_os_app_action_rejects_unknown_app_before_launch(monkeypatch):
@@ -133,5 +134,5 @@ async def test_ipc_never_executes_unknown_app(monkeypatch):
 
     reply = await handler._try_pc_intent("abra powershell")
 
-    assert "não está autorizado" in reply
+    assert reply == RESPOSTA_NAO_SEI
     execute.assert_not_awaited()

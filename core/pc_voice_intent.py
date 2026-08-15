@@ -9,6 +9,40 @@ With Supercerebro OFF, detected intents are blocked (BLOCKED_PC_CONTROL).
 import re
 from dataclasses import dataclass
 
+# ZARA-RECUSA-UNICA-001 (Alex, 2026-08-13)
+# "eu nao quero que ela ofereça calculadora, quando ela nao puder fazer algo,
+# ela vai falar eu ainda nao sei fazer isto."
+#
+# Uma frase so para TODO caso de incapacidade, venha de allowlist, de sintaxe
+# recusada ou de comando sem executor. Continua sendo recusa honesta: ela nao
+# executa nada e nao finge que executou. O que muda e parar de listar
+# consolacoes que o Alex nao pediu.
+# ZARA-RECUSA-HUMANA-001
+#
+# Alex: *"tem que ser o mais próximo de uma conversa entre humanos em todos os
+# sentidos"*, e antes disso: *"isso é muito robótico"*.
+#
+# A recusa era "Eu ainda não sei fazer isto." — honesta, e é por isso que ela
+# existe: é o guarda que impede a ZARA de fingir que executou. Mas ninguém fala
+# assim. Uma pessoa que não sabe fazer algo diz que não sabe **e diz o que
+# fazer a seguir**; frase seca deixa o outro sem saída.
+#
+# A honestidade não mudou uma vírgula. Só deixou de ser uma porta na cara.
+RESPOSTA_NAO_SEI = (
+    "Isso eu ainda não sei fazer. Se você me disser de outro jeito eu tento, "
+    "e se for coisa nova mesmo, é só pedir pro Claude me ensinar."
+)
+
+# ZARA-PONTE-NOMES-001
+# O reconhecimento de fala não escreve "Claude". Alex relatou: "falei claude ela
+# entendeu claudio". Estes são os nomes que precisam valer como se fossem o
+# mesmo. Quando ele reportar uma variação nova, é só acrescentar aqui.
+_NOME_CLAUDE = (
+    r"(?:claude|cláudio|claudio|cláudia|claudia|cloud|cloude|clode|claudi|"
+    r"claudy|clau|glaude|clod)(?:\s+code)?"
+)
+_NOME_CODEX = r"(?:codex|códex|codes|c[óo]dice|cortex|chat\s*gpt|chatgpt|cheat\s*gpt)"
+
 _LOCAL_DETERMINISTIC_ACTIONS = frozenset({
     "os_app", "os_open", "os_volume", "audio_mute", "audio_unmute",
     "os_brightness_absolute", "os_brightness_up", "os_brightness_down",
@@ -23,6 +57,12 @@ _LOCAL_DETERMINISTIC_ACTIONS = frozenset({
     "system_time", "system_info", "system_metrics", "system_processes", "os_clipboard", "os_clipboard_read",
     "input_type_text", "input_hotkey",
     "audio_status",
+    # ZARA-PONTE-CLAUDE-001: falar com o Claude Code é reflexo local, não pode
+    # depender do Supercérebro estar ligado — que é o estado padrão no boot.
+    "claude_ler", "claude_enviar", "codex_ler", "codex_enviar", "ponte_repassar",
+    # ZARA-APRENDIZADO-001: contar o que aprendeu é reflexo local, não depende
+    # do Supercérebro nem de rede.
+    "aprendizado_resumo",
 })
 
 
@@ -54,12 +94,113 @@ class PcVoiceIntentDetector:
 
         # Intent patterns
         self.patterns = [
+            # ZARA-PONTE-CLAUDE-001 — conversar com o Claude Code sem teclado.
+            # Ficam no topo de propósito: "lê o que o Claude falou" contém
+            # "lê", que padrões mais abaixo (área de transferência, página)
+            # também disputam.
+            (r'^(?:zara[,\s]+)?(?:responde|responda|responder|manda|mande|mandar|'
+             r'diz|diga|dizer|fala|escreve|escreva)\s+'
+             r'(?:pro|para\s+o|ao|pro\s+o)\s+(?:(?:claude|cloud|claudi)(?:\s+code)?|code(?!x))\s*[:,]?\s*(.+)$',
+             self._claude_enviar, "claude_enviar", None),
+            # ZARA-PONTE-REPASSE-001 — os três conversando, com a ZARA no meio.
+            # Vem antes dos padrões de envio: "manda o que o Claude falou pro
+            # Codex" também casaria com "manda pro Codex ...".
+            (r'^(?:zara[,\s]+)?(?:manda|mande|mandar|passa|passe|repassa|repasse|'
+             r'diz|mostra|leva)\s+(?:isso\s+|o\s+que\s+)?(?:o\s+)?'
+             r'(?:(?:claude|cloud|claudi)(?:\s+code)?|code(?!x))\s*(?:falou|disse|mandou|respondeu|escreveu)?\s*'
+             r'(?:pro|para\s+o|ao)\s+(?:codex|codes|c[óo]dex|chat\s*gpt)\b.*$',
+             self._repasse_claude_codex, "ponte_repassar", "claude>codex"),
+            (r'^(?:zara[,\s]+)?(?:manda|mande|mandar|passa|passe|repassa|repasse|'
+             r'diz|mostra|leva)\s+(?:isso\s+|o\s+que\s+)?(?:o\s+)?'
+             r'(?:codex|codes|c[óo]dex|chat\s*gpt)\s*(?:falou|disse|mandou|respondeu|escreveu)?\s*'
+             r'(?:pro|para\s+o|ao)\s+(?:(?:claude|cloud|claudi)(?:\s+code)?|code(?!x))\b.*$',
+             self._repasse_codex_claude, "ponte_repassar", "codex>claude"),
+            # Mesma ideia com a ordem trocada: "passa PRO CODEX o que o CLAUDE
+            # disse". Alex fala das duas formas.
+            (r'^(?:zara[,\s]+)?(?:manda|mande|mandar|passa|passe|repassa|repasse|diz|mostra|leva)\s+'
+             r'(?:pro|para\s+o|ao)\s+(?:codex|codes|c[óo]dex|chat\s*gpt)\s+'
+             r'(?:isso\s+|o\s+que\s+)(?:o\s+)?(?:(?:claude|cloud|claudi)(?:\s+code)?|code(?!x))\b.*$',
+             self._repasse_claude_codex, "ponte_repassar", "claude>codex"),
+            (r'^(?:zara[,\s]+)?(?:manda|mande|mandar|passa|passe|repassa|repasse|diz|mostra|leva)\s+'
+             r'(?:pro|para\s+o|ao)\s+(?:(?:claude|cloud|claudi)(?:\s+code)?|code(?!x))\s+'
+             r'(?:isso\s+|o\s+que\s+)(?:o\s+)?(?:codex|codes|c[óo]dex|chat\s*gpt)\b.*$',
+             self._repasse_codex_claude, "ponte_repassar", "codex>claude"),
+            # ZARA-APRENDIZADO-001 — Alex vendo o que ela aprendeu.
+            #
+            # Sem isso o aprendizado vira caixa preta que só cresce. Ele precisa
+            # poder olhar dentro; sem olhar não há como corrigir, e uma memória
+            # que ninguém revisa acaba operando com base em besteira.
+            (r'^(?:zara[,\s]+)?(?:o\s+que\s+)?(?:voc[êe]\s+)?'
+             r'(?:aprendeu|aprendendo|aprendi[óo]?|evolui[uo]?|melhorou)\b.*$',
+             self._o_que_aprendeu, "aprendizado_resumo", "hoje"),
+            (r'^(?:zara[,\s]+)?(?:me\s+)?(?:mostra|mostre|conta|conte|diga|fala)\s+'
+             r'(?:o\s+que\s+)?(?:voc[êe]\s+)?(?:aprendeu|est[áa]\s+aprendendo)\b.*$',
+             self._o_que_aprendeu, "aprendizado_resumo", "hoje"),
+            (r'^(?:zara[,\s]+)?(?:em\s+que\s+)?(?:dia|nivel|n[íi]vel)\s+'
+             r'(?:voc[êe]\s+)?(?:est[áa]|ta|t[áa])\b.*$',
+             self._o_que_aprendeu, "aprendizado_resumo", "hoje"),
+            # ZARA-PONTE-LEITURA-COMPLETA-002 — "lê resumido".
+            #
+            # O padrão passou a ser ler TUDO: a voz dela é gratuita, quem gasta
+            # token é o Claude e o Codex escrevendo. Cortar a fala dela
+            # economizava o recurso errado. Estas frases pedem a versão curta,
+            # e vêm antes da leitura normal, que casaria igual.
+            (r'^(?:zara[,\s]+)?'
+             rf'(?!.*\b{_NOME_CODEX}\b)'
+             rf'(?=.*\b{_NOME_CLAUDE}\b)'
+             r'(?=.*\b(?:resumid[oa]|resumo|resumindo|resuma|resume|por\s+cima|'
+             r'r[áa]pido|s[óo]\s+o\s+principal)\b)'
+             r'(?=.*(?:l[êe]\b|leia|ler\b|falou|disse|mandou|escreveu|resposta|texto))'
+             r'.*$',
+             self._ler_resumido, "claude_ler", "resumido"),
+            (r'^(?:zara[,\s]+)?'
+             rf'(?=.*\b{_NOME_CODEX}\b)'
+             r'(?=.*\b(?:resumid[oa]|resumo|resumindo|resuma|resume|por\s+cima|'
+             r'r[áa]pido|s[óo]\s+o\s+principal)\b)'
+             r'(?=.*(?:l[êe]\b|leia|ler\b|falou|disse|mandou|escreveu|resposta|texto))'
+             r'.*$',
+             self._ler_resumido, "codex_ler", "resumido"),
+            # ZARA-PONTE-FRASE-LIVRE-001 — leitura em frase livre.
+            #
+            # A primeira versão exigia a frase quase exata e Alex disse "eu falei
+            # tudo o que pudia" sem ela entender. Agora basta ele CITAR o Claude
+            # e usar QUALQUER palavra de ouvir/dizer, em qualquer ordem.
+            #
+            # Fica DEPOIS do envio e do repasse de propósito: "diz pro Claude
+            # que..." também contém "diz", e mandar recado é mais específico que
+            # pedir leitura. O mais específico ganha.
+            (r'^(?:zara[,\s]+)?'
+             rf'(?!.*\b{_NOME_CODEX}\b)'
+             rf'(?=.*\b{_NOME_CLAUDE}\b)'
+             r'(?=.*(?:falou|fala\b|disse|diz\b|mandou|respondeu|resposta|escreveu|'
+             r'l[êe]\b|leu\b|leia|ler\b|mensagem|novidade|recado))'
+             r'.*$',
+             self._claude_ler, "claude_ler", "read"),
+            # Mesma frase livre, para o Codex.
+            (r'^(?:zara[,\s]+)?'
+             rf'(?=.*\b{_NOME_CODEX}\b)'
+             r'(?=.*(?:falou|fala\b|disse|diz\b|mandou|respondeu|resposta|escreveu|'
+             r'l[êe]\b|leu\b|leia|ler\b|mensagem|novidade|recado))'
+             r'.*$',
+             self._claude_ler, "codex_ler", "read"),
+            # Codex — mesmo par de comandos, outro destino.
+            (r'^(?:zara[,\s]+)?(?:l[êe]|leia|ler|me\s+l[êe])\s+(?:o\s+que\s+)?'
+             r'(?:a\s+|o\s+)?(?:[úu]ltim[ao]\s+)?(?:resposta\s+d[oe]\s+|mensagem\s+d[oe]\s+)?'
+             r'(?:codex|codes|c[óo]dex|chat\s*gpt)\b.*$',
+             self._claude_ler, "codex_ler", "read"),
+            (r'^(?:zara[,\s]+)?(?:o\s+que\s+)?(?:o\s+)?(?:codex|codes|c[óo]dex|chat\s*gpt)\s+'
+             r'(?:falou|disse|mandou|respondeu|escreveu)\b.*$',
+             self._claude_ler, "codex_ler", "read"),
+            (r'^(?:zara[,\s]+)?(?:responde|responda|responder|manda|mande|mandar|'
+             r'diz|diga|dizer|fala|escreve|escreva)\s+'
+             r'(?:pro|para\s+o|ao|pro\s+o)\s+(?:codex|codes|c[óo]dex|chat\s*gpt)\s*[:,]?\s*(.+)$',
+             self._claude_enviar, "codex_enviar", None),
             # Clipboard writes stay MEDIUM and are confirmed conversationally by IPCHandler.
-            (r'^(?:zara[,\s]+)?(?:o\s+que\s+(?:est[áa]|tem)|leia\s+o\s+que\s+est[áa])\s+(?:na\s+)?(?:área|area)\s+de\s+transfer[êe]ncia\s*[.!?]*$',
+            (r'\b(?:o\s+que\s+(?:est[áa]|ta|tem)|lei[ae]r?|l[êe])\s+(?:o\s+que\s+(?:est[áa]|ta)\s+)?(?:na\s+|a\s+)?(?:área|area)\s+de\s+transfer[êe]ncia\b',
              self._clipboard_read, "os_clipboard_read", "read"),
             (r'^(?:zara[,\s]+)?(?:limpe|limpa|esvazie)\s+(?:a\s+)?(?:área|area)\s+de\s+transfer[êe]ncia\s*[.!?]*$',
              self._clipboard_clear, "os_clipboard", "__CLEAR__"),
-            (r'^(?:zara[,\s]+)?(?:coloque|coloca|copie|copia)\s+(.+?)\s+(?:na|para\s+a)\s+(?:área|area)\s+de\s+transfer[êe]ncia\s*[.!?]*$',
+            (r'\b(?:coloc[ae]r?|copi[ae]r?)\s+(.+?)\s+(?:na|pra|para\s+a?)\s*(?:área|area)\s+de\s+transfer[êe]ncia\b',
              self._clipboard_text, "os_clipboard", None),
             # Open apps
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
@@ -102,9 +243,9 @@ class PcVoiceIntentDetector:
              self._close_chrome, "os_close_safe_app", "chrome"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?(?:microsoft\s+)?edge\s*[.!?]*$',
              self._close_edge, "os_close_safe_app", "edge"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|mostre|v[áa]\s+para)\s+(?:meus?\s+)?downloads\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:abr[ae]|abrir|mostr[ae]|v[áa]\s+(?:pra|para))\s+(?:a\s+)?(?:pasta\s+(?:de\s+|dos\s+)?)?(?:meus?\s+)?downloads\s*[.!?]*$',
              self._open_downloads, "os_open", "downloads"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|mostre|v[áa]\s+para)\s+(?:meus?\s+)?(?:documentos|documents)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:abr[ae]|abrir|mostr[ae]|v[áa]\s+(?:pra|para))\s+(?:a\s+)?(?:pasta\s+(?:de\s+|dos\s+)?)?(?:meus?\s+)?(?:documentos|documents)\s*[.!?]*$',
              self._open_documents, "os_open", "documents"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|mostre|v[áa]\s+para)\s+(?:a\s+)?(?:área\s+de\s+trabalho|desktop)\s*[.!?]*$',
              self._open_desktop, "os_open", "desktop"),
@@ -120,57 +261,58 @@ class PcVoiceIntentDetector:
              self._open_url, "browser_open_url", None),
 
             # Closed media destinations; query is data and the host is fixed.
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|acesse|v[Ã¡a]\s+para)\s+(?:o\s+)?youtube\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|acesse|v[áa]\s+para)\s+(?:o\s+)?youtube\s*[.!?]*$',
              self._browser_native, "youtube_open", "youtube"),
-            (r'^(?:zara[,\s]+)?(?:pesquise?|procure|busque?)\s+(.+?)\s+(?:no|na)\s+youtube\s*[.!?]*$',
+            (r'\b(?:pesquis[ae]r?|procur[ae]r?|busc[ae]r?|toc[ae]r?)\s+(.+?)\s+(?:no|na)\s+youtube\b',
              self._media_query, "youtube_search", None),
             (r'^(?:zara[,\s]+)?(?:toque|toca|coloque|bote|quero\s+ouvir)\s+(.+?)\s*[.!?]*$',
              self._media_query, "youtube_play_by_name", None),
-            (r'^(?:zara[,\s]+)?(?:o\s+que\s+(?:est[áa]\s+tocando|est[áa]\s+passando)|qual\s+(?:m[úu]sica|v[íi]deo)\s+est[áa]\s+tocando)\s*[.!?]*$',
+            (r'\b(?:o\s+que\s+(?:est[áa]|ta)\s+(?:tocando|passando)|qual\s+(?:m[úu]sica|v[íi]deo)\s+(?:est[áa]|ta)\s+tocando)\b',
              self._youtube_now_playing, "youtube_now_playing", "current"),
             (r'^(?:zara[,\s]+)?(?:(?:n[ãa]o\s+gostei(?:\s+dessa\s+m[úu]sica)?[,\s]+)?(?:coloque|coloca|bote|bota)\s+outra\s+(?:dele|dela|desse\s+artista)|outra\s+desse\s+artista)\s*[.!?]*$',
              self._youtube_another, "youtube_another_by_artist", "current_artist"),
             (r'^(?:zara[,\s]+)?(?:pesquise?|procure|busque?)\s+(.+?)\s+(?:no|na)\s+spotify\s*[.!?]*$',
              self._media_query, "spotify_search", None),
-            (r'^(?:zara[,\s]+)?(?:pule|pular)\s+(?:o\s+)?an[úu]ncio\s*[.!?]*$',
+            (r'\b(?:pul[ae]r?|pass[ae]r?|skip)\s+(?:o\s+)?an[úu]ncio\b',
              self._youtube_skip_ad, "youtube_skip_ad", "skip"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir)\s+(?:uma\s+)?nova\s+(?:guia|aba)\s*[.!?]*$',
+            (r'\b(?:abr[ae]r?)\s+(?:uma\s+)?(?:nova\s+(?:guia|aba)|(?:guia|aba)\s+nova)\b',
              self._browser_native, "browser_new_tab", "new_tab"),
-            (r'^(?:zara[,\s]+)?(?:volte|voltar)\s+(?:no|pelo)\s+navegador\s*[.!?]*$',
+            (r'\b(?:volt[ae]r?)\s+(?:no|pelo|na)\s+(?:navegador|p[áa]gina|chrome)\b',
              self._browser_native, "browser_back", "back"),
-            (r'^(?:zara[,\s]+)?(?:avance|avançar)\s+(?:no|pelo)\s+navegador\s*[.!?]*$',
+            (r'\b(?:avanc?[ae]r?|avanç[ae]r?)\s+(?:no|pelo|na)\s+(?:navegador|p[áa]gina|chrome)\b',
              self._browser_native, "browser_forward", "forward"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha)\s+(?:essa|esta|a)\s+(?:guia|aba)\s*[.!?]*$',
              self._browser_native, "browser_close_tab", "close"),
             (r'^(?:zara[,\s]+)?(?:(?:o\s+que\s+diz)|(?:resuma|resume)|(?:qual\s+[ée]\s+o\s+assunto\s+d[ae]))\s+(?:essa|esta|a)\s+p[áa]gina\s*[.!?]*$',
              self._browser_native, "browser_read_page", "read"),
-            (r'^(?:zara[,\s]+)?(?:tire|faça|capture)\s+(?:uma\s+)?(?:captura\s+de\s+tela|screenshot)\s*[.!?]*$',
+            (r'\b(?:tir[ae]r?|faz|faça|fazer|captur[ae]r?|print[ae]?r?)\s+(?:uma\s+|um\s+)?(?:captura\s+de\s+tela|screenshot|print\s+da\s+tela|print)\b',
              self._screenshot, "vision_screenshot", "full"),
-            (r'^(?:zara[,\s]+)?(?:mostre|envie|crie)\s+(?:uma\s+)?notificação(?:\s+dizendo)?\s+(.+?)\s*[.!?]*$',
+            (r'\b(?:mostr[ae]r?|envi[ae]r?|cri[ae]r?|manda?r?)\s+(?:uma\s+)?notifica[çc][ãa]o(?:\s+dizendo)?\s+(.+?)\s*[.!?]*$',
              self._notification_message, "os_notify", None),
 
             # Read-only system truth.
             (r'^(?:zara[,\s]+)?(?:que\s+horas\s+(?:s[ãa]o|sao)|qual\s+(?:é|e)\s+a\s+hora|hora\s+local)\s*[.!?]*$',
              self._system_info, "system_time", "local"),
-            (r'^(?:zara[,\s]+)?(?:como\s+est[áa]\s+o\s+(?:computador|pc)|status\s+do\s+(?:computador|pc)|uso\s+de\s+(?:cpu|ram|mem[óo]ria))\s*[.!?]*$',
+            (r'\b(?:como\s+(?:est[áa]|ta)\s+o\s+(?:computador|pc)|status\s+do\s+(?:computador|pc)|uso\s+de\s+(?:cpu|ram|mem[óo]ria)|quanto\s+de\s+bateria|quanta\s+bateria|n[íi]vel\s+da\s+bateria)\b',
              self._system_metrics, "system_metrics", "summary"),
-            (r'^(?:zara[,\s]+)?(?:mostre|diga|quais\s+s[ãa]o)\s+(?:as\s+)?informaç[õo]es\s+do\s+sistema\s*[.!?]*$',
+            (r'\b(?:mostr[ae]r?|diz|diga|quais\s+s[ãa]o)\s+(?:as\s+)?informa[çc][õo]es\s+do\s+sistema\b',
              self._system_info, "system_info", "basic"),
-            (r'^(?:zara[,\s]+)?(?:liste|mostre|quais)\s+(?:os\s+)?processos(?:\s+est[ãa]o\s+rodando)?\s*[.!?]*$',
+            (r'\b(?:list[ae]r?|mostr[ae]r?|quais)\s+(?:os\s+)?processos(?:\s+est[ãa]o\s+rodando)?\b',
              self._system_processes, "system_processes", "top"),
 
             # Search
-            (r'\b(pesquise?|procure|search|busque?)\s+(por\s+)?(.+)\b',
+            (r'^(?:zara[,\s]+)?(pesquis[ae]r?|procur[ae]r?|search|busc[ae]r?)\s+(por\s+)?(.+?)\s*[.!?]*$',
              self._search, "browser_search", None),
 
             # Volume
-            (r'\b(?:coloque|coloca|defina|ponha|deixe|set)\s+(?:o\s+)?volume\s+(?:em|para|a)\s+(\d{1,3})\s*%?\b',
+            # ZARA-VOICE-VERBOS-002: faltavam "poe/bota/ajusta" e a preposicao "pra".
+            (r'\b(?:coloc[ae]r?|defin[ae]r?|ponha|poe|bot[ae]r?|deix[ae]r?|ajust[ae]r?|set)\s+(?:o\s+)?volume\s+(?:em|para|pra|a)\s*(\d{1,3})\s*%?\b',
              self._volume_level, "os_volume", None),
-            (r'\bvolume\s+(?:em\s+)?(\d{1,3})\s*%?\b',
+            (r'\bvolume\s+(?:em\s+|para\s+|pra\s+|a\s+)?(\d{1,3})\s*%?\b',
              self._volume_level, "os_volume", None),
             # Volume (aceita imperativo E infinitivo: "aumente/aumentar/aumenta",
             # "diminua/diminuir", "suba/subir", "baixe/baixar/abaixar").
-            (r'\b(?:aument[ae]r?|suba|subir|subo|up|mais\s+volume|increase?)\s+(?:o\s+)?volume\b',
+            (r'\b(?:aument[ae]r?|sob[ae]|suba|subir|subo|up|mais\s+volume|increase?)\s+(?:o\s+)?volume\b',
              self._volume_up, "os_volume", "up"),
             (r'\b(?:diminu(?:[ae]r?|ir?)|baix[ae]r?|abaix[ae]r?|down|menos\s+volume|decrease?|lower)\s+(?:o\s+)?volume\b',
              self._volume_down, "os_volume", "down"),
@@ -181,57 +323,81 @@ class PcVoiceIntentDetector:
              self._youtube_pause, "youtube_pause", "pause"),
             (r'^(?:zara[,\s]+)?(?:continue(?:\s+(?:a\s+)?música)?|continua|play)\s*[.!?]*$',
              self._youtube_resume, "youtube_resume", "resume"),
-            (r'^(?:zara[,\s]+)?(?:avance|avança|adianta)\s+(\d{1,4})\s+segundos?\s*[.!?]*$',
+            (r'\b(?:avanc?[ae]r?|avanç[ae]r?|adiant[ae]r?|pul[ae]r?)\s+(\d{1,4})\s+segundos?\b',
              self._youtube_seek_forward, "youtube_seek", None),
-            (r'^(?:zara[,\s]+)?(?:volte|volta|retroceda)\s+(\d{1,4})\s+segundos?\s*[.!?]*$',
+            (r'\b(?:volt[ae]r?|retroced[ae]r?|retorn[ae]r?)\s+(\d{1,4})\s+segundos?\b',
              self._youtube_seek_backward, "youtube_seek", None),
             (r'^(?:zara[,\s]+)?(?:volte|volta)\s+um\s+pouco\s*[.!?]*$',
              self._youtube_seek_small_back, "youtube_seek", "-10"),
             (r'^(?:zara[,\s]+)?(?:recomece|recomeça|reinicie|volte\s+ao\s+início)(?:\s+(?:essa|a)\s+(?:música|faixa|vídeo))?\s*[.!?]*$',
              self._youtube_restart, "youtube_seek", "restart"),
-            (r'^(?:zara[,\s]+)?(?:próxima(?:\s+música)?|pule\s+essa)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:pr[óo]xima(?:\s+m[úu]sica)?|pul[ae]\s+essa|pul[ae]\s+(?:a\s+)?m[úu]sica|next)\s*[.!?]*$',
              self._media_next, "youtube_next", "next"),
             (r'^(?:zara[,\s]+)?(?:anterior|música\s+anterior|volt[ae]\s+(?:a\s+)?(?:música|faixa))\s*[.!?]*$',
              self._media_previous, "media_previous", "previous"),
-            (r'^(?:zara[,\s]+)?(?:mute|(?:ativ[ae]r?|lig[ae]r?|coloc[ae]r?)\s+(?:o\s+)?mudo)\s*[.!?]*$',
-             self._audio_mute, "audio_mute", "mute"),
-            (r'^(?:zara[,\s]+)?(?:tir[ae]r?\s+(?:do\s+|o\s+)?mudo|retir[ae]r?\s+do\s+mudo|desativ[ae]r?\s+(?:o\s+)?mudo)\s*[.!?]*$',
+            # ZARA-VOICE-VERBOS-002: mudo em fala real -> "muta", "tira o som",
+            # "deixa mudo", "silencia". Desmutar -> "volta o som", "tira do mudo".
+            # O unmute vem ANTES do mute: "tira o som" e mute, mas "volta o som"
+            # e unmute, e a ordem evita que um coma o outro.
+            (r'^(?:zara[,\s]+)?(?:volt(?:a|e)|devolv(?:a|e)|retom(?:a|e))\s+(?:o\s+)?(?:som|audio|áudio)\s*[.!?]*$',
              self._audio_unmute, "audio_unmute", "unmute"),
-            (r'^(?:zara[,\s]+)?(?:qual\s+(?:é|e)\s+o\s+dispositivo\s+de\s+áudio|status\s+d[eo]\s+áudio|como\s+está\s+o\s+áudio)\s*[.!?]*$',
+            (r'\b(?:tir[ae]r?\s+(?:do\s+|o\s+)?mudo|retir[ae]r?\s+do\s+mudo|desativ[ae]r?\s+(?:o\s+)?mudo|desmut[ae]r?|unmute)\b',
+             self._audio_unmute, "audio_unmute", "unmute"),
+            (r'^(?:zara[,\s]+)?(?:mute|mut[ae]|silenci[ae]|(?:ativ(?:a|e)|lig(?:a|ue)|coloc(?:a|ue)|deix(?:a|e)|poe|ponha)\s+(?:no\s+|o\s+)?mudo)\s*[.!?]*$',
+             self._audio_mute, "audio_mute", "mute"),
+            (r'^(?:zara[,\s]+)?(?:tir(?:a|e)|cort(?:a|e)|deslig(?:a|ue))\s+(?:o\s+)?(?:som|audio|áudio)\s*[.!?]*$',
+             self._audio_mute, "audio_mute", "mute"),
+            (r'\b(?:qual\s+(?:é|e)\s+o\s+dispositivo\s+de\s+(?:áudio|audio)|status\s+d[eo]\s+(?:áudio|audio)|como\s+(?:está|esta)\s+o\s+(?:áudio|audio))\b',
              self._audio_status, "audio_status", "status"),
 
             # Silent Windows radios (WinRT API, no Quick Settings flyout).
-            (r'^(?:zara[,\s]+)?(?:ative|ligue)\s+(?:o\s+)?wi-?fi\s*[.!?]*$',
+            # ZARA-VOICE-VERBOS-002: eram ancorados e so aceitavam "ative/ligue".
+            # A fala real usa "liga o wifi", "ativa o wi-fi", "desliga o bluetooth".
+            (r'\b(?:ativ(?:a|e|ar)|lig(?:a|ue|ar))\s+(?:o\s+)?wi-?\s?fi\b',
              self._radio_on, "os_wifi_on", "on"),
-            (r'^(?:zara[,\s]+)?(?:desative|desligue)\s+(?:o\s+)?wi-?fi\s*[.!?]*$',
+            (r'\b(?:desativ(?:a|e|ar)|deslig(?:a|ue|ar)|tir(?:a|e|ar))\s+(?:o\s+)?wi-?\s?fi\b',
              self._radio_off, "os_wifi_off", "off"),
-            (r'^(?:zara[,\s]+)?(?:ative|ligue)\s+(?:o\s+)?bluetooth\s*[.!?]*$',
+            (r'\b(?:ativ(?:a|e|ar)|lig(?:a|ue|ar))\s+(?:o\s+)?bluetooth\b',
              self._radio_on, "os_bluetooth_on", "on"),
-            (r'^(?:zara[,\s]+)?(?:desative|desligue)\s+(?:o\s+)?bluetooth\s*[.!?]*$',
+            (r'\b(?:desativ(?:a|e|ar)|deslig(?:a|ue|ar)|tir(?:a|e|ar))\s+(?:o\s+)?bluetooth\b',
              self._radio_off, "os_bluetooth_off", "off"),
 
             # Brightness and night-light controls.
-            (r'^(?:zara[,\s]+)?(?:brilho\s+(?:em\s+)?|coloque\s+(?:o\s+)?brilho\s+(?:em\s+)?|deixe\s+a\s+tela\s+em\s+)(\d{1,3})\s*%?\s*[.!?]*$',
+            # ZARA-VOICE-VERBOS-001: os padroes de brilho eram ancorados (^...$)
+            # e so aceitavam o imperativo culto. "diminui o brilho", "abaixa o
+            # brilho ai" e "deixa a tela mais escura" nao casavam, caiam no LLM
+            # e voltavam como falso sucesso. Agora sao delimitados por \b, como
+            # os de volume — que por isso sempre funcionaram.
+            (r'\b(?:coloc\w+|ponha|poe|bote|bota|defin\w+|deix\w+|ajust\w+|deixa)?\s*'
+             r'(?:o\s+)?brilho\s+(?:em|para|pra|a)?\s*(\d{1,3})\s*%?',
              self._brightness_level, "os_brightness_absolute", None),
-            (r'^(?:zara[,\s]+)?(?:aumente\s+(?:o\s+)?brilho|(?:um\s+pouco\s+)?mais\s+claro)\s*[.!?]*$',
+            (r'\bbrilho\s+(?:em\s+)?(\d{1,3})\s*%?',
+             self._brightness_level, "os_brightness_absolute", None),
+            (r'\b(?:aument\w+|sob[ae]|sub\w+|clarei\w+)\s+(?:um\s+pouco\s+)?(?:o\s+)?brilho',
              self._brightness_up, "os_brightness_up", "up"),
-            (r'^(?:zara[,\s]+)?(?:diminua\s+(?:o\s+)?brilho|(?:um\s+pouco\s+)?mais\s+escuro)\s*[.!?]*$',
+            (r'\b(?:mais\s+claro|clareia|clareie)\b',
+             self._brightness_up, "os_brightness_up", "up"),
+            (r'\b(?:diminu\w+|abaix\w+|baix\w+|reduz\w*|escurec\w+)\s+(?:um\s+pouco\s+)?(?:o\s+)?brilho',
              self._brightness_down, "os_brightness_down", "down"),
-            (r'^(?:zara[,\s]+)?(?:ative|ativar|ligue|ligar)\s+(?:(?:a\s+)?luz|(?:o\s+)?modo)\s+noturn[oa]\s*[.!?]*$',
+            (r'\b(?:mais\s+escur[oa]|escurece|escureca)\b',
+             self._brightness_down, "os_brightness_down", "down"),
+            # ZARA-VOICE-VERBOS-002: "ativa o modo noturno", "liga a luz noturna",
+            # "tira o modo noturno" nao casavam. Agora delimitado por \b.
+            (r'\b(?:ativ(?:a|e|ar)|lig(?:a|ue|ar)|coloc(?:a|ue|ar)|poe|ponha)\s+(?:(?:a\s+)?luz|(?:o\s+)?modo)\s+noturn[oa]\b',
              self._night_light_on, "os_night_light_on", "on"),
-            (r'^(?:zara[,\s]+)?(?:desative|desativar|desligue|desligar)\s+(?:(?:a\s+)?luz|(?:o\s+)?modo)\s+noturn[oa]\s*[.!?]*$',
+            (r'\b(?:desativ(?:a|e|ar)|deslig(?:a|ue|ar)|tir(?:a|e|ar)|remov(?:a|e|er))\s+(?:(?:a\s+)?luz|(?:o\s+)?modo)\s+noturn[oa]\b',
              self._night_light_off, "os_night_light_off", "off"),
 
             # Window controls are anchored and never include close/Alt+F4.
-            (r'^(?:zara[,\s]+)?(?:minimize(?:\s+(?:a|esta)\s+janela)?|agora\s+minimize\s+ele)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:minimiz[ae]|minimizar)(?:\s+(?:a|esta|essa)\s+janela)?\s*[.!?]*$',
              self._window_minimize, "window_minimize", "active"),
-            (r'^(?:zara[,\s]+)?(?:maximize(?:\s+(?:a|esta)\s+janela)?)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:maximiz[ae]|maximizar)(?:\s+(?:a|esta|essa)\s+janela)?\s*[.!?]*$',
              self._window_maximize, "window_maximize", "active"),
-            (r'^(?:zara[,\s]+)?(?:restaure(?:\s+a\s+janela)?|volte\s+a\s+janela\s+ao\s+normal)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:(?:restaur[ae]|restaurar)(?:\s+(?:a|esta|essa)\s+janela)?|volt[ae]\s+a\s+janela\s+ao\s+normal)\s*[.!?]*$',
              self._window_restore, "window_restore", "active"),
-            (r'^(?:zara[,\s]+)?(?:troque\s+de\s+janela|v[áa]\s+para\s+a\s+próxima\s+janela)\s*[.!?]*$',
+            (r'\b(?:troc[ae]r?\s+de\s+janela|v[áa]\s+(?:pra|para)\s+a\s+pr[óo]xima\s+janela|pr[óo]xima\s+janela)\b',
              self._window_switch, "window_switch_next", "next"),
-            (r'^(?:zara[,\s]+)?(?:traz|traga|coloque)\s+(?:o\s+)?chrome\s+(?:pra|para)\s+frente\s*[.!?]*$',
+            (r'\b(?:traz|traga|coloc[ae]r?|foc[ae]r?|v[áa]\s+(?:pro|para\s+o))\s+(?:n[oa]\s+)?(?:o\s+)?chrome(?:\s+(?:pra|para)\s+frente)?\b',
              self._window_chrome, "window_focus_named", "chrome"),
             (r'^(?:zara[,\s]+)?(?:volta|volte|traz|traga)\s+(?:pra|para)\s+(?:a\s+)?zara\s*[.!?]*$',
              self._window_zara, "window_focus_named", "zara"),
@@ -241,9 +407,9 @@ class PcVoiceIntentDetector:
              self._window_project, "window_focus_named", "project"),
 
             # Scroll
-            (r'^(?:zara[,\s]+)?(?:role|scroll|desça|descer|desce)(?:\s+(?:a\s+)?página)?(?:\s+(?:para\s+)?baixo)?\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:rol[ae]|scroll|desç[ae]|descer|desce)(?:\s+(?:a\s+)?p[áa]gina)?(?:\s+(?:pra|para)?\s*baixo)?\s*[.!?]*$',
              self._scroll_down, "browser_scroll", "down"),
-            (r'^(?:zara[,\s]+)?(?:role|scroll|suba|subir|sobe)(?:\s+(?:a\s+)?página)?(?:\s+(?:para\s+)?cima|\s+um\s+pouco)?\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:rol[ae]|scroll|sub[ae]|subir|sobe)(?:\s+(?:a\s+)?p[áa]gina)?(?:\s+(?:pra|para)?\s*cima|\s+um\s+pouco)?\s*[.!?]*$',
              self._scroll_up, "browser_scroll", "up"),
 
             # Explicitly catch unsupported app requests after all known safe
@@ -252,6 +418,31 @@ class PcVoiceIntentDetector:
              r'(?P<app>.+?)\s*[.!?]*$',
              self._unsupported_app, "os_app", None),
         ]
+
+    # ZARA-VOICE-SEGURANCA-001 / ZARA-RECUSA-HONESTA-001
+    #
+    # A primeira versao deste guarda rodava na ENTRADA de `detect` e devolvia
+    # `is_pc_intent=False` para qualquer texto contendo sintaxe de shell OU o
+    # nome de um programa perigoso. Duas consequencias, ambas ruins:
+    #
+    # 1. Silencio em vez de recusa. "abra powershell" saia daqui como "nao e
+    #    comando de PC" e caia no LLM, entao a ZARA nao executava (certo) mas
+    #    tambem nao dizia que era proibido (errado). O contrato do projeto
+    #    exige recusa honesta, nao mudez.
+    # 2. Falso positivo em fala inocente. A lista tinha `python`, `reg`, `sh`,
+    #    `curl`: "procure por Python asyncio" virava texto perigoso e a busca
+    #    era recusada em silencio.
+    #
+    # Agora a defesa e por PARAMETRO, depois do casamento, e so contra
+    # SINTAXE (encadeamento de comando e travessia de caminho) — nunca contra
+    # nomes de programa, que ja sao barrados pela allowlist de `os_app`.
+    _SINTAXE_PERIGOSA = re.compile(r'(?:&&|\|\||[;`]|\$\(|\.\.[\\/]|[\\/]\.\.)')
+
+    # Acoes cujo parametro e texto para ler/digitar/buscar, nunca caminho ou
+    # comando. Aqui "&&" e um caractere qualquer e nao pode bloquear a frase.
+    _ACOES_DE_TEXTO_LIVRE = frozenset({
+        "browser_search", "input_type_text", "os_clipboard",
+    })
 
     def detect(self, text: str) -> PcVoiceResult:
         """Detect PC control intent in text."""
@@ -449,10 +640,24 @@ class PcVoiceIntentDetector:
                         param=param,
                         blocked=True,
                         physical_effect=0,
-                        reply=(
-                            "Esse aplicativo não está autorizado. "
-                            "Posso abrir Calculadora, Bloco de Notas ou Chrome."
-                        ),
+                        reply=RESPOSTA_NAO_SEI,
+                    )
+
+                # Defesa de sintaxe: encadeamento de comando ou travessia de
+                # caminho num parametro que vai virar acao no Windows. Recusa
+                # falada, nunca silencio.
+                if (
+                    action not in self._ACOES_DE_TEXTO_LIVRE
+                    and param
+                    and self._SINTAXE_PERIGOSA.search(str(param))
+                ):
+                    return PcVoiceResult(
+                        is_pc_intent=True,
+                        action=action,
+                        param=param,
+                        blocked=True,
+                        physical_effect=0,
+                        reply=RESPOSTA_NAO_SEI,
                     )
 
                 blocked = self._blocked_by_superbrain(action)
@@ -477,6 +682,35 @@ class PcVoiceIntentDetector:
     # Handlers
     def _browser_native(self, m):
         return ""
+
+    # ZARA-PONTE-CLAUDE-001
+    def _claude_ler(self, m):
+        return "read"
+
+    # ZARA-PONTE-LEITURA-COMPLETA-002
+    def _ler_resumido(self, m):
+        return "resumido"
+
+    # ZARA-APRENDIZADO-001
+    def _o_que_aprendeu(self, m):
+        return "hoje"
+
+    # ZARA-PONTE-REPASSE-001
+    def _repasse_claude_codex(self, m):
+        return "claude>codex"
+
+    def _repasse_codex_claude(self, m):
+        return "codex>claude"
+
+    def _claude_enviar(self, m):
+        texto = m.group(1).strip()
+        # Alex costuma abrir com "que"/"pra" quando dita: "responde pro Claude
+        # que ele conserte o volume". Isso vira parte da frase e polui a
+        # mensagem; tiramos só quando abre a fala.
+        texto = re.sub(r'^(?:que\s+|pra\s+|para\s+)', '', texto)
+        if len(texto) >= 2 and texto[0] in "'\"‘’“”" and texto[-1] in "'\"‘’“”":
+            texto = texto[1:-1].strip()
+        return texto[:2000]
 
     def _clipboard_read(self, m):
         return "read"

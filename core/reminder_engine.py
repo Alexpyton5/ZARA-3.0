@@ -42,7 +42,14 @@ CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_at_utc);
 CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state);
 """
 
-OVERDUE_WINDOW_SECONDS = 24 * 3600  # dispara como overdue se atraso <= 24h
+# ZARA-REMINDER-HIGIENE-001
+# Janela de atraso. Era 24h, o que fazia um lembrete vencido tocar de novo a
+# cada abertura do app durante um dia inteiro. Lembrete atrasado mais de uma
+# hora perdeu o proposito: vira MISSED e aparece na lista, sem falar.
+OVERDUE_WINDOW_SECONDS = 3600
+
+# Lembretes ja resolvidos nao ficam no banco para sempre.
+RETENCAO_RESOLVIDOS_SEGUNDOS = 7 * 24 * 3600
 
 
 class ReminderPersistenceError(RuntimeError):
@@ -106,6 +113,17 @@ class ReminderEngine:
                 "UPDATE reminders SET state='SCHEDULED', updated_at=? WHERE state='FIRING'",
                 (time.time(),),
             )
+            # ZARA-REMINDER-HIGIENE-001: limpa o que ja foi resolvido ha mais
+            # de uma semana. Sem isso o banco so cresce e lembretes velhos
+            # continuam aparecendo na lista para sempre.
+            corte = time.time() - RETENCAO_RESOLVIDOS_SEGUNDOS
+            apagados = conn.execute(
+                "DELETE FROM reminders WHERE state IN ('FIRED','CANCELLED','COMPLETED','MISSED') "
+                "AND COALESCE(updated_at, created_at, 0) < ?",
+                (corte,),
+            ).rowcount
+            if apagados:
+                print(f"[Reminder] {apagados} lembrete(s) resolvido(s) antigo(s) removido(s)")
             conn.commit()
 
     # ---- CRUD ----
@@ -294,6 +312,24 @@ class ReminderEngine:
                 self.on_fire(r)
             except Exception:
                 pass
+
+    def purgar_resolvidos(self, dias: int = 0) -> int:
+        """Remove lembretes ja resolvidos. dias=0 remove todos os resolvidos.
+
+        ZARA-REMINDER-HIGIENE-001. Nunca toca em SCHEDULED: o que ainda vai
+        acontecer e preservado.
+        """
+        corte = time.time() - (dias * 24 * 3600)
+        with self._lock:
+            with self._connect() as conn:
+                n = conn.execute(
+                    "DELETE FROM reminders WHERE state IN "
+                    "('FIRED','CANCELLED','COMPLETED','MISSED') "
+                    "AND COALESCE(updated_at, created_at, 0) <= ?",
+                    (corte,),
+                ).rowcount
+                conn.commit()
+        return int(n or 0)
 
     def fire_due_now(self) -> int:
         """Sync helper (tests): claim + fire all currently due reminders."""

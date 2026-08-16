@@ -296,3 +296,189 @@
 
 /* ---- fotos de perfil mais altas, perto da marca d'agua ---- */
 .zara-preview .participants { padding-bottom: 46px !important; }
+
+/* ============================================================================
+   TEMA CLARO — o que ficava preto porque nunca foi olhado
+   ============================================================================
+   A interface nasceu escura e so o escuro foi verificado. No claro sobravam
+   tres ilhas pretas: a barra de comando, o painel do Lab e o log da conversa.
+   Sao regras da folha antiga do projeto, carregada depois desta, vencendo por
+   ordem de cascata. */
+
+/* 1) a pilula volta a ser clara */
+.zara-preview.theme-light .command-bar {
+  background: rgba(250, 247, 245, .82) !important;
+  box-shadow: 0 12px 28px rgba(50, 40, 34, .07), inset 0 1px rgba(255,255,255,.7) !important;
+}
+.zara-preview.theme-light .command-bar > input { color: var(--ink) !important; }
+.zara-preview.theme-light .command-bar > input::placeholder { color: var(--muted) !important; }
+.zara-preview.theme-light .command-bar .mic-button:not(.desligado) { color: var(--ink) !important; }
+
+/* 2) o painel da direita entra na paleta clara */
+.zara-preview.theme-light .lab-window {
+  color: var(--ink) !important;
+  border: 1px solid var(--strong-line) !important;
+  background:
+    radial-gradient(circle at 48% 16%, rgba(255,255,255,.7), transparent 33%),
+    linear-gradient(158deg, #f7f3ef 0%, #efe9e3 60%, #f4efea 100%) !important;
+  box-shadow: 0 26px 58px rgba(63, 52, 45, .16), inset 0 1px rgba(255,255,255,.75) !important;
+}
+.zara-preview.theme-light .window-controls button { color: var(--muted) !important; }
+.zara-preview.theme-light .window-controls button:hover { background: rgba(70,59,52,.07) !important; }
+.zara-preview.theme-light .participants small { color: var(--muted) !important; }
+.zara-preview.theme-light .lab-composer {
+  color: var(--muted) !important;
+  border: 1px solid var(--strong-line) !important;
+  background: rgba(255,255,255,.55) !important;
+}
+.zara-preview.theme-light .lab-composer input { color: var(--ink) !important; }
+.zara-preview.theme-light .lab-composer input::placeholder { color: var(--muted) !important; }
+.zara-preview.theme-light .lab-composer button { color: var(--accent) !important; }
+.zara-preview.theme-light .hermes { color: var(--muted) !important; background: rgba(255,255,255,.5) !important; }
+
+/* baloes: mesmos tres tons do escuro, na versao clara */
+.zara-preview.theme-light .lab-messages article { color: var(--ink) !important; }
+.zara-preview.theme-light .lab-messages article.wine { background: rgba(83, 56, 69, .13) !important; }
+.zara-preview.theme-light .lab-messages article.gold { background: rgba(200, 185, 158, .3) !important; }
+.zara-preview.theme-light .lab-messages article.gray { background: rgba(70, 59, 52, .09) !important; }
+
+/* 3) o log da conversa segue o mesmo painel */
+.zara-preview.theme-light .painel-conversa-lista article { background: rgba(70, 59, 52, .07) !important; }
+.zara-preview.theme-light .painel-conversa-lista article.user { background: rgba(83, 56, 69, .12) !important; }
+
+/* 4) a marca d'agua: preta no escuro, BRANCA no claro.
+   O efeito que o Alex quer e o mesmo — sumir no fundo e so aparecer quando a
+   luz bate. Num fundo claro, quem some e o branco, nao o preto. */
+.zara-preview.theme-light .lab-watermark {
+  filter: brightness(0) invert(1) !important;
+  opacity: .62 !important;
+}
+
+/* ---- fotos de perfil: mesmo tamanho e centradas nos dois temas ---- */
+.zara-preview .participants div { justify-content: flex-end; }
+.zara-preview .participants img,
+.zara-preview .participants .foto-claude,
+.zara-preview .participants .avatar-marca {
+  width: 50px !important;
+  height: 50px !important;
+  flex: 0 0 50px;
+  border-radius: 50% !important;
+  object-fit: cover;
+  margin: 0 auto;
+}
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 132% auto !important;
+  background-position: center 24% !important;
+}
+.zara-preview.theme-light .participants .avatar-marca.zara { background-color: #f4efe9 !important; }
+.zara-preview.theme-light .participants img,
+.zara-preview.theme-light .participants .foto-claude,
+.zara-preview.theme-light .participants .avatar-marca {
+  box-shadow: 0 7px 15px rgba(63, 52, 45, .18) !important;
+}
+
+/* ---- avatar da ZARA: monograma centrado, do tamanho dos outros ----
+   Medido no proprio arquivo: o monograma ocupa 65,2% da largura e tem o centro
+   a 39,8% da altura. Dai saem os dois numeros abaixo — 100/65,2 = 154% para ele
+   preencher o circulo, e 19% de deslocamento vertical para o centro dele cair
+   no centro da bolinha. Antes eu tinha chutado 132%/24% e sobrava pedaco da
+   palavra ZARA dentro do circulo. */
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 154% auto !important;
+  background-position: center 19% !important;
+}
+
+/* ---- os tres perfis um pouco mais altos ---- */
+.zara-preview .participants { padding-bottom: 62px !important; }
+
+/* ---- ZARA: menos zoom, centrada ----
+   154% enchia o circulo de borda a borda e cortava as pontas do monograma.
+   126% deixa respiro, e o 1px vertical vem da conta: o centro do desenho esta
+   a 39,8% da altura do arquivo, entao a imagem precisa descer 0,7px para o
+   centro dele cair no centro da bolinha. */
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 126% auto !important;
+  background-position: center 1px !important;
+}
+
+/* A OpenAI agora e o icone oficial de 180px, ja centrado no arquivo. */
+.zara-preview .participants img { object-position: center center; }
+
+/* ---- tema claro: matar o quadrado branco atras do anel ----
+   O PNG do anel claro tem fundo branco. Sobre a pagina creme isso vira uma
+   caixa branca chapada em volta do circulo — o que o Alex chamou de "morto".
+   multiply faz o branco desaparecer e deixa so os fios; nada de recortar
+   arquivo nem inventar tom. */
+.zara-preview.theme-light .orb .ring-light.ring-base {
+  mix-blend-mode: multiply;
+}
+.zara-preview.theme-light .spectrum-canvas { mix-blend-mode: multiply; }
+
+/* ---- marca d'agua clara: off-white quente, nao branco puro ----
+   Branco puro sobre creme tambem fica morto. O sepia leve puxa para o marfim
+   da paleta dele. */
+.zara-preview.theme-light .lab-watermark {
+  filter: brightness(0) invert(1) sepia(.32) saturate(.5) !important;
+  opacity: .72 !important;
+}
+
+/* O .orb tem isolation:isolate, que fecha a camada e impede o multiply de
+   alcancar a pagina atras — por isso o quadrado branco continuava. No tema
+   claro a camada fica aberta para o branco do PNG sumir no creme da pagina. */
+.zara-preview.theme-light .orb { isolation: auto !important; }
+.zara-preview.theme-light .presence-stage { isolation: auto; }
+
+/* O branco saiu do proprio arquivo do anel claro, entao o multiply nao e mais
+   necessario — e ele estava sujando os fios contra o creme da pagina. */
+.zara-preview.theme-light .orb .ring-light.ring-base { mix-blend-mode: normal; }
+.zara-preview.theme-light .spectrum-canvas { mix-blend-mode: normal; }
+
+/* ---- letras dos baloes: maiores e mais encorpadas ----
+   Alex: "muito finas e pequenas". Eram 11px em peso normal dentro de um painel
+   escuro — some. */
+.zara-preview .lab-messages strong,
+.zara-preview .painel-conversa-lista strong {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: .04em !important;
+}
+.zara-preview .lab-messages p,
+.zara-preview .painel-conversa-lista p {
+  font-size: 13px !important;
+  font-weight: 450 !important;
+  line-height: 1.62 !important;
+}
+.zara-preview .lab-composer input,
+.zara-preview .lab-composer { font-size: 12px !important; }
+.zara-preview .participants small { font-size: 11px !important; font-weight: 500 !important; }
+
+/* ---- botao de enviar do Lab: sem caixa, colado na margem ----
+   No desenho do Alex e so a seta. O meu tinha um quadrado translucido atras,
+   estava alto e longe da borda direita. */
+.zara-preview .lab-composer {
+  grid-template-columns: minmax(0, 1fr) 30px !important;
+  align-items: center !important;
+  padding: 4px 10px 4px 15px !important;
+}
+.zara-preview .lab-composer button {
+  width: 30px !important;
+  height: 30px !important;
+  align-self: center !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--muted) !important;
+}
+.zara-preview.theme-light .lab-composer button { color: var(--accent) !important; }
+
+/* A rolagem do Lab aparecia como uma barra escura colada no balao. */
+.zara-preview .lab-messages::-webkit-scrollbar,
+.zara-preview .painel-conversa-lista::-webkit-scrollbar { width: 5px; }
+.zara-preview .lab-messages::-webkit-scrollbar-track,
+.zara-preview .painel-conversa-lista::-webkit-scrollbar-track { background: transparent; }
+.zara-preview .lab-messages::-webkit-scrollbar-thumb,
+.zara-preview .painel-conversa-lista::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+}

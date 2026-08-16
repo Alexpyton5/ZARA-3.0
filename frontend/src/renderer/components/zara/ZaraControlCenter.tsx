@@ -668,10 +668,19 @@ export const ZaraControlCenter: React.FC = () => {
 
         {painelVisivel ? (
         <aside className="lab-window">
+          {/* Os tres eram caracteres de texto — travessao, quadrado e xis — cada um
+              com peso e altura propria da fonte. Desenhados na mesma caixa de
+              12px e na mesma espessura de traco, eles finalmente combinam. */}
           <div className="window-controls">
-            <button type="button" aria-label="Minimizar" onClick={() => window.zaraIPC?.window?.minimize?.()}>—</button>
-            <button type="button" aria-label="Maximizar" onClick={() => window.zaraIPC?.window?.maximize?.()}><i/></button>
-            <button type="button" aria-label="Fechar" onClick={() => window.zaraIPC?.window?.close?.()}>×</button>
+            <button type="button" aria-label="Minimizar" onClick={() => window.zaraIPC?.window?.minimize?.()}>
+              <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 6h9" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            </button>
+            <button type="button" aria-label="Maximizar" onClick={() => window.zaraIPC?.window?.maximize?.()}>
+              <svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1.7" y="1.7" width="8.6" height="8.6" rx="1.3" fill="none" stroke="currentColor" strokeWidth="1.1"/></svg>
+            </button>
+            <button type="button" aria-label="Fechar" onClick={() => window.zaraIPC?.window?.close?.()}>
+              <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 2.2 9.8 9.8M9.8 2.2 2.2 9.8" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+            </button>
           </div>
           {painel === 'lab' ? (<>
           {/* A marca d'agua e a MESMA logo da barra lateral, so que apagada em preto

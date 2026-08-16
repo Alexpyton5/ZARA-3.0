@@ -636,3 +636,8 @@
    que eu tinha usado no ::before. */
 .zara-preview .home-stage { background: var(--zara-palco, transparent); }
 .zara-preview .presence-stage::before { display: none !important; }
+
+/* os tres controles da janela na mesma caixa e no mesmo peso */
+.zara-preview .window-controls button { font-size: 0 !important; }
+.zara-preview .window-controls svg { width: 12px; height: 12px; display: block; opacity: .82; }
+.zara-preview .window-controls button:hover svg { opacity: 1; }

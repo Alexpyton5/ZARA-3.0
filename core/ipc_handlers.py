@@ -2142,6 +2142,8 @@ class IPCHandler:
         # entendeu mesmo, e tem de dizer isso.
         if not self._PERGUNTA_SE_ENTENDEU.search(text):
             self._ultimo_pedido_entendido = text
+        # ZARA-ONDE-ELE-ESTA-001: falou por voz, entao esta na sala com o PC.
+        self._marcar_canal("computador")
         # ZARA-LATENCIA-MEDIDA-001: o mesmo turno, mas gravado em disco. Os
         # [VOICE_TRACE] morrem com o console, e é por isso que a lentidão que
         # Alex sente nunca virou número.
@@ -2999,6 +3001,8 @@ class IPCHandler:
             return
 
         print(f"[IPC] Processing message ({len(text)} chars, engine: {engine})")
+        # ZARA-ONDE-ELE-ESTA-001: digitou no app, entao esta na frente do PC.
+        self._marcar_canal("computador")
         await self._append_conversation_message("user", text, engine)
 
         jarvis_reply = await self._try_jarvis_multi_action(text)
@@ -3498,6 +3502,10 @@ class IPCHandler:
         #
         # Voz e texto sempre compartilharam a cadeia; agora compartilham a
         # memória também.
+        # ZARA-ONDE-ELE-ESTA-001: ele falou pelo celular, entao ele esta no
+        # celular. E o sinal mais confiavel que existe — melhor que qualquer
+        # palpite sobre teclado ou tela bloqueada.
+        self._marcar_canal("telegram")
         resposta_final = await self._responder_ao_celular(destino, texto, execute_action)
         try:
             await self._append_conversation_message("user", texto, "telegram")
@@ -3539,6 +3547,10 @@ class IPCHandler:
         if destino == "claude":
             resultado = await execute_action("claude_enviar", texto=texto)
             if getattr(resultado, "success", False):
+                # ZARA-RESPOSTA-VOLTA-POR-ONDE-VEIO-001: fica marcado que ele
+                # está esperando ALI. Sem isso a resposta do Claude ficava presa
+                # no computador e ele, no celular, achava que eu tinha sumido.
+                self._pergunta_veio_do_celular = True
                 return "Entreguei ao Claude. Te aviso quando responder."
             return f"Não consegui: {getattr(resultado, 'error', 'motivo desconhecido')}"
 
@@ -3647,7 +3659,15 @@ class IPCHandler:
     # O tempo sem teclado continua existindo, mas só como segunda condição, com
     # uma folga grande — meia hora parado com a tela aberta é ele tendo saído
     # sem bloquear, não ele lendo.
-    _LONGE_APOS = 1800.0  # 30 min; folga generosa de propósito
+    # Trinta minutos era folga demais, e Alex pagou por isso: ele avisou que
+    # estava saindo para o trabalho, mandou mensagem poucos minutos depois, e
+    # pela minha conta ainda contava como presente — justamente na primeira
+    # meia hora, que é quando ele mais precisa de resposta no celular.
+    #
+    # Cinco minutos parado é gente que levantou. Ele lendo uma resposta longa
+    # continua protegido pelo outro lado da regra: pergunta feita no celular
+    # volta pelo celular sem consultar distância nenhuma.
+    _LONGE_APOS = 300.0  # 5 min
 
     @staticmethod
     def _ocioso_ha_quantos_segundos() -> float:
@@ -3692,7 +3712,33 @@ class IPCHandler:
         except Exception:
             return False  # na dúvida, ele está aqui
 
+    # ZARA-ONDE-ELE-ESTA-001
+    #
+    # Alex, depois de eu errar duas vezes seguidas o critério de presença:
+    #
+    #   "quando eu não digitar aqui nesse chat por trinta minutos, você já sabe
+    #    que eu não estou aqui, principalmente se eu digitar pelo Telegram e não
+    #    digitar aqui, porque sempre que eu estou aqui, eu digito aqui."
+    #
+    # A regra dele é melhor que a minha e por um motivo simples: eu estava
+    # adivinhando presença pelo teclado, e ele estava me dando um FATO. O canal
+    # que ele escolhe para falar é a prova de onde ele está — ninguém escreve no
+    # celular estando na frente do computador.
+    #
+    # O teclado continua valendo como segundo sinal, para o caso de ele estar no
+    # PC sem falar com ninguém. Mas o canal manda.
+    _JANELA_DO_CANAL = 30 * 60  # 30 minutos, palavra dele
+
+    def _marcar_canal(self, canal: str) -> None:
+        """Registra por onde ele acabou de falar. `telegram` ou `computador`."""
+        self._ultimo_canal = (canal, time.time())
+
     def _alex_esta_longe(self) -> bool:
+        canal, quando = getattr(self, "_ultimo_canal", ("", 0.0))
+        if canal and (time.time() - quando) < self._JANELA_DO_CANAL:
+            # Ele falou por algum canal há pouco: o canal responde a pergunta,
+            # e nenhum palpite sobre teclado ou tela vale mais que isso.
+            return canal == "telegram"
         if self._tela_bloqueada():
             return True
         return self._ocioso_ha_quantos_segundos() >= self._LONGE_APOS
@@ -3748,8 +3794,29 @@ class IPCHandler:
                 # teclado e o mouse dele. Mexendo no computador, ele já está
                 # lendo — vai só o aviso curto. Longe, vai o texto inteiro,
                 # porque a tela não serve para nada nesse caso.
-                if conteudo and self._alex_esta_longe():
+                # ZARA-RESPOSTA-VOLTA-POR-ONDE-VEIO-001
+                #
+                # A regra de "só manda se ele estiver longe" estava certa para
+                # aviso que ninguém pediu, e ERRADA para resposta a pergunta.
+                #
+                # O que aconteceu, no histórico de hoje às 20h43: ele escreveu
+                # "ta ai" pelo Telegram, a ZARA entregou para mim e respondeu a
+                # ele "te aviso quando responder". Eu respondi — no computador.
+                # A resposta ficou presa aqui porque ele estava perto do PC, e
+                # do lado dele foi silêncio. Ele passou vinte minutos perguntando
+                # à ZARA o que tinha acontecido comigo.
+                #
+                # Ele mesmo resumiu: "voce quebrou meu fluxo de trabalho, sem
+                # voce nao consegui fazer nada".
+                #
+                # A regra certa é a mais velha do mundo: **resposta volta por
+                # onde a pergunta veio**. Se ele perguntou pelo celular, a
+                # resposta vai ao celular, esteja ele onde estiver. A distância
+                # só decide o que fazer com aviso que ele NÃO pediu.
+                esperando = bool(getattr(self, "_pergunta_veio_do_celular", False))
+                if conteudo and (esperando or self._alex_esta_longe()):
                     await ponte.avisar(f"{texto}\n\n{conteudo}".strip())
+                    self._pergunta_veio_do_celular = False
                 else:
                     await ponte.avisar(texto)
 

@@ -26,9 +26,9 @@ def _handler(ocioso: float, bloqueada: bool = False):
 @pytest.mark.parametrize("ocioso,longe", [
     (0.0, False),       # digitando agora
     (5.0, False),       # acabou de parar
-    (300.0, False),     # LENDO uma resposta longa: foi o furo que o Alex achou
-    (900.0, False),     # quinze minutos lendo ainda e ele na cadeira
-    (1801.0, True),     # meia hora parado com a tela aberta: saiu sem bloquear
+    (120.0, False),     # LENDO uma resposta longa: o furo que ele achou primeiro
+    (299.0, False),     # quase cinco minutos: ainda pode estar lendo
+    (301.0, True),      # cinco minutos parado: levantou
 ])
 def test_tempo_parado_sozinho_nao_condena_ninguem(ocioso, longe):
     """A primeira versao dizia "longe" com 3 minutos parados.
@@ -60,3 +60,71 @@ def test_a_medicao_real_nao_explode():
 
     assert isinstance(valor, float)
     assert valor >= 0.0
+
+
+# ---------- ZARA-ONDE-ELE-ESTA-001 ----------
+#
+# Alex, depois de eu errar duas vezes seguidas o criterio de presenca:
+#
+#   "quando eu nao digitar aqui nesse chat por trinta minutos, voce ja sabe que
+#    eu nao estou aqui, principalmente se eu digitar pelo Telegram e nao digitar
+#    aqui, porque sempre que eu estou aqui, eu digito aqui."
+#
+# A regra dele e melhor que a minha: eu estava adivinhando presenca pelo
+# teclado, e ele estava me dando um FATO. Ninguem escreve no celular estando na
+# frente do computador.
+
+
+def _com_canal(canal, ha_quantos_segundos):
+    import time as _t
+    h = IPCHandler.__new__(IPCHandler)
+    h._ultimo_canal = (canal, _t.time() - ha_quantos_segundos)
+    h._tela_bloqueada = staticmethod(lambda: False)
+    h._ocioso_ha_quantos_segundos = staticmethod(lambda: 0.0)
+    return h
+
+
+def test_falou_pelo_telegram_significa_que_esta_no_telegram():
+    """O caso que quebrou o dia dele: saiu, escreveu do celular, e ficou sem
+    resposta porque o teclado do PC dizia que ele estava presente."""
+    assert _com_canal("telegram", 60)._alex_esta_longe() is True
+
+
+def test_digitou_no_app_significa_que_esta_no_computador():
+    assert _com_canal("computador", 60)._alex_esta_longe() is False
+
+
+def test_o_canal_vale_mais_que_o_teclado():
+    """Teclado parado nao pode contradizer o fato de ele ter escrito no app."""
+    h = _com_canal("computador", 30)
+    h._ocioso_ha_quantos_segundos = staticmethod(lambda: 99999.0)
+
+    assert h._alex_esta_longe() is False
+
+
+def test_o_canal_vale_mais_que_a_tela_bloqueada():
+    """Ele pode ter bloqueado a tela e continuar ali, de pe, olhando."""
+    h = _com_canal("computador", 30)
+    h._tela_bloqueada = staticmethod(lambda: True)
+
+    assert h._alex_esta_longe() is False
+
+
+def test_canal_velho_devolve_a_decisao_para_o_teclado():
+    """Passada a janela, o ultimo canal nao prova mais nada sobre agora."""
+    h = _com_canal("computador", IPCHandler._JANELA_DO_CANAL + 60)
+    h._ocioso_ha_quantos_segundos = staticmethod(lambda: 99999.0)
+
+    assert h._alex_esta_longe() is True
+
+
+def test_sem_canal_nenhum_cai_no_criterio_antigo():
+    h = IPCHandler.__new__(IPCHandler)
+    h._tela_bloqueada = staticmethod(lambda: True)
+    h._ocioso_ha_quantos_segundos = staticmethod(lambda: 0.0)
+
+    assert h._alex_esta_longe() is True
+
+
+def test_a_janela_e_a_que_ele_pediu():
+    assert IPCHandler._JANELA_DO_CANAL == 30 * 60

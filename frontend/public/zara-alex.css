@@ -682,3 +682,26 @@
 .zara-preview.theme-light .orb {
   filter: brightness(calc(var(--zara-anel-forca, 1) * .93)) saturate(1.62) contrast(1.46);
 }
+
+/* ---- paleta clara oficial ----
+   Hexes lidos direto da prancha que o Alex mandou, onde eles estao escritos
+   embaixo das amostras. Nada aqui e interpretacao minha. */
+.zara-preview.theme-light {
+  --page: #F3F0EA;
+  --window: #FAF8F4;
+  --sidebar: #F3F0EA;
+  --card: #EDE9E2;
+  --ink: #242321;
+  --muted: #85817A;
+  --accent: #72586F;
+  --accent-soft: rgba(114, 88, 111, .13);
+  --champagne: #C8B99E;
+  --ring: #C8B99E;
+  --line: rgba(36, 35, 33, .10);
+  --strong-line: rgba(36, 35, 33, .16);
+}
+/* Na prancha o anel e champanhe quente com um ponto branco de luz — nao rose.
+   O realce fica mais suave porque a cor ja tem corpo suficiente sozinha. */
+.zara-preview.theme-light .orb {
+  filter: brightness(calc(var(--zara-anel-forca, 1) * .98)) saturate(1.15) contrast(1.12);
+}

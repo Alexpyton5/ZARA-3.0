@@ -1,6 +1,7 @@
 import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
+import { PainelConfiguracoes, aplicarAparencia, usarAparencia } from './PainelConfiguracoes';
 import { ZaraLab } from './ZaraLab';
 import { normalizeReminderEvent } from '../../../reminderEvents';
 import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
@@ -78,8 +79,12 @@ function tomDoAutor(author: string): string {
 
 export const ZaraControlCenter: React.FC = () => {
   const [activeNav, setActiveNav] = useState('HOME');
-  // O tema de entrada é o escuro (Sage) — é assim na interface que Alex aprovou.
-  const [theme, setTheme] = useState<Theme>(() => localStorage.getItem('zara-tema') === 'light' ? 'light' : 'dark');
+  // O tema deixou de ser um interruptor: ele e uma consequencia da aparencia
+  // escolhida em Configuracoes, que tambem guarda cores, brilhos e tamanhos.
+  const { aparencia, setAparencia, tema } = usarAparencia();
+  const theme: Theme = tema === 'claro' ? 'light' : 'dark';
+  const [configAberta, setConfigAberta] = useState(false);
+  const raizRef = useRef<HTMLElement>(null);
   const [state, setState] = useState<VoiceState>('STANDBY');
   const [voiceLevel, setVoiceLevel] = useState(0.02);
   const [tomDaVoz, setTomDaVoz] = useState(0.45);
@@ -128,7 +133,8 @@ export const ZaraControlCenter: React.FC = () => {
     window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3200);
   }, []);
 
-  useEffect(() => { localStorage.setItem('zara-tema', theme); }, [theme]);
+  // Toda mudanca de regulador cai aqui e vira variavel CSS na hora.
+  useEffect(() => { aplicarAparencia(raizRef.current, aparencia); }, [aparencia]);
   useEffect(() => { localStorage.setItem('zara-painel', painel); }, [painel]);
   useEffect(() => { localStorage.setItem('zara-painel-visivel', painelVisivel ? 'sim' : 'nao'); }, [painelVisivel]);
 
@@ -547,7 +553,7 @@ export const ZaraControlCenter: React.FC = () => {
 
 
   return (
-    <main className={`zara-preview theme-${theme} ${classeDoAnel(state)}`}>
+    <main ref={raizRef} className={`zara-preview theme-${theme} ${classeDoAnel(state)}`}>
       <section className="desktop-frame" aria-label="Interface da ZARA">
         <section className="main-window">
           <aside className="sidebar">
@@ -568,7 +574,7 @@ export const ZaraControlCenter: React.FC = () => {
               <div className="online-row">
                 <i className={backendOnline ? 'online' : ''}/>
                 <span>{backendOnline ? 'ONLINE' : 'OFFLINE'}</span>
-                <button type="button" aria-label="Alternar tema" onClick={() => setTheme((c) => c === 'light' ? 'dark' : 'light')}><IconeTema/></button>
+                <button type="button" aria-label="Configurações de aparência" title="Aparência" onClick={() => setConfigAberta(true)}><IconeTema/></button>
               </div>
               <div className="user-row">
                 <img src="./avatar-alex.png?v=3" alt=""/>
@@ -722,6 +728,12 @@ export const ZaraControlCenter: React.FC = () => {
       </section>
 
       <div className="zara-toasts">{toasts.map((t) => <div key={t.id} className={`zara-toast ${t.kind || 'ok'}`}>{t.text}</div>)}</div>
+      <PainelConfiguracoes
+        aberto={configAberta}
+        onFechar={() => setConfigAberta(false)}
+        aparencia={aparencia}
+        onMudar={setAparencia}
+      />
       {galaxyOpen && <MemoryGalaxyModal onClose={() => setGalaxyOpen(false)}/>}
     </main>
   );

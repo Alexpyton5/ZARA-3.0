@@ -230,3 +230,45 @@
   background-image: url("./zara-brand-light.png");
   background-color: #f2eee9;
 }
+
+/* ---- baloes do Lab: uma caixa so, que cresce com o texto ----
+   Tinham altura minima e maxima fixas (86px a 100px). Texto maior que isso
+   vazava para fora — e o recorte da altura maxima era o "quadrado dentro da
+   caixa". Agora a caixa acompanha o texto e a lista e que rola. */
+.zara-preview .lab-messages { overflow-y: auto !important; padding-right: 2px; }
+.zara-preview .lab-messages article {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  border: 0 !important;
+  border-radius: 15px !important;
+  padding: 13px 14px !important;
+  margin-bottom: 10px !important;
+  overflow: visible !important;
+}
+.zara-preview .lab-messages p {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  margin-top: 6px !important;
+}
+
+/* ---- participantes: nome mais perto do circulo, conjunto mais alto ---- */
+.zara-preview .participants { padding-bottom: 20px !important; }
+.zara-preview .participants div { gap: 4px !important; }
+
+/* ---- simbolo do Claude maior dentro da bolinha ----
+   O arquivo oficial vem com folga em volta; o recorte redondo deixa ampliar
+   so o simbolo, sem mexer no tamanho do circulo. */
+.zara-preview .participants .foto-claude {
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  display: block;
+  overflow: hidden;
+  box-shadow: 0 9px 19px rgba(0,0,0,.28);
+}
+.zara-preview .participants .foto-claude img {
+  width: 100%; height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  transform: scale(1.34);
+}

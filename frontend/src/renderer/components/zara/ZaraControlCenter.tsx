@@ -568,7 +568,7 @@ export const ZaraControlCenter: React.FC = () => {
               ainda por cima vinha cortado. */}
           <img className="lab-watermark" src="./zara-brand-dark.png" alt=""/>
           <div className="participants">
-            <div><img src="./avatar-claude.png" alt="Claude"/><small>Claude</small></div>
+            <div><span className="foto-claude"><img src="./avatar-claude.png" alt="Claude"/></span><small>Claude</small></div>
             <div><img src="./avatar-openai.png" alt="OpenAI"/><small>OpenAI</small></div>
             <div><span className="avatar-marca zara" role="img" aria-label="ZARA"/><small>ZARA</small></div>
           </div>

@@ -793,3 +793,17 @@
 .zara-preview .orb .ring-base { animation: zaraGiroOrganico 34s ease-in-out infinite, orbBreath 5.8s ease-in-out infinite !important; }
 .zara-preview.orb-listening .orb .ring-base { animation: zaraGiroOrganico 24s ease-in-out infinite, orbBreath 4.2s ease-in-out infinite !important; }
 .zara-preview.orb-speaking .orb .ring-base { animation: zaraGiroOrganico 17s ease-in-out infinite, orbBreath 3.1s ease-in-out infinite !important; }
+
+/* ---- fios soltos uns dos outros ----
+   Cada copia do anel usa uma turbulencia com semente diferente, entao cada
+   camada de fios vibra no proprio ritmo. As opacidades somam ~1, e o
+   deslocamento e centrado em zero, entao a DISTANCIA media entre os fios nao
+   muda — que foi exatamente a condicao que o Alex deu. */
+.zara-preview .orb .ring-base.camada-0 { filter: url(#zara-cord-vibration) drop-shadow(0 0 8px var(--ring)); opacity: .62; }
+.zara-preview .orb .ring-base.camada-1 { filter: url(#zara-cord-vibration-1); opacity: .3; }
+.zara-preview .orb .ring-base.camada-2 { filter: url(#zara-cord-vibration-2); opacity: .22; }
+.zara-preview .orb .ring-base.camada-1,
+.zara-preview .orb .ring-base.camada-2 { animation-delay: -7s, -2.3s; }
+.zara-preview .orb .ring-base.camada-2 { animation-delay: -15s, -4.1s; }
+.theme-light .zara-preview .orb .ring-base.camada-0,
+.zara-preview.theme-light .orb .ring-base.camada-0 { filter: url(#zara-cord-vibration); }

@@ -123,8 +123,6 @@ export const ZaraControlCenter: React.FC = () => {
   const pendingHistoryMessagesRef = useRef<ChatMessage[]>([]);
   const autoVoiceStartedRef = useRef(false);
   const anelRef = useRef<HTMLDivElement>(null);
-  const turbulenciaRef = useRef<SVGFETurbulenceElement>(null);
-  const deslocamentoRef = useRef<SVGFEDisplacementMapElement>(null);
   const faiscasRef = useRef<HTMLCanvasElement>(null);
   // O laco de animacao le daqui em vez de depender das props, senao ele se
   // reinicia a cada quadro de voz e a animacao engasga.
@@ -342,9 +340,23 @@ export const ZaraControlCenter: React.FC = () => {
       // controlado: passar disso deixa o anel nervoso, que nao e o que ele quer.
       const escala = ativo ? 1.6 + energia * 12.5 : 0.5 + energia * 3.2;
       anel.setAttribute('data-cord-scale', escala.toFixed(2));
-      deslocamentoRef.current?.setAttribute('scale', escala.toFixed(2));
-      // A frequencia vertical acompanha o tom: voz mais aguda encrespa mais a corda.
-      turbulenciaRef.current?.setAttribute('baseFrequency', `${(0.0132 + tom * 0.0013).toFixed(4)} ${(0.063 + tom * 0.089).toFixed(4)}`);
+      // Cada camada tem sua propria escala e frequencia, defasadas no tempo. E
+      // isso que faz os fios parecerem SOLTOS uns dos outros em vez de um lencol
+      // unico deformando junto. O deslocamento e centrado em zero, entao a
+      // distancia media entre eles nao muda — a condicao que Alex deu.
+      const fases = [1, 0.82, 1.21];
+      const ritmos = [1, 1.37, 0.71];
+      for (let n = 0; n < 3; n++) {
+        const sufixo = n ? `-${n}` : '';
+        const balanco = 1 + Math.sin((agora / 1000) * (0.31 * ritmos[n]) + n * 2.1) * 0.28;
+        const alvoEscala = (escala * fases[n] * balanco).toFixed(2);
+        // A frequencia vertical acompanha o tom: voz mais aguda encrespa mais a corda.
+        const alvoFreq = `${(0.0132 + tom * 0.0013 + n * 0.0021).toFixed(4)} ${(0.063 + tom * 0.089 + n * 0.011).toFixed(4)}`;
+        document.querySelectorAll(`#zara-cord-vibration${sufixo} feDisplacementMap`)
+          .forEach((e) => e.setAttribute('scale', alvoEscala));
+        document.querySelectorAll(`#zara-cord-vibration${sufixo} feTurbulence`)
+          .forEach((e) => e.setAttribute('baseFrequency', alvoFreq));
+      }
 
       if (contexto) {
         const lado = canvas.clientWidth || 214;
@@ -622,15 +634,24 @@ export const ZaraControlCenter: React.FC = () => {
                 >
                   <svg className="orb-filter-defs" width="0" height="0" aria-hidden="true">
                     <defs>
-                      <filter id="zara-cord-vibration" x="-24%" y="-24%" width="148%" height="148%" colorInterpolationFilters="sRGB">
-                        <feTurbulence ref={turbulenciaRef} type="fractalNoise" baseFrequency="0.0132 0.0871" numOctaves={1} seed={7} result="cordNoise"/>
-                        <feDisplacementMap ref={deslocamentoRef} in="SourceGraphic" in2="cordNoise" scale="0" xChannelSelector="R" yChannelSelector="G"/>
-                      </filter>
+                      {[0, 1, 2].map((n) => (
+                        <filter key={n} id={`zara-cord-vibration${n ? `-${n}` : ''}`}
+                                x="-24%" y="-24%" width="148%" height="148%" colorInterpolationFilters="sRGB">
+                          <feTurbulence type="fractalNoise" baseFrequency="0.0132 0.0871"
+                                        numOctaves={1} seed={7 + n * 13} result="cordNoise"/>
+                          <feDisplacementMap in="SourceGraphic" in2="cordNoise" scale="0"
+                                             xChannelSelector="R" yChannelSelector="G"/>
+                        </filter>
+                      ))}
                     </defs>
                   </svg>
                   <canvas ref={faiscasRef} className="spectrum-canvas" aria-hidden="true" width={214} height={214}/>
-                  <img className="ring-light ring-base" src="./zara-ring-light.png?v=6" alt="Presença luminosa da ZARA"/>
-                  <img className="ring-dark ring-base" src="./zara-ring-dark.png?v=6" alt=""/>
+                  {[0, 1, 2].map((n) => (
+                    <React.Fragment key={n}>
+                      <img className={`ring-light ring-base camada-${n}`} src="./zara-ring-light.png?v=6" alt={n === 0 ? 'Presença luminosa da ZARA' : ''}/>
+                      <img className={`ring-dark ring-base camada-${n}`} src="./zara-ring-dark.png?v=6" alt=""/>
+                    </React.Fragment>
+                  ))}
                 </div>
 
                 <form className="command-bar" onSubmit={send}>

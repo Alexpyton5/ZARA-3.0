@@ -372,12 +372,16 @@ export const ZaraControlCenter: React.FC = () => {
           }
           const raio = lado * 0.331;
           const intensidade = (0.16 + energia * 0.9) * b.forca;
-          const meio = b.arco * (0.7 + energia * 0.8);
+          const meio = b.arco * (0.34 + energia * 0.5);   // mais curto = ponto, nao faixa
           const gradiente = contexto.createLinearGradient(
             cx + Math.cos(b.angulo - meio) * raio, cy + Math.sin(b.angulo - meio) * raio,
             cx + Math.cos(b.angulo + meio) * raio, cy + Math.sin(b.angulo + meio) * raio);
+          // Na referencia do Alex o ponto quente e BRANCO, com a cor do anel so
+          // na saida — e o que da a impressao de brasa correndo pelo fio.
           gradiente.addColorStop(0, 'rgba(255,255,255,0)');
-          gradiente.addColorStop(0.5, cor);
+          gradiente.addColorStop(0.32, cor);
+          gradiente.addColorStop(0.5, '#ffffff');
+          gradiente.addColorStop(0.68, cor);
           gradiente.addColorStop(1, 'rgba(255,255,255,0)');
           contexto.globalAlpha = mudo ? 0.04 : Math.min(0.92, intensidade);
           contexto.strokeStyle = gradiente;

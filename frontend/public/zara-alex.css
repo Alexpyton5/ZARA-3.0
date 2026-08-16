@@ -627,3 +627,12 @@
 @media (width <= 1260px) {
   .zara-preview .presence-stage::before { inset: -127px -22px -54px -26px !important; }
 }
+
+/* ---- o fundo atras do card Hoje acompanha o quadrado central ----
+   Alex: "esse fundo atras da barra deveria ficar da mesma cor do quadrado
+   central sem alterar a cor da barra". Entao a cor vai na area inteira
+   (.home-stage, que contem o palco E a coluna do card) e o card fica por cima
+   com a cor das barras. Isso tambem aposenta o truque de margens negativas
+   que eu tinha usado no ::before. */
+.zara-preview .home-stage { background: var(--zara-palco, transparent); }
+.zara-preview .presence-stage::before { display: none !important; }

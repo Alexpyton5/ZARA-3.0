@@ -580,3 +580,17 @@
 }
 .config-linha.cor input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
 .config-linha.cor input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
+
+/* ---- barras de rolagem ----
+   No tema claro elas apareciam pretas, porque a barra padrao do Chromium nao
+   sabe do nosso tema. */
+.zara-preview *, .config-painel, .config-painel * { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+.zara-preview ::-webkit-scrollbar,
+.config-painel::-webkit-scrollbar { width: 6px; height: 6px; }
+.zara-preview ::-webkit-scrollbar-track,
+.config-painel::-webkit-scrollbar-track { background: transparent; }
+.zara-preview ::-webkit-scrollbar-thumb,
+.config-painel::-webkit-scrollbar-thumb { border-radius: 3px; background: rgba(255,255,255,.14); }
+.zara-preview.theme-light ::-webkit-scrollbar-thumb,
+.zara-preview.theme-light .config-painel::-webkit-scrollbar-thumb { background: rgba(70,59,52,.16); }
+.zara-preview.theme-light *, .zara-preview.theme-light .config-painel { scrollbar-color: rgba(70,59,52,.22) transparent; }

@@ -243,7 +243,12 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
 
         <section>
           <h4>Fundo atrás do anel</h4>
-          <Cor rotulo="Cor" valor={aparencia.palco} onMudar={(v) => trocar('palco', v)}/>
+          {/* Escolher a cor com a intensidade em zero nao mudava nada na tela, e
+              dava a impressao de que o painel estava quebrado. Escolher a cor
+              acende sozinho; a intensidade continua no controle dele. */}
+          <Cor rotulo="Cor" valor={aparencia.palco}
+               onMudar={(v) => onMudar({ ...aparencia, palco: v,
+                 palcoForca: aparencia.palcoForca < 0.05 ? 0.35 : aparencia.palcoForca })}/>
           <Regulador rotulo="Intensidade" valor={aparencia.palcoForca} min={0} max={1} passo={0.02}
                      onMudar={(v) => trocar('palcoForca', v)}/>
         </section>

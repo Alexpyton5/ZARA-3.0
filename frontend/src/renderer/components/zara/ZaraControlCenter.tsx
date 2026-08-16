@@ -570,7 +570,7 @@ export const ZaraControlCenter: React.FC = () => {
           <div className="participants">
             <div><img src="./avatar-claude.png" alt="Claude"/><small>Claude</small></div>
             <div><img src="./avatar-openai.png" alt="OpenAI"/><small>OpenAI</small></div>
-            <div><img src="./avatar-zara.png" alt="ZARA"/><small>ZARA</small></div>
+            <div><span className="avatar-marca zara" role="img" aria-label="ZARA"/><small>ZARA</small></div>
           </div>
           <div className="lab-messages">
             {miniLabMessages.length === 0 ? (

@@ -197,3 +197,36 @@
   filter: brightness(0) !important;
   mix-blend-mode: normal !important;
 }
+
+/* ---- marca d'agua: mais alta e menor ----
+   Estava encostando nas bolas dos avatares. */
+.zara-preview .lab-watermark {
+  width: 148px !important;
+  top: 30px !important;
+  opacity: .42 !important;
+}
+
+/* ---- avatares de marca ----
+   O Claude passa a ter o simbolo dele, como a OpenAI ja tinha; a ZARA passa a
+   usar o proprio monograma em vez de uma foto. O recorte pega so o ZA, sem a
+   palavra ZARA que vem embaixo no arquivo. */
+.zara-preview .participants .avatar-marca {
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  display: block;
+  overflow: hidden;
+  box-shadow: 0 9px 19px rgba(0,0,0,.28);
+}
+.zara-preview .participants .avatar-marca svg { width: 100%; height: 100%; display: block; }
+.zara-preview .participants .avatar-marca.zara {
+  background-image: url("./zara-brand-dark.png");
+  background-size: 150% auto;
+  background-position: center 22%;
+  background-repeat: no-repeat;
+  background-color: #10120f;
+}
+.theme-light .zara-preview .participants .avatar-marca.zara,
+.zara-preview.theme-light .participants .avatar-marca.zara {
+  background-image: url("./zara-brand-light.png");
+  background-color: #f2eee9;
+}

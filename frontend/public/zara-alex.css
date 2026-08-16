@@ -604,3 +604,26 @@
   width: calc(var(--zara-anel-tamanho, 1) * clamp(350px, 28.8vw, 450px)) !important;
   transform: translateY(var(--zara-anel-y, -27px)) !important;
 }
+
+/* ---- agrupamento de cor pedido pelo Alex ----
+   UM controle para o quadrado central, OUTRO para as tres barras. As tres
+   (lateral, card Hoje e Lab/log) andam sempre juntas: mexeu numa, mexeu nas
+   tres. O Lab tinha um degrade proprio no CSS original e ficava de fora. */
+.zara-preview .lab-window {
+  background: var(--sidebar) !important;
+  border: 1px solid var(--line) !important;
+}
+.zara-preview .today-card { background: var(--sidebar) !important; }
+
+/* o quadrado central pinta a area inteira, nao so o miolo do palco.
+   Os valores negativos sao o padding do .home-stage (127 31 54 55) invertido. */
+.zara-preview .presence-stage::before {
+  inset: -127px -31px -54px -55px !important;
+  border-radius: 0 !important;
+}
+@media (height <= 790px) {
+  .zara-preview .presence-stage::before { inset: -76px -31px -28px -55px !important; }
+}
+@media (width <= 1260px) {
+  .zara-preview .presence-stage::before { inset: -127px -22px -54px -26px !important; }
+}

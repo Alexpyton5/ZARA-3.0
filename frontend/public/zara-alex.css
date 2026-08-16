@@ -404,15 +404,6 @@
 /* A OpenAI agora e o icone oficial de 180px, ja centrado no arquivo. */
 .zara-preview .participants img { object-position: center center; }
 
-/* ---- tema claro: matar o quadrado branco atras do anel ----
-   O PNG do anel claro tem fundo branco. Sobre a pagina creme isso vira uma
-   caixa branca chapada em volta do circulo — o que o Alex chamou de "morto".
-   multiply faz o branco desaparecer e deixa so os fios; nada de recortar
-   arquivo nem inventar tom. */
-.zara-preview.theme-light .orb .ring-light.ring-base {
-  mix-blend-mode: multiply;
-}
-.zara-preview.theme-light .spectrum-canvas { mix-blend-mode: multiply; }
 
 /* ---- marca d'agua clara: off-white quente, nao branco puro ----
    Branco puro sobre creme tambem fica morto. O sepia leve puxa para o marfim
@@ -422,16 +413,7 @@
   opacity: .72 !important;
 }
 
-/* O .orb tem isolation:isolate, que fecha a camada e impede o multiply de
-   alcancar a pagina atras — por isso o quadrado branco continuava. No tema
-   claro a camada fica aberta para o branco do PNG sumir no creme da pagina. */
-.zara-preview.theme-light .orb { isolation: auto !important; }
-.zara-preview.theme-light .presence-stage { isolation: auto; }
 
-/* O branco saiu do proprio arquivo do anel claro, entao o multiply nao e mais
-   necessario — e ele estava sujando os fios contra o creme da pagina. */
-.zara-preview.theme-light .orb .ring-light.ring-base { mix-blend-mode: normal; }
-.zara-preview.theme-light .spectrum-canvas { mix-blend-mode: normal; }
 
 /* ---- letras dos baloes: maiores e mais encorpadas ----
    Alex: "muito finas e pequenas". Eram 11px em peso normal dentro de um painel
@@ -518,13 +500,6 @@
   z-index: 0;
 }
 
-/* forca e brilho do anel */
-.zara-preview .orb .ring-base {
-  filter: url(#zara-cord-vibration)
-          drop-shadow(0 0 var(--zara-anel-brilho, 8px) var(--ring))
-          brightness(calc(var(--zara-anel-forca, 1) * (1 + var(--audio-level) * .42)))
-          saturate(calc(1.06 + var(--audio-level) * .62)) !important;
-}
 
 /* cor das logos */
 .zara-preview .lab-watermark {
@@ -672,3 +647,18 @@
 }
 .config-padrao:hover { background: var(--accent); transform: translateY(-50%) scale(1.35); }
 .config-padrao.no-lugar { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+
+
+/* ---- reguladores do anel, sem substituir o filtro do Alex ----
+   A versao anterior REESCREVIA o filter inteiro e por isso destruia o desenho:
+   o drop-shadow espalhava a partir da silhueta e virava um halo fora dos fios.
+   Aqui o filtro original dele continua intacto no CSS acima; a cor, a forca e o
+   brilho entram como uma camada por cima, aplicada no container. Mexer nos
+   reguladores nao pode mais deformar nem borrar o traco.
+   Alex: "nada disso pode perder a qualidade ou deformar". */
+.zara-preview .orb {
+  filter: brightness(var(--zara-anel-forca, 1)) saturate(var(--zara-anel-sat, 1));
+}
+.zara-preview .presence-stage {
+  --zara-halo: transparent;
+}

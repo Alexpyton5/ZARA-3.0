@@ -558,8 +558,8 @@ export const ZaraControlCenter: React.FC = () => {
         <section className="main-window">
           <aside className="sidebar">
             <button type="button" className="brand" aria-label="ZARA" onClick={() => setActiveNav('HOME')}>
-              <img className="brand-light" src="./zara-brand-light.png?v=3" alt="ZARA"/>
-              <img className="brand-dark" src="./zara-brand-dark.png?v=3" alt="ZARA"/>
+              <img className="brand-light" src="./zara-brand-light.png?v=5" alt="ZARA"/>
+              <img className="brand-dark" src="./zara-brand-dark.png?v=5" alt="ZARA"/>
             </button>
 
             <nav aria-label="Navegação principal">
@@ -577,7 +577,7 @@ export const ZaraControlCenter: React.FC = () => {
                 <button type="button" aria-label="Configurações de aparência" title="Aparência" onClick={() => setConfigAberta(true)}><IconeTema/></button>
               </div>
               <div className="user-row">
-                <img src="./avatar-alex.png?v=3" alt=""/>
+                <img src="./avatar-alex.png?v=5" alt=""/>
                 <span>⌄</span>
               </div>
             </footer>
@@ -607,8 +607,8 @@ export const ZaraControlCenter: React.FC = () => {
                     </defs>
                   </svg>
                   <canvas ref={faiscasRef} className="spectrum-canvas" aria-hidden="true" width={214} height={214}/>
-                  <img className="ring-light ring-base" src="./zara-ring-light.png?v=3" alt="Presença luminosa da ZARA"/>
-                  <img className="ring-dark ring-base" src="./zara-ring-dark.png?v=3" alt=""/>
+                  <img className="ring-light ring-base" src="./zara-ring-light.png?v=5" alt="Presença luminosa da ZARA"/>
+                  <img className="ring-dark ring-base" src="./zara-ring-dark.png?v=5" alt=""/>
                 </div>
 
                 <form className="command-bar" onSubmit={send}>
@@ -686,10 +686,10 @@ export const ZaraControlCenter: React.FC = () => {
           {/* A marca d'agua e a MESMA logo da barra lateral, so que apagada em preto
               fosco pelo CSS. O arquivo separado que veio pronto era outro desenho e
               ainda por cima vinha cortado. */}
-          <img className="lab-watermark" src="./zara-brand-dark.png?v=3" alt=""/>
+          <img className="lab-watermark" src="./zara-brand-dark.png?v=5" alt=""/>
           <div className="participants">
-            <div><span className="foto-claude"><img src="./avatar-claude.png?v=3" alt="Claude"/></span><small>Claude</small></div>
-            <div><img src="./avatar-openai.png?v=3" alt="OpenAI"/><small>OpenAI</small></div>
+            <div><span className="foto-claude"><img src="./avatar-claude.png?v=5" alt="Claude"/></span><small>Claude</small></div>
+            <div><img src="./avatar-openai.png?v=5" alt="OpenAI"/><small>OpenAI</small></div>
             <div><span className="avatar-marca zara" role="img" aria-label="ZARA"/><small>ZARA</small></div>
           </div>
           <div className="lab-messages">

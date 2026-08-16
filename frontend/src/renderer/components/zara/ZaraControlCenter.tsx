@@ -107,6 +107,13 @@ export const ZaraControlCenter: React.FC = () => {
   const historyReadyRef = useRef(false);
   const pendingHistoryMessagesRef = useRef<ChatMessage[]>([]);
   const autoVoiceStartedRef = useRef(false);
+  const anelRef = useRef<HTMLDivElement>(null);
+  const turbulenciaRef = useRef<SVGFETurbulenceElement>(null);
+  const deslocamentoRef = useRef<SVGFEDisplacementMapElement>(null);
+  const faiscasRef = useRef<HTMLCanvasElement>(null);
+  // O laco de animacao le daqui em vez de depender das props, senao ele se
+  // reinicia a cada quadro de voz e a animacao engasga.
+  const vivoRef = useRef({ estado: 'STANDBY' as VoiceState, nivel: 0.02, tom: 0.45 });
 
   const notify = useCallback((text: string, kind: Toast['kind'] = 'ok') => {
     toastIdRef.current += 1;
@@ -253,6 +260,106 @@ export const ZaraControlCenter: React.FC = () => {
       offs.forEach((off) => off());
     };
   }, [notify, ligarAecSePreciso]);
+
+  useEffect(() => { vivoRef.current = { estado: state, nivel: voiceLevel, tom: tomDaVoz }; }, [state, voiceLevel, tomDaVoz]);
+
+  // ZARA-ANEL-VIVO-001
+  // O anel do Alex nao "gira": ele TREME. Tres coisas fazem isso, e nenhuma
+  // delas eu tinha: o deslocamento em pixel (--jitter-x/y), a frequencia da
+  // turbulencia acompanhando o tom da voz, e os pontinhos de luz no canvas.
+  // Sem elas o desenho parece um GIF girando.
+  useEffect(() => {
+    const anel = anelRef.current;
+    const canvas = faiscasRef.current;
+    if (!anel || !canvas) return;
+    const contexto = canvas.getContext('2d');
+    const semMovimento = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+
+    const faiscas = Array.from({ length: 30 }, (_, i) => {
+      const r = (n: number) => { const v = Math.sin((i + 1) * (12.9898 + n * 7.233)) * 43758.5453; return v - Math.floor(v); };
+      return {
+        angulo: r(0.11) * Math.PI * 2,
+        velocidade: (r(0.37) > 0.5 ? 1 : -1) * (0.04 + r(0.53) * 0.16),
+        raio: 0.298 + r(0.71) * 0.062,
+        tamanho: 0.7 + r(0.89) * 1.5,
+        fase: r(1.13) * Math.PI * 2,
+        cintilar: 1.1 + r(1.31) * 2.4,
+      };
+    });
+
+    let jx = 0, jy = 0, alvoX = 0, alvoY = 0, energia = 0.02;
+    let quadro = 0, anterior = performance.now();
+
+    const passo = (agora: number) => {
+      const dt = Math.min(0.05, Math.max(0.001, (agora - anterior) / 1000));
+      anterior = agora;
+      const { estado, nivel, tom } = vivoRef.current;
+      const ativo = estado === 'SPEAKING' || estado === 'LISTENING';
+      const mudo = estado === 'MUTED' || estado === 'SLEEPING';
+      const alvo = mudo ? 0.012 : ativo ? Math.max(nivel, 0.08) : 0.045;
+      energia += (alvo - energia) * Math.min(1, dt * 6);
+
+      if (!semMovimento) {
+        // Tremor: um alvo novo de vez em quando e o anel perseguindo ele. Sorteio
+        // a cada quadro daria chiado de TV, nao vibracao de corda.
+        if (Math.random() < 0.22) {
+          const amplitude = energia * 2.6;
+          alvoX = (Math.random() * 2 - 1) * amplitude;
+          alvoY = (Math.random() * 2 - 1) * amplitude;
+        }
+        jx += (alvoX - jx) * Math.min(1, dt * 14);
+        jy += (alvoY - jy) * Math.min(1, dt * 14);
+      }
+
+      anel.style.setProperty('--audio-level', energia.toFixed(3));
+      anel.style.setProperty('--audio-tone', tom.toFixed(3));
+      anel.style.setProperty('--jitter-x', `${jx.toFixed(2)}px`);
+      anel.style.setProperty('--jitter-y', `${jy.toFixed(2)}px`);
+
+      const escala = ativo ? 1.3 + energia * 11 : energia * 2.2;
+      anel.setAttribute('data-cord-scale', escala.toFixed(2));
+      deslocamentoRef.current?.setAttribute('scale', escala.toFixed(2));
+      // A frequencia vertical acompanha o tom: voz mais aguda encrespa mais a corda.
+      turbulenciaRef.current?.setAttribute('baseFrequency', `${(0.0129 + tom * 0.0011).toFixed(4)} ${(0.055 + tom * 0.075).toFixed(4)}`);
+
+      if (contexto) {
+        const lado = canvas.clientWidth || 214;
+        const dpr = window.devicePixelRatio || 1;
+        if (canvas.width !== Math.round(lado * dpr)) {
+          canvas.width = Math.round(lado * dpr);
+          canvas.height = Math.round(lado * dpr);
+        }
+        contexto.setTransform(dpr, 0, 0, dpr, 0, 0);
+        contexto.clearRect(0, 0, lado, lado);
+        const cx = lado / 2, cy = lado / 2;
+        const segundos = agora / 1000;
+        for (const f of faiscas) {
+          if (!semMovimento) f.angulo += f.velocidade * dt;
+          const pulsa = 0.5 + 0.5 * Math.sin(segundos * f.cintilar + f.fase);
+          const alfa = mudo ? 0.05 : (0.12 + energia * 0.75) * pulsa;
+          if (alfa < 0.02) continue;
+          const raio = lado * (f.raio + Math.sin(segundos * 0.4 + f.fase) * 0.006);
+          const x = cx + Math.cos(f.angulo) * raio;
+          const y = cy + Math.sin(f.angulo) * raio;
+          const tamanho = f.tamanho * (0.75 + energia * 0.9);
+          contexto.globalAlpha = Math.min(1, alfa);
+          contexto.fillStyle = '#f3f7ef';
+          contexto.shadowColor = 'rgba(214,235,205,.9)';
+          contexto.shadowBlur = 5 + energia * 9;
+          contexto.beginPath();
+          contexto.arc(x, y, tamanho, 0, Math.PI * 2);
+          contexto.fill();
+        }
+        contexto.globalAlpha = 1;
+        contexto.shadowBlur = 0;
+      }
+
+      quadro = window.requestAnimationFrame(passo);
+    };
+
+    quadro = window.requestAnimationFrame(passo);
+    return () => window.cancelAnimationFrame(quadro);
+  }, []);
 
   const refreshMiniLab = useCallback(async () => {
     try {
@@ -432,11 +539,6 @@ export const ZaraControlCenter: React.FC = () => {
     setActiveNav(key);
   };
 
-  // A deformação da corda vem do nível de voz real, não de um timer. É o mesmo
-  // mecanismo do desenho do Alex: um filtro de turbulência cuja escala cresce
-  // quando ela ouve ou fala.
-  const nivel = Math.max(0, Math.min(1, voiceLevel));
-  const escalaDaCorda = state === 'LISTENING' || state === 'SPEAKING' ? (1.2 + nivel * 9.5) : nivel * 1.6;
 
   return (
     <main className={`zara-preview theme-${theme} ${classeDoAnel(state)}`}>
@@ -480,22 +582,19 @@ export const ZaraControlCenter: React.FC = () => {
             <section className="home-stage">
               <div className="presence-stage">
                 <div
+                  ref={anelRef}
                   className="orb"
                   aria-label={`Estado do anel: ${state.toLowerCase()}`}
-                  style={{
-                    ['--audio-level' as any]: nivel.toFixed(3),
-                    ['--audio-tone' as any]: tomDaVoz.toFixed(3),
-                  }}
                 >
                   <svg className="orb-filter-defs" width="0" height="0" aria-hidden="true">
                     <defs>
                       <filter id="zara-cord-vibration" x="-24%" y="-24%" width="148%" height="148%" colorInterpolationFilters="sRGB">
-                        <feTurbulence type="fractalNoise" baseFrequency="0.0132 0.0871" numOctaves={1} seed={7} result="cordNoise"/>
-                        <feDisplacementMap in="SourceGraphic" in2="cordNoise" scale={escalaDaCorda} xChannelSelector="R" yChannelSelector="G"/>
+                        <feTurbulence ref={turbulenciaRef} type="fractalNoise" baseFrequency="0.0132 0.0871" numOctaves={1} seed={7} result="cordNoise"/>
+                        <feDisplacementMap ref={deslocamentoRef} in="SourceGraphic" in2="cordNoise" scale="0" xChannelSelector="R" yChannelSelector="G"/>
                       </filter>
                     </defs>
                   </svg>
-                  <canvas className="spectrum-canvas" aria-hidden="true" width={194} height={194}/>
+                  <canvas ref={faiscasRef} className="spectrum-canvas" aria-hidden="true" width={214} height={214}/>
                   <img className="ring-light ring-base" src="./zara-ring-light.png" alt="Presença luminosa da ZARA"/>
                   <img className="ring-dark ring-base" src="./zara-ring-dark.png" alt=""/>
                 </div>

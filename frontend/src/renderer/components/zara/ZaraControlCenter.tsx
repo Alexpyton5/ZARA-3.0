@@ -1,5 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { LoaderCircle, Send } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
 import { ZaraLab } from './ZaraLab';
 import { normalizeReminderEvent } from '../../../reminderEvents';
@@ -25,6 +25,12 @@ const IconeSino = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="
 const IconeEscrever = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>;
 const IconeMic = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3ZM5 11a7 7 0 0 0 14 0M12 18v3"/></svg>;
 const IconeMicMudo = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M9 9v3a3 3 0 0 0 4.6 2.5M15 11.5V6a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 10.5 6M12 18v3"/></svg>;
+const IconeAviao = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+          d="M21 3 3 10.2l7.4 2.9L13.3 21 21 3Z"/>
+  </svg>
+);
 const IconeSol = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.6"/><path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>;
 const IconeTema = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M4 7h4M12 7h8M4 17h8M16 17h4M10 4v6M14 14v6"/></svg>;
 
@@ -546,8 +552,8 @@ export const ZaraControlCenter: React.FC = () => {
         <section className="main-window">
           <aside className="sidebar">
             <button type="button" className="brand" aria-label="ZARA" onClick={() => setActiveNav('HOME')}>
-              <img className="brand-light" src="./zara-brand-light.png" alt="ZARA"/>
-              <img className="brand-dark" src="./zara-brand-dark.png" alt="ZARA"/>
+              <img className="brand-light" src="./zara-brand-light.png?v=3" alt="ZARA"/>
+              <img className="brand-dark" src="./zara-brand-dark.png?v=3" alt="ZARA"/>
             </button>
 
             <nav aria-label="Navegação principal">
@@ -565,7 +571,7 @@ export const ZaraControlCenter: React.FC = () => {
                 <button type="button" aria-label="Alternar tema" onClick={() => setTheme((c) => c === 'light' ? 'dark' : 'light')}><IconeTema/></button>
               </div>
               <div className="user-row">
-                <img src="./avatar-alex.png" alt=""/>
+                <img src="./avatar-alex.png?v=3" alt=""/>
                 <span>⌄</span>
               </div>
             </footer>
@@ -595,8 +601,8 @@ export const ZaraControlCenter: React.FC = () => {
                     </defs>
                   </svg>
                   <canvas ref={faiscasRef} className="spectrum-canvas" aria-hidden="true" width={214} height={214}/>
-                  <img className="ring-light ring-base" src="./zara-ring-light.png" alt="Presença luminosa da ZARA"/>
-                  <img className="ring-dark ring-base" src="./zara-ring-dark.png" alt=""/>
+                  <img className="ring-light ring-base" src="./zara-ring-light.png?v=3" alt="Presença luminosa da ZARA"/>
+                  <img className="ring-dark ring-base" src="./zara-ring-dark.png?v=3" alt=""/>
                 </div>
 
                 <form className="command-bar" onSubmit={send}>
@@ -665,10 +671,10 @@ export const ZaraControlCenter: React.FC = () => {
           {/* A marca d'agua e a MESMA logo da barra lateral, so que apagada em preto
               fosco pelo CSS. O arquivo separado que veio pronto era outro desenho e
               ainda por cima vinha cortado. */}
-          <img className="lab-watermark" src="./zara-brand-dark.png" alt=""/>
+          <img className="lab-watermark" src="./zara-brand-dark.png?v=3" alt=""/>
           <div className="participants">
-            <div><span className="foto-claude"><img src="./avatar-claude.png" alt="Claude"/></span><small>Claude</small></div>
-            <div><img src="./avatar-openai.png" alt="OpenAI"/><small>OpenAI</small></div>
+            <div><span className="foto-claude"><img src="./avatar-claude.png?v=3" alt="Claude"/></span><small>Claude</small></div>
+            <div><img src="./avatar-openai.png?v=3" alt="OpenAI"/><small>OpenAI</small></div>
             <div><span className="avatar-marca zara" role="img" aria-label="ZARA"/><small>ZARA</small></div>
           </div>
           <div className="lab-messages">
@@ -685,7 +691,7 @@ export const ZaraControlCenter: React.FC = () => {
           <form className="lab-composer" onSubmit={sendMiniLab}>
             <input value={miniLabInput} onChange={(e) => setMiniLabInput(e.target.value)} placeholder="Participar da conversa..." aria-label="Mensagem para o ZARA Lab"/>
             <button type="submit" disabled={miniLabBusy || !miniLabInput.trim()} aria-label="Enviar">
-              {miniLabBusy ? <LoaderCircle className="spin" size={15}/> : <Send size={16}/>}
+              {miniLabBusy ? <LoaderCircle className="spin" size={15}/> : <IconeAviao/>}
             </button>
           </form>
           <button type="button" className={`hermes ${supercerebro ? 'ativo' : ''}`} onClick={() => void toggleSuper()}>

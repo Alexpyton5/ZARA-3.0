@@ -482,3 +482,13 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--muted) 30%, transparent);
 }
+
+/* ---- ZARA no circulo: numeros medidos no arquivo claro ----
+   monograma = 66,7% da largura, centro a 45,3% da altura. Para ele ocupar 88%
+   do circulo de 50px: 132% de escala, e -4px de deslocamento vertical para o
+   centro do desenho cair no centro da bolinha. */
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 132% auto !important;
+  background-position: center -4px !important;
+}
+.zara-preview .lab-composer button svg { width: 19px; height: 19px; }

@@ -81,7 +81,7 @@ export const ZaraControlCenter: React.FC = () => {
   const [activeNav, setActiveNav] = useState('HOME');
   // O tema deixou de ser um interruptor: ele e uma consequencia da aparencia
   // escolhida em Configuracoes, que tambem guarda cores, brilhos e tamanhos.
-  const { aparencia, setAparencia, tema } = usarAparencia();
+  const { aparencia, setAparencia, tema, desfazer, refazer, temPassado, temFuturo } = usarAparencia();
   const theme: Theme = tema === 'claro' ? 'light' : 'dark';
   const [configAberta, setConfigAberta] = useState(false);
   const raizRef = useRef<HTMLElement>(null);
@@ -742,6 +742,10 @@ export const ZaraControlCenter: React.FC = () => {
         onFechar={() => setConfigAberta(false)}
         aparencia={aparencia}
         onMudar={setAparencia}
+        onDesfazer={desfazer}
+        onRefazer={refazer}
+        temPassado={temPassado}
+        temFuturo={temFuturo}
       />
       {galaxyOpen && <MemoryGalaxyModal onClose={() => setGalaxyOpen(false)}/>}
     </main>

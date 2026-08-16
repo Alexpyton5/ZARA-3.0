@@ -641,3 +641,34 @@
 .zara-preview .window-controls button { font-size: 0 !important; }
 .zara-preview .window-controls svg { width: 12px; height: 12px; display: block; opacity: .82; }
 .zara-preview .window-controls button:hover svg { opacity: 1; }
+
+/* ---- desfazer / refazer ---- */
+.config-historico { display: flex; align-items: center; gap: 2px; }
+.config-historico button { width: 28px; height: 28px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 15px; line-height: 1; }
+.config-historico button:hover:not(:disabled) { color: var(--ink); background: var(--card); }
+.config-historico button:disabled { opacity: .3; cursor: default; }
+.config-historico button:last-child { font-size: 20px; }
+
+/* ---- trilho com marcas e o ponto do padrao ---- */
+.config-trilho { position: relative; display: flex; align-items: center; height: 20px; }
+.config-trilho input[type="range"] {
+  width: 100%;
+  background-image: repeating-linear-gradient(to right,
+    color-mix(in srgb, var(--muted) 42%, transparent) 0 1px,
+    transparent 1px 10%);
+}
+/* O ponto do padrao: maior que as marcas, para ele achar de onde saiu. */
+.config-padrao {
+  position: absolute;
+  top: 50%;
+  width: 9px; height: 9px;
+  margin-left: -4.5px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 62%, transparent);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.config-padrao:hover { background: var(--accent); transform: translateY(-50%) scale(1.35); }
+.config-padrao.no-lugar { background: color-mix(in srgb, var(--accent) 55%, transparent); }

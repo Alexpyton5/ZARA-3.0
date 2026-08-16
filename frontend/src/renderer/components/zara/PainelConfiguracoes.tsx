@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Configurações da aparência da ZARA.
@@ -169,6 +169,10 @@ interface Props {
   onFechar: () => void;
   aparencia: Aparencia;
   onMudar: (a: Aparencia) => void;
+  onDesfazer: () => void;
+  onRefazer: () => void;
+  temPassado: boolean;
+  temFuturo: boolean;
 }
 
 interface RegProps {
@@ -178,17 +182,32 @@ interface RegProps {
   max: number;
   passo: number;
   sufixo?: string;
+  padrao?: number;
   onMudar: (v: number) => void;
 }
 
-const Regulador: React.FC<RegProps> = ({ rotulo, valor, min, max, passo, sufixo, onMudar }) => (
-  <label className="config-linha">
-    <span>{rotulo}</span>
-    <input type="range" min={min} max={max} step={passo} value={valor}
-           onChange={(e) => onMudar(Number(e.target.value))}/>
-    <small>{valor}{sufixo || ''}</small>
-  </label>
-);
+const Regulador: React.FC<RegProps> = ({ rotulo, valor, min, max, passo, sufixo, padrao, onMudar }) => {
+  // O ponto maior marca onde era o padrao. Clicar nele devolve so esta linha,
+  // sem mexer no resto — bem mais fino que o "voltar ao padrao" geral.
+  const posicao = padrao === undefined ? null : ((padrao - min) / (max - min)) * 100;
+  return (
+    <label className="config-linha">
+      <span>{rotulo}</span>
+      <div className="config-trilho">
+        <input type="range" min={min} max={max} step={passo} value={valor}
+               onChange={(e) => onMudar(Number(e.target.value))}/>
+        {posicao !== null && (
+          <button type="button" className={`config-padrao ${valor === padrao ? 'no-lugar' : ''}`}
+                  style={{ left: `${posicao}%` }}
+                  title={`Padrão: ${padrao}${sufixo || ''} — clique para voltar`}
+                  aria-label={`Voltar ao padrão desta opção (${padrao}${sufixo || ''})`}
+                  onClick={(e) => { e.preventDefault(); onMudar(padrao as number); }}/>
+        )}
+      </div>
+      <small>{valor}{sufixo || ''}</small>
+    </label>
+  );
+};
 
 const Cor: React.FC<{ rotulo: string; valor: string; onMudar: (v: string) => void }> = ({ rotulo, valor, onMudar }) => (
   <label className="config-linha cor">
@@ -198,7 +217,7 @@ const Cor: React.FC<{ rotulo: string; valor: string; onMudar: (v: string) => voi
   </label>
 );
 
-export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparencia, onMudar }) => {
+export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparencia, onMudar, onDesfazer, onRefazer, temPassado, temFuturo }) => {
   const trocar = useCallback(<K extends keyof Aparencia>(campo: K, valor: Aparencia[K]) => {
     onMudar({ ...aparencia, [campo]: valor });
   }, [aparencia, onMudar]);
@@ -210,6 +229,9 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
     return () => window.removeEventListener('keydown', aoTeclar);
   }, [aberto, onFechar]);
 
+  // De onde saem os pontinhos: o padrao do modo em que ele esta.
+  const padroes = aparencia.modo === 'claro' ? APARENCIA_PADRAO_CLARA : APARENCIA_PADRAO;
+
   if (!aberto) return null;
 
   return (
@@ -217,7 +239,11 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
       <aside className="config-painel" onClick={(e) => e.stopPropagation()} aria-label="Configurações de aparência">
         <header>
           <strong>Aparência</strong>
-          <button type="button" onClick={onFechar} aria-label="Fechar">×</button>
+          <div className="config-historico">
+            <button type="button" onClick={onDesfazer} disabled={!temPassado} title="Desfazer" aria-label="Desfazer">↶</button>
+            <button type="button" onClick={onRefazer} disabled={!temFuturo} title="Refazer" aria-label="Refazer">↷</button>
+            <button type="button" onClick={onFechar} aria-label="Fechar">×</button>
+          </div>
         </header>
 
         <section>
@@ -235,20 +261,20 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
 
         <section>
           <h4>Texto</h4>
-          <Regulador rotulo="Tamanho no Lab e no log" valor={aparencia.fonteLab} min={11} max={20} passo={1} sufixo="px"
+          <Regulador rotulo="Tamanho no Lab e no log" valor={aparencia.fonteLab} padrao={padroes.fonteLab} min={11} max={20} passo={1} sufixo="px"
                      onMudar={(v) => trocar('fonteLab', v)}/>
         </section>
 
         <section>
           <h4>Anel</h4>
           <Cor rotulo="Cor" valor={aparencia.anel} onMudar={(v) => trocar('anel', v)}/>
-          <Regulador rotulo="Força" valor={aparencia.forcaAnel} min={0.4} max={2} passo={0.05}
+          <Regulador rotulo="Força" valor={aparencia.forcaAnel} padrao={padroes.forcaAnel} min={0.4} max={2} passo={0.05}
                      onMudar={(v) => trocar('forcaAnel', v)}/>
-          <Regulador rotulo="Brilho" valor={aparencia.brilhoAnel} min={0} max={30} passo={1} sufixo="px"
+          <Regulador rotulo="Brilho" valor={aparencia.brilhoAnel} padrao={padroes.brilhoAnel} min={0} max={30} passo={1} sufixo="px"
                      onMudar={(v) => trocar('brilhoAnel', v)}/>
-          <Regulador rotulo="Altura" valor={aparencia.anelAltura} min={-140} max={90} passo={1} sufixo="px"
+          <Regulador rotulo="Altura" valor={aparencia.anelAltura} padrao={padroes.anelAltura} min={-140} max={90} passo={1} sufixo="px"
                      onMudar={(v) => trocar('anelAltura', v)}/>
-          <Regulador rotulo="Tamanho" valor={aparencia.anelTamanho} min={0.6} max={1.4} passo={0.01}
+          <Regulador rotulo="Tamanho" valor={aparencia.anelTamanho} padrao={padroes.anelTamanho} min={0.6} max={1.4} passo={0.01}
                      onMudar={(v) => trocar('anelTamanho', v)}/>
         </section>
 
@@ -260,37 +286,37 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
           <Cor rotulo="Cor" valor={aparencia.palco}
                onMudar={(v) => onMudar({ ...aparencia, palco: v,
                  palcoForca: aparencia.palcoForca < 0.05 ? 0.35 : aparencia.palcoForca })}/>
-          <Regulador rotulo="Intensidade" valor={aparencia.palcoForca} min={0} max={1} passo={0.02}
+          <Regulador rotulo="Intensidade" valor={aparencia.palcoForca} padrao={padroes.palcoForca} min={0} max={1} passo={0.02}
                      onMudar={(v) => trocar('palcoForca', v)}/>
         </section>
 
         <section>
           <h4>Laterais e painéis</h4>
           <Cor rotulo="Cor" valor={aparencia.barra} onMudar={(v) => trocar('barra', v)}/>
-          <Regulador rotulo="Opacidade" valor={aparencia.barraOpacidade} min={0.2} max={1} passo={0.02}
+          <Regulador rotulo="Opacidade" valor={aparencia.barraOpacidade} padrao={padroes.barraOpacidade} min={0.2} max={1} passo={0.02}
                      onMudar={(v) => trocar('barraOpacidade', v)}/>
           <Cor rotulo="Destaque" valor={aparencia.acento} onMudar={(v) => trocar('acento', v)}/>
         </section>
 
         <section>
           <h4>Logo do início</h4>
-          <Regulador rotulo="Cor" valor={aparencia.logoMatiz} min={0} max={360} passo={1} sufixo="°"
+          <Regulador rotulo="Cor" valor={aparencia.logoMatiz} padrao={padroes.logoMatiz} min={0} max={360} passo={1} sufixo="°"
                      onMudar={(v) => trocar('logoMatiz', v)}/>
-          <Regulador rotulo="Saturação" valor={aparencia.logoSaturacao} min={0} max={2} passo={0.05}
+          <Regulador rotulo="Saturação" valor={aparencia.logoSaturacao} padrao={padroes.logoSaturacao} min={0} max={2} passo={0.05}
                      onMudar={(v) => trocar('logoSaturacao', v)}/>
-          <Regulador rotulo="Reluzência" valor={aparencia.logoBrilho} min={0.2} max={2.4} passo={0.05}
+          <Regulador rotulo="Reluzência" valor={aparencia.logoBrilho} padrao={padroes.logoBrilho} min={0.2} max={2.4} passo={0.05}
                      onMudar={(v) => trocar('logoBrilho', v)}/>
         </section>
 
         <section>
           <h4>Marca d'água do Lab e do log</h4>
-          <Regulador rotulo="Cor" valor={aparencia.aguaMatiz} min={0} max={360} passo={1} sufixo="°"
+          <Regulador rotulo="Cor" valor={aparencia.aguaMatiz} padrao={padroes.aguaMatiz} min={0} max={360} passo={1} sufixo="°"
                      onMudar={(v) => trocar('aguaMatiz', v)}/>
-          <Regulador rotulo="Saturação" valor={aparencia.aguaSaturacao} min={0} max={2} passo={0.05}
+          <Regulador rotulo="Saturação" valor={aparencia.aguaSaturacao} padrao={padroes.aguaSaturacao} min={0} max={2} passo={0.05}
                      onMudar={(v) => trocar('aguaSaturacao', v)}/>
-          <Regulador rotulo="Reluzência" valor={aparencia.aguaBrilho} min={0.2} max={2.4} passo={0.05}
+          <Regulador rotulo="Reluzência" valor={aparencia.aguaBrilho} padrao={padroes.aguaBrilho} min={0.2} max={2.4} passo={0.05}
                      onMudar={(v) => trocar('aguaBrilho', v)}/>
-          <Regulador rotulo="Intensidade" valor={aparencia.aguaOpacidade} min={0} max={1} passo={0.02}
+          <Regulador rotulo="Intensidade" valor={aparencia.aguaOpacidade} padrao={padroes.aguaOpacidade} min={0} max={1} passo={0.02}
                      onMudar={(v) => trocar('aguaOpacidade', v)}/>
         </section>
 
@@ -308,16 +334,54 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
 
 export function usarAparencia() {
   const [guardado, setGuardado] = useState<Guardado>(() => carregarGuardado());
+  // Pilhas de desfazer/refazer. Alex: "eu mexi e agora o circulo ta meio feio e
+  // nao sei como colocar no lugar". Sem isto, errar a mao e uma viagem sem volta.
+  const passado = useRef<Guardado[]>([]);
+  const futuro = useRef<Guardado[]>([]);
+  const ultimoToque = useRef(0);
+  const [versao, setVersao] = useState(0);
+
   const tema = modoEfetivo(guardado.modo);
   const slot = tema === 'claro' ? 'claro' : 'escuro';
   const aparencia: Aparencia = { ...guardado[slot], modo: guardado.modo };
 
   const setAparencia = useCallback((nova: Aparencia) => {
     setGuardado((atual) => {
-      // Trocar de modo NAO leva cor junto: so muda de quarto.
+      // Arrastar um regulador dispara dezenas de mudancas por segundo. Sem
+      // agrupar, "desfazer" andaria um pixel de cada vez e seria inutil.
+      const agora = Date.now();
+      const continuacao = agora - ultimoToque.current < 700;
+      ultimoToque.current = agora;
+      if (!continuacao) {
+        passado.current = [...passado.current.slice(-49), atual];
+        futuro.current = [];
+        setVersao((v) => v + 1);
+      }
       if (nova.modo !== atual.modo) return { ...atual, modo: nova.modo };
       const onde = modoEfetivo(atual.modo) === 'claro' ? 'claro' : 'escuro';
       return { ...atual, [onde]: { ...nova } };
+    });
+  }, []);
+
+  const desfazer = useCallback(() => {
+    setGuardado((atual) => {
+      const anterior = passado.current.pop();
+      if (!anterior) return atual;
+      futuro.current = [...futuro.current, atual];
+      ultimoToque.current = 0;
+      setVersao((v) => v + 1);
+      return anterior;
+    });
+  }, []);
+
+  const refazer = useCallback(() => {
+    setGuardado((atual) => {
+      const proximo = futuro.current.pop();
+      if (!proximo) return atual;
+      passado.current = [...passado.current, atual];
+      ultimoToque.current = 0;
+      setVersao((v) => v + 1);
+      return proximo;
     });
   }, []);
 
@@ -326,5 +390,10 @@ export function usarAparencia() {
     catch { /* disco cheio nao pode derrubar a UI */ }
   }, [guardado]);
 
-  return { aparencia, setAparencia, tema };
+  void versao;   // so existe para redesenhar quando as pilhas mudam
+  return {
+    aparencia, setAparencia, tema, desfazer, refazer,
+    temPassado: passado.current.length > 0,
+    temFuturo: futuro.current.length > 0,
+  };
 }

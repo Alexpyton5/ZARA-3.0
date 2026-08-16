@@ -1,48 +1,86 @@
-import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Home, MessageCircle, Brain, Zap, Database, Box, SlidersHorizontal, Mic, MicOff, Send,
-  Minimize, Square, X, Bell, Activity, Grid3X3, ShieldCheck, Cpu, Network,
-  Search, RefreshCw, ChevronRight, Bot,
-  Palette, Wrench, BrainCircuit, CircleDot, LoaderCircle, Trash2,
-  Volume2, VolumeX
-} from 'lucide-react';
-import { VoiceParticleSphere, VoiceState } from './VoiceParticleSphere';
+import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { LoaderCircle, Send } from 'lucide-react';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
-import { PainelAparencia } from './PainelAparencia';
-import { ConversaInstrumento } from './ConversaInstrumento';
 import { ZaraLab } from './ZaraLab';
 import { normalizeReminderEvent } from '../../../reminderEvents';
 import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
 import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
-import { APARENCIA_INICIAL } from '../../lib/aparencia';
+
+type VoiceState = 'STANDBY' | 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'PROCESSING' | 'SLEEPING' | 'MUTED';
+type Theme = 'light' | 'dark';
 
 interface Toast { id: number; text: string; kind?: 'ok' | 'warn' | 'error'; }
-interface EngineOption { id: string; name: string; provider: string; free_tier?: string; status?: string; }
-
-type HermesAgent = 'appearance' | 'intelligence' | 'functionality';
-
-const nav = [
-  ['HOME', Home], ['CONVERSATIONS', MessageCircle], ['INTELLIGENCE', Brain],
-  ['AUTOMATIONS', Zap], ['DATA HUB', Database], ['MEMORY CORE', Box],
-  ['SYSTEMS', SlidersHorizontal], ['SETTINGS', SlidersHorizontal],
-] as const;
+interface EngineOption { id: string; name: string; provider: string; status?: string; }
+interface MiniLabMessage { id: string; author: string; content: string; createdAt: number; }
 
 const initialMessages: ChatMessage[] = [];
 
-function timeLabel(ts: number) {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// Os ícones são os mesmos traços do desenho do Alex, redesenhados como componentes
+// para não depender de uma biblioteca que muda de forma entre versões.
+const IconeHoje = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M5 17.5 3.8 21l3.8-1.5a8.4 8.4 0 1 0-2.6-2Z"/></svg>;
+const IconeMemorias = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M20.8 5.9c-2.1-2.1-5.4-2.1-7.5 0L12 7.2l-1.3-1.3a5.3 5.3 0 0 0-7.5 7.5L12 22l8.8-8.6a5.3 5.3 0 0 0 0-7.5Z"/></svg>;
+const IconeRotinas = () => <svg viewBox="0 0 24 24" aria-hidden="true"><rect fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" x="3.5" y="5.2" width="17" height="15" rx="2"/><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M8 3v4M16 3v4M3.5 9.2h17"/></svg>;
+const IconeLab = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M9 3h6M10 3v6l-5.5 9.4A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.6L14 9V3M7.3 16h9.4"/></svg>;
+const IconeSino = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M18 8.5a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7M13.7 20a2 2 0 0 1-3.4 0"/></svg>;
+const IconeEscrever = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>;
+const IconeMic = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3ZM5 11a7 7 0 0 0 14 0M12 18v3"/></svg>;
+const IconeMicMudo = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M9 9v3a3 3 0 0 0 4.6 2.5M15 11.5V6a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 10.5 6M12 18v3"/></svg>;
+const IconeSol = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.6"/><path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>;
+const IconeTema = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M4 7h4M12 7h8M4 17h8M16 17h4M10 4v6M14 14v6"/></svg>;
+
+const navegacao = [
+  { key: 'HOME', label: 'Hoje', Icone: IconeHoje },
+  { key: 'MEMORY CORE', label: 'Memórias', Icone: IconeMemorias },
+  { key: 'AUTOMATIONS', label: 'Rotinas', Icone: IconeRotinas },
+  { key: 'CONVERSATIONS', label: 'ZARA LAB', Icone: IconeLab },
+] as const;
+
+// A classe de estado do anel é a mesma que o CSS do Alex já espera.
+function classeDoAnel(state: VoiceState): string {
+  if (state === 'LISTENING') return 'orb-listening';
+  if (state === 'SPEAKING') return 'orb-speaking';
+  return 'orb-idle';
+}
+
+function horaCurta(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function normalizeLabMessages(raw: unknown): MiniLabMessage[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(-8).flatMap((entry: any, index: number) => {
+    const content = typeof entry?.content === 'string' ? entry.content.trim() : '';
+    if (!content) return [];
+    const epoch = Number(entry?.created_at ?? 0);
+    return [{
+      id: String(entry?.id ?? `${epoch}-${index}`),
+      author: String(entry?.author ?? 'zara'),
+      content,
+      createdAt: epoch > 0 && epoch < 10_000_000_000 ? epoch * 1000 : (epoch || Date.now()),
+    }];
+  });
+}
+
+// As cores dos balões do Lab são as do desenho: vinho, dourado e cinza.
+function tomDoAutor(author: string): string {
+  const a = author.toLowerCase();
+  if (a.includes('claude')) return 'wine';
+  if (a.includes('openai') || a.includes('codex') || a.includes('gpt')) return 'gold';
+  if (a.includes('alex')) return 'wine';
+  return 'gray';
 }
 
 export const ZaraControlCenter: React.FC = () => {
   const [activeNav, setActiveNav] = useState('HOME');
+  // O tema de entrada é o escuro (Sage) — é assim na interface que Alex aprovou.
+  const [theme, setTheme] = useState<Theme>(() => localStorage.getItem('zara-tema') === 'light' ? 'light' : 'dark');
   const [state, setState] = useState<VoiceState>('STANDBY');
   const [voiceLevel, setVoiceLevel] = useState(0.02);
-  const [mudo, setMudo] = useState(false);   // ZARA-BOTAO-MUDO-001
+  const [tomDaVoz, setTomDaVoz] = useState(0.45);
+  const [mudo, setMudo] = useState(false);
   const [voiceOn, setVoiceOn] = useState(false);
   const [supercerebro, setSupercerebro] = useState(false);
   const [galaxyOpen, setGalaxyOpen] = useState(false);
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
-  const [interfaceNova, setInterfaceNova] = useState(() => APARENCIA_INICIAL?.interfaceNova ?? false);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [historyReady, setHistoryReady] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
@@ -54,7 +92,12 @@ export const ZaraControlCenter: React.FC = () => {
   const [engines, setEngines] = useState<EngineOption[]>([]);
   const [selectedEngine, setSelectedEngine] = useState('auto_smart');
   const [voiceLabel, setVoiceLabel] = useState('GEMINI LIVE • KORE');
+  const [miniLabMessages, setMiniLabMessages] = useState<MiniLabMessage[]>([]);
+  const [miniLabInput, setMiniLabInput] = useState('');
+  const [miniLabBusy, setMiniLabBusy] = useState(false);
+  const [miniLabOnline, setMiniLabOnline] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const labFimRef = useRef<HTMLDivElement>(null);
   const toastIdRef = useRef(0);
   const historyReadyRef = useRef(false);
   const pendingHistoryMessagesRef = useRef<ChatMessage[]>([]);
@@ -63,70 +106,73 @@ export const ZaraControlCenter: React.FC = () => {
   const notify = useCallback((text: string, kind: Toast['kind'] = 'ok') => {
     toastIdRef.current += 1;
     const id = toastIdRef.current;
-    setToasts((t) => [...t.slice(-2), { id, text, kind }]);
-    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
+    setToasts((current) => [...current.slice(-2), { id, text, kind }]);
+    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3200);
   }, []);
 
+  useEffect(() => { localStorage.setItem('zara-tema', theme); }, [theme]);
+
   // ZARA-AEC-RENDERER-001. Só abre o microfone aqui quando o backend disser que
-  // ele é o dono do áudio; no modo local o PortAudio já capturou, e duas
-  // capturas concorrentes brigariam pelo dispositivo.
+  // ele é o dono do áudio; no modo local o PortAudio já capturou, e duas capturas
+  // concorrentes brigariam pelo dispositivo.
   const ligarAecSePreciso = useCallback(async (resultado: { audio_transport?: string } | null) => {
     if (resultado?.audio_transport !== 'renderer') return;
     const r = await iniciarAudioAec((pcm) => window.zaraIPC?.voice?.sendMicChunk?.(pcm));
-    if (!r.ok) {
-      notify('Não consegui abrir o microfone; a voz não vai ouvir você.', 'error');
-      return;
-    }
-    if (!r.aecAtivo) {
-      notify('Microfone aberto sem cancelamento de eco — ela pode se ouvir falar.', 'warn');
-    }
+    if (!r.ok) { notify('Não consegui abrir o microfone; a voz não vai ouvir você.', 'error'); return; }
+    if (!r.aecAtivo) notify('Microfone aberto sem cancelamento de eco — ela pode se ouvir falar.', 'warn');
   }, [notify]);
+
+  // ZARA-BOTAO-MUDO-005 — o backend guarda a escolha; o botão abre na cor certa.
+  useEffect(() => {
+    let vivo = true;
+    window.zaraIPC?.voice?.mute?.()
+      .then((r) => { if (vivo && r && typeof r.mudo === 'boolean') setMudo(r.mudo); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   useEffect(() => {
     const api = window.zaraIPC;
     if (!api) return;
     const offs: Array<() => void> = [];
-    if (api.on?.stateChange) offs.push(api.on.stateChange((s) => setState(s as VoiceState)));
-    // ZARA-AEC-RENDERER-001: a voz da Kore toca AQUI, no mesmo processo que
-    // captura o microfone. É isso que dá ao AEC do Chromium o sinal de
-    // referência e impede a ZARA de responder ao próprio alto-falante.
+
+    if (api.on?.stateChange) offs.push(api.on.stateChange((nextState: string) => setState(nextState as VoiceState)));
+    // ZARA-AEC-RENDERER-001: a voz da Kore toca AQUI, no mesmo processo que captura
+    // o microfone. É isso que dá ao AEC do Chromium o sinal de referência.
     if (api.on?.voiceOutputAudio) offs.push(api.on.voiceOutputAudio((data) => {
       if (data?.stop) { cortarKore(); return; }
       if (data?.pcm) tocarKore(data.pcm, data.sampleRate || 24000);
     }));
-    if (api.on?.voiceLevel) offs.push(api.on.voiceLevel((level, _tone, speaking) => {
+    if (api.on?.voiceLevel) offs.push(api.on.voiceLevel((level: number, tone: number, speaking: boolean) => {
       setVoiceLevel(Math.max(0, Math.min(1, level || 0)));
+      if (typeof tone === 'number' && Number.isFinite(tone)) setTomDaVoz(Math.max(0, Math.min(1, tone)));
       if (speaking) setState('SPEAKING');
     }));
-    if (api.on?.message) offs.push(api.on.message((m) => {
-      if (!m?.content) return;
-      const incoming: ChatMessage = { role: (m.role === 'user' ? 'user' : m.role === 'system' ? 'system' : 'assistant'), content: m.content, timestamp: Date.now() };
-      if (!historyReadyRef.current) {
-        pendingHistoryMessagesRef.current.push(incoming);
-      } else {
-        setMessages((old) => [...old, incoming]);
-      }
-    }));
-    if (api.on?.metrics) offs.push(api.on.metrics((m) => {
-      setMetrics((old) => ({
-        cpu: Number(m?.cpu ?? old.cpu), memory: Number(m?.ram ?? m?.memory ?? old.memory),
-        network: Number(m?.network ?? old.network), storage: Number(m?.storage ?? m?.disk ?? old.storage),
-      }));
-    }));
-    if (api.on?.supercerebroChange) offs.push(api.on.supercerebroChange((active) => setSupercerebro(Boolean(active))));
-    if (api.on?.reminderFired) offs.push(api.on.reminderFired((rawReminder) => {
-      const reminder = normalizeReminderEvent(rawReminder);
-      if (!reminder) return;
+    if (api.on?.message) offs.push(api.on.message((message: { role: string; content: string }) => {
+      if (!message?.content) return;
       const incoming: ChatMessage = {
-        role: 'assistant',
-        content: `🔔 Lembrete: ${reminder.text}`,
+        role: message.role === 'user' ? 'user' : message.role === 'system' ? 'system' : 'assistant',
+        content: message.content,
         timestamp: Date.now(),
       };
-      if (!historyReadyRef.current) {
-        pendingHistoryMessagesRef.current.push(incoming);
-      } else {
-        setMessages((old) => [...old, incoming]);
-      }
+      if (!historyReadyRef.current) pendingHistoryMessagesRef.current.push(incoming);
+      else setMessages((current) => [...current, incoming]);
+    }));
+    if (api.on?.metrics) offs.push(api.on.metrics((nextMetrics: any) => {
+      setMetrics((current) => ({
+        cpu: Number(nextMetrics?.cpu ?? current.cpu),
+        memory: Number(nextMetrics?.ram ?? nextMetrics?.memory ?? current.memory),
+        network: Number(nextMetrics?.network ?? current.network),
+        storage: Number(nextMetrics?.storage ?? nextMetrics?.disk ?? current.storage),
+      }));
+    }));
+    if (api.on?.supercerebroChange) offs.push(api.on.supercerebroChange((active: boolean) => setSupercerebro(Boolean(active))));
+    if (api.on?.reminderFired) offs.push(api.on.reminderFired((rawReminder: unknown) => {
+      const reminder = normalizeReminderEvent(rawReminder);
+      if (!reminder) return;
+      const incoming: ChatMessage = { role: 'assistant', content: `🔔 Lembrete: ${reminder.text}`, timestamp: Date.now() };
+      if (!historyReadyRef.current) pendingHistoryMessagesRef.current.push(incoming);
+      else setMessages((current) => [...current, incoming]);
       notify(`🔔 ${reminder.text}`);
     }));
 
@@ -137,55 +183,53 @@ export const ZaraControlCenter: React.FC = () => {
       setMessages([...persisted, ...pending]);
       setHistoryReady(true);
     };
+
     const historyPromise = api.conversationHistory?.list?.(500);
-    if (historyPromise) {
-      historyPromise
-        .then((result: unknown) => completeHistoryLoad(normalizeHistoryResponse(result)))
-        .catch(() => completeHistoryLoad([]));
-    } else {
-      void Promise.resolve().then(() => completeHistoryLoad([]));
-    }
+    if (historyPromise) historyPromise.then((result: unknown) => completeHistoryLoad(normalizeHistoryResponse(result))).catch(() => completeHistoryLoad([]));
+    else void Promise.resolve().then(() => completeHistoryLoad([]));
 
     const engineListPromise = api.engine?.list?.();
     if (engineListPromise) {
       engineListPromise.then((result: any) => {
         const list: EngineOption[] = Array.isArray(result?.engines) ? result.engines : [];
         setEngines(list);
-        const availableIds = new Set(list.map((item) => item.id));
+        const ids = new Set(list.map((engine) => engine.id));
         const preferred = String(result?.current || localStorage.getItem('zara-ai-engine') || 'auto_smart');
-        const next = availableIds.has(preferred) ? preferred : (availableIds.has('auto_smart') ? 'auto_smart' : (list[0]?.id || 'auto_smart'));
+        const next = ids.has(preferred) ? preferred : ids.has('auto_smart') ? 'auto_smart' : (list[0]?.id || 'auto_smart');
         setSelectedEngine(next);
         localStorage.setItem('zara-ai-engine', next);
         const changePromise = api.engine?.change?.(next);
         if (changePromise) void changePromise.catch(() => undefined);
-        const voice = result?.voice;
-        if (voice?.voice) setVoiceLabel(`${voice?.name || 'GEMINI LIVE'} • ${voice.voice}`.toUpperCase());
+        if (result?.voice?.voice) setVoiceLabel(`${result.voice.name || 'GEMINI LIVE'} • ${result.voice.voice}`.toUpperCase());
       }).catch(() => {
-        setEngines([{ id: 'auto_smart', name: 'AUTO • INTELIGENTE', provider: 'zara' }, { id: 'auto_economy', name: 'AUTO • ECONÔMICO', provider: 'zara' }]);
+        setEngines([
+          { id: 'auto_smart', name: 'AUTO • INTELIGENTE', provider: 'zara' },
+          { id: 'auto_economy', name: 'AUTO • ECONÔMICO', provider: 'zara' },
+        ]);
         setSelectedEngine('auto_smart');
       });
     }
 
     const refreshBackend = () => {
-      api.system?.metrics?.().then((m: any) => {
+      api.system?.metrics?.().then((nextMetrics: any) => {
         setBackendOnline(true);
-        setMetrics((old) => ({ cpu: Number(m?.cpu ?? old.cpu), memory: Number(m?.ram ?? old.memory), network: Number(m?.network ?? old.network), storage: Number(m?.storage ?? m?.disk ?? old.storage) }));
+        setMetrics((current) => ({
+          cpu: Number(nextMetrics?.cpu ?? current.cpu), memory: Number(nextMetrics?.ram ?? current.memory),
+          network: Number(nextMetrics?.network ?? current.network), storage: Number(nextMetrics?.storage ?? nextMetrics?.disk ?? current.storage),
+        }));
       }).catch(() => setBackendOnline(false));
-      api.supercerebro?.status?.().then((r: any) => {
-        setSupercerebro(Boolean(r?.active && r?.connected));
-      }).catch(() => setSupercerebro(false));
+      api.supercerebro?.status?.().then((result: any) => setSupercerebro(Boolean(result?.active && result?.connected))).catch(() => setSupercerebro(false));
     };
+
     refreshBackend();
+    // A ZARA é voice-first: ela sobe ouvindo, sem Alex ter que clicar em nada.
     if (!autoVoiceStartedRef.current) {
       autoVoiceStartedRef.current = true;
       setState('PROCESSING');
       api.voice?.start?.().then(async (result: any) => {
         await ligarAecSePreciso(result);
-        if (result?.mode === 'gemini_live') {
-          setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
-        } else if (result?.mode) {
-          setVoiceLabel(String(result.mode).toUpperCase());
-        }
+        if (result?.mode === 'gemini_live') setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
+        else if (result?.mode) setVoiceLabel(String(result.mode).toUpperCase());
         setVoiceOn(true);
         setState(result?.wake_mode ? 'IDLE' : 'LISTENING');
       }).catch(() => {
@@ -199,80 +243,48 @@ export const ZaraControlCenter: React.FC = () => {
       window.clearInterval(refreshTimer);
       offs.forEach((off) => off());
     };
-  }, [notify]);
+  }, [notify, ligarAecSePreciso]);
+
+  const refreshMiniLab = useCallback(async () => {
+    try {
+      const snapshot: any = await window.zaraIPC?.lab?.state?.();
+      if (!snapshot || !Array.isArray(snapshot.messages)) throw new Error('Estado do Lab indisponível');
+      setMiniLabMessages(normalizeLabMessages(snapshot.messages));
+      setMiniLabOnline(true);
+    } catch {
+      setMiniLabOnline(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // A primeira busca sai da pilha do efeito de propósito: chamada direto ali,
+    // ela dispara setState durante a montagem e cascateia render.
+    const primeira = window.setTimeout(() => void refreshMiniLab(), 0);
+    const timer = window.setInterval(() => void refreshMiniLab(), 3000);
+    return () => { window.clearTimeout(primeira); window.clearInterval(timer); };
+  }, [refreshMiniLab]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  const agentStatus = useMemo(() => supercerebro ? 'GATEWAY CONECTADO • AGENTE PENDENTE' : 'AGENTE PENDENTE', [supercerebro]);
-
-  const toggleSuper = async () => {
-    const next = !supercerebro;
-    try {
-      const toggle = window.zaraIPC?.supercerebro?.toggle;
-      if (!toggle) throw new Error('IPC do Supercérebro indisponível');
-      const result: any = await toggle(next);
-      if (!result || typeof result !== 'object' || typeof result.active !== 'boolean') {
-        throw new Error('Resposta inválida do backend');
-      }
-      const actual = Boolean(result.active && (next ? result.connected : true));
-      setSupercerebro(actual);
-      notify(`Supercérebro ${actual ? 'ativado' : 'desativado'}.`);
-    } catch {
-      setSupercerebro(false);
-      notify('O gateway Hermes não confirmou a ativação.', 'error');
-    }
-  };
-
-  // ZARA-BOTAO-MUDO-001
-  // ZARA-BOTAO-MUDO-003
-  // Alex: "o botao deve ser clicavel e permancer do jeito que eu clicar".
-  // A versão anterior só mudava depois que o backend respondesse — se a
-  // resposta demorasse ou falhasse, o botão parecia morto. Agora ele vira na
-  // hora, manda o estado EXATO que ele escolheu (não "alterna", que
-  // dessincroniza), e volta atrás só se o backend recusar.
-  const alternarMudo = async () => {
-    const desejado = !mudo;
-    setMudo(desejado);
-    try {
-      const r = await window.zaraIPC?.voice?.mute?.(desejado);
-      if (r && typeof r.mudo === 'boolean' && r.mudo !== desejado) setMudo(r.mudo);
-      notify(desejado ? 'Ela parou de falar. Continua ouvindo e executando.'
-                      : 'Ela voltou a falar.');
-    } catch {
-      setMudo(!desejado);   // não pegou: o botão volta a dizer a verdade
-      notify('Não consegui mudar isso agora.', 'error');
-    }
-  };
-
-  // ZARA-BOTAO-MUDO-005
-  // Alex: "eu tenho que ficar toda hora clicando em deixar vermelho é?".
-  // Não. O backend guarda a escolha; aqui o botão pergunta como ficou da última
-  // vez, para abrir já na cor certa em vez de voltar sempre para verde.
   useEffect(() => {
-    let vivo = true;
-    window.zaraIPC?.voice?.mute?.()
-      .then((r) => { if (vivo && r && typeof r.mudo === 'boolean') setMudo(r.mudo); })
-      .catch(() => {});
-    return () => { vivo = false; };
-  }, []);
+    labFimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [miniLabMessages]);
 
+  // Este botão controla se ela OUVE. O da onda controla se ela FALA.
   const toggleVoice = async () => {
     try {
       if (voiceOn) {
         await window.zaraIPC?.voice?.stop?.();
         pararAudioAec();
-        setVoiceOn(false); setState('STANDBY'); setVoiceLevel(0.02);
+        setVoiceOn(false); setState('MUTED'); setVoiceLevel(0.02);
       } else {
         setState('PROCESSING');
         const result: any = await window.zaraIPC?.voice?.start?.();
         await ligarAecSePreciso(result);
-        if (result?.mode === 'gemini_live') {
-          setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
-        } else if (result?.mode) {
-          setVoiceLabel(String(result.mode).toUpperCase());
-        }
+        if (result?.mode === 'gemini_live') setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
+        else if (result?.mode) setVoiceLabel(String(result.mode).toUpperCase());
         setVoiceOn(true); setState('LISTENING');
       }
     } catch {
@@ -281,29 +293,63 @@ export const ZaraControlCenter: React.FC = () => {
     }
   };
 
-  const send = async (e?: FormEvent) => {
-    e?.preventDefault();
+  // ZARA-BOTAO-MUDO-001 / 003 — calar a voz sem desligar a ZARA. Ela continua
+  // ouvindo, entendendo e executando; só para de falar.
+  const alternarMudo = async () => {
+    const desejado = !mudo;
+    setMudo(desejado);
+    try {
+      const r = await window.zaraIPC?.voice?.mute?.(desejado);
+      if (r && typeof r.mudo === 'boolean' && r.mudo !== desejado) setMudo(r.mudo);
+      notify(desejado ? 'Ela parou de falar. Continua ouvindo e executando.' : 'Ela voltou a falar.');
+    } catch {
+      setMudo(!desejado);
+      notify('Não consegui mudar isso agora.', 'error');
+    }
+  };
+
+  const send = async (event?: FormEvent) => {
+    event?.preventDefault();
     const text = input.trim();
     if (!text || busy) return;
-    if (!historyReady) {
-      notify('A conversa ainda está sendo carregada.', 'warn');
-      return;
-    }
-    const userMsg: ChatMessage = { role: 'user', content: text, timestamp: Date.now() };
-    setMessages((old) => [...old, userMsg]);
-    setInput(''); setBusy(true); setState('THINKING');
+    if (!historyReady) { notify('A conversa ainda está sendo carregada.', 'warn'); return; }
+    const userMessage: ChatMessage = { role: 'user', content: text, timestamp: Date.now() };
+    setMessages((current) => [...current, userMessage]);
+    setInput('');
+    setBusy(true);
+    setState('THINKING');
     try {
-      const history = [...messages, userMsg]
-        .filter((m) => m.role !== 'system')
+      const history = [...messages, userMessage]
+        .filter((message) => message.role !== 'system')
         .slice(-16)
-        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
-      const res: any = await window.zaraIPC?.message?.send?.({ message: text, engine: selectedEngine, history });
-      const content = String(res?.content ?? res?.response ?? res?.message ?? res ?? '').trim();
-      if (content) setMessages((old) => [...old, { role: 'assistant', content, timestamp: Date.now() }]);
+        .map((message) => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content }));
+      const response: any = await window.zaraIPC?.message?.send?.({ message: text, engine: selectedEngine, history });
+      const content = String(response?.content ?? response?.response ?? response?.message ?? response ?? '').trim();
+      if (content) setMessages((current) => [...current, { role: 'assistant', content, timestamp: Date.now() }]);
     } catch {
-      setMessages((old) => [...old, { role: 'system', content: 'Backend indisponível para esta solicitação.', timestamp: Date.now() }]);
+      setMessages((current) => [...current, { role: 'system', content: 'Backend indisponível para esta solicitação.', timestamp: Date.now() }]);
     } finally {
-      setBusy(false); setState(voiceOn ? 'LISTENING' : 'STANDBY');
+      setBusy(false);
+      setState(voiceOn ? 'LISTENING' : 'STANDBY');
+    }
+  };
+
+  const sendMiniLab = async (event?: FormEvent) => {
+    event?.preventDefault();
+    const content = miniLabInput.trim();
+    if (!content || miniLabBusy) return;
+    setMiniLabBusy(true);
+    setMiniLabInput('');
+    try {
+      const sender = window.zaraIPC?.lab?.send;
+      if (!sender) throw new Error('IPC do Lab indisponível');
+      await sender({ author: 'alex', target: 'zara', content });
+      await refreshMiniLab();
+    } catch {
+      setMiniLabInput(content);
+      notify('Não foi possível participar do ZARA Lab agora.', 'error');
+    } finally {
+      setMiniLabBusy(false);
     }
   };
 
@@ -332,231 +378,210 @@ export const ZaraControlCenter: React.FC = () => {
       const result: any = await window.zaraIPC?.engine?.change?.(engine);
       if (!result?.success) throw new Error('Engine não confirmado pelo backend');
       localStorage.setItem('zara-ai-engine', engine);
-      const chosen = engines.find((item) => item.id === engine);
-      notify(`Motor de IA: ${chosen?.name || engine}`);
     } catch {
       setSelectedEngine(previous);
       notify('Este motor não está disponível com as chaves atuais.', 'error');
     }
   };
 
+  const toggleSuper = async () => {
+    const next = !supercerebro;
+    try {
+      const toggle = window.zaraIPC?.supercerebro?.toggle;
+      if (!toggle) throw new Error('IPC do Supercérebro indisponível');
+      const result: any = await toggle(next);
+      if (!result || typeof result.active !== 'boolean') throw new Error('Resposta inválida do backend');
+      const actual = Boolean(result.active && (next ? result.connected : true));
+      setSupercerebro(actual);
+      notify(`Supercérebro ${actual ? 'ativado' : 'desativado'}.`);
+    } catch {
+      setSupercerebro(false);
+      notify('O gateway Hermes não confirmou a ativação.', 'error');
+    }
+  };
+
   const runDiagnostics = async () => {
     try {
-      const m: any = await window.zaraIPC?.system?.metrics?.();
-      if (m) {
+      const nextMetrics: any = await window.zaraIPC?.system?.metrics?.();
+      if (nextMetrics) {
         setBackendOnline(true);
-        setMetrics((old) => ({ cpu: Number(m.cpu ?? old.cpu), memory: Number(m.ram ?? old.memory), network: Number(m.network ?? old.network), storage: Number(m.storage ?? m.disk ?? old.storage) }));
+        setMetrics((current) => ({
+          cpu: Number(nextMetrics.cpu ?? current.cpu), memory: Number(nextMetrics.ram ?? current.memory),
+          network: Number(nextMetrics.network ?? current.network), storage: Number(nextMetrics.storage ?? nextMetrics.disk ?? current.storage),
+        }));
       }
-      notify('Diagnóstico básico e métricas atualizados.');
-    } catch { setBackendOnline(false); notify('Diagnóstico indisponível no backend atual.', 'error'); }
+      notify('Métricas atualizadas.');
+    } catch {
+      setBackendOnline(false);
+      notify('Diagnóstico indisponível no backend atual.', 'error');
+    }
   };
 
-  const systemScan = async () => {
-    try { await window.zaraIPC?.system?.info?.(); notify('Informações do sistema consultadas.'); }
-    catch { notify('System Scan indisponível no backend atual.', 'error'); }
+  const handleNavigation = (key: string) => {
+    if (key === 'MEMORY CORE') { setGalaxyOpen(true); return; }
+    if (key === 'AUTOMATIONS') { notify('Rotinas aparecerão aqui quando o módulo estiver disponível.', 'warn'); return; }
+    setActiveNav(key);
   };
 
-  const implementedNav = new Set(['HOME', 'CONVERSATIONS', 'MEMORY CORE', 'SYSTEMS', 'SETTINGS']);
-
-  const handleNav = (label: string) => {
-    if (!implementedNav.has(label)) return;
-    if (label === 'MEMORY CORE') { setGalaxyOpen(true); return; }
-    if (label === 'SETTINGS') { setAppearanceOpen(true); return; }
-    setActiveNav(label);
-    if (label === 'SYSTEMS') void runDiagnostics();
-  };
-
-  const hermesAgents: Array<[HermesAgent, string, string, React.ComponentType<any>]> = [
-    ['appearance', 'APPEARANCE AGENT', 'Interface • design • experiência', Palette],
-    ['intelligence', 'INTELLIGENCE AGENT', 'Skills • pesquisa • raciocínio', BrainCircuit],
-    ['functionality', 'FUNCTIONALITY AGENT', 'Integrações • automações • recursos', Wrench],
-  ];
+  // A deformação da corda vem do nível de voz real, não de um timer. É o mesmo
+  // mecanismo do desenho do Alex: um filtro de turbulência cuja escala cresce
+  // quando ela ouve ou fala.
+  const nivel = Math.max(0, Math.min(1, voiceLevel));
+  const escalaDaCorda = state === 'LISTENING' || state === 'SPEAKING' ? (1.2 + nivel * 9.5) : nivel * 1.6;
 
   return (
-    <div className="zara-shell">
-      <header className="topbar">
-        <div className="top-brand"><strong>ZARA</strong><span>AI CONTROL CENTER</span></div>
-        <div className={`engine-picker ${supercerebro ? 'hermes-priority' : ''}`} title={supercerebro ? 'Supercérebro ativo: Hermes Gateway tem prioridade sobre o motor selecionado' : 'Escolha o motor de IA para o chat de texto'}>
-          <span>AI ENGINE</span>
-          <select value={selectedEngine} disabled={supercerebro || engines.length === 0} onChange={(e) => void changeEngine(e.target.value)}>
-            {engines.map((engine) => <option key={engine.id} value={engine.id}>{engine.name}{engine.status && !engine.id.startsWith('auto_') ? ` • ${engine.status}` : ''}</option>)}
-          </select>
-          <em>{supercerebro ? 'HERMES PRIORITY' : (engines.find((item) => item.id === selectedEngine)?.provider || 'ZARA').toUpperCase()}</em>
-        </div>
-        <div className="window-controls">
-          <button onClick={() => window.zaraIPC?.window?.minimize?.()} aria-label="Minimizar"><Minimize size={17}/></button>
-          <button onClick={() => window.zaraIPC?.window?.maximize?.()} aria-label="Maximizar"><Square size={14}/></button>
-          <button className="close" onClick={() => window.zaraIPC?.window?.close?.()} aria-label="Fechar"><X size={17}/></button>
-        </div>
-      </header>
-
-      <aside className="side-rail">
-        <nav className="side-nav">
-          {nav.map(([label, Icon]) => (
-            <button key={label} disabled={!implementedNav.has(label)} title={!implementedNav.has(label) ? 'Módulo ainda não implementado no backend' : undefined} className={activeNav === label ? 'active' : ''} onClick={() => handleNav(label)}>
-              <Icon size={21}/><span>{label}</span>
+    <main className={`zara-preview theme-${theme} ${classeDoAnel(state)}`}>
+      <section className="desktop-frame" aria-label="Interface da ZARA">
+        <section className="main-window">
+          <aside className="sidebar">
+            <button type="button" className="brand" aria-label="ZARA" onClick={() => setActiveNav('HOME')}>
+              <img className="brand-light" src="./zara-brand-light.png" alt="ZARA"/>
+              <img className="brand-dark" src="./zara-brand-dark.png" alt="ZARA"/>
             </button>
-          ))}
-        </nav>
 
-        <div className="side-bottom">
-          <button className={`super-switch ${supercerebro ? 'on' : ''}`} onClick={toggleSuper} aria-pressed={supercerebro}>
-            <BrainCircuit size={20}/><span>SUPERCÉREBRO</span><i><b/></i><small>{supercerebro ? 'ON' : 'OFF'}</small>
-          </button>
-          <div className="core-card">
-            <img src="./zara-symbol.png" alt="Logo ZARA"/>
-            <div><strong>ZARA CORE</strong><span>v3.0</span><em><CircleDot size={9}/> {backendOnline ? 'ONLINE' : 'OFFLINE'}</em></div>
+            <nav aria-label="Navegação principal">
+              {navegacao.map(({ key, label, Icone }) => (
+                <button type="button" key={key} className={activeNav === key ? 'active' : ''} onClick={() => handleNavigation(key)}>
+                  <Icone/><span>{label}</span>
+                </button>
+              ))}
+            </nav>
+
+            <footer>
+              <div className="online-row">
+                <i className={backendOnline ? 'online' : ''}/>
+                <span>{backendOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                <button type="button" aria-label="Alternar tema" onClick={() => setTheme((c) => c === 'light' ? 'dark' : 'light')}><IconeTema/></button>
+              </div>
+              <div className="user-row">
+                <img src="./avatar-alex.png" alt=""/>
+                <span>⌄</span>
+              </div>
+            </footer>
+          </aside>
+
+          <div className="main-actions">
+            <button type="button" aria-label="Diagnóstico" onClick={() => void runDiagnostics()} title={`CPU ${metrics.cpu.toFixed(0)}% • Memória ${metrics.memory.toFixed(0)}%`}><IconeSino/></button>
+            <button type="button" aria-label="Limpar conversa" disabled={clearingHistory || busy || voiceOn || !historyReady} onClick={() => void clearConversationHistory()}><IconeEscrever/></button>
           </div>
-          <div className="admin-card"><div className="admin-avatar">A</div><div><strong>Admin</strong><span>Superuser</span></div><ChevronRight size={15}/></div>
-        </div>
-      </aside>
 
-      {activeNav === 'CONVERSATIONS' ? (
-        <ZaraLab />
-      ) : (
-        <>
-      <main className={`center-stage ${activeNav === 'HOME' && interfaceNova ? 'instrumento-ativo' : ''}`}>
-        {activeNav === 'HOME' && interfaceNova ? (
-          <ConversaInstrumento
-            mensagens={messages}
-            estado={state}
-            nivelVoz={voiceLevel}
-            historicoPronto={historyReady}
-          />
-        ) : (
-        <section className="orb-zone">
-          <VoiceParticleSphere level={voiceLevel} state={state}/>
-          <div className={`voice-state state-${state.toLowerCase()}`}>{state === 'LISTENING' ? 'OUVINDO' : state === 'IDLE' ? 'EM ESPERA — diga ZARA' : state === 'SPEAKING' ? 'FALANDO' : state === 'THINKING' ? 'PROCESSANDO' : state === 'PROCESSING' ? 'RECONECTANDO' : ''}</div>
-          <div className={`voice-engine-label ${voiceOn ? 'active' : ''}`}>{voiceLabel}</div>
+          {activeNav === 'CONVERSATIONS' ? (
+            <section className="home-stage"><div className="lab-cheio"><ZaraLab /></div></section>
+          ) : (
+            <section className="home-stage">
+              <div className="presence-stage">
+                <div
+                  className="orb"
+                  aria-label={`Estado do anel: ${state.toLowerCase()}`}
+                  style={{
+                    ['--audio-level' as any]: nivel.toFixed(3),
+                    ['--audio-tone' as any]: tomDaVoz.toFixed(3),
+                  }}
+                >
+                  <svg className="orb-filter-defs" width="0" height="0" aria-hidden="true">
+                    <defs>
+                      <filter id="zara-cord-vibration" x="-24%" y="-24%" width="148%" height="148%" colorInterpolationFilters="sRGB">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.0132 0.0871" numOctaves={1} seed={7} result="cordNoise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="cordNoise" scale={escalaDaCorda} xChannelSelector="R" yChannelSelector="G"/>
+                      </filter>
+                    </defs>
+                  </svg>
+                  <canvas className="spectrum-canvas" aria-hidden="true" width={194} height={194}/>
+                  <img className="ring-light ring-base" src="./zara-ring-light.png" alt="Presença luminosa da ZARA"/>
+                  <img className="ring-dark ring-base" src="./zara-ring-dark.png" alt=""/>
+                </div>
+
+                <form className="command-bar" onSubmit={send}>
+                  <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Como posso pensar com você hoje?" aria-label="Mensagem para ZARA"/>
+                  {/* microfone = ela OUVE; onda = ela FALA. Duas coisas diferentes. */}
+                  <button
+                    type="button"
+                    className={`mic-button ${voiceOn ? 'ligado' : 'desligado'}`}
+                    onClick={() => void toggleVoice()}
+                    aria-pressed={voiceOn}
+                    aria-label={voiceOn ? 'Microfone ligado — clique para travar' : 'Microfone travado — clique para ela ouvir'}
+                    title={voiceOn ? `Ela está te ouvindo (${voiceLabel}). Clique para travar o microfone.` : 'Microfone travado. Ela não ouve nada.'}
+                  >
+                    {voiceOn ? <IconeMic/> : <IconeMicMudo/>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`voice-button ${mudo ? 'desligado' : 'ligado'}`}
+                    onClick={() => void alternarMudo()}
+                    aria-pressed={!mudo}
+                    aria-label={mudo ? 'Voz silenciada — clique para ela voltar a falar' : 'Silenciar a voz dela'}
+                    title={mudo ? 'Calada. Clique para ela voltar a falar.' : 'Ela fala. Clique para calar (continua ouvindo e executando).'}
+                  >
+                    <span className="voice-bars"><i/><i/><i/><i/><i/></span>
+                  </button>
+                </form>
+                {messages.length > 0 && (
+                  <section className="conversa-recente" ref={logRef} aria-label="Conversa recente">
+                    {messages.slice(-4).map((message, index) => (
+                      <article key={message.id || `${message.timestamp}-${index}`} className={message.role}>
+                        <strong>{message.role === 'assistant' ? 'ZARA' : message.role === 'system' ? 'Sistema' : 'Você'}</strong>
+                        <p>{message.content}</p>
+                        <time>{horaCurta(message.timestamp)}</time>
+                      </article>
+                    ))}
+                  </section>
+                )}
+
+              </div>
+
+              <aside className="today-card">
+                <header><div><IconeSol/><strong>Hoje</strong></div><span>•••</span></header>
+                <article><span className="agenda-symbol">▣</span><div><strong>Reunião de projeto</strong><small>10:00</small></div></article>
+                <article><span className="agenda-symbol plane">⌁</span><div><strong>Viagem</strong><small>15:30&nbsp; · &nbsp;Guarulhos</small></div></article>
+                <article className="priority"><span className="agenda-symbol">☆</span><div><strong>Prioridade do dia</strong><small>Preparar relatório<br/>estratégico</small></div></article>
+                <label className="motor-de-ia">
+                  Motor de IA
+                  <select value={selectedEngine} disabled={supercerebro || engines.length === 0} onChange={(e) => void changeEngine(e.target.value)}>
+                    {engines.map((engine) => <option key={engine.id} value={engine.id}>{engine.name}</option>)}
+                  </select>
+                </label>
+              </aside>
+            </section>
+          )}
         </section>
-        )}
-        <form className="command-bar" onSubmit={send}>
-          {/* ZARA-BOTAO-MIC-001
-              Alex: "eu faria o mesmo botao vermelho para travar o mic dela...
-              para ela nao responder coisa que nao pedi mas ela ouviu e levou
-              pra la consumindo tokens atoa".
 
-              O botão já existia e já ligava/desligava o microfone — o que não
-              existia era a COR. Sem ela, ele não tinha como saber se estava
-              sendo ouvido, e "não sei se está ligado" é o mesmo que desligado.
-
-              São dois botões e duas coisas diferentes, de propósito:
-                este  = ela OUVE ou não
-                o outro = ela FALA ou não */}
-          <button
-            type="button"
-            className={`mic ${voiceOn ? 'active' : ''}`}
-            onClick={toggleVoice}
-            aria-pressed={voiceOn}
-            aria-label={voiceOn ? 'Microfone ligado — clique para travar' : 'Microfone travado — clique para ela ouvir'}
-            title={voiceOn ? 'VERDE = ela está te ouvindo. Clique para travar o microfone.' : 'VERMELHO = microfone travado. Ela não ouve nada.'}
-            style={{
-              background: voiceOn ? '#12b866' : '#e0243a',
-              borderColor: voiceOn ? '#25e88a' : '#ff4d63',
-              color: '#ffffff',
-              boxShadow: voiceOn ? '0 0 14px rgba(18,184,102,.65)' : '0 0 14px rgba(224,36,58,.65)',
-              transition: 'background .15s ease, box-shadow .15s ease',
-            }}
-          >
-            {voiceOn ? <Mic size={20}/> : <MicOff size={20}/>}
-          </button>
-          {/* ZARA-BOTAO-MUDO-001 — calar a voz sem desligar a ZARA.
-              Ela continua ouvindo, entendendo e executando; só para de falar.
-              Alex pediu porque ela anunciava "o Claude respondeu" enquanto ele
-              estava lendo a resposta na tela. */}
-          <button
-            type="button"
-            className={`mic ${mudo ? 'muted' : 'active'}`}
-            onClick={alternarMudo}
-            aria-pressed={mudo}
-            aria-label={mudo ? 'Voz silenciada — clique para ela voltar a falar' : 'Silenciar a voz dela'}
-            title={mudo ? 'VERMELHO = calada. Clique para ela voltar a falar.' : 'VERDE = ela fala. Clique para calar (continua ouvindo e executando).'}
-            // ZARA-BOTAO-MUDO-004
-            // Alex: "o botao da zara nao fica verde ou vermelho".
-            // As classes `.mic.active`/`.mic.muted` não pintavam nada na folha de
-            // estilo, então o botão ficava igual nos dois estados. A cor vai aqui,
-            // no elemento, onde nenhum CSS de fora apaga.
-            style={{
-              background: mudo ? '#e0243a' : '#12b866',
-              borderColor: mudo ? '#ff4d63' : '#25e88a',
-              color: '#ffffff',
-              boxShadow: mudo ? '0 0 14px rgba(224,36,58,.65)' : '0 0 14px rgba(18,184,102,.65)',
-              transition: 'background .15s ease, box-shadow .15s ease',
-            }}
-          >
-            {mudo ? <VolumeX size={20}/> : <Volume2 size={20}/>}
-          </button>
-          <input className="zara-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message ZARA..."/>
-          <button type="submit" className="send" disabled={busy || !historyReady || !input.trim()} aria-label="Enviar">{busy ? <LoaderCircle className="spin" size={19}/> : <Send size={21}/>}</button>
-        </form>
-
-        {!(activeNav === 'HOME' && interfaceNova) && (
-        <section className="conversation-card">
-          <header><span>CONVERSATION LOG</span><button type="button" disabled={clearingHistory || busy || voiceOn || !historyReady} onClick={clearConversationHistory}><Trash2 size={13}/> {clearingHistory ? 'CLEARING...' : 'CLEAR'}</button></header>
-          <div className="conversation-scroll" ref={logRef}>
-            {messages.length === 0 && <div className="empty-log">{historyReady ? 'Nenhuma conversa salva.' : 'Carregando conversas...'}</div>}
-            {messages.map((m, i) => (
-              <article className={`message-row ${m.role}`} key={m.id || `${m.timestamp}-${i}`}>
-                <div className="message-icon">{m.role === 'assistant' ? <img src="./zara-symbol.png"/> : m.role === 'system' ? <Activity size={16}/> : <span>A</span>}</div>
-                <div className="message-body"><div><strong>{m.role === 'assistant' ? 'ZARA' : m.role === 'system' ? 'SYSTEM' : 'You'}</strong><time>{timeLabel(m.timestamp)}</time></div><p>{m.content}</p></div>
+        <aside className="lab-window">
+          <div className="window-controls">
+            <button type="button" aria-label="Minimizar" onClick={() => window.zaraIPC?.window?.minimize?.()}>—</button>
+            <button type="button" aria-label="Maximizar" onClick={() => window.zaraIPC?.window?.maximize?.()}><i/></button>
+            <button type="button" aria-label="Fechar" onClick={() => window.zaraIPC?.window?.close?.()}>×</button>
+          </div>
+          <img className="lab-watermark" src="./zara-lab-watermark.png" alt=""/>
+          <div className="participants">
+            <div><img src="./avatar-claude.png" alt="Claude"/><small>Claude</small></div>
+            <div><img src="./avatar-openai.png" alt="OpenAI"/><small>OpenAI</small></div>
+            <div><img src="./avatar-zara.png" alt="ZARA"/><small>ZARA</small></div>
+          </div>
+          <div className="lab-messages">
+            {miniLabMessages.length === 0 ? (
+              <article className="gray"><p>{miniLabOnline ? 'O laboratório aguarda mensagens reais.' : 'ZARA Lab indisponível.'}</p></article>
+            ) : miniLabMessages.map((message) => (
+              <article key={message.id} className={tomDoAutor(message.author)}>
+                <strong>{message.author === 'alex' ? 'Alex' : message.author.toUpperCase()}</strong>
+                <p>{message.content}</p>
               </article>
             ))}
+            <div ref={labFimRef}/>
           </div>
-        </section>
-        )}
-      </main>
+          <form className="lab-composer" onSubmit={sendMiniLab}>
+            <input value={miniLabInput} onChange={(e) => setMiniLabInput(e.target.value)} placeholder="Participar da conversa..." aria-label="Mensagem para o ZARA Lab"/>
+            <button type="submit" disabled={miniLabBusy || !miniLabInput.trim()} aria-label="Enviar">
+              {miniLabBusy ? <LoaderCircle className="spin" size={15}/> : <Send size={16}/>}
+            </button>
+          </form>
+          <button type="button" className={`hermes ${supercerebro ? 'ativo' : ''}`} onClick={() => void toggleSuper()}>
+            {supercerebro ? 'Hermes conectado' : 'Conectar Hermes'}
+          </button>
+        </aside>
+      </section>
 
-      <aside className="right-rail">
-        <section className="panel hermes-lab">
-          <header><span><Bot size={16}/> HERMES LAB</span><em className={supercerebro ? 'online' : ''}><i/> {supercerebro ? 'GATEWAY ONLINE' : 'STANDBY'}</em></header>
-          <p className="panel-caption">Agentes planejados • nenhuma atualização é aplicada sem aprovação do Alex.</p>
-          <div className="agent-list">
-            {hermesAgents.map(([key, title, desc, Icon]) => (
-              <div className="agent-row" key={key}><div className="agent-icon"><Icon size={16}/></div><div><strong>{title}</strong><span>{desc}</span></div><small><i/>{agentStatus}</small></div>
-            ))}
-          </div>
-        </section>
-
-        <section className="status-strip panel"><div><Activity size={16}/><span>BACKEND STATUS<strong>{backendOnline ? 'ONLINE' : 'OFFLINE'}</strong></span></div><Bell size={16}/></section>
-
-        <section className="panel system-overview">
-          <header><span><Grid3X3 size={15}/> SYSTEM OVERVIEW</span></header>
-          {[
-            ['CPU', `${metrics.cpu.toFixed(0)}%`, Cpu],
-            ['MEMORY', `${metrics.memory.toFixed(0)}%`, Brain],
-            ['BACKEND', backendOnline ? 'ONLINE' : 'OFFLINE', Network],
-            ['MEMORY CORE', backendOnline ? 'READY' : 'OFFLINE', Database],
-          ].map(([name, status, Icon]: any) => (
-            <div className="overview-row" key={name}><Icon size={15}/><span>{name}</span><em>{status}</em><i className={!backendOnline && (name === 'BACKEND' || name === 'MEMORY CORE') ? 'offline-dot' : ''}/></div>
-          ))}
-        </section>
-
-        <section className="panel active-modules">
-          <header><span><Box size={15}/> ACTIVE MODULES</span></header>
-          {[['Natural Language', backendOnline ? 'READY' : 'OFFLINE'],['Reasoning Engine', backendOnline ? 'READY' : 'OFFLINE'],['Memory Galaxy','PENDING'],['Voice Interface','ON DEMAND']].map(([n,v]) => <div className="module-row" key={n}><span>{n}</span><em>{v}</em><i/></div>)}
-        </section>
-
-        <section className="panel quick-actions">
-          <header><span><Zap size={16}/> QUICK ACTIONS</span></header>
-          <button onClick={runDiagnostics}>Run Diagnostics<ChevronRight size={15}/></button>
-          <button onClick={systemScan}>System Scan<ChevronRight size={15}/></button>
-          <button disabled title="Será habilitado quando o fluxo de propostas/aprovação estiver implementado">Update Core<ChevronRight size={15}/></button>
-          <button disabled title="Relatórios ainda não possuem backend">View Reports<ChevronRight size={15}/></button>
-          <button className="galaxy-button" onClick={() => setGalaxyOpen(true)}><Search size={14}/> Memory Galaxy<ChevronRight size={15}/></button>
-        </section>
-
-        <section className="security-footer panel"><div><ShieldCheck size={16}/><span>IPC<strong>LOCAL</strong></span></div><div><RefreshCw size={16}/><span>BACKEND<strong>{backendOnline ? 'READY' : 'OFFLINE'}</strong></span></div></section>
-      </aside>
-        </>
-      )}
-
-      <div className="toast-stack">{toasts.map((t) => <div key={t.id} className={`toast ${t.kind || 'ok'}`}>{t.text}</div>)}</div>
-      <PainelAparencia
-        aberto={appearanceOpen}
-        onClose={() => setAppearanceOpen(false)}
-        onInterfaceNovaChange={setInterfaceNova}
-      />
-      {galaxyOpen && <MemoryGalaxyModal onClose={() => setGalaxyOpen(false)}/>} 
-    </div>
+      <div className="zara-toasts">{toasts.map((t) => <div key={t.id} className={`zara-toast ${t.kind || 'ok'}`}>{t.text}</div>)}</div>
+      {galaxyOpen && <MemoryGalaxyModal onClose={() => setGalaxyOpen(false)}/>}
+    </main>
   );
 };

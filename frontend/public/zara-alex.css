@@ -662,3 +662,14 @@
 .zara-preview .presence-stage {
   --zara-halo: transparent;
 }
+
+/* ---- realce dos fios no tema claro ----
+   O traco rose sobre pagina creme tem pouco contraste natural e some. O reforco
+   entra no CONTAINER, nao na imagem: contraste e saturacao sao operacoes por
+   pixel, entao nao borram, nao deformam e nao encostam no arquivo do Alex.
+   Foi reescrever o PNG e usar drop-shadow que estragou o desenho antes. */
+.zara-preview.theme-light .orb {
+  filter: brightness(calc(var(--zara-anel-forca, 1) * .94))
+          saturate(1.45)
+          contrast(1.42);
+}

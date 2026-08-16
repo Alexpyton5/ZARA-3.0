@@ -28,12 +28,12 @@ const IconeMic = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="n
 const IconeMicMudo = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M9 9v3a3 3 0 0 0 4.6 2.5M15 11.5V6a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 10.5 6M12 18v3"/></svg>;
 const IconeAviao = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
-    {/* Aviao de papel VAZADO, com a dobra visivel — como na imagem do Alex.
-        O anterior era uma forma cheia, com recorte na traseira. */}
+    {/* Aponta para a FRENTE: a ponta esta em x=21.5 na mesma altura do centro.
+        As versoes anteriores apontavam para cima e para o alto. */}
     <path fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-          d="M21.5 3.2 2.6 10.6l7.7 2.6 2.6 7.6 8.6-17.6Z"/>
-    <path fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-          d="M10.3 13.2 21.5 3.2"/>
+          d="M2.4 5.2 21.6 12 2.4 18.8 5.9 12 2.4 5.2Z"/>
+    <path fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+          d="M5.9 12h15.7"/>
   </svg>
 );
 const IconeSol = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.6"/><path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>;
@@ -295,11 +295,6 @@ export const ZaraControlCenter: React.FC = () => {
     // pontos de luz concentrada que percorrem o anel acendendo e apagando. Sao
     // desenhados em vetor no canvas, entao ficam nitidos em qualquer tamanho —
     // e por isso nao granulam a imagem, que era o medo dele.
-    const brilhos = [
-      { angulo: 0.4, velocidade: 0.19, arco: 0.30, forca: 1.0 },
-      { angulo: 2.7, velocidade: -0.13, arco: 0.22, forca: 0.78 },
-      { angulo: 4.9, velocidade: 0.26, arco: 0.16, forca: 0.62 },
-    ];
     const corDoAnel = () => getComputedStyle(anel).getPropertyValue('--ring').trim() || '#a8c3a0';
 
     const faiscas = Array.from({ length: 30 }, (_, i) => {
@@ -330,7 +325,7 @@ export const ZaraControlCenter: React.FC = () => {
         // Tremor: um alvo novo de vez em quando e o anel perseguindo ele. Sorteio
         // a cada quadro daria chiado de TV, nao vibracao de corda.
         if (Math.random() < 0.22) {
-          const amplitude = energia * 2.6;
+          const amplitude = 0.34 + energia * 2.95;   // piso pequeno: vivo mesmo calada
           alvoX = (Math.random() * 2 - 1) * amplitude;
           alvoY = (Math.random() * 2 - 1) * amplitude;
         }
@@ -343,11 +338,13 @@ export const ZaraControlCenter: React.FC = () => {
       anel.style.setProperty('--jitter-x', `${jx.toFixed(2)}px`);
       anel.style.setProperty('--jitter-y', `${jy.toFixed(2)}px`);
 
-      const escala = ativo ? 1.3 + energia * 11 : energia * 2.2;
+      // +15% na amplitude geral e um piso visivel no repouso. O teto continua
+      // controlado: passar disso deixa o anel nervoso, que nao e o que ele quer.
+      const escala = ativo ? 1.6 + energia * 12.5 : 0.5 + energia * 3.2;
       anel.setAttribute('data-cord-scale', escala.toFixed(2));
       deslocamentoRef.current?.setAttribute('scale', escala.toFixed(2));
       // A frequencia vertical acompanha o tom: voz mais aguda encrespa mais a corda.
-      turbulenciaRef.current?.setAttribute('baseFrequency', `${(0.0129 + tom * 0.0011).toFixed(4)} ${(0.055 + tom * 0.075).toFixed(4)}`);
+      turbulenciaRef.current?.setAttribute('baseFrequency', `${(0.0132 + tom * 0.0013).toFixed(4)} ${(0.063 + tom * 0.089).toFixed(4)}`);
 
       if (contexto) {
         const lado = canvas.clientWidth || 214;
@@ -360,42 +357,13 @@ export const ZaraControlCenter: React.FC = () => {
         contexto.clearRect(0, 0, lado, lado);
         const cx = lado / 2, cy = lado / 2;
         const segundos = agora / 1000;
+        const claro0 = anel.closest('.theme-light') !== null;
 
-        // os brilhos viajantes vem primeiro, por baixo das faiscas
+        // O canvas volta a fazer so o que ele fazia no desenho do Alex: as
+        // faiscas. O giro e a vibracao sao do PROPRIO anel — giro por CSS,
+        // vibracao pelo filtro de turbulencia. Nada e desenhado por cima dele.
         const cor = corDoAnel();
-        // Em fundo claro nao existe "somar luz": clarear o que ja e quase branco
-        // nao acende nada. La o brilho pinta por cima, com a cor do anel.
-        const claro = anel.closest('.theme-light') !== null;
-        contexto.globalCompositeOperation = claro ? 'source-over' : 'lighter';
-        for (const b of brilhos) {
-          if (!semMovimento) {
-            // A velocidade respira sozinha: sem isso o giro fica de relogio, e
-            // Alex pediu que fosse organico mesmo em silencio.
-            const respiro = 1 + Math.sin(segundos * 0.23 + b.angulo) * 0.35;
-            b.angulo += b.velocidade * respiro * (0.5 + energia * 2.4) * dt;
-          }
-          const raio = lado * 0.331;
-          const intensidade = (0.16 + energia * 0.9) * b.forca;
-          const meio = b.arco * (0.34 + energia * 0.5);   // mais curto = ponto, nao faixa
-          const gradiente = contexto.createLinearGradient(
-            cx + Math.cos(b.angulo - meio) * raio, cy + Math.sin(b.angulo - meio) * raio,
-            cx + Math.cos(b.angulo + meio) * raio, cy + Math.sin(b.angulo + meio) * raio);
-          // Na referencia do Alex o ponto quente e BRANCO, com a cor do anel so
-          // na saida — e o que da a impressao de brasa correndo pelo fio.
-          gradiente.addColorStop(0, 'rgba(255,255,255,0)');
-          gradiente.addColorStop(0.32, cor);
-          gradiente.addColorStop(0.5, '#ffffff');
-          gradiente.addColorStop(0.68, cor);
-          gradiente.addColorStop(1, 'rgba(255,255,255,0)');
-          contexto.globalAlpha = mudo ? 0.04 : Math.min(0.92, intensidade);
-          contexto.strokeStyle = gradiente;
-          contexto.lineWidth = lado * (0.006 + energia * 0.008);
-          contexto.lineCap = 'round';
-          contexto.beginPath();
-          contexto.arc(cx, cy, raio, b.angulo - meio, b.angulo + meio);
-          contexto.stroke();
-        }
-        contexto.globalCompositeOperation = 'source-over';
+        const claro = claro0;
         for (const f of faiscas) {
           if (!semMovimento) f.angulo += f.velocidade * dt;
           const pulsa = 0.5 + 0.5 * Math.sin(segundos * f.cintilar + f.fase);
@@ -612,8 +580,8 @@ export const ZaraControlCenter: React.FC = () => {
         <section className="main-window">
           <aside className="sidebar">
             <button type="button" className="brand" aria-label="ZARA" onClick={() => setActiveNav('HOME')}>
-              <img className="brand-light" src="./zara-brand-light.png?v=5" alt="ZARA"/>
-              <img className="brand-dark" src="./zara-brand-dark.png?v=5" alt="ZARA"/>
+              <img className="brand-light" src="./zara-brand-light.png?v=6" alt="ZARA"/>
+              <img className="brand-dark" src="./zara-brand-dark.png?v=6" alt="ZARA"/>
             </button>
 
             <nav aria-label="Navegação principal">
@@ -631,7 +599,7 @@ export const ZaraControlCenter: React.FC = () => {
                 <button type="button" aria-label="Configurações de aparência" title="Aparência" onClick={() => setConfigAberta(true)}><IconeTema/></button>
               </div>
               <div className="user-row">
-                <img src="./avatar-alex.png?v=5" alt=""/>
+                <img src="./avatar-alex.png?v=6" alt=""/>
                 <span>⌄</span>
               </div>
             </footer>
@@ -661,8 +629,8 @@ export const ZaraControlCenter: React.FC = () => {
                     </defs>
                   </svg>
                   <canvas ref={faiscasRef} className="spectrum-canvas" aria-hidden="true" width={214} height={214}/>
-                  <img className="ring-light ring-base" src="./zara-ring-light.png?v=5" alt="Presença luminosa da ZARA"/>
-                  <img className="ring-dark ring-base" src="./zara-ring-dark.png?v=5" alt=""/>
+                  <img className="ring-light ring-base" src="./zara-ring-light.png?v=6" alt="Presença luminosa da ZARA"/>
+                  <img className="ring-dark ring-base" src="./zara-ring-dark.png?v=6" alt=""/>
                 </div>
 
                 <form className="command-bar" onSubmit={send}>
@@ -740,10 +708,10 @@ export const ZaraControlCenter: React.FC = () => {
           {/* A marca d'agua e a MESMA logo da barra lateral, so que apagada em preto
               fosco pelo CSS. O arquivo separado que veio pronto era outro desenho e
               ainda por cima vinha cortado. */}
-          <img className="lab-watermark" src="./zara-brand-dark.png?v=5" alt=""/>
+          <img className="lab-watermark" src="./zara-brand-dark.png?v=6" alt=""/>
           <div className="participants">
-            <div><span className="foto-claude"><img src="./avatar-claude.png?v=5" alt="Claude"/></span><small>Claude</small></div>
-            <div><img src="./avatar-openai.png?v=5" alt="OpenAI"/><small>OpenAI</small></div>
+            <div><span className="foto-claude"><img src="./avatar-claude.png?v=6" alt="Claude"/></span><small>Claude</small></div>
+            <div><img src="./avatar-openai.png?v=6" alt="OpenAI"/><small>OpenAI</small></div>
             <div><span className="avatar-marca zara" role="img" aria-label="ZARA"/><small>ZARA</small></div>
           </div>
           <div className="lab-messages">

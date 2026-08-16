@@ -770,3 +770,26 @@
   background: rgba(255,255,255,.45) !important;
   border-color: var(--line) !important;
 }
+
+/* ---- o anel gira o tempo inteiro ----
+   A animacao original era de 60s por volta: quase imperceptivel, e Alex leu
+   como "nao gira". 26s e visivel sem virar carrossel. */
+.zara-preview .orb .ring-base { animation-duration: 26s, 5.8s !important; }
+.zara-preview.orb-listening .orb .ring-base { animation: orbSpin 20s linear infinite !important; }
+.zara-preview.orb-speaking .orb .ring-base { animation: orbSpin 14s linear infinite !important; }
+
+/* ---- o giro organico vai no PROPRIO anel do Alex ----
+   Eu tinha desenhado um anel novo por dentro; ele nao pediu isso. O que ele
+   quer e simples: o desenho dele girando e os fios vibrando ao mesmo tempo.
+   A vibracao ja vem do filtro de turbulencia; aqui esta o giro, com uma
+   velocidade que oscila para nao parecer ponteiro de relogio. */
+@keyframes zaraGiroOrganico {
+  0%   { rotate: 0deg; }
+  28%  { rotate: 104deg; }
+  53%  { rotate: 182deg; }
+  76%  { rotate: 288deg; }
+  100% { rotate: 360deg; }
+}
+.zara-preview .orb .ring-base { animation: zaraGiroOrganico 34s ease-in-out infinite, orbBreath 5.8s ease-in-out infinite !important; }
+.zara-preview.orb-listening .orb .ring-base { animation: zaraGiroOrganico 24s ease-in-out infinite, orbBreath 4.2s ease-in-out infinite !important; }
+.zara-preview.orb-speaking .orb .ring-base { animation: zaraGiroOrganico 17s ease-in-out infinite, orbBreath 3.1s ease-in-out infinite !important; }

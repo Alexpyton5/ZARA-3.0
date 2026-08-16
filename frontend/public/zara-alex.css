@@ -272,3 +272,27 @@
   box-shadow: none;
   transform: scale(1.34);
 }
+
+/* ---- caixa de participar do Lab: uma borda so ----
+   O campo trazia borda, fundo e contorno proprios dentro da caixa que ja tem
+   borda. Duas bordas concentricas era o "quadrado dentro do quadrado" de novo,
+   agora no rodape do painel. */
+.zara-preview .lab-composer input {
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #cfd3ca !important;
+  font-size: 11px !important;
+  padding: 0 !important;
+  min-width: 0;
+  width: 100%;
+}
+.zara-preview .lab-composer input::placeholder { color: #7f857c !important; }
+
+/* ---- simbolo do Claude: zoom menor ----
+   1.34 cortou demais as pontas das petalas. */
+.zara-preview .participants .foto-claude img { transform: scale(1.12); }
+
+/* ---- fotos de perfil mais altas, perto da marca d'agua ---- */
+.zara-preview .participants { padding-bottom: 46px !important; }

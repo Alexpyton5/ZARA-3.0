@@ -181,3 +181,19 @@
 }
 .zara-preview .command-bar > .mic-button { grid-column: 2 !important; justify-self: end !important; }
 .zara-preview .command-bar > .voice-button { grid-column: 3 !important; justify-self: end !important; }
+
+/* ---- marca d'agua do Lab: a logo, em preto fosco ----
+   Antes era outro arquivo e vinha com object-fit:cover num quadro de 182x190,
+   ou seja, o desenho era CORTADO — dai o "quadrado faltando um pedaco" e o
+   nome puxando para o esverdeado.
+   Agora e a propria logo da barra lateral. brightness(0) apaga toda a cor e
+   deixa so a silhueta preta; a opacidade baixa faz ela sumir no fundo do
+   painel, camuflada, aparecendo so quando a luz bate. */
+.zara-preview .lab-watermark {
+  object-fit: contain !important;
+  width: 190px !important;
+  height: auto !important;
+  opacity: .5 !important;
+  filter: brightness(0) !important;
+  mix-blend-mode: normal !important;
+}

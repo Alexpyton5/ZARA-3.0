@@ -563,7 +563,10 @@ export const ZaraControlCenter: React.FC = () => {
             <button type="button" aria-label="Fechar" onClick={() => window.zaraIPC?.window?.close?.()}>×</button>
           </div>
           {painel === 'lab' ? (<>
-          <img className="lab-watermark" src="./zara-lab-watermark.png" alt=""/>
+          {/* A marca d'agua e a MESMA logo da barra lateral, so que apagada em preto
+              fosco pelo CSS. O arquivo separado que veio pronto era outro desenho e
+              ainda por cima vinha cortado. */}
+          <img className="lab-watermark" src="./zara-brand-dark.png" alt=""/>
           <div className="participants">
             <div><img src="./avatar-claude.png" alt="Claude"/><small>Claude</small></div>
             <div><img src="./avatar-openai.png" alt="OpenAI"/><small>OpenAI</small></div>

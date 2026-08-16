@@ -81,6 +81,11 @@ export const ZaraControlCenter: React.FC = () => {
   const [voiceOn, setVoiceOn] = useState(false);
   const [supercerebro, setSupercerebro] = useState(false);
   const [galaxyOpen, setGalaxyOpen] = useState(false);
+  // O lugar da direita nao e do Lab: e do que Alex escolher. O Lab e so o
+  // primeiro inquilino. Pelos tres pontos ele troca o inquilino ou esvazia.
+  const [painel, setPainel] = useState<'lab' | 'conversa'>(() => (localStorage.getItem('zara-painel') as 'lab' | 'conversa') || 'lab');
+  const [painelVisivel, setPainelVisivel] = useState(() => localStorage.getItem('zara-painel-visivel') !== 'nao');
+  const [menuAberto, setMenuAberto] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [historyReady, setHistoryReady] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
@@ -111,6 +116,10 @@ export const ZaraControlCenter: React.FC = () => {
   }, []);
 
   useEffect(() => { localStorage.setItem('zara-tema', theme); }, [theme]);
+  useEffect(() => { localStorage.setItem('zara-painel', painel); }, [painel]);
+  useEffect(() => { localStorage.setItem('zara-painel-visivel', painelVisivel ? 'sim' : 'nao'); }, [painelVisivel]);
+
+  const escolherPainel = (qual: 'lab' | 'conversa') => { setPainel(qual); setPainelVisivel(true); setMenuAberto(false); };
 
   // ZARA-AEC-RENDERER-001. Só abre o microfone aqui quando o backend disser que
   // ele é o dono do áudio; no modo local o PortAudio já capturou, e duas capturas
@@ -515,22 +524,23 @@ export const ZaraControlCenter: React.FC = () => {
                     <span className="voice-bars"><i/><i/><i/><i/><i/></span>
                   </button>
                 </form>
-                {messages.length > 0 && (
-                  <section className="conversa-recente" ref={logRef} aria-label="Conversa recente">
-                    {messages.slice(-4).map((message, index) => (
-                      <article key={message.id || `${message.timestamp}-${index}`} className={message.role}>
-                        <strong>{message.role === 'assistant' ? 'ZARA' : message.role === 'system' ? 'Sistema' : 'Você'}</strong>
-                        <p>{message.content}</p>
-                        <time>{horaCurta(message.timestamp)}</time>
-                      </article>
-                    ))}
-                  </section>
-                )}
 
               </div>
 
               <aside className="today-card">
-                <header><div><IconeSol/><strong>Hoje</strong></div><span>•••</span></header>
+                <header>
+                  <div><IconeSol/><strong>Hoje</strong></div>
+                  <div className="menu-painel">
+                    <button type="button" aria-haspopup="menu" aria-expanded={menuAberto} aria-label="Escolher o que aparece no painel" onClick={() => setMenuAberto((v) => !v)}>•••</button>
+                    {menuAberto && (
+                      <div className="menu-opcoes" role="menu">
+                        <button type="button" role="menuitem" className={painelVisivel && painel === 'lab' ? 'marcado' : ''} onClick={() => escolherPainel('lab')}>ZARA Lab</button>
+                        <button type="button" role="menuitem" className={painelVisivel && painel === 'conversa' ? 'marcado' : ''} onClick={() => escolherPainel('conversa')}>Conversa com a ZARA</button>
+                        <button type="button" role="menuitem" onClick={() => { setPainelVisivel(false); setMenuAberto(false); }}>Ocultar o painel</button>
+                      </div>
+                    )}
+                  </div>
+                </header>
                 <article><span className="agenda-symbol">▣</span><div><strong>Reunião de projeto</strong><small>10:00</small></div></article>
                 <article><span className="agenda-symbol plane">⌁</span><div><strong>Viagem</strong><small>15:30&nbsp; · &nbsp;Guarulhos</small></div></article>
                 <article className="priority"><span className="agenda-symbol">☆</span><div><strong>Prioridade do dia</strong><small>Preparar relatório<br/>estratégico</small></div></article>
@@ -545,12 +555,14 @@ export const ZaraControlCenter: React.FC = () => {
           )}
         </section>
 
+        {painelVisivel ? (
         <aside className="lab-window">
           <div className="window-controls">
             <button type="button" aria-label="Minimizar" onClick={() => window.zaraIPC?.window?.minimize?.()}>—</button>
             <button type="button" aria-label="Maximizar" onClick={() => window.zaraIPC?.window?.maximize?.()}><i/></button>
             <button type="button" aria-label="Fechar" onClick={() => window.zaraIPC?.window?.close?.()}>×</button>
           </div>
+          {painel === 'lab' ? (<>
           <img className="lab-watermark" src="./zara-lab-watermark.png" alt=""/>
           <div className="participants">
             <div><img src="./avatar-claude.png" alt="Claude"/><small>Claude</small></div>
@@ -577,7 +589,28 @@ export const ZaraControlCenter: React.FC = () => {
           <button type="button" className={`hermes ${supercerebro ? 'ativo' : ''}`} onClick={() => void toggleSuper()}>
             {supercerebro ? 'Hermes conectado' : 'Conectar Hermes'}
           </button>
+          </>) : (
+            <div className="painel-conversa">
+              <header><strong>Conversa com a ZARA</strong>
+                <button type="button" disabled={clearingHistory || busy || voiceOn || !historyReady} onClick={() => void clearConversationHistory()} aria-label="Limpar conversa">limpar</button>
+              </header>
+              <div className="painel-conversa-lista" ref={logRef}>
+                {messages.length === 0 ? (
+                  <p className="vazio">{historyReady ? 'Ainda não conversamos hoje.' : 'Carregando a conversa...'}</p>
+                ) : messages.map((message, index) => (
+                  <article key={message.id || `${message.timestamp}-${index}`} className={message.role}>
+                    <strong>{message.role === 'assistant' ? 'ZARA' : message.role === 'system' ? 'Sistema' : 'Você'}</strong>
+                    <p>{message.content}</p>
+                    <time>{horaCurta(message.timestamp)}</time>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
+        ) : (
+          <button type="button" className="painel-oculto" onClick={() => setPainelVisivel(true)} aria-label="Mostrar o painel">‹</button>
+        )}
       </section>
 
       <div className="zara-toasts">{toasts.map((t) => <div key={t.id} className={`zara-toast ${t.kind || 'ok'}`}>{t.text}</div>)}</div>

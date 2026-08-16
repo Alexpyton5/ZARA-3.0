@@ -154,3 +154,30 @@
   gap: 8px !important;
   padding: 7px 9px 7px 26px !important;
 }
+
+/* ---- a pilula, na medida do desenho ----
+   Ela estava curta e com os botoes grudados no texto porque a grade original
+   nao vencia. Agora o campo ocupa toda a coluna da esquerda e os dois botoes
+   ficam ancorados no fim da caixa, como no desenho do Alex. */
+.zara-preview .command-bar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 8px 10px 8px 28px !important;
+  height: 64px !important;
+  width: min(100%, 620px) !important;
+}
+.zara-preview .command-bar > input {
+  grid-column: 1 !important;
+  justify-self: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  outline: none !important;
+  color: var(--ink) !important;
+  font-size: 13px !important;
+}
+.zara-preview .command-bar > .mic-button { grid-column: 2 !important; justify-self: end !important; }
+.zara-preview .command-bar > .voice-button { grid-column: 3 !important; justify-self: end !important; }

@@ -28,8 +28,12 @@ const IconeMic = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="n
 const IconeMicMudo = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M9 9v3a3 3 0 0 0 4.6 2.5M15 11.5V6a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 10.5 6M12 18v3"/></svg>;
 const IconeAviao = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-          d="M3.6 6.4 20.4 12 3.6 17.6 6.2 12 3.6 6.4Z"/>
+    {/* Aviao de papel VAZADO, com a dobra visivel — como na imagem do Alex.
+        O anterior era uma forma cheia, com recorte na traseira. */}
+    <path fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+          d="M21.5 3.2 2.6 10.6l7.7 2.6 2.6 7.6 8.6-17.6Z"/>
+    <path fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+          d="M10.3 13.2 21.5 3.2"/>
   </svg>
 );
 const IconeSol = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.6"/><path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>;

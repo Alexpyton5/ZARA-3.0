@@ -705,3 +705,43 @@
 .zara-preview.theme-light .orb {
   filter: brightness(calc(var(--zara-anel-forca, 1) * .98)) saturate(1.15) contrast(1.12);
 }
+
+/* ---- paleta dos baloes do Lab ----
+   Lida da imagem que o Alex mandou: ameixa para o Claude, champanhe queimado
+   para a OpenAI, cinza para a ZARA e uma ameixa mais funda para ele. O painel
+   fica escuro nos DOIS temas, como esta na prancha de identidade dele. */
+.zara-preview .lab-window,
+.zara-preview.theme-light .lab-window {
+  color: #EDEAE4 !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(158deg, #262421 0%, #1B1A18 60%, #232120 100%) !important;
+}
+.zara-preview .lab-messages article,
+.zara-preview.theme-light .lab-messages article { color: #F2EFE9 !important; border: 0 !important; }
+.zara-preview .lab-messages article.wine,
+.zara-preview.theme-light .lab-messages article.wine { background: #6B5166 !important; }
+.zara-preview .lab-messages article.gold,
+.zara-preview.theme-light .lab-messages article.gold { background: #A98A5F !important; }
+.zara-preview .lab-messages article.gray,
+.zara-preview.theme-light .lab-messages article.gray { background: #6E6E67 !important; }
+/* a fala do proprio Alex numa ameixa mais funda, para nao competir com o Claude */
+.zara-preview .lab-messages article.wine:nth-child(4n),
+.zara-preview.theme-light .lab-messages article.wine:nth-child(4n) { background: #5B4256 !important; }
+
+.zara-preview .participants small,
+.zara-preview.theme-light .participants small { color: #DCD8D1 !important; }
+.zara-preview .window-controls button,
+.zara-preview.theme-light .window-controls button { color: #DCD8D1 !important; }
+.zara-preview .lab-composer,
+.zara-preview.theme-light .lab-composer {
+  color: #9A968E !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  background: rgba(255,255,255,.04) !important;
+}
+.zara-preview .lab-composer input,
+.zara-preview.theme-light .lab-composer input { color: #EDEAE4 !important; }
+.zara-preview .lab-composer button,
+.zara-preview.theme-light .lab-composer button { color: #DCD8D1 !important; }
+.zara-preview .hermes,
+.zara-preview.theme-light .hermes { color: #9A968E !important; background: rgba(255,255,255,.05) !important; border-color: rgba(255,255,255,.12) !important; }
+.zara-preview.theme-light .lab-watermark { filter: brightness(0) invert(1) sepia(.3) saturate(.5) !important; }

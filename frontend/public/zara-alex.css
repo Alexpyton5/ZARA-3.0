@@ -594,3 +594,11 @@
 .zara-preview.theme-light ::-webkit-scrollbar-thumb,
 .zara-preview.theme-light .config-painel::-webkit-scrollbar-thumb { background: rgba(70,59,52,.16); }
 .zara-preview.theme-light *, .zara-preview.theme-light .config-painel { scrollbar-color: rgba(70,59,52,.22) transparent; }
+
+/* ---- altura e tamanho do anel ----
+   So a vertical e ajustavel de proposito: soltar o eixo horizontal deixaria o
+   circulo torto em relacao a barra de comando, que e centrada. */
+.zara-preview .orb {
+  width: calc(var(--zara-anel-tamanho, 1) * clamp(350px, 28.8vw, 450px)) !important;
+  transform: translateY(var(--zara-anel-y, -27px)) !important;
+}

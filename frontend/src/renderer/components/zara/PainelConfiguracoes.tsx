@@ -20,6 +20,9 @@ export interface Aparencia {
   anel: string;            // cor do anel central
   forcaAnel: number;       // brilho do anel: 0.4 apagado, 2 reluzente
   brilhoAnel: number;      // raio do halo em px
+  anelAltura: number;      // sobe/desce em px. So a altura: mexer nos lados
+                           // deixaria o circulo torto, e Alex pediu para travar.
+  anelTamanho: number;     // 0,6 a 1,4 do tamanho original
   palco: string;           // fundo atrás do anel
   palcoForca: number;      // 0 = invisível, 1 = cheio
   barra: string;           // cor das laterais e dos painéis
@@ -41,6 +44,8 @@ export const APARENCIA_PADRAO: Aparencia = {
   anel: '#a8c3a0',
   forcaAnel: 1,
   brilhoAnel: 8,
+  anelAltura: -27,
+  anelTamanho: 1,
   palco: '#121313',
   palcoForca: 0,
   barra: '#161817',
@@ -131,6 +136,8 @@ export function aplicarAparencia(raiz: HTMLElement | null, a: Aparencia): void {
   s.setProperty('--zara-fonte-lab', `${a.fonteLab}px`);
   s.setProperty('--zara-anel-forca', String(a.forcaAnel));
   s.setProperty('--zara-anel-brilho', `${a.brilhoAnel}px`);
+  s.setProperty('--zara-anel-y', `${a.anelAltura}px`);
+  s.setProperty('--zara-anel-tamanho', String(a.anelTamanho));
   s.setProperty('--zara-palco', comAlfa(a.palco, a.palcoForca));
   const receita = (h: number, sat: number, br: number) =>
     `grayscale(1) sepia(1) hue-rotate(${h}deg) saturate(${sat}) brightness(${br})`;
@@ -239,6 +246,10 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
                      onMudar={(v) => trocar('forcaAnel', v)}/>
           <Regulador rotulo="Brilho" valor={aparencia.brilhoAnel} min={0} max={30} passo={1} sufixo="px"
                      onMudar={(v) => trocar('brilhoAnel', v)}/>
+          <Regulador rotulo="Altura" valor={aparencia.anelAltura} min={-140} max={90} passo={1} sufixo="px"
+                     onMudar={(v) => trocar('anelAltura', v)}/>
+          <Regulador rotulo="Tamanho" valor={aparencia.anelTamanho} min={0.6} max={1.4} passo={0.01}
+                     onMudar={(v) => trocar('anelTamanho', v)}/>
         </section>
 
         <section>

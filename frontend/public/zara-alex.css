@@ -745,3 +745,28 @@
 .zara-preview .hermes,
 .zara-preview.theme-light .hermes { color: #9A968E !important; background: rgba(255,255,255,.05) !important; border-color: rgba(255,255,255,.12) !important; }
 .zara-preview.theme-light .lab-watermark { filter: brightness(0) invert(1) sepia(.3) saturate(.5) !important; }
+
+/* ---- o Lab volta para o grupo das barras ----
+   Alex: "nao deixe o lab claro no da mesma cor das barras 1 e 2 e se mudar uma
+   muda as 3". A prancha mostrava o Lab escuro no tema claro, mas a regra dele
+   vale mais: as tres superficies andam juntas. Os baloes coloridos continuam,
+   so o painel que os segura muda. */
+.zara-preview.theme-light .lab-window {
+  color: var(--ink) !important;
+  border: 1px solid var(--line) !important;
+  background: var(--sidebar) !important;
+}
+.zara-preview.theme-light .participants small,
+.zara-preview.theme-light .window-controls button,
+.zara-preview.theme-light .lab-composer button { color: var(--muted) !important; }
+.zara-preview.theme-light .lab-composer {
+  color: var(--muted) !important;
+  border: 1px solid var(--strong-line) !important;
+  background: rgba(255,255,255,.5) !important;
+}
+.zara-preview.theme-light .lab-composer input { color: var(--ink) !important; }
+.zara-preview.theme-light .hermes {
+  color: var(--muted) !important;
+  background: rgba(255,255,255,.45) !important;
+  border-color: var(--line) !important;
+}

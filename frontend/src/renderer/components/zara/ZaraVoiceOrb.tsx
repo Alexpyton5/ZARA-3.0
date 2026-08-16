@@ -18,13 +18,32 @@ interface ZaraVoiceOrbProps {
   theme: ZaraOrbTheme;
 }
 
+interface Filament {
+  band: 0 | 1;
+  radialOffset: number;
+  amplitude: number;
+  temporalFrequency: number;
+  drift: number;
+  phase: number;
+  width: number;
+  alpha: number;
+  harmonicA: number;
+  harmonicB: number;
+  harmonicC: number;
+}
+
 interface Particle {
   angle: number;
-  speed: number;
-  cord: 0 | 1;
+  angularSpeed: number;
+  radialBase: number;
+  radialAmplitude: number;
+  radialFrequency: number;
   size: number;
   alpha: number;
   phase: number;
+  twinkleSpeed: number;
+  spin: number;
+  spinSpeed: number;
 }
 
 interface Point {
@@ -33,24 +52,61 @@ interface Point {
 }
 
 const TAU = Math.PI * 2;
-const SAMPLE_COUNT = 196;
-const PARTICLE_COUNT = 34;
+const SAMPLE_COUNT = 220;
+const PARTICLE_COUNT = 42;
+
+// The two original band radii are preserved. Extra filaments live inside a very small
+// envelope around those exact radii so the perceived circle/silhouette does not change.
+const FILAMENTS: readonly Filament[] = [
+  { band: 0, radialOffset: -0.0022, amplitude: 0.72, temporalFrequency: 0.73, drift: 0.72, phase: 0.28, width: 0.55, alpha: 0.34, harmonicA: 7, harmonicB: 15, harmonicC: 27 },
+  { band: 0, radialOffset: 0, amplitude: 1, temporalFrequency: 1.07, drift: 0.91, phase: 1.46, width: 1.12, alpha: 0.92, harmonicA: 6, harmonicB: 13, harmonicC: 23 },
+  { band: 0, radialOffset: 0.0024, amplitude: 0.79, temporalFrequency: 1.34, drift: 1.08, phase: 3.18, width: 0.62, alpha: 0.43, harmonicA: 8, harmonicB: 17, harmonicC: 29 },
+  { band: 1, radialOffset: -0.0025, amplitude: 0.76, temporalFrequency: 0.82, drift: 0.78, phase: 4.14, width: 0.58, alpha: 0.37, harmonicA: 5, harmonicB: 14, harmonicC: 25 },
+  { band: 1, radialOffset: 0, amplitude: 0.91, temporalFrequency: 1.18, drift: 0.96, phase: 2.12, width: 0.92, alpha: 0.72, harmonicA: 7, harmonicB: 16, harmonicC: 26 },
+  { band: 1, radialOffset: 0.0021, amplitude: 0.68, temporalFrequency: 1.43, drift: 1.13, phase: 5.37, width: 0.52, alpha: 0.32, harmonicA: 9, harmonicB: 19, harmonicC: 31 },
+] as const;
+
+const INNER_CARRIER = FILAMENTS[1];
+const OUTER_CARRIER = FILAMENTS[4];
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));
 }
 
+function lerp(a: number, b: number, amount: number) {
+  return a + (b - a) * amount;
+}
+
+function wrapAngle(angle: number) {
+  const wrapped = angle % TAU;
+  return wrapped < 0 ? wrapped + TAU : wrapped;
+}
+
+function sequenceValue(index: number, salt: number) {
+  const value = Math.sin((index + 1) * (12.9898 + salt * 7.233)) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 function makeParticles(): Particle[] {
-  const golden = 0.6180339887498949;
   return Array.from({ length: PARTICLE_COUNT }, (_, index) => {
-    const sequence = (index * golden) % 1;
+    const a = sequenceValue(index, 0.11);
+    const b = sequenceValue(index, 0.37);
+    const c = sequenceValue(index, 0.73);
+    const d = sequenceValue(index, 1.17);
+    const direction = a > 0.47 ? 1 : -1;
+
     return {
-      angle: TAU * ((index / PARTICLE_COUNT + sequence * 0.17) % 1),
-      speed: 0.12 + (index % 7) * 0.018,
-      cord: (index % 3 === 0 ? 1 : 0) as 0 | 1,
-      size: 0.62 + (index % 5) * 0.13,
-      alpha: 0.38 + (index % 6) * 0.075,
-      phase: TAU * sequence,
+      angle: TAU * b,
+      angularSpeed: direction * (0.045 + c * 0.125),
+      radialBase: 0.08 + d * 0.84,
+      radialAmplitude: 0.09 + a * 0.24,
+      radialFrequency: 0.12 + b * 0.26,
+      size: 0.48 + c * 0.78,
+      alpha: 0.28 + d * 0.58,
+      phase: TAU * a,
+      twinkleSpeed: 1.25 + b * 2.2,
+      spin: TAU * d,
+      spinSpeed: direction * (0.18 + c * 0.58),
     };
   });
 }
@@ -77,43 +133,99 @@ function stateTarget(state: ZaraVoiceState, level: number, reducedMotion: boolea
   }
 }
 
-function stateSpeed(state: ZaraVoiceState, level: number, reducedMotion: boolean) {
+function vibrationSpeed(state: ZaraVoiceState, level: number, reducedMotion: boolean) {
   if (reducedMotion) return 0;
   switch (state) {
-    case 'SPEAKING': return 1.12 + clamp(level) * 1.55;
-    case 'LISTENING': return 0.72 + clamp(level) * 0.38;
+    case 'SPEAKING': return 0.86 + clamp(level) * 1.18;
+    case 'LISTENING': return 0.64 + clamp(level) * 0.48;
     case 'THINKING':
-    case 'PROCESSING': return 0.62;
+    case 'PROCESSING': return 0.58;
     case 'MUTED':
-    case 'SLEEPING': return 0.06;
-    default: return 0.18;
+    case 'SLEEPING': return 0.08;
+    default: return 0.32;
   }
 }
 
-function pointOnCord(
+function rotationSpeed(state: ZaraVoiceState, level: number, reducedMotion: boolean) {
+  if (reducedMotion) return 0;
+  const audio = clamp(level);
+  switch (state) {
+    case 'SPEAKING': return 0.075 + audio * 0.035;
+    case 'LISTENING': return 0.064 + audio * 0.018;
+    case 'THINKING':
+    case 'PROCESSING': return 0.07;
+    case 'MUTED':
+    case 'SLEEPING': return 0.026;
+    default: return 0.052;
+  }
+}
+
+function filamentRadius(
   theta: number,
-  cord: 0 | 1,
+  filament: Filament,
+  size: number,
+  energy: number,
+  vibrationClock: number,
+  rotation: number,
+) {
+  const baseRadius = size * (filament.band === 0 ? 0.302 : 0.347);
+  const localTheta = theta - rotation * filament.drift;
+  const clock = vibrationClock * filament.temporalFrequency + filament.phase;
+
+  // Higher spatial harmonics and much smaller displacement make the lines visibly vibrate
+  // instead of bending together like rubber. Every filament owns its own oscillator.
+  const wave =
+    Math.sin(localTheta * filament.harmonicA + clock) * 0.46 +
+    Math.sin(localTheta * filament.harmonicB - clock * 0.71 + filament.phase * 0.37) * 0.31 +
+    Math.sin(localTheta * filament.harmonicC + clock * 0.43 - filament.phase * 0.22) * 0.23;
+
+  const micro =
+    Math.sin(localTheta * (filament.harmonicC + 8) - clock * 1.31) * 0.58 +
+    Math.sin(localTheta * (filament.harmonicB + 13) + clock * 1.67) * 0.42;
+
+  const vibrationAmplitude = size * (0.0007 + energy * 0.0046) * filament.amplitude;
+  const microAmplitude = size * (0.00028 + energy * 0.00145) * filament.amplitude;
+
+  return baseRadius + size * filament.radialOffset + wave * vibrationAmplitude + micro * microAmplitude;
+}
+
+function pointOnFilament(
+  theta: number,
+  filament: Filament,
   centerX: number,
   centerY: number,
   size: number,
   energy: number,
-  phase: number,
+  vibrationClock: number,
+  rotation: number,
 ): Point {
-  const baseRadius = size * (cord === 0 ? 0.302 : 0.347);
-  const cordShift = cord === 0 ? 0 : 0.58;
-  const amplitude = size * (0.0034 + energy * 0.0165);
-
-  // Three low-amplitude harmonics keep the ring organic without making it wobble as one rigid object.
-  const wave =
-    Math.sin(theta * 3 + phase * 1.08 + cordShift) * 0.54 +
-    Math.sin(theta * 7 - phase * 0.66 + cordShift * 1.8) * 0.30 +
-    Math.sin(theta * 11 + phase * 0.31 - cordShift) * 0.16;
-  const micro = Math.sin(theta * 17 - phase * 0.19 + cordShift) * size * 0.00085;
-  const radius = baseRadius + wave * amplitude + micro;
-
+  const radius = filamentRadius(theta, filament, size, energy, vibrationClock, rotation);
   return {
     x: centerX + Math.cos(theta) * radius,
     y: centerY + Math.sin(theta) * radius,
+  };
+}
+
+function particlePoint(
+  particle: Particle,
+  timeSeconds: number,
+  centerX: number,
+  centerY: number,
+  size: number,
+  energy: number,
+  vibrationClock: number,
+  rotation: number,
+): Point {
+  const radialTravel = Math.sin(timeSeconds * particle.radialFrequency + particle.phase) * particle.radialAmplitude;
+  const transfer = clamp(particle.radialBase + radialTravel, 0.025, 0.975);
+  const inner = filamentRadius(particle.angle, INNER_CARRIER, size, energy, vibrationClock, rotation);
+  const outer = filamentRadius(particle.angle, OUTER_CARRIER, size, energy, vibrationClock, rotation);
+  const crossCurrent = Math.sin(timeSeconds * 0.31 + particle.phase * 1.7) * size * (0.0007 + energy * 0.0012);
+  const radius = lerp(inner, outer, transfer) + crossCurrent;
+
+  return {
+    x: centerX + Math.cos(particle.angle) * radius,
+    y: centerY + Math.sin(particle.angle) * radius,
   };
 }
 
@@ -143,7 +255,8 @@ export const ZaraVoiceOrb: React.FC<ZaraVoiceOrbProps> = ({ state, level, theme 
     let frameId = 0;
     let previousTime = performance.now();
     let energy = 0.045;
-    let phase = 0;
+    let vibrationClock = 0;
+    let rotation = 0;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -166,44 +279,85 @@ export const ZaraVoiceOrb: React.FC<ZaraVoiceOrbProps> = ({ state, level, theme 
     window.addEventListener('resize', resize);
     resize();
 
-    const drawCord = (
-      cord: 0 | 1,
+    const drawFilament = (
+      filament: Filament,
       centerX: number,
       centerY: number,
       size: number,
       currentEnergy: number,
-      currentPhase: number,
+      currentClock: number,
+      currentRotation: number,
       color: string,
       glowColor: string,
-      opacity: number,
+      opacityScale: number,
     ) => {
       context.beginPath();
       for (let index = 0; index <= SAMPLE_COUNT; index += 1) {
         const theta = (index / SAMPLE_COUNT) * TAU;
-        const point = pointOnCord(theta, cord, centerX, centerY, size, currentEnergy, currentPhase);
+        const point = pointOnFilament(
+          theta,
+          filament,
+          centerX,
+          centerY,
+          size,
+          currentEnergy,
+          currentClock,
+          currentRotation,
+        );
         if (index === 0) context.moveTo(point.x, point.y);
         else context.lineTo(point.x, point.y);
       }
       context.closePath();
-      context.globalAlpha = opacity;
+      context.globalAlpha = filament.alpha * opacityScale;
       context.strokeStyle = color;
-      context.lineWidth = cord === 0 ? 1.45 : 1.05;
+      context.lineWidth = filament.width;
       context.shadowColor = glowColor;
-      context.shadowBlur = 3.5 + currentEnergy * 8.5;
+      context.shadowBlur = 2.4 + currentEnergy * 5.8;
       context.stroke();
       context.shadowBlur = 0;
+    };
+
+    const drawLightFlake = (
+      particle: Particle,
+      point: Point,
+      radius: number,
+      alpha: number,
+      color: string,
+      glowColor: string,
+    ) => {
+      context.save();
+      context.translate(point.x, point.y);
+      context.rotate(particle.spin);
+      context.globalAlpha = alpha;
+      context.fillStyle = color;
+      context.shadowColor = glowColor;
+      context.shadowBlur = 2.2 + radius * 2.2;
+      context.beginPath();
+      context.moveTo(0, -radius * 1.7);
+      context.lineTo(radius * 0.48, -radius * 0.32);
+      context.lineTo(radius * 1.45, 0);
+      context.lineTo(radius * 0.42, radius * 0.28);
+      context.lineTo(0, radius * 1.55);
+      context.lineTo(-radius * 0.42, radius * 0.28);
+      context.lineTo(-radius * 1.45, 0);
+      context.lineTo(-radius * 0.48, -radius * 0.32);
+      context.closePath();
+      context.fill();
+      context.restore();
     };
 
     const draw = (time: number) => {
       const elapsed = Math.min(0.05, Math.max(0.001, (time - previousTime) / 1000));
       previousTime = time;
+      const timeSeconds = time / 1000;
       const live = liveRef.current;
       const target = stateTarget(live.state, live.level, reducedMotion);
 
-      // First-order exponential smoothing cannot overshoot the target: no spring bounce, no hard snap.
+      // First-order damping keeps the response organic without spring overshoot.
       const responseRate = target > energy ? 8.4 : 4.6;
       energy += (target - energy) * (1 - Math.exp(-responseRate * elapsed));
-      phase += stateSpeed(live.state, live.level, reducedMotion) * elapsed;
+      vibrationClock += vibrationSpeed(live.state, live.level, reducedMotion) * elapsed;
+      rotation = wrapAngle(rotation + rotationSpeed(live.state, live.level, reducedMotion) * elapsed);
 
       context.clearRect(0, 0, cssWidth, cssHeight);
       const centerX = cssWidth / 2;
@@ -226,7 +380,7 @@ export const ZaraVoiceOrb: React.FC<ZaraVoiceOrbProps> = ({ state, level, theme 
             particle: 'rgba(130, 91, 121, .96)',
           };
 
-      // Only a diffuse outer glow is drawn; there is deliberately no inner orb/circle layer.
+      // Preserve the existing diffuse halo and the empty center: no new orb/circle layer.
       const halo = context.createRadialGradient(
         centerX,
         centerY,
@@ -242,32 +396,44 @@ export const ZaraVoiceOrb: React.FC<ZaraVoiceOrbProps> = ({ state, level, theme 
       context.fillStyle = halo;
       context.fillRect(0, 0, cssWidth, cssHeight);
 
-      drawCord(1, centerX, centerY, size, energy * 0.88, phase * 0.91, palette.secondary, palette.glow, muted ? 0.28 : 0.72);
-      drawCord(0, centerX, centerY, size, energy, phase, palette.primary, palette.glow, muted ? 0.34 : 0.9);
-
-      const particleSpeed = reducedMotion ? 0 : (0.62 + energy * 1.9);
-      particlesRef.current.forEach((particle, index) => {
-        particle.angle = (particle.angle + particle.speed * elapsed * particleSpeed) % TAU;
-        const particlePhase = phase + particle.phase * 0.08;
-        const point = pointOnCord(
-          particle.angle,
-          particle.cord,
+      const opacityScale = muted ? 0.36 : 1;
+      FILAMENTS.forEach((filament) => {
+        const color = filament.band === 0 ? palette.primary : palette.secondary;
+        drawFilament(
+          filament,
           centerX,
           centerY,
           size,
           energy,
-          particlePhase,
+          vibrationClock,
+          rotation,
+          color,
+          palette.glow,
+          opacityScale,
         );
-        const flicker = 0.72 + Math.sin(time * 0.0035 + particle.phase + index * 0.37) * 0.18;
-        const radius = particle.size * (0.86 + energy * 0.48);
+      });
 
-        context.beginPath();
-        context.globalAlpha = (muted ? 0.12 : particle.alpha) * flicker;
-        context.fillStyle = particle.cord === 0 ? palette.particle : palette.secondary;
-        context.shadowColor = palette.glow;
-        context.shadowBlur = 2 + energy * 5;
-        context.arc(point.x, point.y, radius, 0, TAU);
-        context.fill();
+      const particleEnergy = 0.58 + energy * 1.42;
+      particlesRef.current.forEach((particle, index) => {
+        particle.angle = wrapAngle(particle.angle + particle.angularSpeed * elapsed * particleEnergy);
+        particle.spin = wrapAngle(particle.spin + particle.spinSpeed * elapsed * (0.55 + energy * 0.7));
+
+        const point = particlePoint(
+          particle,
+          timeSeconds,
+          centerX,
+          centerY,
+          size,
+          energy,
+          vibrationClock,
+          rotation,
+        );
+        const twinkle = 0.73 + Math.sin(timeSeconds * particle.twinkleSpeed + particle.phase + index * 0.19) * 0.19;
+        const radius = particle.size * (0.72 + energy * 0.34);
+        const alpha = (muted ? 0.1 : particle.alpha) * twinkle;
+        const color = index % 4 === 0 ? palette.secondary : palette.particle;
+
+        drawLightFlake(particle, point, radius, alpha, color, palette.glow);
       });
 
       context.globalAlpha = 1;

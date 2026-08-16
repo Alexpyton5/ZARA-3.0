@@ -734,6 +734,19 @@ function setupIPC(): void {
   ipcMain.handle('window-close', () => mainWindow?.close())
 }
 
+// Se quem lia a saida deste processo sumir (um terminal fechado, um pipe
+// cortado), qualquer console.log vira EPIPE e derruba o app inteiro com um
+// dialogo de erro. Log nao pode matar a ZARA.
+for (const canal of [process.stdout, process.stderr]) {
+  canal.on('error', (erro: NodeJS.ErrnoException) => {
+    if (erro?.code === 'EPIPE') return
+  })
+}
+process.on('uncaughtException', (erro: NodeJS.ErrnoException) => {
+  if (erro?.code === 'EPIPE') return
+  throw erro
+})
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   // Another ZARA instance is already running: do not start a second sidecar

@@ -526,10 +526,14 @@
 
 /* cor das logos */
 .zara-preview .lab-watermark {
-  filter: var(--zara-marca-filtro, brightness(0)) !important;
-  opacity: var(--zara-marca-opacidade, .5) !important;
+  filter: var(--zara-agua-filtro, brightness(0)) !important;
+  opacity: var(--zara-agua-opacidade, .5) !important;
 }
-.zara-preview .brand img { filter: var(--zara-marca-brand, none); }
+.zara-preview.theme-light .lab-watermark {
+  filter: var(--zara-agua-filtro, brightness(0) invert(1) sepia(.32) saturate(.5)) !important;
+  opacity: var(--zara-agua-opacidade, .72) !important;
+}
+.zara-preview .brand img { filter: var(--zara-logo-filtro, none); }
 
 /* ---- o painel ---- */
 .config-fundo { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
@@ -559,3 +563,20 @@
 .config-painel > footer { padding-top: 14px; }
 .config-painel > footer button { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
 .config-painel > footer button:hover { color: var(--ink); }
+
+/* ---- o quadradinho de cor ----
+   Estava esticado por toda a coluna do regulador. Vira um quadrado pequeno,
+   como nos seletores de tema comuns. */
+.config-linha.cor { grid-template-columns: 116px 1fr 26px 62px; }
+.config-linha.cor input[type="color"] {
+  grid-column: 3;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--strong-line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.config-linha.cor input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.config-linha.cor input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }

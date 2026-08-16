@@ -24,10 +24,14 @@ export interface Aparencia {
   palcoForca: number;      // 0 = invisível, 1 = cheio
   barra: string;           // cor das laterais e dos painéis
   barraOpacidade: number;  // translucidez das laterais
-  marcaMatiz: number;      // 0–360, cor das logos
-  marcaSaturacao: number;  // 0 = cinza, 2 = saturado
-  marcaBrilho: number;     // reluzência
-  marcaOpacidade: number;  // quanto a marca d'água aparece
+  // Duas logos, dois conjuntos. Mexer numa nao pode mexer na outra.
+  logoMatiz: number;       // marca da barra lateral (a de cima do "Hoje")
+  logoSaturacao: number;
+  logoBrilho: number;
+  aguaMatiz: number;       // marca d'agua atras do Lab e do log
+  aguaSaturacao: number;
+  aguaBrilho: number;
+  aguaOpacidade: number;
 }
 
 export const APARENCIA_PADRAO: Aparencia = {
@@ -41,10 +45,9 @@ export const APARENCIA_PADRAO: Aparencia = {
   palcoForca: 0,
   barra: '#161817',
   barraOpacidade: 0.78,
-  marcaMatiz: 90,
-  marcaSaturacao: 0.55,
-  marcaBrilho: 1,
-  marcaOpacidade: 0.5,
+  logoMatiz: 90, logoSaturacao: 0.55, logoBrilho: 1,
+  aguaMatiz: 90, aguaSaturacao: 0.55, aguaBrilho: 1,
+  aguaOpacidade: 0.5,
 };
 
 // O claro tem outros pontos de partida; senão trocar de modo entrega um tema quebrado.
@@ -56,9 +59,9 @@ export const APARENCIA_PADRAO_CLARA: Aparencia = {
   palco: '#f3eeea',
   barra: '#f6f1ec',
   barraOpacidade: 0.72,
-  marcaMatiz: 320,
-  marcaSaturacao: 0.35,
-  marcaOpacidade: 0.72,
+  logoMatiz: 320, logoSaturacao: 0.35,
+  aguaMatiz: 320, aguaSaturacao: 0.35,
+  aguaOpacidade: 0.72,
 };
 
 const CHAVE = 'zara-aparencia';
@@ -70,15 +73,43 @@ function comAlfa(hex: string, alfa: number): string {
   return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alfa))})`;
 }
 
-export function carregarAparencia(): Aparencia {
+/**
+ * O que fica em disco: o modo atual e UM CONJUNTO POR MODO.
+ *
+ * Alex: "tem que haver uma configuracao diferente para cada modo e fica salvo e
+ * quando alterar o tema nao muda o outro". Antes trocar de modo jogava fora o
+ * que ele tinha ajustado naquele modo; agora cada um dorme no proprio quarto.
+ */
+interface Guardado {
+  modo: ModoDeTema;
+  claro: Aparencia;
+  escuro: Aparencia;
+}
+
+const GUARDADO_PADRAO: Guardado = {
+  modo: 'escuro',
+  claro: APARENCIA_PADRAO_CLARA,
+  escuro: APARENCIA_PADRAO,
+};
+
+function carregarGuardado(): Guardado {
   try {
     const cru = localStorage.getItem(CHAVE);
-    if (!cru) return APARENCIA_PADRAO;
+    if (!cru) return GUARDADO_PADRAO;
     const salvo = JSON.parse(cru);
-    const base = salvo?.modo === 'claro' ? APARENCIA_PADRAO_CLARA : APARENCIA_PADRAO;
-    return { ...base, ...salvo };
+    // Formato antigo (um conjunto so): aproveita no modo em que ele estava.
+    if (salvo && !salvo.claro && !salvo.escuro && salvo.modo) {
+      const qual = salvo.modo === 'claro' ? 'claro' : 'escuro';
+      return { ...GUARDADO_PADRAO, modo: salvo.modo,
+               [qual]: { ...GUARDADO_PADRAO[qual], ...salvo } } as Guardado;
+    }
+    return {
+      modo: salvo?.modo || 'escuro',
+      claro: { ...APARENCIA_PADRAO_CLARA, ...(salvo?.claro || {}) },
+      escuro: { ...APARENCIA_PADRAO, ...(salvo?.escuro || {}) },
+    };
   } catch {
-    return APARENCIA_PADRAO;
+    return GUARDADO_PADRAO;
   }
 }
 
@@ -101,17 +132,29 @@ export function aplicarAparencia(raiz: HTMLElement | null, a: Aparencia): void {
   s.setProperty('--zara-anel-forca', String(a.forcaAnel));
   s.setProperty('--zara-anel-brilho', `${a.brilhoAnel}px`);
   s.setProperty('--zara-palco', comAlfa(a.palco, a.palcoForca));
-  const colorir = `grayscale(1) sepia(1) hue-rotate(${a.marcaMatiz}deg) saturate(${a.marcaSaturacao}) brightness(${a.marcaBrilho})`;
-  s.setProperty('--zara-marca-filtro', colorir);
-  // A logo da barra lateral e um degrade metalico. Colorir por padrao a
-  // achataria, entao ela so entra na brincadeira quando Alex mexe de fato num
-  // dos tres reguladores de logo.
+  const receita = (h: number, sat: number, br: number) =>
+    `grayscale(1) sepia(1) hue-rotate(${h}deg) saturate(${sat}) brightness(${br})`;
   const padrao = a.modo === 'claro' ? APARENCIA_PADRAO_CLARA : APARENCIA_PADRAO;
-  const mexeu = a.marcaMatiz !== padrao.marcaMatiz
-    || a.marcaSaturacao !== padrao.marcaSaturacao
-    || a.marcaBrilho !== padrao.marcaBrilho;
-  s.setProperty('--zara-marca-brand', mexeu ? colorir : 'none');
-  s.setProperty('--zara-marca-opacidade', String(a.marcaOpacidade));
+
+  // A marca d'agua nasce FOSCA: preta no escuro, branca quente no claro. Ela so
+  // recebe cor quando Alex mexe num dos reguladores dela — antes eu tinha
+  // aplicado a receita colorida por padrao e ela ficou verde no tema escuro.
+  const fosco = a.modo === 'claro'
+    ? 'brightness(0) invert(1) sepia(.32) saturate(.5)'
+    : 'brightness(0)';
+  const aguaMexida = a.aguaMatiz !== padrao.aguaMatiz
+    || a.aguaSaturacao !== padrao.aguaSaturacao
+    || a.aguaBrilho !== padrao.aguaBrilho;
+  s.setProperty('--zara-agua-filtro', aguaMexida ? receita(a.aguaMatiz, a.aguaSaturacao, a.aguaBrilho) : fosco);
+
+  // A logo da barra lateral e um degrade metalico: colorir por padrao a
+  // achataria, entao ela fica intacta ate ele mexer.
+  const logoMexida = a.logoMatiz !== padrao.logoMatiz
+    || a.logoSaturacao !== padrao.logoSaturacao
+    || a.logoBrilho !== padrao.logoBrilho;
+  s.setProperty('--zara-logo-filtro', logoMexida ? receita(a.logoMatiz, a.logoSaturacao, a.logoBrilho) : 'none');
+
+  s.setProperty('--zara-agua-opacidade', String(a.aguaOpacidade));
 }
 
 interface Props {
@@ -176,13 +219,7 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
             {(['claro', 'escuro', 'sistema'] as ModoDeTema[]).map((m) => (
               <button key={m} type="button"
                       className={aparencia.modo === m ? 'marcado' : ''}
-                      onClick={() => onMudar({
-                        // Trocar de modo puxa o ponto de partida daquele modo; sem isso
-                        // as cores do escuro iam para o claro e ficava ilegível.
-                        ...(m === 'claro' ? APARENCIA_PADRAO_CLARA : APARENCIA_PADRAO),
-                        modo: m,
-                        fonteLab: aparencia.fonteLab,
-                      })}>
+                      onClick={() => onMudar({ ...aparencia, modo: m })}>
                 {m === 'claro' ? 'Claro' : m === 'escuro' ? 'Escuro' : 'Seguir o Windows'}
               </button>
             ))}
@@ -220,15 +257,25 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
         </section>
 
         <section>
-          <h4>Logos</h4>
-          <Regulador rotulo="Cor" valor={aparencia.marcaMatiz} min={0} max={360} passo={1} sufixo="°"
-                     onMudar={(v) => trocar('marcaMatiz', v)}/>
-          <Regulador rotulo="Saturação" valor={aparencia.marcaSaturacao} min={0} max={2} passo={0.05}
-                     onMudar={(v) => trocar('marcaSaturacao', v)}/>
-          <Regulador rotulo="Reluzência" valor={aparencia.marcaBrilho} min={0.2} max={2.4} passo={0.05}
-                     onMudar={(v) => trocar('marcaBrilho', v)}/>
-          <Regulador rotulo="Marca d'água" valor={aparencia.marcaOpacidade} min={0} max={1} passo={0.02}
-                     onMudar={(v) => trocar('marcaOpacidade', v)}/>
+          <h4>Logo do início</h4>
+          <Regulador rotulo="Cor" valor={aparencia.logoMatiz} min={0} max={360} passo={1} sufixo="°"
+                     onMudar={(v) => trocar('logoMatiz', v)}/>
+          <Regulador rotulo="Saturação" valor={aparencia.logoSaturacao} min={0} max={2} passo={0.05}
+                     onMudar={(v) => trocar('logoSaturacao', v)}/>
+          <Regulador rotulo="Reluzência" valor={aparencia.logoBrilho} min={0.2} max={2.4} passo={0.05}
+                     onMudar={(v) => trocar('logoBrilho', v)}/>
+        </section>
+
+        <section>
+          <h4>Marca d'água do Lab e do log</h4>
+          <Regulador rotulo="Cor" valor={aparencia.aguaMatiz} min={0} max={360} passo={1} sufixo="°"
+                     onMudar={(v) => trocar('aguaMatiz', v)}/>
+          <Regulador rotulo="Saturação" valor={aparencia.aguaSaturacao} min={0} max={2} passo={0.05}
+                     onMudar={(v) => trocar('aguaSaturacao', v)}/>
+          <Regulador rotulo="Reluzência" valor={aparencia.aguaBrilho} min={0.2} max={2.4} passo={0.05}
+                     onMudar={(v) => trocar('aguaBrilho', v)}/>
+          <Regulador rotulo="Intensidade" valor={aparencia.aguaOpacidade} min={0} max={1} passo={0.02}
+                     onMudar={(v) => trocar('aguaOpacidade', v)}/>
         </section>
 
         <footer>
@@ -244,9 +291,24 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
 };
 
 export function usarAparencia() {
-  const [aparencia, setAparencia] = useState<Aparencia>(() => carregarAparencia());
+  const [guardado, setGuardado] = useState<Guardado>(() => carregarGuardado());
+  const tema = modoEfetivo(guardado.modo);
+  const slot = tema === 'claro' ? 'claro' : 'escuro';
+  const aparencia: Aparencia = { ...guardado[slot], modo: guardado.modo };
+
+  const setAparencia = useCallback((nova: Aparencia) => {
+    setGuardado((atual) => {
+      // Trocar de modo NAO leva cor junto: so muda de quarto.
+      if (nova.modo !== atual.modo) return { ...atual, modo: nova.modo };
+      const onde = modoEfetivo(atual.modo) === 'claro' ? 'claro' : 'escuro';
+      return { ...atual, [onde]: { ...nova } };
+    });
+  }, []);
+
   useEffect(() => {
-    try { localStorage.setItem(CHAVE, JSON.stringify(aparencia)); } catch { /* disco cheio não pode derrubar a UI */ }
-  }, [aparencia]);
-  return { aparencia, setAparencia, tema: modoEfetivo(aparencia.modo) };
+    try { localStorage.setItem(CHAVE, JSON.stringify(guardado)); }
+    catch { /* disco cheio nao pode derrubar a UI */ }
+  }, [guardado]);
+
+  return { aparencia, setAparencia, tema };
 }

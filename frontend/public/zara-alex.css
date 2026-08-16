@@ -673,3 +673,12 @@
           saturate(1.45)
           contrast(1.42);
 }
+
+/* No claro o canvas precisa SOMAR luz, nao multiplicar, senao os brilhos
+   viajantes escurecem em vez de acender. */
+.zara-preview.theme-light .spectrum-canvas { mix-blend-mode: normal; opacity: .95; }
+/* Saturacao um pouco acima, contraste contido: passar da conta posteriza uma
+   imagem de 470px, que e exatamente o granulado que Alex nao quer. */
+.zara-preview.theme-light .orb {
+  filter: brightness(calc(var(--zara-anel-forca, 1) * .93)) saturate(1.62) contrast(1.46);
+}

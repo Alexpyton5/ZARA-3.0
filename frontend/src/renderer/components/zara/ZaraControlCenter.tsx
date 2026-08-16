@@ -287,6 +287,17 @@ export const ZaraControlCenter: React.FC = () => {
     const contexto = canvas.getContext('2d');
     const semMovimento = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 
+    // Brilhos que VIAJAM pela circunferencia, como no video que Alex mandou:
+    // pontos de luz concentrada que percorrem o anel acendendo e apagando. Sao
+    // desenhados em vetor no canvas, entao ficam nitidos em qualquer tamanho —
+    // e por isso nao granulam a imagem, que era o medo dele.
+    const brilhos = [
+      { angulo: 0.4, velocidade: 0.19, arco: 0.30, forca: 1.0 },
+      { angulo: 2.7, velocidade: -0.13, arco: 0.22, forca: 0.78 },
+      { angulo: 4.9, velocidade: 0.26, arco: 0.16, forca: 0.62 },
+    ];
+    const corDoAnel = () => getComputedStyle(anel).getPropertyValue('--ring').trim() || '#a8c3a0';
+
     const faiscas = Array.from({ length: 30 }, (_, i) => {
       const r = (n: number) => { const v = Math.sin((i + 1) * (12.9898 + n * 7.233)) * 43758.5453; return v - Math.floor(v); };
       return {
@@ -345,6 +356,38 @@ export const ZaraControlCenter: React.FC = () => {
         contexto.clearRect(0, 0, lado, lado);
         const cx = lado / 2, cy = lado / 2;
         const segundos = agora / 1000;
+
+        // os brilhos viajantes vem primeiro, por baixo das faiscas
+        const cor = corDoAnel();
+        // Em fundo claro nao existe "somar luz": clarear o que ja e quase branco
+        // nao acende nada. La o brilho pinta por cima, com a cor do anel.
+        const claro = anel.closest('.theme-light') !== null;
+        contexto.globalCompositeOperation = claro ? 'source-over' : 'lighter';
+        for (const b of brilhos) {
+          if (!semMovimento) {
+            // A velocidade respira sozinha: sem isso o giro fica de relogio, e
+            // Alex pediu que fosse organico mesmo em silencio.
+            const respiro = 1 + Math.sin(segundos * 0.23 + b.angulo) * 0.35;
+            b.angulo += b.velocidade * respiro * (0.5 + energia * 2.4) * dt;
+          }
+          const raio = lado * 0.331;
+          const intensidade = (0.16 + energia * 0.9) * b.forca;
+          const meio = b.arco * (0.7 + energia * 0.8);
+          const gradiente = contexto.createLinearGradient(
+            cx + Math.cos(b.angulo - meio) * raio, cy + Math.sin(b.angulo - meio) * raio,
+            cx + Math.cos(b.angulo + meio) * raio, cy + Math.sin(b.angulo + meio) * raio);
+          gradiente.addColorStop(0, 'rgba(255,255,255,0)');
+          gradiente.addColorStop(0.5, cor);
+          gradiente.addColorStop(1, 'rgba(255,255,255,0)');
+          contexto.globalAlpha = mudo ? 0.04 : Math.min(0.92, intensidade);
+          contexto.strokeStyle = gradiente;
+          contexto.lineWidth = lado * (0.006 + energia * 0.008);
+          contexto.lineCap = 'round';
+          contexto.beginPath();
+          contexto.arc(cx, cy, raio, b.angulo - meio, b.angulo + meio);
+          contexto.stroke();
+        }
+        contexto.globalCompositeOperation = 'source-over';
         for (const f of faiscas) {
           if (!semMovimento) f.angulo += f.velocidade * dt;
           const pulsa = 0.5 + 0.5 * Math.sin(segundos * f.cintilar + f.fase);
@@ -354,10 +397,13 @@ export const ZaraControlCenter: React.FC = () => {
           const x = cx + Math.cos(f.angulo) * raio;
           const y = cy + Math.sin(f.angulo) * raio;
           const tamanho = f.tamanho * (0.75 + energia * 0.9);
-          contexto.globalAlpha = Math.min(1, alfa);
-          contexto.fillStyle = '#f3f7ef';
-          contexto.shadowColor = 'rgba(214,235,205,.9)';
-          contexto.shadowBlur = 5 + energia * 9;
+          // No claro a faisca branca sumia no creme e sobrava so a sombra em
+          // volta: viravam argolinhas, que Alex viu como sujeira. La ela e
+          // escura, da cor do anel, e sem halo.
+          contexto.globalAlpha = Math.min(1, claro ? alfa * 0.75 : alfa);
+          contexto.fillStyle = claro ? cor : '#f3f7ef';
+          contexto.shadowColor = claro ? 'transparent' : 'rgba(214,235,205,.9)';
+          contexto.shadowBlur = claro ? 0 : 5 + energia * 9;
           contexto.beginPath();
           contexto.arc(x, y, tamanho, 0, Math.PI * 2);
           contexto.fill();

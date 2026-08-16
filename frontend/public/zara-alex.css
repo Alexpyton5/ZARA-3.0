@@ -504,14 +504,16 @@
 .zara-preview .painel-conversa-lista strong { font-size: calc(var(--zara-fonte-lab, 13px) - 2px) !important; }
 .zara-preview .lab-composer input { font-size: calc(var(--zara-fonte-lab, 13px) - 1px) !important; }
 
-/* fundo atras do anel */
+/* fundo atras do anel — o QUADRADO inteiro, chapado.
+   Eu tinha feito um halo desfocado em volta do circulo; Alex: "eu nao quero uma
+   luz em volta do anel, eu quero que mude a cor desse quadrado inteiro atras do
+   anel". Agora e o painel todo pintado, sem desfoque. */
 .zara-preview .presence-stage::before {
   content: "";
   position: absolute;
-  inset: 6% 8%;
-  border-radius: 50%;
+  inset: 0;
+  border-radius: 18px;
   background: var(--zara-palco, transparent);
-  filter: blur(28px);
   pointer-events: none;
   z-index: 0;
 }

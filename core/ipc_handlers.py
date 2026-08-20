@@ -28,7 +28,16 @@ def _sanitize_observation(value: object) -> str:
 
 
 _WAKE_PREFIX_RE = re.compile(
-    r"^\s*(?:(?:ei|hey)\s+)?(?:zara|sara)\b[\s,;:!.-]*(.*)$",
+    # ZARA-VOICE-WAKE-SAUDACAO-001
+    #
+    # Medido no latencia.jsonl (15-19/08): cinco vezes o Alex chamou pelo nome e foi
+    # descartado. As cinco tinham saudacao antes do nome: "Ola, Zara, que horas".
+    # A ancora ^ so tolerava "ei|hey", entao o nome deixava de ser prefixo e o portao
+    # tratava a frase como fala de sala. Contra as 611 linhas descartadas reais, este
+    # grupo faz 4 delas passarem e nenhuma frase de TV, porque a saudacao so vale
+    # quando o nome vem logo depois.
+    r"^\s*(?:(?:ol[aá]|oi|al[oô]|opa|e\s*a[íi]|bom\s+dia|boa\s+tarde|boa\s+noite)[\s,;:!.-]*)?"
+    r"(?:(?:ei|hey)\s+)?(?:zara|sara)\b[\s,;:!.-]*(.*)$",
     flags=re.IGNORECASE,
 )
 
@@ -170,8 +179,8 @@ def _speak_windows_sapi(text: str) -> None:
     """Use the built-in Windows voice when optional neural weights are absent."""
     if os.name != "nt":
         raise RuntimeError("WINDOWS_SAPI_UNAVAILABLE")
-    from comtypes import CoInitialize, CoUninitialize
     import comtypes.client
+    from comtypes import CoInitialize, CoUninitialize
 
     CoInitialize()
     try:
@@ -298,6 +307,8 @@ class IPCHandler:
         self.current_engine: str = "auto_smart"
         self.supercerebro_active: bool = False
         self._set_supercerebro_state(False)
+        # ZARA-TELEGRAM-GRUPO-001: ponte do grupo, em paralelo com a privada.
+        self._telegram_grupo = None
         self.voice_active: bool = False
 
         # Voice pipeline
@@ -2153,6 +2164,32 @@ class IPCHandler:
             self._cronometro = Cronometro(text, origem="voz")
         except Exception:
             self._cronometro = None
+        # ZARA-LATENCIA-SEGUNDA-VIAGEM-001 — A PRIMEIRA VIAGEM, QUE NINGUEM MEDIA.
+        #
+        # Este ponto do codigo so e alcancado depois do turn_complete do turno
+        # do Alex. Em turno de ACAO o audio que o modelo gerou nesse turno foi
+        # DESCARTADO byte a byte (gemini_live_voice._receive_loop: o `if
+        # audio_data and (...)` da falso), mas o programa esperou a geracao
+        # inteira terminar antes de chamar o executor. Ou seja: uma resposta
+        # falada completa foi produzida no Google, jogada fora, e o Alex pagou
+        # o tempo dela.
+        #
+        # O cronometro nascia aqui, entao esse custo ficava FORA de qualquer
+        # medicao. Agora ele vira uma etapa em disco. Se este numero for grande,
+        # ele — e nao a segunda viagem — e o alvo da proxima tarefa.
+        try:
+            _voz = self.gemini_live_voice
+            _fim_fala = _voz.ultimo_fim_de_fala() if _voz is not None else None
+            if _fim_fala is not None:
+                _descartada = (time.perf_counter() - _fim_fala) * 1000.0
+                self._marcar_valor_no_cronometro("primeira_viagem_descartada", _descartada)
+                print(
+                    "[VOICE_TRACE] stage=PRIMEIRA_VIAGEM_DESCARTADA "
+                    f"result=AUDIO_GERADO_E_JOGADO_FORA ms={_descartada:.0f}",
+                    flush=True,
+                )
+        except Exception:
+            pass  # medir nunca pode atrapalhar
         try:
             jarvis_reply = await self._try_jarvis_multi_action(text)
             if jarvis_reply:
@@ -2557,6 +2594,30 @@ class IPCHandler:
             print(f"[IPC] Conversation history clear failed: {type(exc).__name__}")
             await self.send_error(msg, "Conversation history could not be cleared")
 
+    def _marcar_valor_no_cronometro(self, nome: str, ms: float) -> None:
+        """Grava uma duracao JA MEDIDA como etapa do turno. ZARA-LATENCIA-SEGUNDA-VIAGEM-001.
+
+        `Cronometro.marcar()` so sabe registrar "quantos ms desde o inicio do
+        turno". Os marcos novos nao sao isso: `primeira_viagem_descartada`
+        acontece ANTES do inicio do turno e os marcos de TTS sao intervalos
+        internos. Por isso o valor entra direto na tabela de etapas.
+
+        Divida temporaria e assumida: `core/cronometro.py` nao e meu e nao entrou
+        nesta trava, entao nao pude acrescentar la o `marcar_valor()` publico que
+        isto deveria estar chamando. Quando o dono acrescentar, esta funcao vira
+        uma linha. Ate la o acesso e defensivo e engolido em silencio, como o
+        resto do cronometro: um medidor que derruba a voz seria pior que nao medir.
+        """
+        try:
+            crono = getattr(self, "_cronometro", None)
+            if crono is None:
+                return
+            marcas = getattr(crono, "_marcas", None)
+            if isinstance(marcas, dict):
+                marcas[str(nome)] = float(ms)
+        except Exception:
+            pass  # medir nunca pode atrapalhar
+
     async def _speak_response(self, text: str):
         """Speak response using TTS, loading the local model only on first use."""
         value = str(text or "").strip()
@@ -2691,7 +2752,28 @@ class IPCHandler:
             # entre `antes_de_falar` e o total é exatamente o preço da segunda
             # viagem — o número que faltava para decidir se vale eliminá-la.
             if _crono is not None:
+                # ZARA-LATENCIA-SEGUNDA-VIAGEM-001 — CUIDADO AO LER `voz_pronta`.
+                #
+                # speak() so retorna no turn_complete do Gemini, isto e, quando
+                # a frase INTEIRA ja foi gerada. Logo `voz_pronta` (e o
+                # `total_ms`, que e igual a ele) mede "ate ela terminar de
+                # falar", nao "ate ela comecar". Uma frase mais longa aumenta
+                # esse numero sem que nada tenha ficado mais lento.
+                #
+                # A espera que o Alex reclama e a de COMECAR, e ela e:
+                #   primeira_viagem_descartada + antes_de_falar
+                #   + tts_pedido_ate_player_ms
+                # As tres agora vao para o disco separadas, para que ninguem
+                # volte a otimizar contra o numero errado.
                 _crono.marcar("voz_pronta")
+                try:
+                    if self.gemini_live_voice is not None:
+                        for _nome, _valor in (
+                            self.gemini_live_voice.marcos_da_segunda_viagem().items()
+                        ):
+                            self._marcar_valor_no_cronometro(_nome, _valor)
+                except Exception:
+                    pass  # medir nunca pode atrapalhar
                 _crono.fechar(rota="voz", voz=engine_used, falou=spoken)
                 self._cronometro = None
             # ZARA-JANELA-DE-CONVERSA-002
@@ -3343,27 +3425,69 @@ class IPCHandler:
 
         Ele não pode ficar o dia todo na cadeira. Sem token configurado, esta
         função não faz nada e não reclama — a ZARA continua igual.
+
+        ZARA-TELEGRAM-GRUPO-001: além da ponte privada do Alex, sobe também a
+        ponte do grupo (se houver token de grupo e id de grupo autorizado).
+        As duas rodam em paralelo, cada uma com seu bot e sua regra de acesso.
         """
         try:
-            if getattr(self, "_telegram", None) is not None:
-                return
-            from core.paths import config_dir
-            from core.telegram_ponte import PonteTelegram
+            if getattr(self, "_telegram", None) is None:
+                from core.paths import config_dir
+                from core.telegram_ponte import PonteTelegram
 
-            arquivo = config_dir() / "api_keys.json"
-            token = ""
-            if arquivo.exists():
-                token = str(
-                    json.loads(arquivo.read_text(encoding="utf-8")).get("telegram_bot_token") or ""
-                ).strip()
-            if not token:
-                return
+                arquivo = config_dir() / "api_keys.json"
+                token = ""
+                if arquivo.exists():
+                    token = str(
+                        json.loads(arquivo.read_text(encoding="utf-8")).get("telegram_bot_token") or ""
+                    ).strip()
+                if token:
+                    ponte = PonteTelegram(token, self._executar_do_celular)
+                    if await ponte.iniciar():
+                        self._telegram = ponte
 
-            ponte = PonteTelegram(token, self._executar_do_celular)
-            if await ponte.iniciar():
-                self._telegram = ponte
+            # Ponte do grupo (roda em paralelo com a privada).
+            if getattr(self, "_telegram_grupo", None) is None:
+                from core.paths import config_dir
+                from core.telegram_grupo import PonteGrupo
+
+                cfg = config_dir() / "api_keys.json"
+                dados = {}
+                if cfg.exists():
+                    try:
+                        dados = json.loads(cfg.read_text(encoding="utf-8"))
+                    except Exception:
+                        dados = {}
+                token_grupo = str(dados.get("telegram_group_token") or "").strip()
+                grupo_id = dados.get("telegram_group_id")
+                # ZARA-TELEGRAM-GRUPO-002: usa o bot novo também no privado do
+                # Alex, se não houver grupo ainda. O id do dono privado vem do
+                # config, com fallback para o dono da ponte privada.
+                dono_privado = dados.get("telegram_group_dono_privado")
+                if dono_privado is None:
+                    dono_privado = dados.get("telegram_dono")
+                if token_grupo and grupo_id is not None:
+                    ponte_grupo = PonteGrupo(
+                        token_grupo,
+                        self._executar_do_celular,
+                        grupo_id=int(grupo_id),
+                        dono_privado=int(dono_privado) if dono_privado is not None else None,
+                    )
+                    if await ponte_grupo.iniciar():
+                        self._telegram_grupo = ponte_grupo
+                elif token_grupo and dono_privado is not None:
+                    # Sem grupo ainda: o bot novo já atende o privado do Alex.
+                    ponte_grupo = PonteGrupo(
+                        token_grupo,
+                        self._executar_do_celular,
+                        grupo_id=None,
+                        dono_privado=int(dono_privado),
+                    )
+                    if await ponte_grupo.iniciar():
+                        self._telegram_grupo = ponte_grupo
         except Exception as exc:
             self._telegram = None
+            self._telegram_grupo = None
             print(f"[TELEGRAM] nao ligou: {exc}", flush=True)
 
     # ZARA-SE-CONSERTA-SOZINHA-001
@@ -3392,17 +3516,26 @@ class IPCHandler:
             try:
                 await asyncio.sleep(self._INTERVALO_DO_VIGIA)
                 ponte = getattr(self, "_telegram", None)
-                if ponte is None or not ponte.configurado:
+                ponte_grupo = getattr(self, "_telegram_grupo", None)
+                if (
+                    (ponte is None or not ponte.configurado)
+                    and (ponte_grupo is None or not ponte_grupo.configurado)
+                ):
                     continue
-                if ponte.esta_viva:
+                if (ponte is None or ponte.esta_viva) and (
+                    ponte_grupo is None or ponte_grupo.esta_viva
+                ):
                     continue
 
                 print("[VIGIA] Telegram parou de responder; reerguendo", flush=True)
-                try:
-                    await ponte.parar()
-                except Exception:
-                    pass
+                for p in (ponte, ponte_grupo):
+                    if p is not None:
+                        try:
+                            await p.parar()
+                        except Exception:
+                            pass
                 self._telegram = None
+                self._telegram_grupo = None
                 await self._ligar_telegram()
 
                 nova = getattr(self, "_telegram", None)
@@ -3554,6 +3687,25 @@ class IPCHandler:
                 return "Entreguei ao Claude. Te aviso quando responder."
             return f"Não consegui: {getattr(resultado, 'error', 'motivo desconhecido')}"
 
+        # ZARA-TELEGRAM-HERMES-001
+        #
+        # O prefixo "hermes:" já existia no roteamento da ponte, mas o
+        # despachante não tinha branch para ele — a mensagem caía na própria
+        # ZARA. O Supercérebro (Hermes Agent via gateway local) é um destino
+        # de verdade, então aqui ele é tratado direto, tanto pelo celular
+        # privado quanto pelo grupo.
+        if destino == "hermes":
+            try:
+                from integrations.hermes.client import HermesClient
+
+                client = HermesClient()
+                result = await asyncio.to_thread(client.send_message, texto)
+                if result["success"]:
+                    return f"Hermes:\n\n{result['text']}"
+                return f"Hermes não veio: {result['error']}"
+            except Exception as exc:
+                return f"Hermes não veio: {type(exc).__name__}"
+
         # ZARA-TELEGRAM-TODOS-001
         #
         # Alex escreveu "todos- se voces 3 estao vendo esta mensagem responda
@@ -3576,6 +3728,15 @@ class IPCHandler:
                 partes.append(f"Codex: {do_codex}" if not erro else f"Codex não veio: {erro}")
             except Exception as exc:
                 partes.append(f"Codex não veio: {type(exc).__name__}")
+
+            try:
+                from integrations.hermes.client import HermesClient
+
+                client = HermesClient()
+                result = await asyncio.to_thread(client.send_message, texto)
+                partes.append(f"Hermes: {result['text']}" if result["success"] else f"Hermes não veio: {result['error']}")
+            except Exception as exc:
+                partes.append(f"Hermes não veio: {type(exc).__name__}")
 
             resultado = await execute_action("claude_enviar", texto=texto)
             if getattr(resultado, "success", False):

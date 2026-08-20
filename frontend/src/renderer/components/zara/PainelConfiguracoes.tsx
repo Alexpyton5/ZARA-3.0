@@ -332,7 +332,7 @@ export const PainelConfiguracoes: React.FC<Props> = ({ aberto, onFechar, aparenc
   );
 };
 
-export function usarAparencia() {
+export function useAparencia() {
   const [guardado, setGuardado] = useState<Guardado>(() => carregarGuardado());
   // Pilhas de desfazer/refazer. Alex: "eu mexi e agora o circulo ta meio feio e
   // nao sei como colocar no lugar". Sem isto, errar a mao e uma viagem sem volta.
@@ -340,6 +340,8 @@ export function usarAparencia() {
   const futuro = useRef<Guardado[]>([]);
   const ultimoToque = useRef(0);
   const [versao, setVersao] = useState(0);
+  const [temPassado, setTemPassado] = useState(false);
+  const [temFuturo, setTemFuturo] = useState(false);
 
   const tema = modoEfetivo(guardado.modo);
   const slot = tema === 'claro' ? 'claro' : 'escuro';
@@ -356,6 +358,8 @@ export function usarAparencia() {
         passado.current = [...passado.current.slice(-49), atual];
         futuro.current = [];
         setVersao((v) => v + 1);
+        setTemPassado(true);
+        setTemFuturo(false);
       }
       if (nova.modo !== atual.modo) return { ...atual, modo: nova.modo };
       const onde = modoEfetivo(atual.modo) === 'claro' ? 'claro' : 'escuro';
@@ -370,6 +374,8 @@ export function usarAparencia() {
       futuro.current = [...futuro.current, atual];
       ultimoToque.current = 0;
       setVersao((v) => v + 1);
+      setTemPassado(passado.current.length > 0);
+      setTemFuturo(true);
       return anterior;
     });
   }, []);
@@ -381,6 +387,8 @@ export function usarAparencia() {
       passado.current = [...passado.current, atual];
       ultimoToque.current = 0;
       setVersao((v) => v + 1);
+      setTemPassado(true);
+      setTemFuturo(futuro.current.length > 0);
       return proximo;
     });
   }, []);
@@ -393,7 +401,7 @@ export function usarAparencia() {
   void versao;   // so existe para redesenhar quando as pilhas mudam
   return {
     aparencia, setAparencia, tema, desfazer, refazer,
-    temPassado: passado.current.length > 0,
-    temFuturo: futuro.current.length > 0,
+    temPassado,
+    temFuturo,
   };
 }

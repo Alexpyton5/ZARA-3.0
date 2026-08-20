@@ -6,13 +6,10 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from pathlib import Path
 
 import pytest
 
-from core import paths
 from core.reminder_engine import ReminderEngine
-
 
 REAL_DB_FRAGMENT = "AppData\\Local\\ZARA3\\data\\reminders"
 

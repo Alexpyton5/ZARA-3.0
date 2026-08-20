@@ -221,13 +221,14 @@ class PonteTelegram:
         limpo = limpo.lstrip("@").lstrip()
         baixo = limpo.casefold()
         for nome, destino in (
-            ("claude", "claude"),
-            ("codex", "codex"),
-            ("zara", "zara"),
-            ("todos", "todos"),
-            ("todo mundo", "todos"),
-            ("galera", "todos"),
-        ):
+                    ("claude", "claude"),
+                    ("codex", "codex"),
+                    ("zara", "zara"),
+                    ("hermes", "hermes"),
+                    ("todos", "todos"),
+                    ("todo mundo", "todos"),
+                    ("galera", "todos"),
+                ):
             if not baixo.startswith(nome):
                 continue
             resto = limpo[len(nome):]
@@ -348,6 +349,7 @@ class PonteTelegram:
                 "Use assim:\n"
                 "claude: <o que quer que eu faça>\n"
                 "codex: <tarefa para o Codex>\n"
+                "hermes: <tarefa para o Hermes>\n"
                 "zara: <comando para mim>"
             )
             return

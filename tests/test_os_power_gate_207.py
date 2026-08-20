@@ -7,9 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from core.actions import os_ops
 from core.action_registry import ActionRegistry
-
+from core.actions import os_ops
 
 DESTRUCTIVE = ["shutdown", "poweroff", "restart", "reboot", "sleep", "suspend", "hibernate", "logoff"]
 

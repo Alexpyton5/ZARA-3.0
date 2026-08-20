@@ -11,7 +11,6 @@ from pathlib import Path
 
 from core.action_registry import ActionResult, action, get_registry
 
-
 _SAFE_OPEN_EXTENSIONS = {
     ".txt", ".md", ".pdf", ".doc", ".docx", ".xls", ".xlsx",
     ".ppt", ".pptx", ".csv", ".rtf", ".odt", ".ods", ".odp",

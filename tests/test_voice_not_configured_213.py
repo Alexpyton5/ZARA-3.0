@@ -1,8 +1,6 @@
 """213/214 — voz local: status honesto, sem download autonomo, sem microfone real."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from core import voice_stt, voice_tts

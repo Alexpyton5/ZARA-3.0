@@ -19,7 +19,6 @@ import pytest
 from core.action_registry import ActionResult
 from core.ipc_handlers import IPCHandler
 
-
 # ---------- o estado no resultado ----------
 
 def test_por_padrao_uma_acao_continua_sendo_verificada():

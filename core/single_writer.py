@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 LOCK_NAME = "zara.writer.lock"
 
@@ -38,7 +37,7 @@ class WriterLock:
     path: Path
     owner_pid: int
     acquired: bool
-    conflict_pid: Optional[int] = None
+    conflict_pid: int | None = None
 
     @property
     def blocked(self) -> bool:

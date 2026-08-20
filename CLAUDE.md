@@ -122,7 +122,10 @@ Relatório sem `KNOWN_BROKEN` não fecha tarefa.
 ## Regras modulares e procedimentos
 
 Regras detalhadas em `.claude/rules/`. Procedimentos multi-passo em `.claude/skills/`.
-Subagentes read-only em `.claude/agents/`.
+Subagentes em `.claude/agents/`.
+
+O time de 9 papeis e o mapa de escrita (um escritor por area, arquivos compartilhados e trava)
+estao em `.claude/rules/time-zara.md`. Leitura obrigatoria antes de distribuir trabalho.
 
 Comandos de fluxo de trabalho definidos por Alex em `CLAUDE_SKILLS.md`:
 `/grillme`, `/spec`, `/tickets`, `/implement`, `/review`. São de leitura obrigatória

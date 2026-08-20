@@ -1,7 +1,7 @@
 import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { MemoryGalaxyModal } from './MemoryGalaxyModal';
-import { PainelConfiguracoes, aplicarAparencia, usarAparencia } from './PainelConfiguracoes';
+import { PainelConfiguracoes, aplicarAparencia, useAparencia } from './PainelConfiguracoes';
 import { ZaraLab } from './ZaraLab';
 import { normalizeReminderEvent } from '../../../reminderEvents';
 import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
@@ -85,7 +85,7 @@ export const ZaraControlCenter: React.FC = () => {
   const [activeNav, setActiveNav] = useState('HOME');
   // O tema deixou de ser um interruptor: ele e uma consequencia da aparencia
   // escolhida em Configuracoes, que tambem guarda cores, brilhos e tamanhos.
-  const { aparencia, setAparencia, tema, desfazer, refazer, temPassado, temFuturo } = usarAparencia();
+  const { aparencia, setAparencia, tema, desfazer, refazer, temPassado, temFuturo } = useAparencia();
   const theme: Theme = tema === 'claro' ? 'light' : 'dark';
   const [configAberta, setConfigAberta] = useState(false);
   const raizRef = useRef<HTMLElement>(null);
@@ -123,6 +123,8 @@ export const ZaraControlCenter: React.FC = () => {
   const pendingHistoryMessagesRef = useRef<ChatMessage[]>([]);
   const autoVoiceStartedRef = useRef(false);
   const anelRef = useRef<HTMLDivElement>(null);
+  const deslocamentoRef = useRef<SVGFEDisplacementMapElement>(null);
+  const deslizeRef = useRef<SVGFEOffsetElement>(null);
   const faiscasRef = useRef<HTMLCanvasElement>(null);
   // O laco de animacao le daqui em vez de depender das props, senao ele se
   // reinicia a cada quadro de voz e a animacao engasga.
@@ -307,7 +309,7 @@ export const ZaraControlCenter: React.FC = () => {
       };
     });
 
-    let jx = 0, jy = 0, alvoX = 0, alvoY = 0, energia = 0.02;
+    let jx = 0, jy = 0, alvoX = 0, alvoY = 0, energia = 0.02, deriva = 0;
     let quadro = 0, anterior = performance.now();
 
     const passo = (agora: number) => {
@@ -323,7 +325,9 @@ export const ZaraControlCenter: React.FC = () => {
         // Tremor: um alvo novo de vez em quando e o anel perseguindo ele. Sorteio
         // a cada quadro daria chiado de TV, nao vibracao de corda.
         if (Math.random() < 0.22) {
-          const amplitude = 0.34 + energia * 2.95;   // piso pequeno: vivo mesmo calada
+          // Este tremor move o anel INTEIRO, entao ele agora e discreto: quem
+          // carrega a vida e o movimento fio a fio, nao o bloco balancando.
+          const amplitude = 0.18 + energia * 1.3;   // piso pequeno: vivo mesmo calada
           alvoX = (Math.random() * 2 - 1) * amplitude;
           alvoY = (Math.random() * 2 - 1) * amplitude;
         }
@@ -336,27 +340,23 @@ export const ZaraControlCenter: React.FC = () => {
       anel.style.setProperty('--jitter-x', `${jx.toFixed(2)}px`);
       anel.style.setProperty('--jitter-y', `${jy.toFixed(2)}px`);
 
-      // +15% na amplitude geral e um piso visivel no repouso. O teto continua
-      // controlado: passar disso deixa o anel nervoso, que nao e o que ele quer.
-      const escala = ativo ? 1.6 + energia * 12.5 : 0.5 + energia * 3.2;
+      // ---- cada fio com o seu proprio movimento ----
+      // A causa do "lencol" era a frequencia horizontal do ruido: 0.0132 e uma
+      // onda de ~76px num anel onde um fio esta a ~7px do outro. Todos pegavam
+      // o MESMO empurrao. Agora o ruido e fino e igual nos dois eixos: ele muda
+      // dentro do vao entre um fio e o vizinho, entao cada um recebe um
+      // deslocamento diferente. O campo de ruido tambem passeia (feOffset), e e
+      // isso que faz a vibracao correr ao longo do fio em vez de ferver parada.
+      // A DISTANCIA media nao muda: o deslocamento e centrado em zero e a
+      // amplitude fica bem abaixo do espaco entre os fios.
+      const escala = (ativo ? 2.2 + energia * 4.6 : 1.3 + energia * 2.4) * (0.9 + tom * 0.2);
       anel.setAttribute('data-cord-scale', escala.toFixed(2));
-      // Cada camada tem sua propria escala e frequencia, defasadas no tempo. E
-      // isso que faz os fios parecerem SOLTOS uns dos outros em vez de um lencol
-      // unico deformando junto. O deslocamento e centrado em zero, entao a
-      // distancia media entre eles nao muda — a condicao que Alex deu.
-      const fases = [1, 0.82, 1.21];
-      const ritmos = [1, 1.37, 0.71];
-      for (let n = 0; n < 3; n++) {
-        const sufixo = n ? `-${n}` : '';
-        const balanco = 1 + Math.sin((agora / 1000) * (0.31 * ritmos[n]) + n * 2.1) * 0.28;
-        const alvoEscala = (escala * fases[n] * balanco).toFixed(2);
-        // A frequencia vertical acompanha o tom: voz mais aguda encrespa mais a corda.
-        const alvoFreq = `${(0.0132 + tom * 0.0013 + n * 0.0021).toFixed(4)} ${(0.063 + tom * 0.089 + n * 0.011).toFixed(4)}`;
-        document.querySelectorAll(`#zara-cord-vibration${sufixo} feDisplacementMap`)
-          .forEach((e) => e.setAttribute('scale', alvoEscala));
-        document.querySelectorAll(`#zara-cord-vibration${sufixo} feTurbulence`)
-          .forEach((e) => e.setAttribute('baseFrequency', alvoFreq));
-      }
+      deslocamentoRef.current?.setAttribute('scale', escala.toFixed(2));
+      // Passeio acumulado em vez de multiplicar o relogio: mudar a velocidade
+      // no meio do caminho daria um salto de fase, e o salto aparece como tranco.
+      deriva += dt * (0.58 + energia * 1.15 + tom * 0.25);
+      deslizeRef.current?.setAttribute('dx', (Math.sin(deriva * 0.83) * 17 + Math.sin(deriva * 1.47 + 1.7) * 9).toFixed(2));
+      deslizeRef.current?.setAttribute('dy', (Math.sin(deriva * 0.71 + 0.6) * 15 + Math.sin(deriva * 1.29 + 2.9) * 8).toFixed(2));
 
       if (contexto) {
         const lado = canvas.clientWidth || 214;
@@ -634,24 +634,24 @@ export const ZaraControlCenter: React.FC = () => {
                 >
                   <svg className="orb-filter-defs" width="0" height="0" aria-hidden="true">
                     <defs>
-                      {[0, 1, 2].map((n) => (
-                        <filter key={n} id={`zara-cord-vibration${n ? `-${n}` : ''}`}
-                                x="-24%" y="-24%" width="148%" height="148%" colorInterpolationFilters="sRGB">
-                          <feTurbulence type="fractalNoise" baseFrequency="0.0132 0.0871"
-                                        numOctaves={1} seed={7 + n * 13} result="cordNoise"/>
-                          <feDisplacementMap in="SourceGraphic" in2="cordNoise" scale="0"
-                                             xChannelSelector="R" yChannelSelector="G"/>
-                        </filter>
-                      ))}
+                      <filter id="zara-cord-vibration" x="-24%" y="-24%" width="148%" height="148%" colorInterpolationFilters="sRGB">
+                        {/* Ruido fino e igual nos dois eixos: como ele varia dentro do
+                            vao entre um fio e o vizinho, cada fio recebe um empurrao
+                            diferente. Grosso demais e o anel vira um lencol so. */}
+                        <feTurbulence type="fractalNoise" baseFrequency="0.055 0.059"
+                                      numOctaves={2} seed={7} result="cordNoise"/>
+                        {/* O campo de ruido passeia; e o passeio que faz a onda CORRER
+                            pelo fio. A borda descoberta pelo deslize cai fora do anel,
+                            porque a regiao do filtro sobra 24% de cada lado. */}
+                        <feOffset ref={deslizeRef} in="cordNoise" dx="0" dy="0" result="cordNoiseDrift"/>
+                        <feDisplacementMap ref={deslocamentoRef} in="SourceGraphic" in2="cordNoiseDrift"
+                                           scale="0" xChannelSelector="R" yChannelSelector="G"/>
+                      </filter>
                     </defs>
                   </svg>
                   <canvas ref={faiscasRef} className="spectrum-canvas" aria-hidden="true" width={214} height={214}/>
-                  {[0, 1, 2].map((n) => (
-                    <React.Fragment key={n}>
-                      <img className={`ring-light ring-base camada-${n}`} src="./zara-ring-light.png?v=6" alt={n === 0 ? 'Presença luminosa da ZARA' : ''}/>
-                      <img className={`ring-dark ring-base camada-${n}`} src="./zara-ring-dark.png?v=6" alt=""/>
-                    </React.Fragment>
-                  ))}
+                  <img className="ring-light ring-base" src="./zara-ring-light.png?v=6" alt="Presença luminosa da ZARA"/>
+                  <img className="ring-dark ring-base" src="./zara-ring-dark.png?v=6" alt=""/>
                 </div>
 
                 <form className="command-bar" onSubmit={send}>

@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "pesquisador_reverso",
+  "timestamp": "2026-08-19T14:35:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-002",
+  "summary": "Pesquisar skills Hermes úteis para ZARA",
+  "details": "Use skills_list e skill_view para catalogar skills Hermes que acelerem a ZARA:\n- Voz/áudio: STT, TTS, wake word, VAD\n- Automação Windows: computer-use, MCP servers\n- UI/UX: design systems, component libraries\n- Agentes: multi-agent, delegation, orchestration\n- Qualidade: testing, security, code review\nDocumente em .agent_context/RESEARCH_INSIGHTS.md na seção SECAO-SKILLS-HERMES com: nome da skill, categoria, como ajuda a ZARA, prioridade de adoção.",
+  "recommended_next": "TASK-006 (pipeline de voz) após TASK-001"
+}

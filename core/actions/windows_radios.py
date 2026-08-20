@@ -8,7 +8,6 @@ from typing import Any
 
 from core.action_registry import ActionResult, action
 
-
 _RADIO_KINDS = {"wifi": "WiFi", "bluetooth": "Bluetooth"}
 _RADIO_STATES = {True: "On", False: "Off"}
 

@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from core.actions import windows_radios
 from core.action_registry import ActionResult
+from core.actions import windows_radios
 from core.ipc_handlers import IPCHandler, IPCMessage
 from core.pc_voice_intent import PcVoiceIntentDetector
 

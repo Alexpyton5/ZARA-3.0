@@ -1639,6 +1639,7 @@ def _focus_window_verified(hwnd: int) -> bool:
 
 def _window_matches_named_target(hwnd: int, target: str) -> bool:
     import psutil
+
     from core.paths import project_root
 
     process = _window_process_name(hwnd)
@@ -2058,3 +2059,507 @@ def os_notify_action(title: str, message: str = "", timeout: int = 5) -> ActionR
         return ActionResult(success=False, error="Notifications not supported on this OS")
     except Exception as e:
         return ActionResult(success=False, error=str(e))
+
+
+        # ============================================================================
+        # MCP (Model Context Protocol) Actions
+        # ============================================================================
+
+        # Global MCP client manager instance
+        _mcp_client_manager = None
+
+
+        def _get_mcp_client_manager():
+            """Get or create the MCP client manager."""
+            global _mcp_client_manager
+            if _mcp_client_manager is None:
+                from core.mcp.client import MCPClientManager
+                _mcp_client_manager = MCPClientManager()
+                # Register default servers
+                import sys
+                from pathlib import Path
+                project_root = Path(__file__).parent.parent.parent
+                python_exe = sys.executable
+
+                _mcp_client_manager.register_server(
+                    "file_ops",
+                    [python_exe, "-m", "core.mcp.servers.file_ops"],
+                    cwd=str(project_root)
+                )
+                _mcp_client_manager.register_server(
+                    "registry",
+                    [python_exe, "-m", "core.mcp.servers.registry"],
+                    cwd=str(project_root)
+                )
+                _mcp_client_manager.register_server(
+                    "processes",
+                    [python_exe, "-m", "core.mcp.servers.processes"],
+                    cwd=str(project_root)
+                )
+                _mcp_client_manager.register_server(
+                    "network",
+                    [python_exe, "-m", "core.mcp.servers.network"],
+                    cwd=str(project_root)
+                )
+                _mcp_client_manager.register_server(
+                    "ui_automation",
+                    [python_exe, "-m", "core.mcp.servers.ui_automation"],
+                    cwd=str(project_root)
+                )
+            return _mcp_client_manager
+
+
+        @action(
+            name="mcp_connect",
+            category="mcp",
+            description="Connect to an MCP server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_connect_action(server: str) -> ActionResult:
+            """Connect to an MCP server by name."""
+            try:
+                manager = _get_mcp_client_manager()
+                client = await manager.connect(server)
+                tools = client.list_tools()
+                resources = client.list_resources()
+                prompts = client.list_prompts()
+
+                return ActionResult(
+                    success=True,
+                    output=f"Conectado ao servidor MCP: {server}",
+                    data={
+                        "server": server,
+                        "tools": [t.name for t in tools],
+                        "resources": [r.uri for r in resources],
+                        "prompts": [p.name for p in prompts],
+                    },
+                )
+            except Exception as e:
+                return ActionResult(success=False, error=str(e))
+
+
+        @action(
+            name="mcp_disconnect",
+            category="mcp",
+            description="Disconnect from an MCP server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_disconnect_action(server: str = None) -> ActionResult:
+            """Disconnect from an MCP server or all servers."""
+            try:
+                manager = _get_mcp_client_manager()
+                if server:
+                    client = await manager.get_client(server)
+                    if client:
+                        await client.close()
+                        return ActionResult(success=True, output=f"Desconectado de {server}")
+                    return ActionResult(success=False, error=f"Servidor não conectado: {server}")
+                else:
+                    await manager.disconnect_all()
+                    return ActionResult(success=True, output="Desconectado de todos os servidores MCP")
+            except Exception as e:
+                return ActionResult(success=False, error=str(e))
+
+
+        @action(
+            name="mcp_list_servers",
+            category="mcp",
+            description="List connected MCP servers",
+            capability="READ_ONLY",
+        )
+        async def mcp_list_servers_action() -> ActionResult:
+            """List all connected MCP servers."""
+            try:
+                manager = _get_mcp_client_manager()
+                connected = manager.list_connected()
+
+                result = {}
+                for name in connected:
+                    client = await manager.get_client(name)
+                    if client:
+                        tools = client.list_tools()
+                        result[name] = {
+                            "tools": [t.name for t in tools],
+                            "resources": [r.uri for r in client.list_resources()],
+                            "prompts": [p.name for p in client.list_prompts()],
+                        }
+
+                return ActionResult(
+                    success=True,
+                    output=f"Servidores MCP conectados: {', '.join(connected) if connected else 'nenhum'}",
+                    data={"servers": result},
+                )
+            except Exception as e:
+                return ActionResult(success=False, error=str(e))
+
+
+        @action(
+            name="mcp_call_tool",
+            category="mcp",
+            description="Call a tool on an MCP server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_call_tool_action(server: str, tool: str, arguments: dict = None) -> ActionResult:
+            """Call a tool on an MCP server."""
+            try:
+                manager = _get_mcp_client_manager()
+                client = await manager.get_client(server)
+                if not client:
+                    # Try to connect
+                    client = await manager.connect(server)
+
+                result = await client.call_tool(tool, arguments or {})
+
+                return ActionResult(
+                    success=True,
+                    output=f"Ferramenta {tool} executada em {server}",
+                    data={"server": server, "tool": tool, "result": result},
+                )
+            except Exception as e:
+                return ActionResult(success=False, error=str(e))
+
+
+        @action(
+            name="mcp_read_resource",
+            category="mcp",
+            description="Read a resource from an MCP server",
+            capability="READ_ONLY",
+        )
+        async def mcp_read_resource_action(server: str, uri: str) -> ActionResult:
+            """Read a resource from an MCP server."""
+            try:
+                manager = _get_mcp_client_manager()
+                client = await manager.get_client(server)
+                if not client:
+                    client = await manager.connect(server)
+
+                content = await client.read_resource(uri)
+
+                return ActionResult(
+                    success=True,
+                    output=f"Recurso {uri} lido de {server}",
+                    data={"server": server, "uri": uri, "content": content},
+                )
+            except Exception as e:
+                return ActionResult(success=False, error=str(e))
+
+
+        @action(
+            name="mcp_get_prompt",
+            category="mcp",
+            description="Get a prompt template from an MCP server",
+            capability="READ_ONLY",
+        )
+        async def mcp_get_prompt_action(server: str, prompt: str, arguments: dict = None) -> ActionResult:
+            """Get a prompt template from an MCP server."""
+            try:
+                manager = _get_mcp_client_manager()
+                client = await manager.get_client(server)
+                if not client:
+                    client = await manager.connect(server)
+
+                messages = await client.get_prompt(prompt, arguments or {})
+
+                return ActionResult(
+                    success=True,
+                    output=f"Prompt {prompt} obtido de {server}",
+                    data={"server": server, "prompt": prompt, "messages": messages},
+                )
+            except Exception as e:
+                return ActionResult(success=False, error=str(e))
+
+
+        # Convenience actions for common MCP operations
+
+        @action(
+            name="mcp_file_read",
+            category="mcp",
+            description="Read a file via MCP file_ops server",
+            capability="READ_ONLY",
+        )
+        async def mcp_file_read_action(path: str, encoding: str = "utf-8", max_size: int = 1048576) -> ActionResult:
+            """Read a file using the MCP file_ops server."""
+            return await mcp_call_tool_action("file_ops", "file_read", {"path": path, "encoding": encoding, "max_size": max_size})
+
+
+        @action(
+            name="mcp_file_write",
+            category="mcp",
+            description="Write a file via MCP file_ops server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_file_write_action(path: str, content: str, encoding: str = "utf-8", create_dirs: bool = True) -> ActionResult:
+            """Write a file using the MCP file_ops server."""
+            return await mcp_call_tool_action("file_ops", "file_write", {"path": path, "content": content, "encoding": encoding, "create_dirs": create_dirs})
+
+
+        @action(
+            name="mcp_file_list",
+            category="mcp",
+            description="List files via MCP file_ops server",
+            capability="READ_ONLY",
+        )
+        async def mcp_file_list_action(path: str, pattern: str = "*", recursive: bool = False, include_dirs: bool = True) -> ActionResult:
+            """List files using the MCP file_ops server."""
+            return await mcp_call_tool_action("file_ops", "file_list", {"path": path, "pattern": pattern, "recursive": recursive, "include_dirs": include_dirs})
+
+
+        @action(
+            name="mcp_file_copy",
+            category="mcp",
+            description="Copy a file via MCP file_ops server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_file_copy_action(source: str, destination: str, overwrite: bool = False) -> ActionResult:
+            """Copy a file using the MCP file_ops server."""
+            return await mcp_call_tool_action("file_ops", "file_copy", {"source": source, "destination": destination, "overwrite": overwrite})
+
+
+        @action(
+            name="mcp_file_move",
+            category="mcp",
+            description="Move a file via MCP file_ops server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_file_move_action(source: str, destination: str, overwrite: bool = False) -> ActionResult:
+            """Move a file using the MCP file_ops server."""
+            return await mcp_call_tool_action("file_ops", "file_move", {"source": source, "destination": destination, "overwrite": overwrite})
+
+
+        @action(
+            name="mcp_file_delete",
+            category="mcp",
+            description="Delete a file via MCP file_ops server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_file_delete_action(path: str, recursive: bool = False) -> ActionResult:
+            """Delete a file using the MCP file_ops server."""
+            return await mcp_call_tool_action("file_ops", "file_delete", {"path": path, "recursive": recursive})
+
+
+        @action(
+            name="mcp_file_search",
+            category="mcp",
+            description="Search file contents via MCP file_ops server",
+            capability="READ_ONLY",
+        )
+        async def mcp_file_search_action(path: str, pattern: str, file_pattern: str = "*", case_sensitive: bool = False, max_results: int = 100) -> ActionResult:
+            """Search file contents using the MCP file_ops server."""
+            return await mcp_call_tool_action("file_ops", "file_search", {"path": path, "pattern": pattern, "file_pattern": file_pattern, "case_sensitive": case_sensitive, "max_results": max_results})
+
+
+        @action(
+            name="mcp_registry_read",
+            category="mcp",
+            description="Read a registry value via MCP registry server",
+            capability="READ_ONLY",
+        )
+        async def mcp_registry_read_action(hive: str, path: str, name: str = "") -> ActionResult:
+            """Read a registry value using the MCP registry server."""
+            return await mcp_call_tool_action("registry", "registry_read", {"hive": hive, "path": path, "name": name})
+
+
+        @action(
+            name="mcp_registry_write",
+            category="mcp",
+            description="Write a registry value via MCP registry server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_registry_write_action(hive: str, path: str, name: str, value: str, type: str = "REG_SZ") -> ActionResult:
+            """Write a registry value using the MCP registry server."""
+            return await mcp_call_tool_action("registry", "registry_write", {"hive": hive, "path": path, "name": name, "value": value, "type": type})
+
+
+        @action(
+            name="mcp_registry_list",
+            category="mcp",
+            description="List registry keys/values via MCP registry server",
+            capability="READ_ONLY",
+        )
+        async def mcp_registry_list_action(hive: str, path: str) -> ActionResult:
+            """List registry keys and values using the MCP registry server."""
+            return await mcp_call_tool_action("registry", "registry_list_keys", {"hive": hive, "path": path})
+
+
+        @action(
+            name="mcp_registry_search",
+            category="mcp",
+            description="Search registry via MCP registry server",
+            capability="READ_ONLY",
+        )
+        async def mcp_registry_search_action(hive: str, path: str, pattern: str, max_results: int = 50) -> ActionResult:
+            """Search registry using the MCP registry server."""
+            return await mcp_call_tool_action("registry", "registry_search", {"hive": hive, "path": path, "pattern": pattern, "max_results": max_results})
+
+
+        @action(
+            name="mcp_process_list",
+            category="mcp",
+            description="List processes via MCP processes server",
+            capability="READ_ONLY",
+        )
+        async def mcp_process_list_action(filter: str = "", limit: int = 100) -> ActionResult:
+            """List processes using the MCP processes server."""
+            return await mcp_call_tool_action("processes", "process_list", {"filter": filter, "limit": limit})
+
+
+        @action(
+            name="mcp_process_get",
+            category="mcp",
+            description="Get process details via MCP processes server",
+            capability="READ_ONLY",
+        )
+        async def mcp_process_get_action(pid: int) -> ActionResult:
+            """Get process details using the MCP processes server."""
+            return await mcp_call_tool_action("processes", "process_get", {"pid": pid})
+
+
+        @action(
+            name="mcp_process_kill",
+            category="mcp",
+            description="Kill a process via MCP processes server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_process_kill_action(pid: int, force: bool = False) -> ActionResult:
+            """Kill a process using the MCP processes server."""
+            return await mcp_call_tool_action("processes", "process_kill", {"pid": pid, "force": force})
+
+
+        @action(
+            name="mcp_process_start",
+            category="mcp",
+            description="Start a process via MCP processes server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_process_start_action(command: str, args: list = None, cwd: str = None, env: dict = None, detached: bool = False) -> ActionResult:
+            """Start a process using the MCP processes server."""
+            return await mcp_call_tool_action("processes", "process_start", {"command": command, "args": args or [], "cwd": cwd, "env": env, "detached": detached})
+
+
+        @action(
+            name="mcp_network_interfaces",
+            category="mcp",
+            description="List network interfaces via MCP network server",
+            capability="READ_ONLY",
+        )
+        async def mcp_network_interfaces_action() -> ActionResult:
+            """List network interfaces using the MCP network server."""
+            return await mcp_call_tool_action("network", "network_interfaces", {})
+
+
+        @action(
+            name="mcp_network_connections",
+            category="mcp",
+            description="List network connections via MCP network server",
+            capability="READ_ONLY",
+        )
+        async def mcp_network_connections_action(kind: str = "inet") -> ActionResult:
+            """List network connections using the MCP network server."""
+            return await mcp_call_tool_action("network", "network_connections", {"kind": kind})
+
+
+        @action(
+            name="mcp_network_ping",
+            category="mcp",
+            description="Ping a host via MCP network server",
+            capability="READ_ONLY",
+        )
+        async def mcp_network_ping_action(host: str, count: int = 4, timeout: int = 1000) -> ActionResult:
+            """Ping a host using the MCP network server."""
+            return await mcp_call_tool_action("network", "network_ping", {"host": host, "count": count, "timeout": timeout})
+
+
+        @action(
+            name="mcp_network_port_scan",
+            category="mcp",
+            description="Scan ports via MCP network server",
+            capability="READ_ONLY",
+        )
+        async def mcp_network_port_scan_action(host: str, ports: list, timeout: int = 1000) -> ActionResult:
+            """Scan ports using the MCP network server."""
+            return await mcp_call_tool_action("network", "network_port_scan", {"host": host, "ports": ports, "timeout": timeout})
+
+
+        @action(
+            name="mcp_ui_find_window",
+            category="mcp",
+            description="Find a window via MCP UI Automation server",
+            capability="READ_ONLY",
+        )
+        async def mcp_ui_find_window_action(title: str = "", class_name: str = "", exact: bool = False) -> ActionResult:
+            """Find a window using the MCP UI Automation server."""
+            return await mcp_call_tool_action("ui_automation", "ui_find_window", {"title": title, "class_name": class_name, "exact": exact})
+
+
+        @action(
+            name="mcp_ui_get_foreground",
+            category="mcp",
+            description="Get foreground window via MCP UI Automation server",
+            capability="READ_ONLY",
+        )
+        async def mcp_ui_get_foreground_action() -> ActionResult:
+            """Get the foreground window using the MCP UI Automation server."""
+            return await mcp_call_tool_action("ui_automation", "ui_get_foreground_window", {})
+
+
+        @action(
+            name="mcp_ui_click",
+            category="mcp",
+            description="Click at coordinates via MCP UI Automation server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_ui_click_action(x: int, y: int, button: str = "left", clicks: int = 1) -> ActionResult:
+            """Click at coordinates using the MCP UI Automation server."""
+            return await mcp_call_tool_action("ui_automation", "ui_click", {"x": x, "y": y, "button": button, "clicks": clicks})
+
+
+        @action(
+            name="mcp_ui_type",
+            category="mcp",
+            description="Type text via MCP UI Automation server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_ui_type_action(text: str, delay: int = 10) -> ActionResult:
+            """Type text using the MCP UI Automation server."""
+            return await mcp_call_tool_action("ui_automation", "ui_type_text", {"text": text, "delay": delay})
+
+
+        @action(
+            name="mcp_ui_send_key",
+            category="mcp",
+            description="Send key combination via MCP UI Automation server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_ui_send_key_action(key: str, modifiers: list = None) -> ActionResult:
+            """Send key combination using the MCP UI Automation server."""
+            return await mcp_call_tool_action("ui_automation", "ui_send_key", {"key": key, "modifiers": modifiers or []})
+
+
+        @action(
+            name="mcp_ui_window_control",
+            category="mcp",
+            description="Control a window (minimize/maximize/restore/close) via MCP UI Automation server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_ui_window_control_action(hwnd: int, action: str) -> ActionResult:
+            """Control a window using the MCP UI Automation server."""
+            action_map = {
+                "minimize": "ui_window_minimize",
+                "maximize": "ui_window_maximize",
+                "restore": "ui_window_restore",
+                "close": "ui_window_close",
+            }
+            if action not in action_map:
+                return ActionResult(success=False, error=f"Ação inválida: {action}. Use: minimize, maximize, restore, close")
+            return await mcp_call_tool_action("ui_automation", action_map[action], {"hwnd": hwnd})
+
+
+        @action(
+            name="mcp_ui_screenshot",
+            category="mcp",
+            description="Screenshot a window via MCP UI Automation server",
+            capability="LOCAL_PC_CONTROL",
+        )
+        async def mcp_ui_screenshot_action(hwnd: int, path: str) -> ActionResult:
+            """Take a screenshot of a window using the MCP UI Automation server."""
+            return await mcp_call_tool_action("ui_automation", "ui_screenshot_window", {"hwnd": hwnd, "path": path})

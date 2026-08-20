@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "arquiteto_mcp",
+  "timestamp": "2026-08-19T14:35:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-005",
+  "summary": "Projetar arquitetura MCP para automação Windows",
+  "details": "Analise core/actions/os_ops.py (107KB), browser.py, web.py, system.py, vision.py. Documente em .agent_context/RESEARCH_INSIGHTS.md na seção SECAO-MCP-ARCH:\n1. Quais actions viram tools MCP (volume, janelas, browser, arquivos, sistema)\n2. Schema de entrada/saída para cada tool\n3. Segurança: allowlist de hotkeys, bloqueio de campos sensíveis, HWND validation\n4. Transporte: stdio vs HTTP, auth, rate limiting\n5. Integração com Hermes gateway (porta 8642)\n6. Exemplo: servidor MCP 'zara-windows-automation'\nDependência: aguardar TASK-001 para mapeamento completo de actions.",
+  "recommended_next": "Após TASK-001, prototipar servidor MCP com 3-5 tools críticas"
+}

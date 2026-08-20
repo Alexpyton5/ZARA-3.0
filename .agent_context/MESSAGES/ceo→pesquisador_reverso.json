@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "pesquisador_reverso",
+  "timestamp": "2026-08-19T14:35:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-001",
+  "summary": "Mapear arquitetura atual da ZARA 3.0",
+  "details": "Analise o repo em C:/Users/alexp/Downloads/ZARA 3.0 CLEAN 002/ e documente em .agent_context/RESEARCH_INSIGHTS.md na seção SECAO-ARQUITETURA-ATUAL:\n1. Estrutura core/ (ipc_handlers, actions/, voice pipeline, orchestrator)\n2. Frontend Electron (renderer/components/zara/)\n3. Actions disponíveis (os_ops, files, browser, web, media, etc.)\n4. Pipeline de voz (Gemini Live, STT, TTS, wake word)\n5. Build system (PyInstaller, build_exe.py)\n6. Testes e dependências\nEntregue fatos, não opiniões. Cite arquivos e linhas.",
+  "recommended_next": "TASK-002 (pesquisar skills Hermes úteis)"
+}

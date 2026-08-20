@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import builtins
-from unittest.mock import AsyncMock
 
 import pytest
 
-from core.action_registry import ActionResult, get_registry
+from core.action_registry import get_registry
 from core.actions import os_ops
 from core.pc_voice_intent import PcVoiceIntentDetector
 

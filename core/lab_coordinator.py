@@ -207,6 +207,7 @@ class LabCoordinator:
             WorkerState("openclaw", "OPENCLAW", "AGENT RUNTIME / R&D", str(claw.get("state") or ("INSTALLED" if openclaw else "NOT INSTALLED")), str(claw.get("detail") or "Runtime persistente de agentes e pesquisa."), executable=openclaw, can_chat=bool(claw.get("can_chat")), can_execute=False),
             WorkerState("cline", "CLINE", "QA / HEADLESS", "LIMITED" if cline else "NOT INSTALLED", "Instalado; hardware local abaixo da recomendação para executor principal.", executable=cline, can_chat=False, can_execute=False),
             WorkerState("aider", "AIDER", "PATCH / GIT", "INSTALLED" if aider else "NOT INSTALLED", "Especialista em patches cirúrgicos; execução ainda bloqueada.", executable=aider, can_chat=False, can_execute=False),
+            WorkerState("revisor_supervisor", "REVISOR_SUPERVISOR", "QA / FINAL REVIEW", "REGISTERED", "Avaliação final de entregas EXECUTOR_DEV. Critérios: nota ≥ 9.0, zero quebra legado, cobertura ≥ 90%, latência voz < 500ms, zero vulnerabilidades críticas. Emite PASS/FAIL em .agent_context/REVIEWS/review_<task>.json.", can_chat=True, can_execute=False),
         ]
         return [asdict(s) for s in states]
 
@@ -273,7 +274,7 @@ class LabCoordinator:
             raise ValueError("Mensagem vazia")
         # @OPENCODE mention routes to OpenCode regardless of the dropdown target.
         target = resolve_lab_target(target, content)
-        if target not in {"zara", "hermes", "mentor", "opencode", "openclaw", "cline", "aider"}:
+        if target not in {"zara", "hermes", "mentor", "opencode", "openclaw", "cline", "aider", "revisor_supervisor"}:
             raise ValueError(f"Participante desconhecido: {target}")
 
         await self._insert_message(author, target, content, "chat")
@@ -331,6 +332,12 @@ class LabCoordinator:
                 if not response:
                     raise RuntimeError("OPENCLAW retornou resposta vazia")
                 state = "OK"
+            elif target == "revisor_supervisor":
+                state = "INSTALLED"
+                response = (
+                    "REVISOR_SUPERVISOR permanece registrado, mas sua execução ainda não foi habilitada nesta etapa. "
+                    "Use o Mentor para acionar avaliação final (task.state == READY_FOR_REVIEW)."
+                )
             else:
                 state = "INSTALLED"
                 response = (

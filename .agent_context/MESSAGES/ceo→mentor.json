@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "mentor",
+  "timestamp": "2026-08-19T14:45:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-MENTOR-001",
+  "summary": "Atuar como conselheiro estratégico e validador de decisões arquiteturais",
+  "details": "Seu papel na fábrica ZARA:\n1. Revisar decisões arquiteturais antes de irem para implementação\n2. Validar trade-offs (latência vs precisão, local vs cloud, etc.)\n3. Aprovar/rejeitar mudanças que afetem a identidade da ZARA\n4. Manter visão de longo prazo (roadmap IDEIAS-DO-ALEX.md)\n5. Mediar conflitos técnicos entre agentes\n6. Reportar ao CEO_MENTOR (este canal) com pareceres\n\nAcesse .agent_context/RESEARCH_INSIGHTS.md e BACKLOG.json para contexto.\nNão escreva código — seu output são pareceres em .agent_context/MESSAGES/mentor→ceo.json",
+  "recommended_next": "Aguardar primeiras pesquisas (TASK-001, 002, 006)"
+}

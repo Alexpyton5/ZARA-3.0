@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core.single_writer import acquire_writer_lock, LOCK_NAME  # noqa: E402
+from core.single_writer import LOCK_NAME, acquire_writer_lock  # noqa: E402
 
 
 def test_acquire_creates_lock(tmp_path):

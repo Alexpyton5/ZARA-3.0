@@ -8,7 +8,6 @@ import pytest
 
 from core.model_router import ModelRouter
 
-
 # ------------------------------------------------------------ 232 failover
 
 

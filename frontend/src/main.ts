@@ -754,6 +754,12 @@ if (!gotSingleInstanceLock) {
   console.warn('[Electron] Outra instancia da ZARA ja esta em execucao. Encerrando esta.')
   app.quit()
 } else {
+  // Ensure lock is released on exit to prevent stale mutex on crash/kill
+  app.on('will-quit', () => {
+    if (gotSingleInstanceLock) {
+      app.releaseSingleInstanceLock()
+    }
+  })
   app.on('second-instance', () => {
     // ZARA-BANDEJA-001: agora a janela pode estar escondida, não só minimizada.
     // `focus()` numa janela escondida não mostra nada, e clicar no atalho

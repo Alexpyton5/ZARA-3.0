@@ -8,7 +8,6 @@ No runtime, no network: the IPC handler is exercised with light fakes.
 """
 from __future__ import annotations
 
-import asyncio
 import types
 
 import pytest

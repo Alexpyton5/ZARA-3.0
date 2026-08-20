@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import types
-
 import pytest
 
 from core.ipc_handlers import IPCHandler, IPCMessage

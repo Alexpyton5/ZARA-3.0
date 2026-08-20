@@ -4,12 +4,12 @@ import asyncio
 import sys
 import time
 from types import SimpleNamespace
-
-import pytest
 from unittest.mock import AsyncMock, Mock
 
-from core.gemini_live_voice import GeminiLiveVoice, GeminiLiveVoiceConfig
+import pytest
+
 from core import ipc_handlers
+from core.gemini_live_voice import GeminiLiveVoice, GeminiLiveVoiceConfig
 from core.ipc_handlers import IPCHandler, IPCMessage, _canonical_request
 
 

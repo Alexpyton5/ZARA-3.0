@@ -177,10 +177,17 @@ def create_pyinstaller_spec() -> Path:
         + sounddevice_datas + certifi_datas
     )
 
-    # google-genai has a broad async/live module tree; collect it explicitly so
-    # PyInstaller cannot miss modules imported dynamically by the SDK.
-    genai_hidden = collect_submodules("google.genai")
-    all_hidden_imports = sorted(set(HIDDEN_IMPORTS + genai_hidden))
+    # google-genai runtime modules ONLY (exclui google.genai.tests.* que inchava o build).
+    genai_runtime = [
+        "google.genai.client", "google.genai.types", "google.genai.models",
+        "google.genai.chats", "google.genai.files", "google.genai.live",
+        "google.genai.caches", "google.genai.batches", "google.genai.operations",
+        "google.genai._local_tokenizer_loader", "google.genai.local_tokenizer",
+        "google.genai.interactions", "google.genai.tunings", "google.genai.documents",
+        "google.genai.mcp", "google.genai.gaos", "google.genai.errors",
+        "google.genai.common", "google.genai.transformers",
+    ]
+    all_hidden_imports = sorted(set(HIDDEN_IMPORTS + genai_runtime))
 
     # Bibliotecas nativas do vosk (libvosk.dll + deps) com destino dentro de vosk/
     vosk_binaries = collect_dynamic_libs("vosk")
@@ -188,9 +195,20 @@ def create_pyinstaller_spec() -> Path:
     # Bibliotecas nativas do pvporcupine (se existirem — retornou 13 entradas)
     porcupine_binaries = collect_dynamic_libs("pvporcupine")
     # ZARA-VOICE-KORE-PACKAGING-001: PortAudio nativo do sounddevice.
-    sounddevice_binaries = collect_dynamic_libs("sounddevice")
+    # collect_dynamic_libs("sounddevice") retorna vazio (nao e pacote) — coletar manualmente.
+    import sounddevice as _sd
+    _sd_path = Path(_sd.__file__).parent
+    _portaudio = list(_sd_path.glob("_sounddevice_data/portaudio-binaries/**/*.dll"))
+    sounddevice_binaries = [(str(p), "sounddevice/_sounddevice_data/portaudio-binaries") for p in _portaudio]
     # miniaudio e extensao nativa: decodifica o MP3 da Edge em streaming.
-    miniaudio_binaries = collect_dynamic_libs("miniaudio")
+    # collect_dynamic_libs("miniaudio") retorna vazio — coletar manualmente se existir.
+    try:
+        import miniaudio as _ma
+        _ma_path = Path(_ma.__file__).parent
+        _ma_native = list(_ma_path.glob("*.dll")) + list(_ma_path.glob("**/*.dll"))
+        miniaudio_binaries = [(str(p), "miniaudio") for p in _ma_native]
+    except Exception:
+        miniaudio_binaries = []
     binaries = (
         vosk_binaries + porcupine_binaries + sounddevice_binaries + miniaudio_binaries
     )

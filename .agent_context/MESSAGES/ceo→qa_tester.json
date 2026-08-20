@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "qa_tester",
+  "timestamp": "2026-08-19T14:35:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-003",
+  "summary": "Auditar bugs conhecidos no FINAL_GAPS_ROADMAP e CADERNO-DE-TAREFAS",
+  "details": "Leia FINAL_GAPS_ROADMAP.md e CADERNO-DE-TAREFAS.md na raiz do repo. Documente em .agent_context/RESEARCH_INSIGHTS.md na seção SECAO-BUGS-CONHECIDOS:\n1. Bugs P0 (voz física, reminders UTF-8) - status e bloqueadores\n2. Bugs P1 (janelas, browser, input, áudio, PC info, visão)\n3. Bugs P2/P3 (Jarvis, LAB, Smart Router, estabilidade)\n4. Itens fora da fila (Paint, Calculadora, Calendar, delete/power)\n5. Testes que falham ou são flaky\nClassifique por severidade e esforço para corrigir.",
+  "recommended_next": "Aguardar TASK-001 para contexto de código"
+}

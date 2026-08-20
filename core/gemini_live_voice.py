@@ -151,8 +151,8 @@ class GeminiLiveVoiceConfig:
     # Curto demais corta a frase quando ele pausa para pensar; longo demais
     # parece que ela travou. Ajustavel sem rebuild por "vad_silencio_ms" em
     # api_keys.json.
-    vad_silencio_ms: int = 450
-    vad_padding_ms: int = 120
+    vad_silencio_ms: int = 300
+    vad_padding_ms: int = 100
     vad_fim_sensivel: bool = True
     # ZARA-VOICE-AUDICAO-001
     # O gate Vosk local ficava LIGADO por padrao e era a causa de tres
@@ -295,6 +295,23 @@ class GeminiLiveVoice:
         self._cooldown_tasks: set[asyncio.Task] = set()
         self._speech_done: asyncio.Event | None = None
         self._play_generated_audio = False
+        # ZARA-LATENCIA-SEGUNDA-VIAGEM-001 — marcos crus do caminho da fala.
+        #
+        # O cronometro que existia nascia dentro de _process_voice_message, ou
+        # seja, DEPOIS de o turno do Alex ter fechado no servidor, e era lido
+        # depois de speak() voltar — e speak() so volta no turn_complete, isto
+        # e, quando a frase inteira ja foi gerada. O numero que ele produzia
+        # ("6904 ms") nao era "quanto o Alex espera para ela COMECAR a falar";
+        # era "quanto demora ate ela TERMINAR de falar". Sao coisas diferentes
+        # e a queixa dele e a primeira.
+        #
+        # Estes quatro relogios existem para separar as duas. Sao perf_counter
+        # crus; quem transforma em ms e quem le. Observabilidade apenas: nenhum
+        # deles muda comportamento.
+        self._t_fim_fala_usuario: float | None = None   # VAD do servidor fechou
+        self._t_fala_pedida: float | None = None        # mandamos FALE_EXATAMENTE
+        self._t_primeiro_byte_tts: float | None = None  # 1o audio da Kore chegou
+        self._t_audio_entregue: float | None = None     # 1o audio foi para o player
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
         self._ready = asyncio.Event()
@@ -529,6 +546,12 @@ class GeminiLiveVoice:
         # compartilhado, o turn_complete de um turno liberava o await de outro
         # e a fala saia fora de ordem.
         done = asyncio.Event()
+        # ZARA-LATENCIA-SEGUNDA-VIAGEM-001: folha limpa para os marcos desta
+        # ida ao Google. A retentativa da cascata chama speak() de novo, entao
+        # sem isto o segundo pedido herdaria o primeiro byte do primeiro.
+        self._t_fala_pedida = None
+        self._t_primeiro_byte_tts = None
+        self._t_audio_entregue = None
         await self._speech_queue.put((value, done))
         try:
             await asyncio.wait_for(done.wait(), timeout=timeout)
@@ -537,6 +560,41 @@ class GeminiLiveVoice:
             return False
         finally:
             self._play_generated_audio = False
+
+    # ZARA-LATENCIA-SEGUNDA-VIAGEM-001 — leitura dos marcos ---------------
+    #
+    # Os [VOICE_TRACE] morrem com o console e o console nao estava aberto na
+    # hora em que o Alex achou lento. Quem grava em disco e o Cronometro, no
+    # ipc_handlers. Estas duas funcoes existem so para entregar os numeros a
+    # ele. Nao alteram estado e nunca levantam excecao.
+
+    def ultimo_fim_de_fala(self) -> float | None:
+        """perf_counter do instante em que o Alex parou de falar, ou None.
+
+        None quer dizer honestamente "nao sei": turno vindo de texto, sessao
+        recem-aberta, ou fala nova que ja zerou o marco.
+        """
+        return self._t_fim_fala_usuario
+
+    def marcos_da_segunda_viagem(self) -> dict[str, int]:
+        """Quanto custou a ida e volta ao Google para a Kore ler o resultado."""
+        def _ms(inicio: float | None, fim: float | None) -> int | None:
+            if inicio is None or fim is None:
+                return None
+            return round((fim - inicio) * 1000.0)
+
+        bruto = {
+            "tts_pedido_ate_primeiro_byte_ms": _ms(
+                self._t_fala_pedida, self._t_primeiro_byte_tts
+            ),
+            "tts_primeiro_byte_ate_player_ms": _ms(
+                self._t_primeiro_byte_tts, self._t_audio_entregue
+            ),
+            "tts_pedido_ate_player_ms": _ms(
+                self._t_fala_pedida, self._t_audio_entregue
+            ),
+        }
+        return {nome: valor for nome, valor in bruto.items() if valor is not None}
 
     def _schedule_idle_after_cooldown(self) -> None:
         """Volta ao estado IDLE apos o cooldown, sem bloquear o _receive_loop.
@@ -1003,6 +1061,9 @@ class GeminiLiveVoice:
             self._speech_done = done
             self._play_generated_audio = True
             self._mark_assistant_output_started(text)
+            # ZARA-LATENCIA-SEGUNDA-VIAGEM-001: aqui comeca a ida e volta ao
+            # Google. Tudo daqui ate _t_primeiro_byte_tts e rede + modelo.
+            self._t_fala_pedida = time.perf_counter()
             await session.send_client_content(
                 turns=types.Content(
                     role="user",
@@ -1083,6 +1144,25 @@ class GeminiLiveVoice:
                     # chegou, o VAD do servidor ja fechou a fala do Alex, entao
                     # self._input_text carrega a frase inteira e decidir aqui
                     # nao atrasa nada.
+                    # ZARA-LATENCIA-SEGUNDA-VIAGEM-001 — FIM DA FALA DO ALEX.
+                    #
+                    # Este e o marco que faltava e sem o qual a queixa dele nao
+                    # vira numero. O comentario acima ja afirma a premissa: se o
+                    # primeiro audio do modelo chegou, o VAD do servidor ja
+                    # fechou a fala do Alex. Entao este instante e o "ele calou
+                    # a boca" mais cedo que o Python consegue observar.
+                    #
+                    # E aproximado por cima: o VAD fechou alguns tracos de
+                    # segundo antes, o tempo de o servidor comecar a gerar. Isso
+                    # e INFERIDO, nao medido, e por isso o numero que sai daqui
+                    # e um PISO da espera real do Alex, nunca o total dela.
+                    if not self._play_generated_audio and self._t_fim_fala_usuario is None:
+                        self._t_fim_fala_usuario = time.perf_counter()
+                        print(
+                            "[VOICE_TRACE] stage=FIM_DA_FALA_DO_USUARIO "
+                            "result=VAD_FECHOU_INFERIDO ms=0",
+                            flush=True,
+                        )
                     if not self._turn_route_decided and not self._play_generated_audio:
                         self._decide_turn_route()
                     for part in getattr(model_turn, "parts", []) or []:
@@ -1090,6 +1170,17 @@ class GeminiLiveVoice:
                         audio_data = getattr(inline, "data", None) if inline else None
                         if audio_data and (self._play_generated_audio or self._turn_direct):
                             audio_bytes = bytes(audio_data)
+                            # PRIMEIRO BYTE DE TTS: a Kore respondeu. O que
+                            # existe entre o pedido e este instante e rede +
+                            # modelo, e e o preco estrutural da segunda viagem.
+                            if self._play_generated_audio and self._t_primeiro_byte_tts is None:
+                                self._t_primeiro_byte_tts = time.perf_counter()
+                                _base = self._t_fala_pedida or self._t_primeiro_byte_tts
+                                print(
+                                    "[VOICE_TRACE] stage=TTS_PRIMEIRO_BYTE result=PASS "
+                                    f"ms={(self._t_primeiro_byte_tts - _base) * 1000:.0f}",
+                                    flush=True,
+                                )
                             self._mark_assistant_output_started(self._output_text)
                             await self._emit_state("SPEAKING")
                             await self._emit_level(self._pcm_level(audio_bytes), True)
@@ -1101,6 +1192,20 @@ class GeminiLiveVoice:
                                 if self._output_stream is None:
                                     await asyncio.to_thread(self._ensure_output_stream, sd)
                                 await asyncio.to_thread(self._output_stream.write, audio_bytes)
+                            # INICIO DO AUDIO AUDIVEL — proxy, e o relatorio tem
+                            # de dizer isso. No modo renderer o Python entrega os
+                            # bytes ao Electron; quando o alto-falante realmente
+                            # vibra e do outro lado do IPC e do WebAudio, e daqui
+                            # nao da para ver. No modo PortAudio o write ja foi
+                            # feito acima, entao o proxy e mais apertado.
+                            if self._play_generated_audio and self._t_audio_entregue is None:
+                                self._t_audio_entregue = time.perf_counter()
+                                print(
+                                    "[VOICE_TRACE] stage=AUDIO_AUDIVEL_INICIO "
+                                    f"result={'PROXY_RENDERER' if self.usa_renderer else 'PORTAUDIO'} "
+                                    f"ms={(self._t_audio_entregue - (self._t_primeiro_byte_tts or self._t_audio_entregue)) * 1000:.0f}",
+                                    flush=True,
+                                )
 
                 if getattr(content, "turn_complete", False):
                     await self._finish_turn()
@@ -1134,6 +1239,10 @@ class GeminiLiveVoice:
         self._turn_route_decided = False
         self._turn_direct = False
         self._turn_rejected_as_echo = False
+        # ZARA-LATENCIA-SEGUNDA-VIAGEM-001: fala nova, relogio novo. Sem isto o
+        # "fim da fala" ficaria preso no primeiro turno da sessao e todo turno
+        # seguinte reportaria uma espera absurda e falsa.
+        self._t_fim_fala_usuario = None
         # ZARA-VOICE-ECO-002: congela AQUI se esta fala nasceu por cima da voz
         # da ZARA. Congelar no inicio e o que torna o sinal confiavel — quando
         # o turno terminar ela ja parou de falar e a informacao teria sumido.

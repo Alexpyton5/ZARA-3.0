@@ -1,12 +1,15 @@
 {
-  "BUILD_ID": "release-candidate-botao-20260814-1242",
-  "BUILD_TIMESTAMP": "2026-08-14T12:43:04.447230-03:00",
-  "GIT_BRANCH": "codex/zara-voice-human-loop-001",
-  "GIT_COMMIT": "8e48b875db5cf66a34a2607b279f97e00ad379da",
+  "BUILD_ID": "release-candidate-telegram-grupo-20260820-0624",
+  "BUILD_TIMESTAMP": "2026-08-20T06:24:37.368138-03:00",
+  "BASE_CANDIDATE": "release",
+  "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
+  "GIT_BRANCH": "zara-pearl-install-001",
+  "GIT_COMMIT": "98d5592a409297782b904f863d1429578991fd4f",
   "GIT_DIRTY": true,
-  "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-botao-20260814-1242\\win-unpacked\\ZARA 3.0.exe",
+  "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-telegram-grupo-20260820-0624\\win-unpacked\\ZARA 3.0.exe",
   "EXE_SHA256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
-  "BACKEND_SHA256": "C2C912074D05837277FDC186580CBB87B855AAEE4AC5461CC8D5F036010BF4E8",
-  "ASAR_SHA256": "D40418F1185E378ECDEFD0AC27B3C9565774617671A65593B12F1E953F8A35C9",
-  "DELTA": "Botao de calar com estado visivel (verde fala, vermelho calada). Chave do Telegram nos dois lugares de config."
+  "BACKEND_SHA256": "E24B6D88BE729775B39E4D20C88CAB7F47B22765430E81A2516EFCB7C0BF266B",
+  "BACKEND_SHA256_ANTERIOR": "9553086A9F11DC9A3DBFD3BFDFB6E75F798C637A410B029D5AB0C7C953693530",
+  "ASAR_SHA256": "031750592707DFBD8ED891ED31EBD18FC2F287E732C13E2698D16569E06D00D7",
+  "DELTA": "Telegram grupo bridge ativado: novo bot @zara_team_chat_bot + group_id -1004422682603 no api_keys.json"
 }

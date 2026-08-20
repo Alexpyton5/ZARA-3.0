@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import core.actions.os_ops  # noqa: F401 - registers clipboard actions
 from core.action_registry import execute_action, get_registry
 from core.ipc_handlers import IPCHandler
-import core.actions.os_ops  # noqa: F401 - registers clipboard actions
 
 
 @pytest.fixture

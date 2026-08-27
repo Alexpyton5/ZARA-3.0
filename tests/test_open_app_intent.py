@@ -10,15 +10,15 @@ from core.pc_voice_intent import RESPOSTA_NAO_SEI, PcVoiceIntentDetector
 @pytest.mark.parametrize(
     ("phrase", "expected_app"),
     [
-        ("abra a calculadora", "calculator"),
-        ("inicie a calculadora", "calculator"),
+        ("abra o wordpad", "wordpad"),
+        ("inicie o wordpad", "wordpad"),
         ("abre o bloco de notas", "notepad"),
         ("quero abrir o bloco de notas", "notepad"),
         ("abrir Chrome", "chrome"),
         ("abra o Google Chrome", "chrome"),
-        ("abre calc", "calculator"),
+        ("abre o telegram", "telegram"),
         ("abrir notepad", "notepad"),
-        ("executa calc", "calculator"),
+        ("execute o obsidian", "obsidian"),
         ("execute o bloco de notas", "notepad"),
         ("executar Chrome", "chrome"),
         ("abra o gerenciador de tarefas", "task_manager"),
@@ -77,8 +77,9 @@ def test_os_app_action_verifies_created_notepad_process(monkeypatch):
     monkeypatch.setattr(os_ops, "_resolve_windows_app_command", lambda app: ["notepad.exe"])
     monkeypatch.setattr(os_ops, "_running_app_pids", lambda names: next(observed))
     monkeypatch.setattr(os_ops, "_window_for_pids", lambda pids: 444)
-    startfile = Mock()
-    monkeypatch.setattr(os_ops.os, "startfile", startfile)
+    # ZARA-PC-CONTROL-ALEX-002: codigo usa subprocess.Popen, nao os.startfile.
+    popen = Mock()
+    monkeypatch.setattr(os_ops.subprocess, "Popen", popen)
 
     result = os_ops.os_app_action("notepad")
 
@@ -87,20 +88,21 @@ def test_os_app_action_verifies_created_notepad_process(monkeypatch):
     assert result.data["preexisting_pids"] == [111]
     assert result.data["created_pids"] == [222]
     assert result.data["verified"] is True
-    startfile.assert_called_once_with("notepad.exe")
+    popen.assert_called_once()
 
 
-def test_os_app_action_uses_grammatical_calculator_reply(monkeypatch):
+def test_os_app_action_uses_grammatical_wordpad_reply(monkeypatch):
     monkeypatch.setattr(os_ops.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(os_ops, "_resolve_windows_app_command", lambda app: ["calc.exe"])
+    monkeypatch.setattr(os_ops, "_resolve_windows_app_command", lambda app: ["wordpad.exe"])
     monkeypatch.setattr(os_ops, "_running_app_pids", lambda names: {333})
     monkeypatch.setattr(os_ops, "_window_for_pids", lambda pids: 555)
-    monkeypatch.setattr(os_ops.os, "startfile", Mock())
+    # ZARA-PC-CONTROL-ALEX-002: codigo usa subprocess.Popen, nao os.startfile.
+    monkeypatch.setattr(os_ops.subprocess, "Popen", Mock())
 
-    result = os_ops.os_app_action("calculator")
+    result = os_ops.os_app_action("wordpad")
 
     assert result.success is True
-    assert result.output == "Calculadora aberta e verificada."
+    assert result.output == "WordPad aberto e verificado."
 
 
 @pytest.mark.asyncio
@@ -112,17 +114,17 @@ async def test_ipc_routes_allowlisted_app_and_returns_verified_reply(monkeypatch
         return type(
             "Result",
             (),
-            {"success": True, "error": "", "output": "Calculadora aberta e verificada."},
+            {"success": True, "error": "", "output": "WordPad aberto e verificado."},
         )()
 
     handler = IPCHandler(AsyncMock())
     handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
 
-    reply = await handler._try_pc_intent("abra a calculadora")
+    reply = await handler._try_pc_intent("abra o wordpad")
 
-    assert calls == [("os_app", {"app": "calculator"})]
-    assert reply == "Calculadora aberta e verificada."
+    assert calls == [("os_app", {"app": "wordpad"})]
+    assert reply == "WordPad aberto e verificado."
 
 
 @pytest.mark.asyncio

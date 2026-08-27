@@ -70,10 +70,10 @@ def test_busca_inocente_nao_e_confundida_com_ataque(phrase, esperado):
 
 def test_app_seguro_continua_abrindo():
     """A defesa não pode ter custo em cima do uso normal."""
-    result = _detect("abra a calculadora")
+    result = _detect("abra o wordpad")
 
     assert result.action == "os_app"
-    assert result.param == "calculator"
+    assert result.param == "wordpad"
     assert result.blocked is False
 
 

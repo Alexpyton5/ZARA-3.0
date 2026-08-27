@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Nightly regression suite for ZARA 3.0.
-Runs the full test suite and reports only new failures compared to a baseline.
-Exits with code 0 if no new failures, 1 if new failures detected.
+Runs the full test suite and reports failures compared to a baseline.
+Never converts a non-zero pytest result into a successful process exit.
 """
 
 import json
@@ -11,26 +11,30 @@ import sys
 import os
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 KNOWN_FAILURES_FILE = PROJECT_ROOT / ".known_failures.json"
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
 
 def run_tests():
-    """Run pytest and return list of failed test names."""
+    """Run pytest and return list of failed test names and total tests collected."""
     cmd = [str(VENV_PYTHON), "-m", "pytest", "--tb=no", "-q"]
     result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
-    # Parse output to extract failed test names
+    # Parse output to extract failed test names and total collected
     failed = []
+    total_collected = None
     for line in result.stdout.splitlines():
-        # Pytest -q output: FAILED tests/test_xxx.py::test_name - ...
+        if line.startswith("collected"):
+            # Example: collected 1294 items
+            parts = line.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                total_collected = int(parts[1])
         if line.startswith("FAILED"):
-            # Extract the test name before the first space after FAILED
             # Example: FAILED tests/test_brain_store.py::test_cross_compartment_dedup - assert None ...
             parts = line.split()
             if len(parts) >= 2:
                 test_id = parts[1]
                 failed.append(test_id)
-    return failed, result.returncode, result.stdout, result.stderr
+    return failed, total_collected, result.returncode, result.stdout, result.stderr
 
 def load_known_failures():
     """Load known failures from JSON file."""
@@ -55,8 +59,10 @@ def save_known_failures(failed_tests):
 
 def main():
     print("Running nightly regression suite...")
-    failed_tests, returncode, stdout, stderr = run_tests()
-    print(f"Total tests run: {len(failed_tests) + (returncode == 0 and 0 or 0)}")  # approximate
+    failed_tests, total_collected, returncode, stdout, stderr = run_tests()
+    if total_collected is not None:
+        print(f"Total tests collected: {total_collected}")
+    print(f"Tests run (approx): {len(failed_tests) + (returncode == 0 and 0 or 0)}")  # approximate
     print(f"Failed tests: {len(failed_tests)}")
     if failed_tests:
         print("Failed tests:")
@@ -89,6 +95,19 @@ def main():
         # Optionally update baseline? We only update if the environment variable is set.
         if update_baseline:
             print("\nUpdating baseline with current failures (as requested by NIGHTLY_REGRESSION_UPDATE_BASELINE=1).")
+            save_known_failures(set(failed_tests))
+        return 1
+    elif returncode != 0:
+        # Tests failed but no new failures (all failures are in baseline)
+        # Per "Never converts a non-zero pytest result into a successful process exit", return failure
+        print("\nTests failed (all failures are known baseline). Regression check failed (non-zero pytest exit).")
+        if fixed_tests:
+            print(f"The following previously failing tests now pass (consider updating baseline):")
+            for test in sorted(fixed_tests):
+                print(f"  {test}")
+        # Update baseline to remove fixed tests if requested
+        if update_baseline:
+            print("\nUpdating baseline to remove fixed tests (as requested by NIGHTLY_REGRESSION_UPDATE_BASELINE=1).")
             save_known_failures(set(failed_tests))
         return 1
     else:

@@ -14,7 +14,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 @pytest.mark.parametrize(
     ("phrase", "app"),
     [
-        ("feche a calculadora", "calculator"),
+        ("feche o wordpad", "wordpad"),
         ("feche o gerenciador de tarefas", "task_manager"),
         ("feche as configurações", "settings"),
         ("feche o spotify", "spotify"),

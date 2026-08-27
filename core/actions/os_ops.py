@@ -13,12 +13,6 @@ from urllib.parse import quote_plus, urlsplit, urlunsplit
 from core.action_registry import ActionResult, action
 
 _SAFE_WINDOWS_APPS = {
-    "calculator": {
-        "display_name": "Calculadora",
-        "opened_reply": "Calculadora aberta e verificada.",
-        "executable": "calc.exe",
-        "process_names": {"calc.exe", "calculator.exe", "calculatorapp.exe"},
-    },
     "notepad": {
         "display_name": "Bloco de Notas",
         "opened_reply": "Bloco de Notas aberto e verificado.",
@@ -67,6 +61,33 @@ _SAFE_WINDOWS_APPS = {
         "executable": "spotify:",
         "process_names": {"spotify.exe"},
     },
+    # ZARA-APPS-REAIS-2026-08-27 (Alex): tirei a calculadora (ele nao usa e
+    # nao quer que ela abra) e coloquei os apps que ele tem instalados de
+    # verdade, achados escaneando o Menu Iniciar do Windows dele.
+    "telegram": {
+        "display_name": "Telegram",
+        "opened_reply": "Telegram aberto e verificado.",
+        "executable": r"C:\Users\alexp\AppData\Roaming\Telegram Desktop\Telegram.exe",
+        "process_names": {"telegram.exe"},
+    },
+    "obsidian": {
+        "display_name": "Obsidian",
+        "opened_reply": "Obsidian aberto e verificado.",
+        "executable": r"C:\Users\alexp\AppData\Local\Programs\Obsidian\Obsidian.exe",
+        "process_names": {"obsidian.exe"},
+    },
+    "winrar": {
+        "display_name": "WinRAR",
+        "opened_reply": "WinRAR aberto e verificado.",
+        "executable": r"C:\Program Files\WinRAR\WinRAR.exe",
+        "process_names": {"winrar.exe"},
+    },
+    "wordpad": {
+        "display_name": "WordPad",
+        "opened_reply": "WordPad aberto e verificado.",
+        "executable": r"C:\Program Files\Windows NT\Accessories\wordpad.exe",
+        "process_names": {"wordpad.exe"},
+    },
 }
 
 _WINDOWS_MEDIA_COMMANDS = {
@@ -92,11 +113,11 @@ _SAFE_FOLDER_NAMES = {
 
 _BROWSER_PROCESS_NAMES = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe"}
 _SAFE_CLOSE_APPS = {
-    "calculator", "notepad", "chrome", "task_manager", "settings", "paint",
+    "notepad", "chrome", "task_manager", "settings", "paint",
     "snipping_tool", "edge", "spotify",
+    "telegram", "obsidian", "winrar", "wordpad",
 }
 _SAFE_CLOSE_TITLE_TOKENS = {
-    "calculator": {"calculadora", "calculator"},
     "notepad": {"bloco de notas", "notepad"},
     "chrome": {"google chrome", "chrome"},
     "task_manager": {"gerenciador de tarefas", "task manager"},
@@ -104,6 +125,10 @@ _SAFE_CLOSE_TITLE_TOKENS = {
     "paint": {"paint"},
     "snipping_tool": {"ferramenta de captura", "snipping tool"},
     "edge": {"microsoft edge", "edge"},
+    "telegram": {"telegram"},
+    "obsidian": {"obsidian"},
+    "winrar": {"winrar"},
+    "wordpad": {"wordpad", "documento"},
     "spotify": {"spotify"},
 }
 
@@ -194,6 +219,11 @@ def _resolve_windows_app_command(app: str) -> list[str] | None:
     if resolved:
         return [resolved]
     if app in {"settings", "spotify"}:
+        return [executable]
+    # ZARA-APPS-REAIS-2026-08-27: apps instalados por fora (Telegram, Obsidian,
+    # WinRAR, WordPad) nao ficam na PATH do Windows, entao o spec ja guarda o
+    # caminho absoluto do .exe achado no Menu Iniciar do Alex.
+    if os.path.isabs(executable) and Path(executable).is_file():
         return [executable]
     if app not in {"chrome", "edge"}:
         return [executable]

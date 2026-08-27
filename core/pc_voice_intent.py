@@ -204,9 +204,6 @@ class PcVoiceIntentDetector:
              self._clipboard_text, "os_clipboard", None),
             # Open apps
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
-             r'(?:a\s+)?(?:calculadora|calc|calculator)\s*[.!?]*$',
-             self._open_calc, "os_app", "calculator"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
              r'(?:o\s+)?(?:bloco\s+de\s+notas|notepad)\s*[.!?]*$',
              self._open_notepad, "os_app", "notepad"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
@@ -225,8 +222,14 @@ class PcVoiceIntentDetector:
              self._open_edge, "os_app", "edge"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?spotify\s*[.!?]*$',
              self._open_spotify, "os_app", "spotify"),
-            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:a\s+)?calculadora\s*[.!?]*$',
-             self._close_calculator, "os_close_safe_app", "calculator"),
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?telegram\s*[.!?]*$',
+             self._open_telegram, "os_app", "telegram"),
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?obsidian\s*[.!?]*$',
+             self._open_obsidian, "os_app", "obsidian"),
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?win\s*rar\s*[.!?]*$',
+             self._open_winrar, "os_app", "winrar"),
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?word\s*pad\s*[.!?]*$',
+             self._open_wordpad, "os_app", "wordpad"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?gerenciador\s+de\s+tarefas\s*[.!?]*$',
              self._close_task_manager, "os_close_safe_app", "task_manager"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:as\s+)?configurações\s*[.!?]*$',
@@ -243,6 +246,14 @@ class PcVoiceIntentDetector:
              self._close_chrome, "os_close_safe_app", "chrome"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?(?:microsoft\s+)?edge\s*[.!?]*$',
              self._close_edge, "os_close_safe_app", "edge"),
+            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?telegram\s*[.!?]*$',
+             self._close_telegram, "os_close_safe_app", "telegram"),
+            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?obsidian\s*[.!?]*$',
+             self._close_obsidian, "os_close_safe_app", "obsidian"),
+            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?win\s*rar\s*[.!?]*$',
+             self._close_winrar, "os_close_safe_app", "winrar"),
+            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?word\s*pad\s*[.!?]*$',
+             self._close_wordpad, "os_close_safe_app", "wordpad"),
             (r'^(?:zara[,\s]+)?(?:abr[ae]|abrir|mostr[ae]|v[áa]\s+(?:pra|para))\s+(?:a\s+)?(?:pasta\s+(?:de\s+|dos\s+)?)?(?:meus?\s+)?downloads\s*[.!?]*$',
              self._open_downloads, "os_open", "downloads"),
             (r'^(?:zara[,\s]+)?(?:abr[ae]|abrir|mostr[ae]|v[áa]\s+(?:pra|para))\s+(?:a\s+)?(?:pasta\s+(?:de\s+|dos\s+)?)?(?:meus?\s+)?(?:documentos|documents)\s*[.!?]*$',
@@ -642,8 +653,9 @@ class PcVoiceIntentDetector:
                     param = default_param
 
                 if action == "os_app" and param not in {
-                    "calculator", "notepad", "chrome", "task_manager", "settings",
+                    "notepad", "chrome", "task_manager", "settings",
                     "paint", "snipping_tool", "edge", "spotify",
+                    "telegram", "obsidian", "winrar", "wordpad",
                 }:
                     return PcVoiceResult(
                         is_pc_intent=True,
@@ -742,9 +754,6 @@ class PcVoiceIntentDetector:
     def _notification_message(self, m):
         return m.group(1).strip()
 
-    def _open_calc(self, m):
-        return "calculator"
-
     def _open_notepad(self, m):
         return "notepad"
 
@@ -769,8 +778,29 @@ class PcVoiceIntentDetector:
     def _open_spotify(self, m):
         return "spotify"
 
-    def _close_calculator(self, m):
-        return "calculator"
+    def _open_telegram(self, m):
+        return "telegram"
+
+    def _open_obsidian(self, m):
+        return "obsidian"
+
+    def _open_winrar(self, m):
+        return "winrar"
+
+    def _open_wordpad(self, m):
+        return "wordpad"
+
+    def _close_telegram(self, m):
+        return "telegram"
+
+    def _close_obsidian(self, m):
+        return "obsidian"
+
+    def _close_winrar(self, m):
+        return "winrar"
+
+    def _close_wordpad(self, m):
+        return "wordpad"
 
     def _close_task_manager(self, m):
         return "task_manager"

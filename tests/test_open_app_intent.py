@@ -77,9 +77,12 @@ def test_os_app_action_verifies_created_notepad_process(monkeypatch):
     monkeypatch.setattr(os_ops, "_resolve_windows_app_command", lambda app: ["notepad.exe"])
     monkeypatch.setattr(os_ops, "_running_app_pids", lambda names: next(observed))
     monkeypatch.setattr(os_ops, "_window_for_pids", lambda pids: 444)
-    # ZARA-PC-CONTROL-ALEX-002: codigo usa subprocess.Popen, nao os.startfile.
-    popen = Mock()
-    monkeypatch.setattr(os_ops.subprocess, "Popen", popen)
+    # AUDITORIA_2026-08-27: o codigo real usa os.startfile, nao
+    # subprocess.Popen. O comentario antigo estava errado e o teste
+    # simulava a funcao errada -- os.startfile rodava de verdade e abria o
+    # Bloco de Notas na tela do Alex toda vez que a suite era executada.
+    startfile = Mock()
+    monkeypatch.setattr(os_ops.os, "startfile", startfile)
 
     result = os_ops.os_app_action("notepad")
 
@@ -88,7 +91,7 @@ def test_os_app_action_verifies_created_notepad_process(monkeypatch):
     assert result.data["preexisting_pids"] == [111]
     assert result.data["created_pids"] == [222]
     assert result.data["verified"] is True
-    popen.assert_called_once()
+    startfile.assert_called_once()
 
 
 def test_os_app_action_uses_grammatical_wordpad_reply(monkeypatch):
@@ -96,8 +99,9 @@ def test_os_app_action_uses_grammatical_wordpad_reply(monkeypatch):
     monkeypatch.setattr(os_ops, "_resolve_windows_app_command", lambda app: ["wordpad.exe"])
     monkeypatch.setattr(os_ops, "_running_app_pids", lambda names: {333})
     monkeypatch.setattr(os_ops, "_window_for_pids", lambda pids: 555)
-    # ZARA-PC-CONTROL-ALEX-002: codigo usa subprocess.Popen, nao os.startfile.
-    monkeypatch.setattr(os_ops.subprocess, "Popen", Mock())
+    # AUDITORIA_2026-08-27: ver comentario acima -- o codigo usa
+    # os.startfile, nao subprocess.Popen.
+    monkeypatch.setattr(os_ops.os, "startfile", Mock())
 
     result = os_ops.os_app_action("wordpad")
 

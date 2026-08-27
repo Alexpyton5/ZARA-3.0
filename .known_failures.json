@@ -26,7 +26,6 @@
     "tests/test_microphone_f36.py::TestMicrophoneMissingOrDenied::test_microphone_missing_graceful_failure",
     "tests/test_microphone_f36.py::TestMicrophoneMissingOrDenied::test_microphone_permission_denied_graceful_failure",
     "tests/test_microphone_f36.py::TestMicrophoneMissingOrDenied::test_voice_pipeline_handles_audio_start_failure",
-    "tests/test_open_app_intent.py::test_os_app_action_verifies_created_notepad_process",
     "tests/test_os_ops_truth_contracts.py::test_brightness_allows_explicit_readback_tolerance",
     "tests/test_os_ops_truth_contracts.py::test_brightness_rejects_observed_value_outside_tolerance",
     "tests/test_os_ops_truth_contracts.py::test_night_light_never_reports_cloudstore_only_success",

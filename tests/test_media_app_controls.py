@@ -5,51 +5,95 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from core.action_registry import ActionResult
+from core.action_registry import ActionResult, get_registry
 from core.actions import media_apps
+import core.actions  # noqa: F401 -- garante que as actions estao registradas
+from core.action_registry import get_registry
+
+
+def load_capability(name):
+    return get_registry().get_spec(name) is not None
 from core.ipc_handlers import IPCHandler
 from core.pc_voice_intent import PcVoiceIntentDetector
 
 
 def test_youtube_open_uses_fixed_home_route(monkeypatch):
     open_url = Mock(return_value=ActionResult(success=True, output="sent", data={"dispatch": "DISPATCH_PROVEN"}))
-    monkeypatch.setattr(media_apps, "browser_open_url_action", open_url)
+    registry = get_registry()
+    assert load_capability("browser_open_url")
+    monkeypatch.setitem(registry._actions, "browser_open_url", open_url)
+    monkeypatch.setattr(registry, "pc_control_allowed", True)
 
-    result = media_apps.youtube_open_action()
+    result = registry.execute("youtube_open")
 
     assert result.success is True
     assert result.output == "YouTube enviado ao navegador padrão."
     assert result.data["service"] == "youtube"
     assert result.data["route"] == "home"
-    open_url.assert_called_once_with("https://www.youtube.com/")
+    open_url.assert_called_once_with(url="https://www.youtube.com/")
 
 
 @pytest.mark.parametrize(
-    ("action", "query", "expected"),
+    ("action_name", "query", "expected"),
     [
-        (media_apps.youtube_search_action, "música brasileira", "youtube.com/results?search_query=m%C3%BAsica+brasileira"),
-        (media_apps.spotify_search_action, "jazz focus", "open.spotify.com/search/jazz%20focus"),
+        ("youtube_search", "música brasileira", "youtube.com/results?search_query=m%C3%BAsica+brasileira"),
+        ("spotify_search", "jazz focus", "open.spotify.com/search/jazz%20focus"),
     ],
 )
-def test_media_search_uses_fixed_service_host(monkeypatch, action, query, expected):
+def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, expected):
     opened = []
-    monkeypatch.setattr(
-        media_apps,
-        "browser_open_url_action",
-        lambda url: opened.append(url) or ActionResult(success=True, data={"dispatch": "DISPATCH_PROVEN"}),
-    )
 
-    result = action(query)
+    def open_url(url):
+        opened.append(url)
+        return ActionResult(success=True, data={"dispatch": "DISPATCH_PROVEN"})
+
+    registry = get_registry()
+    assert load_capability("browser_open_url")
+    monkeypatch.setitem(registry._actions, "browser_open_url", open_url)
+    monkeypatch.setattr(registry, "pc_control_allowed", True)
+
+    result = registry.execute(action_name, query=query)
 
     assert result.success is True
     assert expected in opened[0]
     assert result.data["query"] == query
 
 
+@pytest.mark.parametrize(
+    ("action_name", "kwargs", "expected"),
+    [
+        ("youtube_open", {}, "https://www.youtube.com/"),
+        ("youtube_search", {"query": "música brasileira"}, "youtube.com/results?search_query=m%C3%BAsica+brasileira"),
+        ("spotify_search", {"query": "jazz focus"}, "open.spotify.com/search/jazz%20focus"),
+    ],
+)
+def test_browser_opening_media_actions_use_registry_pc_control_gate(monkeypatch, action_name, kwargs, expected):
+    calls: list[str] = []
+
+    def open_url(url):
+        calls.append(url)
+        return ActionResult(success=True, data={"dispatch": "DISPATCH_PROVEN"})
+
+    registry = get_registry()
+    assert load_capability("browser_open_url")
+    monkeypatch.setitem(registry._actions, "browser_open_url", open_url)
+
+    blocked = registry.execute(action_name, **kwargs)
+
+    assert not blocked.success
+    assert "Superc" in blocked.error
+    assert calls == []
+
+    monkeypatch.setattr(registry, "pc_control_allowed", True)
+    allowed = registry.execute(action_name, **kwargs)
+
+    assert allowed.success
+    assert expected in calls[0]
+
+
 @pytest.mark.parametrize("query", ["", "   ", "x" * 201, "bad\nquery"])
 def test_media_search_rejects_invalid_query_without_opening(monkeypatch, query):
     open_url = AsyncMock()
-    monkeypatch.setattr(media_apps, "browser_open_url_action", open_url)
 
     result = media_apps.youtube_search_action(query)
 

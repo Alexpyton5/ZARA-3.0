@@ -16,8 +16,14 @@ import asyncio
 
 import pytest
 
-import core.actions  # noqa: F401  (registers all actions)
+import core.actions  # noqa: F401  (registers only fundamental actions)
 from core.action_registry import execute_action, get_registry
+def load_capability(name):
+    return get_registry().get_spec(name) is not None
+
+
+def load_fundamentals():
+    import core.actions  # noqa: F401
 from core.ipc_handlers import IPCHandler
 from core.pc_voice_intent import PcVoiceIntentDetector
 
@@ -54,6 +60,7 @@ def test_049_scroll_intent_is_detected():
 
 
 def test_049_scroll_action_is_registered():
+    assert load_capability("browser_scroll") is True
     assert "browser_scroll" in get_registry()._specs
 
 
@@ -175,16 +182,49 @@ async def test_050_open_ended_browser_intent_still_asks_for_supercerebro():
 def test_050_core_routes_point_to_registered_actions(text, expected_action):
     res = _detector().detect(text)
     assert res.action == expected_action
+    assert load_capability(expected_action) is True
     assert expected_action in get_registry()._specs, f"rota orfa: {expected_action}"
 
 
+def test_050_blocked_drive_format_is_not_an_executable_route():
+    res = _detector().detect("formatar C")
+
+    assert res.is_pc_intent is True
+    assert res.blocked is True
+    assert res.action == ""
+
+
+def test_050_mcp_actions_are_not_mapped_or_lazy_loadable():
+    """MCP morto não pode importar os_ops nem expor capabilities."""
+    from core.action_mapping import _ACTION_TO_MODULE
+
+    assert not {name for name in _ACTION_TO_MODULE if name.startswith("mcp_")}
+
+    before = set(get_registry()._specs)
+    assert load_capability("mcp_connect") is False
+    assert set(get_registry()._specs) == before
+
+
 def test_050_all_intent_actions_except_known_gap_are_registered():
-    """Rede de seguranca: nenhuma rota orfa NOVA pode ser introduzida."""
+    """Rede de seguranca: nenhuma rota orfa NOVA pode ser introduzida.
+
+    Com lazy-loading, carrega capabilities sob demanda via API publica antes de checar.
+    """
     import inspect
     import re
+
+    # Garante fundamentais carregados
+    load_fundamentals()
 
     src = inspect.getsource(PcVoiceIntentDetector)
     referenced = set(re.findall(r'"([a-z_]+)",\s*(?:"[^"]*"|None)\)', src))
     referenced |= set(re.findall(r'action="([a-z_]+)"', src))
+
+    # Carrega sob demanda cada action referenciada
+    for action_name in referenced:
+        load_capability(action_name)
+
     registered = set(get_registry()._specs)
-    assert not (referenced - registered)
+    missing = referenced - registered
+    print(f"referenced-registered = {sorted(missing)}")
+    assert not missing, f"rotas sem action registrada: {sorted(missing)}"

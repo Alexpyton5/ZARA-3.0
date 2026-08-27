@@ -129,9 +129,16 @@ class ZaraOrchestrator:
         self.initialized = False
         self.last_engine_used: str | None = None
         self.last_route_policy: str | None = None
+        # ZARA-ALMA-001: a identidade so vira atributo depois do boot, para que
+        # `initialized == False` signifique de verdade "ainda nao sei quem sou".
+        self.soul: Soul | None = None
 
     async def initialize(self):
         """Initialize orchestrator components"""
+        # ZARA-ALMA-001: primeira coisa do boot. Ler quem ela e nao depende de
+        # rede, chave nem modelo, entao acontece antes de qualquer componente
+        # que possa falhar - se o resto cair, ela ainda sabe se apresentar.
+        self.soul = boot_identity()
         # Model router loads API keys on init
         self.initialized = True
         print("[Orchestrator] Initialized with ModelRouter")
@@ -219,7 +226,7 @@ class ZaraOrchestrator:
         history: list[dict] | None = None,
     ) -> str:
         """Call a specific model directly"""
-        from core.model_router import get_model_config
+        from core.model_router import ModelProvider, get_model_config
 
         model_config = get_model_config(model_id)
         if not model_config:
@@ -228,6 +235,10 @@ class ZaraOrchestrator:
         # Check if Hermes (local)
         if model_config.provider == ModelProvider.HERMES:
             return await self._call_hermes(message, model_config, stream, history)
+
+        # Check if Ollama (local)
+        if model_config.api_key_env == "OLLAMA_API_KEY":
+            return await self._call_ollama(message, model_config, stream, history)
 
         # For cloud models, use httpx to call API
         return await self._call_cloud_model(message, model_config, stream, history)
@@ -295,6 +306,48 @@ class ZaraOrchestrator:
 
         except Exception as e:
             return f"Error calling Hermes: {e}"
+
+    async def _call_ollama(
+        self, message: str, model_config, stream: bool = False, history=None
+    ) -> str:
+        """Call Ollama local API (OpenAI-compatible)"""
+        try:
+            import httpx
+
+            # Ollama doesn't need an API key
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                payload = {
+                    "model": model_config.api_model,
+                    "messages": [
+                        {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
+                        *self._normalized_history(history, message),
+                        {"role": "user", "content": message}
+                    ],
+                    "max_tokens": model_config.max_tokens,
+                    "temperature": 0.7,
+                    "stream": stream,
+                }
+
+                if stream:
+                    # For streaming, we'd need to handle SSE - simplified for now
+                    pass
+
+                resp = await client.post(
+                    f"{model_config.base_url}/chat/completions",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=120.0
+                )
+
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                else:
+                    error_text = (await resp.aread()).decode(errors="replace")
+                    return f"Error {resp.status_code}: {error_text[:800]}"
+
+        except Exception as e:
+            return f"Error calling Ollama: {e}"
 
     async def _call_cloud_model(
         self, message: str, model_config, stream: bool = False, history=None
@@ -401,8 +454,9 @@ class ZaraOrchestrator:
             error_text = (await resp.aread()).decode(errors="replace")
             return f"Error {resp.status_code}: {error_text[:800]}"
 
-    def get_available_models(self) -> list[dict]:
+    async def get_available_models(self) -> list[dict]:
         """Get list of available models with API keys configured"""
+        models = await self.model_router.get_available_models()
         return [
             {
                 "id": m.id,
@@ -410,7 +464,9 @@ class ZaraOrchestrator:
                 "provider": m.provider.value,
                 "task_types": [t.value for t in m.task_types],
                 "free_tier": m.free_tier_limit,
-                "available": m.provider == ModelProvider.HERMES or m.api_key_env in self.model_router.api_keys
+                "available": m.provider == ModelProvider.HERMES
+                or m.api_key_env == "OLLAMA_API_KEY"
+                or m.api_key_env in self.model_router.api_keys
             }
-            for m in self.model_router.get_available_models()
+            for m in models
         ]

@@ -6,6 +6,12 @@ import pytest
 
 from core.action_registry import get_registry
 from core.actions import os_ops
+import core.actions  # noqa: F401 -- garante que as actions estao registradas
+from core.action_registry import get_registry
+
+
+def load_capability(name):
+    return get_registry().get_spec(name) is not None
 from core.pc_voice_intent import PcVoiceIntentDetector
 
 
@@ -49,6 +55,7 @@ def test_notification_fallback_never_interpolates_message_into_script(monkeypatc
 
 
 def test_notification_metadata_is_low_risk_local_control():
+    assert load_capability("os_notify") is True
     spec = get_registry().get_spec("os_notify")
 
     assert spec.risk == "LOW"

@@ -22,60 +22,7 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-from core.context_envelope import ContextDatum, ContextEnvelope, build_context_envelope
-from core.autonomy_policy import AutonomyDecision, format_decision_pt, decide as _original_decide
 from core.paths import user_data_dir
-
-# Global cache for default project memory instance (used by IPC handler)
-_DEFAULT_PM = None
-_PM_LOCK = threading.Lock()
-
-
-def _get_default_project_memory() -> "ProjectMemory | None":
-    """Return the default ProjectMemory instance (same as used by IPC handlers).
-
-    Returns None instead of raising when init fails (disk full, permission
-    denied, etc.) — AUDITORIA_2026-08-27 item 2.1: this used to propagate
-    straight out of `_traced_decide`, which is patched over the global
-    `autonomy_policy.decide`, so a broken disk would have broken every
-    autonomy decision in the system, not just decision logging.
-    """
-    global _DEFAULT_PM
-    if _DEFAULT_PM is None:
-        with _PM_LOCK:
-            if _DEFAULT_PM is None:
-                try:
-                    _DEFAULT_PM = ProjectMemory()
-                except Exception as e:
-                    print(f"[ProjectMemory] init failed, decision tracing disabled: {e}")
-                    return None
-    return _DEFAULT_PM
-
-
-def _traced_decide(request):
-    """Wrapper around autonomy_policy.decide that records the decision to project memory.
-
-    Recording is best-effort: the real autonomy decision is always returned,
-    even if project memory is unavailable or the write itself fails.
-    """
-    decision = _original_decide(request)
-    try:
-        pm = _get_default_project_memory()
-        if pm is not None:
-            pm.append_decision(format_decision_pt(decision))
-    except Exception as e:
-        print(f"[ProjectMemory] decision trace failed (non-fatal): {e}")
-    return decision
-
-
-# Patch the autonomy_policy.decide function to enable decision traceability.
-# This ensures all callers (including IPC handlers) get the traced version.
-# The wrapper is failure-safe (see _get_default_project_memory / _traced_decide
-# above): a broken tracing sink can no longer break autonomy decisions.
-import core.autonomy_policy as _ap
-if not getattr(_ap, '_traced_by_project_memory', False):
-    _ap.decide = _traced_decide
-    _ap._traced_by_project_memory = True
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS project_docs (

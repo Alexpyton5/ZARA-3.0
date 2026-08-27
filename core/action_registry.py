@@ -148,6 +148,14 @@ class ActionRegistry:
         if name in self._actions:
             print(f"[ActionRegistry] Warning: Overwriting action '{name}'")
 
+        # Validate capability-category combinations
+        # LOCAL_PC_CONTROL must be in a recognized OS/action category
+        # Reject "general" and "mcp" - they are not valid OS categories
+        if normalized_capability == "LOCAL_PC_CONTROL" and category in {"general", "mcp"}:
+            raise ValueError(
+                f"Capability LOCAL_PC_CONTROL requires a valid category (os, audio, window, etc.), not '{category}'"
+            )
+
         self._actions[name] = func
 
         # Build parameter schema from function signature if not provided
@@ -554,7 +562,32 @@ def action(
             risk=risk,
             capability=capability,
         )
-        return func
+
+        # Wrap the function so direct calls still go through registry gates
+        import functools
+        import inspect
+        sig = inspect.signature(func)
+
+        def _merge_args(args, kwargs):
+            # BUGFIX_2026-08-27: os wrappers abaixo so repassavam **kwargs para
+            # registry.execute/execute_async, descartando qualquer argumento
+            # posicional de chamada direta (ex.: os_brightness_absolute_action(150)).
+            # Isso derrubava 209 testes com "missing 1 required positional argument"
+            # e era pre-existente, nao relacionado as correcoes da AUDITORIA_2026-08-27.
+            bound = sig.bind_partial(*args, **kwargs)
+            return bound.arguments
+
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            return registry.execute(action_name, **_merge_args(args, kwargs))
+
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            return await registry.execute_async(action_name, **_merge_args(args, kwargs))
+
+        if async_execution or asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return sync_wrapper
     return decorator
 
 

@@ -235,3 +235,77 @@ def test_edge_requires_backend_installed(monkeypatch):
     with pytest.raises(Exception) as exc:
         voice_tts.EdgeTTS(TTSConfig())
     assert "TTS_BACKEND_NOT_CONFIGURED" in str(exc.value)
+
+
+# --------------------------------------------------------------------------
+# AUDITORIA_2026-08-27 item 1.1 — a cascata morria de verdade no modo
+# nao-bloqueante: a excecao do engine so aparecia DEPOIS que a thread ja
+# tinha comecado, entao nunca chegava ao try/except que troca de engine.
+# --------------------------------------------------------------------------
+
+def test_non_blocking_failure_still_falls_back_to_next_engine():
+    """Falha do Edge dentro da thread nao-bloqueante tem de acordar o Kokoro."""
+    mgr = TTSManager(TTSConfig())
+    mgr.edge = _FakeEngine(fails=True)
+    mgr.kokoro = _FakeEngine()
+
+    mgr.speak("Aviso importante.", blocking=False)
+    mgr._current_playback.join(timeout=2)
+
+    assert mgr.kokoro.spoken == ["Aviso importante."]
+
+
+def test_non_blocking_cascade_exhausted_does_not_raise_in_thread():
+    """Sem nenhum engine, a thread tem de desistir quieta, nao travar/crashar."""
+    mgr = TTSManager(TTSConfig())
+    mgr.edge = _FakeEngine(fails=True)
+    mgr.kokoro = _FakeEngine(fails=True)
+    mgr.gemini = None
+
+    mgr.speak("Ninguem vai falar isto.", blocking=False)
+    mgr._current_playback.join(timeout=2)
+
+    assert not mgr._current_playback.is_alive()
+
+
+def test_blocking_mode_still_raises_when_cascade_exhausted():
+    """O contrato antigo (excecao em modo bloqueante) nao pode regredir."""
+    mgr = TTSManager(TTSConfig())
+    mgr.edge = _FakeEngine(fails=True)
+    mgr.kokoro = _FakeEngine(fails=True)
+    mgr.gemini = None
+
+    with pytest.raises(RuntimeError):
+        mgr.speak("Bloqueante sem engine.", blocking=True)
+
+
+# --------------------------------------------------------------------------
+# AUDITORIA_2026-08-27 item 1.2 — is_speaking() chamava sd.get_stream() duas
+# vezes e tratava a excecao (sem stream ativo) como se fosse None.
+# --------------------------------------------------------------------------
+
+def test_is_speaking_false_when_no_stream_raises(monkeypatch):
+    class _NoStream:
+        def get_stream(self):
+            raise RuntimeError("PortAudio: no stream")
+
+    monkeypatch.setattr(voice_tts, "SOUNDDEVICE_AVAILABLE", True)
+    monkeypatch.setattr(voice_tts, "sd", _NoStream())
+    mgr = TTSManager(TTSConfig())
+
+    assert mgr.is_speaking() is False
+
+
+def test_is_speaking_true_when_stream_active(monkeypatch):
+    class _Stream:
+        active = True
+
+    class _WithStream:
+        def get_stream(self):
+            return _Stream()
+
+    monkeypatch.setattr(voice_tts, "SOUNDDEVICE_AVAILABLE", True)
+    monkeypatch.setattr(voice_tts, "sd", _WithStream())
+    mgr = TTSManager(TTSConfig())
+
+    assert mgr.is_speaking() is True

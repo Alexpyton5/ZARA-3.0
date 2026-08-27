@@ -12,7 +12,16 @@ Comece pelo [relatório de tomada de controle](./MENTOR_TAKEOVER_REPORT.md) e po
 standby, relação entre fonte/build/runtime, status real dos checks, gates de promoção e protocolo de
 segurança.
 
-Evidência atual: 62 testes Python passaram; compileall/Ruff passaram; `npm ci`, `npm ls`, lint,
+Evidência atual (2026-08-27): 1411 de 1591 testes Python passaram, 153 falharam e 27 foram
+pulados. O bug em `core/action_registry.py` (decorator `action()` descartava argumentos posicionais
+de chamadas diretas) foi corrigido nesta mesma revisão, o que já reduziu as falhas de 209 para 153.
+As 153 falhas restantes são pré-existentes e pertencem a um refactor de autonomia/capability ainda
+não commitado, em duas frentes distintas e não relacionadas às correções da AUDITORIA_2026-08-27:
+(1) `IPCHandler` ainda não implementa `handle_soul_get` e outros handlers do recurso "soul"; (2)
+`VadConfig` lê valores de padding/sensibilidade que não batem com o esperado pelos testes novos.
+O número "62 testes" abaixo e em
+OPERATIONS.md é histórico de uma raiz muito mais antiga do projeto (poucas dezenas de arquivos de
+teste) — hoje a suíte tem mais de 150 arquivos. compileall/Ruff passaram; `npm ci`, `npm ls`, lint,
 typecheck, Vite, Electron TypeScript, sidecar e `electron-builder` passaram. O lint terminou com
 0 erros e 47 warnings. O sidecar fonte e o empacotado compartilham SHA-256
 `639E4D80FA54C2A50F77EF161D1C0C49AF5CD7FF24638401BD44EAEF9B18BBCC`.

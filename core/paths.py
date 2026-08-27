@@ -1,4 +1,5 @@
 """Paths — central path resolution for ZARA 3.0."""
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,7 @@ def project_root() -> Path:
     """Root of the source tree or of the frozen sidecar executable."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parents[1]
 
 
 def user_data_dir() -> Path:
@@ -67,3 +68,8 @@ def data_dir() -> Path:
 
 def api_keys_path() -> Path:
     return config_dir() / "api_keys.json"
+
+
+def api_keys_file() -> Path:
+    """Deprecated alias for api_keys_path() — kept for existing call sites."""
+    return api_keys_path()

@@ -61,8 +61,3 @@ def resource_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS)
     return Path(__file__).resolve().parent.parent
-
-
-def user_data_dir() -> Path:
-    """User-writable data directory."""
-    return safe_user_path("data")

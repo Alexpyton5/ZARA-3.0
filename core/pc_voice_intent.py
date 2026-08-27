@@ -374,8 +374,13 @@ class PcVoiceIntentDetector:
             # brilho ai" e "deixa a tela mais escura" nao casavam, caiam no LLM
             # e voltavam como falso sucesso. Agora sao delimitados por \b, como
             # os de volume — que por isso sempre funcionaram.
+            # AUDITORIA_2026-08-27 item 1.6: o numero so casa colado em "brilho"
+            # (so um espaco/preposicao curta no meio), entao frases soltas tipo
+            # "o brilho daquele quadro e uns 80" nao disparam isto (verificado
+            # empiricamente). A preposicao "a" foi removida por ser generica
+            # demais e coincidir com expressoes de hora ("brilho a 3 da tarde").
             (r'\b(?:coloc\w+|ponha|poe|bote|bota|defin\w+|deix\w+|ajust\w+|deixa)?\s*'
-             r'(?:o\s+)?brilho\s+(?:em|para|pra|a)?\s*(\d{1,3})\s*%?',
+             r'(?:o\s+)?brilho\s+(?:em|para|pra)?\s*(\d{1,3})\s*%?',
              self._brightness_level, "os_brightness_absolute", None),
             (r'\bbrilho\s+(?:em\s+)?(\d{1,3})\s*%?',
              self._brightness_level, "os_brightness_absolute", None),

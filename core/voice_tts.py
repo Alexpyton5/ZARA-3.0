@@ -641,32 +641,50 @@ class TTSManager:
     def speak(self, text: str, voice: str = None, speed: float = 1.0, blocking: bool = True):
         """Speak text using best available engine."""
         self._interrupt_event.clear()
+        engines = ((self.edge, "Edge"), (self.kokoro, "Kokoro"))
 
-        for engine, label in ((self.edge, "Edge"), (self.kokoro, "Kokoro")):
+        if blocking:
+            self._speak_cascade(text, voice, speed, engines, raise_on_exhausted=True)
+            return
+
+        # ZARA-TTS-CASCATA-002: a cascata inteira roda dentro da thread, nao so
+        # o primeiro engine. Antes, uma falha do Edge depois que a thread ja
+        # tinha comecado morria silenciosa ali dentro e nunca chegava ao
+        # Kokoro/Gemini — exatamente no modo em que a promessa de "nunca fica
+        # muda" mais importa.
+        t = threading.Thread(
+            target=self._speak_cascade,
+            args=(text, voice, speed, engines),
+            kwargs={"raise_on_exhausted": False},
+            daemon=True,
+        )
+        t.start()
+        self._current_playback = t
+
+    def _speak_cascade(self, text, voice, speed, engines, raise_on_exhausted: bool):
+        """Walk Edge -> Kokoro -> Gemini, catching failures at every step."""
+        for engine, label in engines:
             if not engine:
                 continue
             try:
-                if blocking:
-                    engine.play(text, voice, speed, blocking=True)
-                else:
-                    # Run in thread for non-blocking
-                    t = threading.Thread(
-                        target=engine.play,
-                        args=(text, voice, speed, True),
-                        daemon=True
-                    )
-                    t.start()
-                    self._current_playback = t
+                engine.play(text, voice, speed, blocking=True)
                 return
             except Exception as e:
                 print(f"[TTS] {label} failed, trying fallback: {e}")
 
-        # Fallback to Gemini
         if self.gemini:
-            asyncio.run(self._gemini_speak(text, voice))
+            if raise_on_exhausted:
+                asyncio.run(self._gemini_speak(text, voice))
+            else:
+                try:
+                    asyncio.run(self._gemini_speak(text, voice))
+                except Exception as e:
+                    print(f"[TTS] Gemini fallback failed: {e}")
             return
 
-        raise RuntimeError("No TTS engine available")
+        if raise_on_exhausted:
+            raise RuntimeError("No TTS engine available")
+        print("[TTS] Cascade exhausted (non-blocking) - nenhuma voz falou este texto")
 
     async def _gemini_speak(self, text: str, voice: str = None):
         """Speak via Gemini (async)."""
@@ -689,7 +707,12 @@ class TTSManager:
     def is_speaking(self) -> bool:
         """Check if currently speaking."""
         if SOUNDDEVICE_AVAILABLE:
-            return sd.get_stream().active if sd.get_stream() else False
+            # sd.get_stream() raises (does not return None) when there is no
+            # active stream, which is the common case between utterances.
+            try:
+                return sd.get_stream().active
+            except Exception:
+                return False
         return self._current_playback is not None and self._current_playback.is_alive()
 
     def cleanup(self):

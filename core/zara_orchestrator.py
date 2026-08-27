@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from core.model_router import ModelProvider, ModelRouter, normalize_auto_engine, route_message
+from core.personality import load_personality
 
 _SKILL_ID = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
 _SENSITIVE_KEYS = {"api_key", "authorization", "credential", "password", "secret", "token"}
@@ -24,14 +25,7 @@ _BLOCKED_OUTCOME_MARKERS = (
     "not allowed",
 )
 
-CONVERSATIONAL_SYSTEM_PROMPT = (
-    "Você é ZARA, a assistente pessoal de Alex. Responda em português do Brasil "
-    "quando ele falar em português. Em conversa casual, soe humana, direta e "
-    "acolhedora: normalmente use de uma a três frases curtas. Não transforme uma "
-    "pergunta simples em lista, tutorial ou palestra, salvo quando Alex pedir ou "
-    "quando isso for realmente necessário. Responda primeiro ao que foi perguntado "
-    "e não encerre toda resposta com outra pergunta. Seja precisa e não invente certezas."
-)
+CONVERSATIONAL_SYSTEM_PROMPT = load_personality()
 
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):

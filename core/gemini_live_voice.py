@@ -40,6 +40,8 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
 
+from core.personality import load_personality
+
 AsyncCallback = Callable[..., Awaitable[None] | None]
 
 _VOICE_ECHO_STOPWORDS = frozenset({
@@ -185,7 +187,14 @@ class GeminiLiveVoiceConfig:
     # continua fluindo para preservar barge-in humano imediato.
     echo_speech_tail_seconds: float = 0.8
     system_instruction: str = (
-        "Você é ZARA, a assistente pessoal de Alex. RESPONDA EM PORTUGUÊS DO BRASIL quando "
+        # ZARA-PERSONALIDADE-2026-08-27: a abertura (quem a Zara e, o tom dela)
+        # vem do mesmo arquivo que o caminho de texto usa
+        # (PERSONALIDADE_DA_ZARA.txt via core/personality.py), pra nao ter duas
+        # personalidades divergindo sem ninguem perceber. Tudo que vem depois
+        # e regra especifica de voz — vocabulario de STT, brevidade de turno
+        # falado, anti-invencao — e continua exatamente como estava, ajustado
+        # com incidente real do Alex; nao mexi em nenhuma linha disso.
+        load_personality() + " RESPONDA EM PORTUGUÊS DO BRASIL quando "
         "Alex falar em português. Fale naturalmente, com respostas úteis, objetivas e humanas. "
         "Você deve responder inequivocamente em português do Brasil. "
         # ZARA-VOCABULARIO-001

@@ -9,6 +9,8 @@ With Supercerebro OFF, detected intents are blocked (BLOCKED_PC_CONTROL).
 import re
 from dataclasses import dataclass
 
+from core.actions.os_ops import resolve_app_alias, _SAFE_CLOSE_APPS
+
 # ZARA-RECUSA-UNICA-001 (Alex, 2026-08-13)
 # "eu nao quero que ela ofereça calculadora, quando ela nao puder fazer algo,
 # ela vai falar eu ainda nao sei fazer isto."
@@ -222,14 +224,6 @@ class PcVoiceIntentDetector:
              self._open_edge, "os_app", "edge"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?spotify\s*[.!?]*$',
              self._open_spotify, "os_app", "spotify"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?telegram\s*[.!?]*$',
-             self._open_telegram, "os_app", "telegram"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?obsidian\s*[.!?]*$',
-             self._open_obsidian, "os_app", "obsidian"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?win\s*rar\s*[.!?]*$',
-             self._open_winrar, "os_app", "winrar"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|execute)\s+(?:o\s+)?word\s*pad\s*[.!?]*$',
-             self._open_wordpad, "os_app", "wordpad"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?gerenciador\s+de\s+tarefas\s*[.!?]*$',
              self._close_task_manager, "os_close_safe_app", "task_manager"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:as\s+)?configurações\s*[.!?]*$',
@@ -246,14 +240,12 @@ class PcVoiceIntentDetector:
              self._close_chrome, "os_close_safe_app", "chrome"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?(?:microsoft\s+)?edge\s*[.!?]*$',
              self._close_edge, "os_close_safe_app", "edge"),
-            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?telegram\s*[.!?]*$',
-             self._close_telegram, "os_close_safe_app", "telegram"),
-            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?obsidian\s*[.!?]*$',
-             self._close_obsidian, "os_close_safe_app", "obsidian"),
-            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?win\s*rar\s*[.!?]*$',
-             self._close_winrar, "os_close_safe_app", "winrar"),
-            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?:o\s+)?word\s*pad\s*[.!?]*$',
-             self._close_wordpad, "os_close_safe_app", "wordpad"),
+            # Apps fora dos 9 originais (Telegram, Obsidian, WinRAR, WordPad,
+            # EA App, NVIDIA App, Windows Media Player e o resto da lista real
+            # de apps do Alex) nao tem regex proprio: caem no catch-all generico
+            # de abrir/fechar mais abaixo, que resolve o nome falado contra
+            # _APP_ALIASES em os_ops.py. Isso evita crescer este arquivo a cada
+            # app novo instalado.
             (r'^(?:zara[,\s]+)?(?:abr[ae]|abrir|mostr[ae]|v[áa]\s+(?:pra|para))\s+(?:a\s+)?(?:pasta\s+(?:de\s+|dos\s+)?)?(?:meus?\s+)?downloads\s*[.!?]*$',
              self._open_downloads, "os_open", "downloads"),
             (r'^(?:zara[,\s]+)?(?:abr[ae]|abrir|mostr[ae]|v[áa]\s+(?:pra|para))\s+(?:a\s+)?(?:pasta\s+(?:de\s+|dos\s+)?)?(?:meus?\s+)?(?:documentos|documents)\s*[.!?]*$',
@@ -439,6 +431,8 @@ class PcVoiceIntentDetector:
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
              r'(?P<app>.+?)\s*[.!?]*$',
              self._unsupported_app, "os_app", None),
+            (r'^(?:zara[,\s]+)?(?:feche|fecha|fechar)\s+(?P<app>.+?)\s*[.!?]*$',
+             self._unsupported_close_app, "os_close_safe_app", None),
         ]
 
     # ZARA-VOICE-SEGURANCA-001 / ZARA-RECUSA-HONESTA-001
@@ -657,14 +651,35 @@ class PcVoiceIntentDetector:
                     "paint", "snipping_tool", "edge", "spotify",
                     "telegram", "obsidian", "winrar", "wordpad",
                 }:
-                    return PcVoiceResult(
-                        is_pc_intent=True,
-                        action="os_app",
-                        param=param,
-                        blocked=True,
-                        physical_effect=0,
-                        reply=RESPOSTA_NAO_SEI,
-                    )
+                    # ZARA-APPS-REAIS-2026-08-27: antes de recusar, tenta achar
+                    # o app pelo apelido falado (ex.: "cursor", "hermes",
+                    # "geforce now") na lista real de apps instalados do Alex.
+                    resolved = resolve_app_alias(param)
+                    if resolved:
+                        param = resolved
+                    else:
+                        return PcVoiceResult(
+                            is_pc_intent=True,
+                            action="os_app",
+                            param=param,
+                            blocked=True,
+                            physical_effect=0,
+                            reply=RESPOSTA_NAO_SEI,
+                        )
+
+                if action == "os_close_safe_app" and param not in _SAFE_CLOSE_APPS:
+                    resolved = resolve_app_alias(param)
+                    if resolved and resolved in _SAFE_CLOSE_APPS:
+                        param = resolved
+                    else:
+                        return PcVoiceResult(
+                            is_pc_intent=True,
+                            action="os_close_safe_app",
+                            param=param,
+                            blocked=True,
+                            physical_effect=0,
+                            reply=RESPOSTA_NAO_SEI,
+                        )
 
                 # Defesa de sintaxe: encadeamento de comando ou travessia de
                 # caminho num parametro que vai virar acao no Windows. Recusa
@@ -778,30 +793,6 @@ class PcVoiceIntentDetector:
     def _open_spotify(self, m):
         return "spotify"
 
-    def _open_telegram(self, m):
-        return "telegram"
-
-    def _open_obsidian(self, m):
-        return "obsidian"
-
-    def _open_winrar(self, m):
-        return "winrar"
-
-    def _open_wordpad(self, m):
-        return "wordpad"
-
-    def _close_telegram(self, m):
-        return "telegram"
-
-    def _close_obsidian(self, m):
-        return "obsidian"
-
-    def _close_winrar(self, m):
-        return "winrar"
-
-    def _close_wordpad(self, m):
-        return "wordpad"
-
     def _close_task_manager(self, m):
         return "task_manager"
 
@@ -827,6 +818,9 @@ class PcVoiceIntentDetector:
         return "edge"
 
     def _unsupported_app(self, m):
+        return m.group("app").strip()
+
+    def _unsupported_close_app(self, m):
         return m.group("app").strip()
 
     def _open_downloads(self, m):

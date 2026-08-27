@@ -88,7 +88,129 @@ _SAFE_WINDOWS_APPS = {
         "executable": r"C:\Program Files\Windows NT\Accessories\wordpad.exe",
         "process_names": {"wordpad.exe"},
     },
+    "ea_app": {
+        "display_name": "EA App",
+        "opened_reply": "EA App aberto e verificado.",
+        "executable": r"C:\Program Files\Electronic Arts\EA Desktop\EA Desktop\EALauncher.exe",
+        "process_names": {"eadesktop.exe", "ealauncher.exe"},
+    },
+    "nvidia_app": {
+        "display_name": "NVIDIA App",
+        "opened_reply": "NVIDIA App aberto e verificado.",
+        "executable": r"C:\Program Files\NVIDIA Corporation\NVIDIA App\CEF\NVIDIA App.exe",
+        "process_names": {"nvidia app.exe"},
+    },
+    "windows_media_player": {
+        "display_name": "Windows Media Player",
+        "opened_reply": "Windows Media Player aberto e verificado.",
+        "executable": r"C:\Program Files (x86)\Windows Media Player\wmplayer.exe",
+        "process_names": {"wmplayer.exe"},
+    },
+    "amplitube": {
+        "display_name": "AmpliTube 5",
+        "opened_reply": "AmpliTube 5 aberto e verificado.",
+        "executable": r"C:\Program Files\IK Multimedia\AmpliTube 5\AmpliTube 5.exe",
+        "process_names": {"amplitube 5.exe"},
+    },
+    "cursor": {
+        "display_name": "Cursor",
+        "opened_reply": "Cursor aberto e verificado.",
+        "executable": r"C:\Users\alexp\AppData\Local\Programs\cursor\Cursor.exe",
+        "process_names": {"cursor.exe"},
+    },
+    "hermes": {
+        "display_name": "Hermes",
+        "opened_reply": "Hermes aberto e verificado.",
+        "executable": r"C:\Users\alexp\AppData\Local\hermes\hermes-agent\apps\desktop\release\win-unpacked\Hermes.exe",
+        "process_names": {"hermes.exe"},
+    },
+    "ik_product_manager": {
+        "display_name": "IK Product Manager",
+        "opened_reply": "IK Product Manager aberto e verificado.",
+        "executable": r"C:\Program Files\IK Multimedia\IK Product Manager\IK Product Manager.exe",
+        "process_names": {"ik product manager.exe"},
+    },
+    "geforce_now": {
+        "display_name": "NVIDIA GeForce NOW",
+        "opened_reply": "GeForce NOW aberto e verificado.",
+        "executable": r"C:\Users\alexp\AppData\Local\NVIDIA Corporation\GeForceNOW\CEF\GeForceNOW.exe",
+        "process_names": {"geforcenow.exe"},
+    },
+    "opencode": {
+        "display_name": "OpenCode",
+        "opened_reply": "OpenCode aberto e verificado.",
+        "executable": r"C:\Users\alexp\AppData\Local\Programs\@opencode-aidesktop\OpenCode.exe",
+        "process_names": {"opencode.exe"},
+    },
+    "qwen": {
+        "display_name": "Qwen",
+        "opened_reply": "Qwen aberto e verificado.",
+        "executable": r"C:\Program Files\Qwen\Qwen.exe",
+        "process_names": {"qwen.exe"},
+    },
+    "wise_memory_optimizer": {
+        "display_name": "Wise Memory Optimizer",
+        "opened_reply": "Wise Memory Optimizer aberto e verificado.",
+        "executable": r"C:\Program Files\Wise\Wise Memory Optimizer\WiseMemoryOptimzer.exe",
+        "process_names": {"wisememoryoptimzer.exe"},
+    },
 }
+
+# ZARA-APPS-REAIS-2026-08-27 (Alex): "coloque todos os apps que eu tenho
+# instalado, nao importa se eu vou usar ou nao". Em vez de escrever um regex e
+# um metodo novo pra cada app (o que deixa este arquivo cada vez maior a cada
+# instalacao nova), os apps fora dos 9 originais sao resolvidos aqui por
+# apelido falado. Ferramentas de risco (terminal, editor de registro,
+# desinstaladores, PowerShell) foram deixadas de fora de proposito: abrir um
+# terminal por voz sem confirmacao nenhuma e risco de seguranca, nao
+# comodidade — terminal ja e uma action HIGH-risk separada, com o gate de
+# confirmacao que essa lista aqui nao tem.
+_APP_ALIASES = {
+    "telegram": "telegram",
+    "obsidian": "obsidian",
+    "winrar": "winrar",
+    "win rar": "winrar",
+    "wordpad": "wordpad",
+    "word pad": "wordpad",
+    "ea": "ea_app",
+    "ea app": "ea_app",
+    "ea desktop": "ea_app",
+    "electronic arts": "ea_app",
+    "nvidia": "nvidia_app",
+    "nvidia app": "nvidia_app",
+    "windows media player": "windows_media_player",
+    "media player": "windows_media_player",
+    "amplitube": "amplitube",
+    "amplitube 5": "amplitube",
+    "cursor": "cursor",
+    "hermes": "hermes",
+    "ik product manager": "ik_product_manager",
+    "geforce now": "geforce_now",
+    "geforce": "geforce_now",
+    "opencode": "opencode",
+    "open code": "opencode",
+    "qwen": "qwen",
+    "wise memory optimizer": "wise_memory_optimizer",
+    "otimizador de memoria": "wise_memory_optimizer",
+}
+
+
+def _strip_accents(text: str) -> str:
+    import unicodedata
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def resolve_app_alias(spoken_text: str) -> str | None:
+    """Resolve free-spoken app text (accent/case-insensitive) to a canonical
+    app id registered in _SAFE_WINDOWS_APPS, or None if unknown."""
+    normalized = _strip_accents(str(spoken_text or "")).strip().lower()
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"^(?:o|a)\s+", "", normalized)
+    app_id = _APP_ALIASES.get(normalized)
+    if app_id and app_id in _SAFE_WINDOWS_APPS:
+        return app_id
+    return None
 
 _WINDOWS_MEDIA_COMMANDS = {
     "media_next": 11,
@@ -116,6 +238,9 @@ _SAFE_CLOSE_APPS = {
     "notepad", "chrome", "task_manager", "settings", "paint",
     "snipping_tool", "edge", "spotify",
     "telegram", "obsidian", "winrar", "wordpad",
+    "ea_app", "nvidia_app", "windows_media_player",
+    "amplitube", "cursor", "hermes", "ik_product_manager",
+    "geforce_now", "opencode", "qwen", "wise_memory_optimizer",
 }
 _SAFE_CLOSE_TITLE_TOKENS = {
     "notepad": {"bloco de notas", "notepad"},
@@ -129,6 +254,17 @@ _SAFE_CLOSE_TITLE_TOKENS = {
     "obsidian": {"obsidian"},
     "winrar": {"winrar"},
     "wordpad": {"wordpad", "documento"},
+    "ea_app": {"ea app", "ea desktop", "electronic arts"},
+    "nvidia_app": {"nvidia app", "nvidia"},
+    "windows_media_player": {"windows media player", "media player"},
+    "amplitube": {"amplitube", "amplitube 5"},
+    "cursor": {"cursor"},
+    "hermes": {"hermes"},
+    "ik_product_manager": {"ik product manager"},
+    "geforce_now": {"geforce now", "geforce"},
+    "opencode": {"opencode", "open code"},
+    "qwen": {"qwen"},
+    "wise_memory_optimizer": {"wise memory optimizer"},
     "spotify": {"spotify"},
 }
 

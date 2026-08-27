@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from core.conversation_compression import compress_history
 from core.model_router import ModelProvider, ModelRouter, normalize_auto_engine, route_message
 from core.personality import load_personality
 
@@ -149,6 +150,8 @@ class ZaraOrchestrator:
         """Route a user message according to AUTO SMART/ECONOMY or a manual engine."""
         if not self.initialized:
             await self.initialize()
+
+        history = compress_history(history)
 
         normalized_engine = normalize_auto_engine(engine)
 

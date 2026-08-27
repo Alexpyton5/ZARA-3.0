@@ -860,6 +860,26 @@ class IPCHandler:
             self.reminder_engine = None
             print(f"[IPC] Reminder Core unavailable: {exc}")
 
+        # ZARA-3-MODOS-2026-08-27: modo "tarefa agendada". O TaskScheduler
+        # (core/actions/scheduler.py) ja existia completo -- add/remove/list,
+        # loop de fundo, calculo de proximo horario -- mas nada no boot nunca
+        # chamava .start(). Achado durante a limpeza de hoje: peca pronta,
+        # nunca ligada. Wire real: qualquer action registrada pode ser
+        # agendada por voz/texto (schedule_add), nao so lembretes.
+        try:
+            from core.actions.scheduler import TaskScheduler
+            from core.action_registry import get_registry
+
+            self.task_scheduler = TaskScheduler()
+            self.task_scheduler.set_action_runner(
+                lambda action_name, params: get_registry().execute(action_name, **params)
+            )
+            self.task_scheduler.start()
+            print("[IPC] Task Scheduler initialized (modo agendado ligado)")
+        except Exception as exc:
+            self.task_scheduler = None
+            print(f"[IPC] Task Scheduler unavailable: {exc}")
+
         # ZARA-TELEGRAM-002: a ponte do celular sobe no boot, NÃO junto com a
         # voz. Ela estava presa em handle_voice_start, então com o microfone
         # desligado o Telegram ficava mudo — e o ponto inteiro dessa ponte é

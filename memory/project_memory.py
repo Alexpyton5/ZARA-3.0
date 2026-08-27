@@ -24,6 +24,25 @@ from pathlib import Path
 
 from core.paths import user_data_dir
 
+
+def _detect_real_obsidian_vault() -> Path | None:
+    """Read Obsidian's own config to find Alex's real vault, instead of
+    guessing a path. Returns None if Obsidian was never opened or the
+    config is unreadable — callers must treat that as "no mirror available",
+    never as an error."""
+    config_path = Path.home() / "AppData" / "Roaming" / "obsidian" / "obsidian.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        vaults = data.get("vaults", {})
+        if not vaults:
+            return None
+        most_recent = max(vaults.values(), key=lambda v: v.get("ts", 0))
+        vault_path = Path(most_recent["path"])
+        return vault_path if vault_path.is_dir() else None
+    except Exception:
+        return None
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS project_docs (
     key TEXT PRIMARY KEY,          -- charter | architecture | decisions | state | roadmap
@@ -79,13 +98,20 @@ def _normalize_id(value: str, *, label: str) -> str:
 
 
 class ProjectMemory:
-    def __init__(self, base_dir: Path | None = None):
+    def __init__(self, base_dir: Path | None = None, obsidian_vault_dir: Path | None = None):
         self.base_dir = base_dir or (user_data_dir() / "data" / "project-memory")
         self.db_path = self.base_dir / "project_memory.db"
         self.vault_dir = self.base_dir / "vault"
         self.context_file = self.base_dir / "mentor_context_latest.md"
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.vault_dir.mkdir(parents=True, exist_ok=True)
+        # ZARA-OBSIDIAN-REAL-2026-08-27: espelha a memoria do projeto no cofre
+        # real do Obsidian do Alex (achado em obsidian.json), numa subpasta
+        # dedicada pra nao se misturar com o resto do que tem la. Melhor
+        # esforco: se o cofre nao existir (HD externo desconectado, cofre
+        # mudou de lugar), a memoria interna da Zara continua funcionando
+        # normalmente, so o espelho fica pra tras.
+        self.obsidian_vault_dir = obsidian_vault_dir or _detect_real_obsidian_vault()
         self._lock = threading.RLock()
         self._init_db()
 
@@ -114,6 +140,20 @@ class ProjectMemory:
         # espelha no vault (markdown legivel)
         safe = key.replace(" ", "_")
         (self.vault_dir / f"{safe}.md").write_text(content, encoding="utf-8")
+        self._mirror_to_obsidian(safe, title, content)
+
+    def _mirror_to_obsidian(self, safe_key: str, title: str, content: str) -> None:
+        """Best-effort mirror to Alex's real Obsidian vault. Never raises —
+        a missing/disconnected vault must not break Zara's own memory."""
+        if self.obsidian_vault_dir is None:
+            return
+        try:
+            zara_folder = self.obsidian_vault_dir / "Zara-Memoria"
+            zara_folder.mkdir(parents=True, exist_ok=True)
+            frontmatter = f"---\ntitle: {title}\nfonte: memoria de projeto da Zara\n---\n\n"
+            (zara_folder / f"{safe_key}.md").write_text(frontmatter + content, encoding="utf-8")
+        except OSError:
+            pass
 
     def append_decision(self, decision: str) -> None:
         """Append a decision to the project decisions log."""

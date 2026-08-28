@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
@@ -391,6 +392,67 @@ def _resolve_windows_app_command(app: str) -> list[str] | None:
         if str(candidate) and candidate.is_file():
             return [str(candidate)]
     return None
+
+
+def _list_chrome_profiles() -> dict[str, str]:
+    """Real profile names -> directory key, read from Chrome's own config.
+
+    AUDITORIA_2026-08-28 (Alex): ele tem varios perfis (alex, Alice, Pessoa 1,
+    Trabalho) e quer abrir direto no perfil certo por voz, sem passar pela
+    tela de escolha. Le o mesmo arquivo que o proprio Chrome usa, nao chuta
+    nome de pasta.
+    """
+    local_state = Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data" / "Local State"
+    try:
+        data = json.loads(local_state.read_text(encoding="utf-8"))
+        cache = data.get("profile", {}).get("info_cache", {})
+        return {str(info.get("name", key)): key for key, info in cache.items()}
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def resolve_chrome_profile(spoken_name: str) -> str | None:
+    """Resolve a spoken profile name to Chrome's real directory key."""
+    normalized = _strip_accents(str(spoken_name or "")).strip().casefold()
+    if not normalized:
+        return None
+    for name, key in _list_chrome_profiles().items():
+        if _strip_accents(name).strip().casefold() == normalized:
+            return key
+    return None
+
+
+@action(name="chrome_open_profile", category="os", description="Open Chrome directly in a named real profile", capability="LOCAL_PC_CONTROL")
+def chrome_open_profile_action(profile: str) -> ActionResult:
+    profile_key = resolve_chrome_profile(profile)
+    if profile_key is None:
+        known = ", ".join(_list_chrome_profiles().keys()) or "nenhum perfil encontrado"
+        return ActionResult(success=False, error=f"Não achei o perfil \"{profile}\" no Chrome. Perfis reais: {known}.")
+
+    command = _resolve_windows_app_command("chrome")
+    if not command:
+        return ActionResult(success=False, error="Chrome não foi encontrado neste computador.")
+
+    before = _running_app_pids({"chrome.exe"})
+    try:
+        subprocess.Popen([command[0], f"--profile-directory={profile_key}"])
+    except OSError as exc:
+        return ActionResult(success=False, error=f"Falha ao abrir o Chrome: {exc}")
+
+    observed: set[int] = set()
+    deadline = time.monotonic() + 4.0
+    while time.monotonic() < deadline:
+        observed = _running_app_pids({"chrome.exe"})
+        if observed - before or observed:
+            break
+        time.sleep(0.1)
+
+    return ActionResult(
+        success=bool(observed),
+        output=f"Chrome aberto no perfil {profile}." if observed else "",
+        error="" if observed else "Chrome não abriu a tempo.",
+        data={"profile": profile, "profile_key": profile_key, "verified": bool(observed)},
+    )
 
 
 def _running_app_pids(process_names: set[str]) -> set[int]:

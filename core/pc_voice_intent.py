@@ -209,6 +209,9 @@ class PcVoiceIntentDetector:
              r'(?:o\s+)?(?:bloco\s+de\s+notas|notepad)\s*[.!?]*$',
              self._open_notepad, "os_app", "notepad"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
+             r'(?:o\s+)?(?:google\s+chrome|chrome)\s+(?:no|com o)\s+perfil\s+(.+?)\s*[.!?]*$',
+             self._open_chrome_profile, "chrome_open_profile", None),
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
              r'(?:o\s+)?(?:google\s+chrome|chrome)\s*[.!?]*$',
              self._open_chrome, "os_app", "chrome"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|execute)\s+'
@@ -774,6 +777,9 @@ class PcVoiceIntentDetector:
 
     def _open_chrome(self, m):
         return "chrome"
+
+    def _open_chrome_profile(self, m):
+        return m.group(1).strip()
 
     def _open_task_manager(self, m):
         return "task_manager"

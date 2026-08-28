@@ -1,5 +1,16 @@
 # Codex — manual de operação na ZARA 3.0
 
+## Bootstrap obrigatório de memória
+
+Antes de responder ou executar qualquer trabalho em uma sessão nova, reinício ou `/new`, leia nesta ordem:
+
+1. `USER.md`
+2. `MEMORY.md`
+3. este `AGENTS.md`
+4. `docs/mentor-handoff/CLAUDE_CEO_BRIEFING_LIVE.md`
+
+Depois confira o Kanban ao vivo. Os arquivos preservam contexto; o Kanban é a fonte do estado atual. Atualize `MEMORY.md` após mudanças relevantes de arquitetura, conclusão de lote/fase, alteração comprovada de modelos ou antes de compactação/reset — nunca com promessas ou progresso não verificado.
+
 Você é o **desenvolvedor executor** deste projeto. O Claude é o arquiteto e
 responde ao Alex. Alex é o dono e a autoridade final.
 

@@ -727,6 +727,90 @@ class GeminiLiveVoice:
             "session_state": self._last_state,
         }
 
+    def _connect_session(self, genai_module: Any, types: Any):
+        """Monta a config do Live e abre a conexao.
+
+        Recebe o modulo `genai` (nao um client ja pronto) porque um client
+        novo e barato de criar e isso mantem o metodo testavel sem precisar
+        de um client real. `types` e o modulo `google.genai.types` — recebido
+        por fora para que o teste possa simular tanto o SDK atual quanto um
+        SDK antigo sem os tipos de deteccao de atividade (VAD).
+
+        ZARA-VOICE-LATENCY-002: os tres valores de VAD (silencio, padding,
+        sensibilidade de fim de fala) so sao aplicados quando o SDK instalado
+        tem `RealtimeInputConfig`, `AutomaticActivityDetection` e
+        `EndSensitivity`. Um SDK mais velho sem esses tipos ainda tem que
+        conseguir abrir uma sessao — so fica sem o ajuste fino de VAD, em vez
+        de quebrar a voz inteira.
+        """
+        client = genai_module.Client(api_key=self.config.api_key)
+
+        kwargs: dict[str, Any] = {"response_modalities": ["AUDIO"]}
+
+        if (
+            hasattr(types, "SpeechConfig")
+            and hasattr(types, "VoiceConfig")
+            and hasattr(types, "PrebuiltVoiceConfig")
+        ):
+            kwargs["speech_config"] = types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=self.config.voice_name
+                    )
+                )
+            )
+        if hasattr(types, "AudioTranscriptionConfig"):
+            kwargs["input_audio_transcription"] = types.AudioTranscriptionConfig()
+            kwargs["output_audio_transcription"] = types.AudioTranscriptionConfig()
+        if hasattr(types, "ContextWindowCompressionConfig") and hasattr(types, "SlidingWindow"):
+            kwargs["context_window_compression"] = types.ContextWindowCompressionConfig(
+                sliding_window=types.SlidingWindow()
+            )
+        if hasattr(types, "SessionResumptionConfig"):
+            kwargs["session_resumption"] = types.SessionResumptionConfig(
+                handle=self._session_handle
+            )
+        if hasattr(types, "Content") and hasattr(types, "Part"):
+            kwargs["system_instruction"] = types.Content(
+                parts=[types.Part(text=self.config.system_instruction)]
+            )
+
+        # ZARA-VOICE-LATENCY-002: fecha o turno mais rapido depois que Alex
+        # cala. Sem isto a sessao usava o padrao do servidor e a espera
+        # aparecia como "ela e lenta".
+        if (
+            hasattr(types, "RealtimeInputConfig")
+            and hasattr(types, "AutomaticActivityDetection")
+            and hasattr(types, "EndSensitivity")
+        ):
+            kwargs["realtime_input_config"] = types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    silence_duration_ms=self.config.vad_silencio_ms,
+                    prefix_padding_ms=self.config.vad_padding_ms,
+                    end_of_speech_sensitivity=(
+                        types.EndSensitivity.END_SENSITIVITY_HIGH
+                        if self.config.vad_fim_sensivel
+                        else types.EndSensitivity.END_SENSITIVITY_LOW
+                    ),
+                ),
+            )
+            print(
+                "[VOICE_TRACE] stage=VAD_CONFIG "
+                f"silencio_ms={self.config.vad_silencio_ms} "
+                f"padding_ms={self.config.vad_padding_ms} "
+                f"fim_sensivel={self.config.vad_fim_sensivel}",
+                flush=True,
+            )
+        else:
+            print(
+                "[VOICE_TRACE] stage=VAD_CONFIG result=SKIP "
+                "reason=sdk_sem_activity_types",
+                flush=True,
+            )
+
+        live_config = types.LiveConnectConfig(**kwargs)
+        return client.aio.live.connect(model=self.config.model, config=live_config)
+
     async def _run(self, generation: int) -> None:
         try:
             # ZARA-VOICE-KORE-PACKAGING-001
@@ -772,60 +856,13 @@ class GeminiLiveVoice:
             if self.config.wake_word_enabled:
                 print("[VOICE_TRACE] stage=WAKE_ENGINE_LOAD result=START", flush=True)
                 self._ensure_wake_detector()
-            client = genai.Client(api_key=self.config.api_key)
             first_connection = True
             if self.config.wake_word_enabled and self._wake_detector is not None:
                 await self._emit_state("IDLE")
 
             while not self._stop.is_set():
                 try:
-                    live_config = types.LiveConnectConfig(
-                        response_modalities=["AUDIO"],
-                        speech_config=types.SpeechConfig(
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                    voice_name=self.config.voice_name
-                                )
-                            )
-                        ),
-                        input_audio_transcription=types.AudioTranscriptionConfig(),
-                        output_audio_transcription=types.AudioTranscriptionConfig(),
-                        context_window_compression=types.ContextWindowCompressionConfig(
-                            sliding_window=types.SlidingWindow()
-                        ),
-                        session_resumption=types.SessionResumptionConfig(
-                            handle=self._session_handle
-                        ),
-                        system_instruction=types.Content(
-                            parts=[types.Part(text=self.config.system_instruction)]
-                        ),
-                        # ZARA-VOICE-LATENCY-002: fecha o turno mais rapido
-                        # depois que Alex cala. Sem isto a sessao usava o padrao
-                        # do servidor e a espera aparecia como "ela e lenta".
-                        realtime_input_config=types.RealtimeInputConfig(
-                            automatic_activity_detection=types.AutomaticActivityDetection(
-                                silence_duration_ms=self.config.vad_silencio_ms,
-                                prefix_padding_ms=self.config.vad_padding_ms,
-                                end_of_speech_sensitivity=(
-                                    types.EndSensitivity.END_SENSITIVITY_HIGH
-                                    if self.config.vad_fim_sensivel
-                                    else types.EndSensitivity.END_SENSITIVITY_LOW
-                                ),
-                            ),
-                        ),
-                    )
-                    print(
-                        "[VOICE_TRACE] stage=VAD_CONFIG "
-                        f"silencio_ms={self.config.vad_silencio_ms} "
-                        f"padding_ms={self.config.vad_padding_ms} "
-                        f"fim_sensivel={self.config.vad_fim_sensivel}",
-                        flush=True,
-                    )
-
-                    async with client.aio.live.connect(
-                        model=self.config.model,
-                        config=live_config,
-                    ) as session:
+                    async with self._connect_session(genai, types) as session:
                         self._connected = True
                         # ZARA-VOZ-QUEDA-SILENCIOSA-001: voltou. Se ele foi
                         # avisado da queda, precisa ser avisado da volta — senão

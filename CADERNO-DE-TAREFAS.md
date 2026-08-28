@@ -195,3 +195,31 @@ relatório dele e não vou fingir que estão prontos.
   registrada em `~/.codex/sessions/` com hora, o que dá auditoria de graça.
 - **Ele custa token dele, não meu** — 25 mil tokens numa varredura que me
   custaria o mesmo. É aí que a delegação paga.
+
+---
+
+## CORUJÃO 25/08/2026 — OPERAÇÃO NOTURNA 10H
+
+**Objetivo:** Eliminar P0 e avançar P1 da auditoria 24/08 (IPCHandler, voice→action, wake word, fila aprovação, os_ops, model_router, ActionRegistry, config cache, pc_voice_intent, limpeza raiz).
+
+**Time montado (10 bots, áreas exclusivas):**
+- @capitao-codex — Líder/Orquestrador (decisões, conflitos, validação)
+- @arquiteto — Arquiteto (decomposição IPC, contratos)
+- @executor_dev — Eng. Backend Core (IPC, action_registry, aprovação)
+- @eng_os_ops — Eng. SO/Actions (os_ops.py → 6 módulos)
+- @eng_voice — Eng. Voz (Gemini Live, VAD, wake word, pc_voice_intent)
+- @eng_model_router — Eng. Modelos (model_router async, config cache)
+- @qa_tester — QA Lead (testes voice→action físicos com verificado=True)
+- @revisor_supervisor — Revisor/Gatekeeper (review rigoroso, NÃO escreve código)
+- @seguranca_redteam — Fiscal (varredura root, locks, _quarentena/, isolamento)
+- @escriba_backlog — Escriba (memória, checkpoints, relatórios pro Alex)
+
+**Artefatos criados:**
+- `.zara-dev/TIME_CORUJAO_20260825.md` — Plano completo, regras, backlog, métricas
+- `ACTIVE_TASK_STATE.md` — Estado ativo das 15 tasks (4 ondas, 22h–08h)
+- `NIGHT_SHIFT_STATE.md` — Log do turno, checkpoints a cada 2h, métricas finais
+
+**Início oficial:** 22:00 25/08/2026
+**Próximo checkpoint:** 22:30 (Checkpoint 1)
+
+**Regras não negociáveis:** LOCK/UNLOCK obrigatório, um escritor por arquivo, entrega=só com prova física, sem prova=IMPLEMENTADO NAO VERIFICADO, @revisor_supervisor vê todo PR, @seguranca_redteam varre a cada 2h.

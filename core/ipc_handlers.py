@@ -358,6 +358,7 @@ class IPCHandler:
         self._set_supercerebro_state(False)
         # ZARA-TELEGRAM-GRUPO-001: ponte do grupo, em paralelo com a privada.
         self._telegram_grupo = None
+        self._telegram_adapter = None
         self.voice_active: bool = False
 
         # Voice pipeline
@@ -1010,12 +1011,55 @@ class IPCHandler:
         except Exception as exc:
             print(f"[IPC] vad_silencio_ms ilegivel, usando padrao: {exc}")
 
+        # ZARA-VOICE-LATENCY-002: quanto audio o Gemini guarda ANTES do inicio
+        # detectado da fala. Sem isso a primeira silaba de Alex podia ser
+        # cortada quando ele comecava a falar bem em cima do fim do turno
+        # anterior. Ajustavel sem rebuild por "vad_padding_ms" em api_keys.json.
+        padding_ms = 100
+        try:
+            from core.paths import config_dir
+            arquivo = config_dir() / "api_keys.json"
+            if arquivo.exists():
+                bruto = json.loads(arquivo.read_text(encoding="utf-8")).get("vad_padding_ms")
+                if bruto is not None:
+                    padding_ms = max(0, min(2000, int(bruto)))
+        except Exception as exc:
+            print(f"[IPC] vad_padding_ms ilegivel, usando padrao: {exc}")
+
+        # ZARA-VOICE-LATENCY-002: sensibilidade de fim de fala do servidor.
+        # Ajustavel sem rebuild por "vad_fim_sensivel" em api_keys.json.
+        fim_sensivel = True
+        try:
+            from core.paths import config_dir
+            arquivo = config_dir() / "api_keys.json"
+            if arquivo.exists():
+                bruto = json.loads(arquivo.read_text(encoding="utf-8")).get("vad_fim_sensivel")
+                if bruto is not None:
+                    if isinstance(bruto, bool):
+                        fim_sensivel = bruto
+                    elif isinstance(bruto, int):
+                        fim_sensivel = bool(bruto)
+                    elif isinstance(bruto, str):
+                        low = bruto.strip().lower()
+                        if low in ("true", "1"):
+                            fim_sensivel = True
+                        elif low in ("false", "0"):
+                            fim_sensivel = False
+                        else:
+                            raise ValueError(f"vad_fim_sensivel invalido: {bruto!r}")
+                    else:
+                        raise ValueError(f"vad_fim_sensivel invalido: {bruto!r}")
+        except Exception as exc:
+            print(f"[IPC] vad_fim_sensivel ilegivel, usando padrao: {exc}")
+
         return GeminiLiveVoiceConfig(
             api_key=gemini_key,
             voice_name="Kore",
             wake_word_enabled=gate_local,
             audio_transport=transporte,
             vad_silencio_ms=silencio_ms,
+            vad_padding_ms=padding_ms,
+            vad_fim_sensivel=fim_sensivel,
         )
 
     async def _on_gemini_live_output_audio(self, audio: bytes) -> None:
@@ -2002,6 +2046,45 @@ class IPCHandler:
                 else None
             ),
         )
+        # ZARA-COMPOUND-E-SOLTO-001
+        # O split acima só quebra em vírgula/";"/"depois". "abra o youtube,
+        # pesquise Bruno Mars e bote para tocar e pule o anúncio" virava só
+        # 2 pedaços: o segundo ("pesquise Bruno Mars e bote para tocar e
+        # pule o anúncio") era um pedido de 3 ações que nenhum pattern único
+        # reconhecia por inteiro.
+        #
+        # Corrigir quebrando também em "e" solto de cara quebraria frases
+        # legítimas como "pesquise rock e blues no youtube" (uma query só,
+        # nunca deve virar duas etapas). Por isso o "e" solto só entra como
+        # FALLBACK, por pedaço: tenta dividir o pedaço em sub-pedaços por
+        # " e " e só aceita a divisão se TODOS os sub-pedaços baterem sozinhos
+        # como intent de PC. Se nem todos baterem — caso do "rock e blues",
+        # onde "blues no youtube" sozinho não é comando nenhum — o pedaço
+        # original fica intacto e segue pelo caminho de sempre (inclusive o
+        # de "etapa não suportada" abaixo).
+        #
+        # A tentativa roda para qualquer pedaço com " e " no meio, não só
+        # para quem já teria dado is_pc_intent=False: um pedaço como "abra o
+        # notepad e feche o chrome" pode até casar inteiro (o catch-all de
+        # abrir app engole o resto como nome de app e não resolve), mas a
+        # divisão em dois comandos reais é sempre a leitura melhor quando
+        # ambos os sub-pedaços batem sozinhos.
+        expanded_parts: list[str] = []
+        for part in parts:
+            if re.search(r"\se\s", part, re.IGNORECASE):
+                sub_parts = [
+                    sub.strip(" .!?")
+                    for sub in re.split(r"\s+e\s+", part, flags=re.IGNORECASE)
+                    if sub.strip(" .!?")
+                ]
+                if len(sub_parts) >= 2 and all(
+                    detector.detect(sub).is_pc_intent for sub in sub_parts
+                ):
+                    expanded_parts.extend(sub_parts)
+                    continue
+            expanded_parts.append(part)
+        parts = expanded_parts
+
         detected = [detector.detect(part) for part in parts]
         pc_count = sum(1 for item in detected if item.is_pc_intent)
         if pc_count == 0:
@@ -3519,6 +3602,9 @@ class IPCHandler:
                     ponte = PonteTelegram(token, self._executar_do_celular)
                     if await ponte.iniciar():
                         self._telegram = ponte
+                        from core.telegram_approval_adapter import TelegramApprovalAdapter
+
+                        self._telegram_adapter = TelegramApprovalAdapter(ponte)
 
             # Ponte do grupo (roda em paralelo com a privada).
             if getattr(self, "_telegram_grupo", None) is None:
@@ -3562,6 +3648,7 @@ class IPCHandler:
         except Exception as exc:
             self._telegram = None
             self._telegram_grupo = None
+            self._telegram_adapter = None
             print(f"[TELEGRAM] nao ligou: {exc}", flush=True)
 
     # ZARA-SE-CONSERTA-SOZINHA-001

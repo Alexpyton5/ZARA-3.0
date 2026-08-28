@@ -1,6 +1,6 @@
 # ZARA 3.0 — quadro operacional do Mentor
 
-Atualizado em: 2026-08-08  
+Atualizado em: 2026-08-28
 Estado global: **RUNTIME EMPACOTADO CERTIFICADO NO ESCOPO DO SMOKE; VOZ HUMANA/APIS REAIS PENDENTES**.
 
 Este arquivo é a fonte de verdade para prioridade, promoção e recuperação. Um item só recebe
@@ -75,7 +75,7 @@ Não corrigir código diretamente neles.
 | `npm run typecheck` | **PASS** | Código de saída `0`. |
 | `npm run lint` | **PASS COM DÍVIDA** | Código `0`; 0 erros e 47 warnings. |
 | `python -m compileall ...` | **PASS** | Revisão Python atual compilada. |
-| `python -m pytest` | **PASS PARCIAL** | 2026-08-27 (tarde): 1293/1416 passaram, 95 falharam, 27 pulados. Corrigido nesta data o bug de `core/action_registry.py` (descartava argumentos posicionais) e removido um sistema não autorizado ("Corujão", um processo Codex que vinha rodando dentro da Zara sem permissão) que tinha ficado pela metade — a suíte melhorou depois da remoção, não piorou. Lista exata das 95 falhas conhecidas em `.known_failures.json`, mantida pelo gate `scripts/debug/nightly_regression.py`. "62 testes" era o total de uma raiz muito mais antiga. |
+| `python -m pytest` | **PASS PARCIAL** | 2026-08-28: 1323/1444 passaram, 94 falharam (baseline conhecida), 27 pulados. Nos dias anteriores foi corrigido o bug de `core/action_registry.py` (descartava argumentos posicionais) e removido um sistema não autorizado ("Corujão", um processo Codex que vinha rodando dentro da Zara sem permissão) que tinha ficado pela metade — a suíte melhorou depois da remoção, não piorou. Lista exata das falhas conhecidas em `.known_failures.json`, mantida pelo gate `scripts/debug/nightly_regression.py`. "62 testes" era o total de uma raiz muito mais antiga. |
 | `python -m ruff check ...` | **PASS** | Gate Python concluído; hotfix SSRF também validado de forma direcionada. |
 | build do sidecar | **PASS** | Hash fonte e empacotado: `639E4D80FA54C2A50F77EF161D1C0C49AF5CD7FF24638401BD44EAEF9B18BBCC`. |
 | Vite / Electron TypeScript | **PASS** | Renderer e processo Electron compilados. |
@@ -98,7 +98,7 @@ Relatórios `MENTOR_*` são histórico e contexto; não substituem evidência da
 - [x] **P0-03 — Reconciliar correções críticas na raiz C.** Policy HIGH/capability, testes IPC e
   hotfix SSRF estão incorporados sem copiar builds antigos.
 - [x] **P0-04 — Restaurar e executar a suíte de testes.** Histórico: 62 testes PASS. Atual
-  (2026-08-27 tarde): 1293/1416 PASS, 95 falhas conhecidas (ver linha `python -m pytest` na tabela
+  (2026-08-28): 1323/1444 PASS, 94 falhas conhecidas (ver linha `python -m pytest` na tabela
   de checks acima), 27 pulados.
 - [x] **P0-05 — Executar gates Python.** Compileall e Ruff PASS.
 - [ ] **P0-06 — Criar o primeiro marco Git recuperável.** Verificar segredos e derivados; após os

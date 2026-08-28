@@ -2,6 +2,7 @@ import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'reac
 import { LoaderCircle } from 'lucide-react';
 import { aplicarAparencia, useAparencia, PainelConfiguracoes } from './PainelConfiguracoes';
 import { ZaraLab } from './ZaraLab';
+import { MemoryGalaxyView } from './MemoryGalaxyView';
 import { normalizeReminderEvent } from '../../../reminderEvents';
 import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
 import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
@@ -595,17 +596,6 @@ export const ZaraControlCenter: React.FC = () => {
   };
 
   const handleNavigation = (key: string) => {
-    if (key === 'MEMORY CORE') {
-      // AUDITORIA_2026-08-27 (Alex): ele quer o Obsidian de VERDADE (com a
-      // animacao real do grafo dele), nao uma galeria de memoria recriada
-      // dentro da Zara. Em vez de reinventar o visual do Obsidian aqui,
-      // manda o mesmo comando de abrir app que ja funciona por voz/texto --
-      // a memoria do projeto (memory/project_memory.py) ja espelha tudo que
-      // a Zara sabe dentro do cofre real dele, na pasta Zara-Memoria.
-      void enviarTexto('abra o obsidian');
-      setActiveNav(key);
-      return;
-    }
     if (key === 'AUTOMATIONS') { notify('Rotinas aparecerão aqui quando o módulo estiver disponível.', 'warn'); return; }
     setActiveNav(key);
   };
@@ -649,6 +639,8 @@ export const ZaraControlCenter: React.FC = () => {
 
           {activeNav === 'CONVERSATIONS' ? (
                       <section className="home-stage"><div className="lab-cheio"><ZaraLab /></div></section>
+                    ) : activeNav === 'MEMORY CORE' ? (
+                      <section className="home-stage"><div className="lab-cheio"><MemoryGalaxyView /></div></section>
                     ) : (
                       <section className="home-stage">
                         <div className="presence-stage">

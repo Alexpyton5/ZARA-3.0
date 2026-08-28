@@ -200,6 +200,64 @@ def _looks_like_unhandled_local_action(text: str) -> bool:
     ))
 
 
+# --- ETAPA 1 do plano de raciocinio livre -----------------------------------
+# docs/audits/PROPOSTA_RACIOCINIO_LIVRE_2026-08-28.md, secao (d).
+#
+# So log, sem decisao nova: nao muda resposta, nao muda rota, nao introduz
+# intent. Objetivo: juntar frases REAIS do Alex que hoje falham (recusa do
+# guarda `_looks_like_unhandled_local_action` ou fuga para
+# `orchestrator.process_message`), para desenhar a Etapa 2 (classificador)
+# contra dado real em vez de casos inventados.
+#
+# Rollback: apagar `_BROAD_ACTION_LANGUAGE_RE`, `_has_broad_action_language_signal`,
+# `_log_intent_telemetry` e as chamadas a `_log_intent_telemetry` nos dois
+# pontos de dispatch (voz em `_process_voice_message`, texto em
+# `handle_send_message`). Zero risco funcional: nenhuma delas participa da
+# decisao de qual resposta a ZARA da.
+
+_BROAD_ACTION_LANGUAGE_RE = re.compile(
+    r"\b(?:"
+    r"abr\w*|fech\w*|abaix\w*|aument\w*|diminu\w*|"
+    r"lig(?:a|ue|ar)\w*|deslig\w*|ativ\w*|desativ\w*|"
+    r"silenci\w*|mut[ae]\w*|"
+    r"toc[ae]\w*|pause?\w*|volt[ae]\w*|avan[cç]\w*|pul[ae]\w*|reproduz\w*|"
+    r"minimiz\w*|maximiz\w*|restaur\w*|foc(?:a|ar|o|que)\w*|"
+    r"escrev\w*|digit\w*|pesquis\w*|busc\w*|procur\w*|"
+    r"copi\w*|col[ae]\w*|renome\w*|apag\w*|mov[ae]\w*|"
+    r"coloc\w*|p[oõ]e\w*|ponha\w*|ajust\w*|defin\w*|deix\w*|troc\w*|mud\w*|"
+    r"brilho\w*|volume\w*|wi[- ]?fi|bluetooth|janela\w*|"
+    r"aplicativo\w*|programa\w*|arquivo\w*|pasta\w*|noturn\w*|mudo\w*"
+    r")\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _has_broad_action_language_signal(text: str) -> bool:
+    """Heuristica SO de telemetria (ETAPA 1). Nao decide nada, nao muda rota.
+
+    Mais ampla e NAO ancorada no inicio da frase, ao contrario de
+    `_looks_like_unhandled_local_action`: o objetivo aqui e so sinalizar, no
+    log, uma frase com "cheiro" de comando de PC que escapou dos dois
+    filtros. Falso positivo aqui custa uma linha de log a mais; nunca afeta
+    a resposta dada ao Alex.
+    """
+    return bool(_BROAD_ACTION_LANGUAGE_RE.search(text or ""))
+
+
+def _log_intent_telemetry(event: str, path: str, text: str) -> None:
+    """Log puro da ETAPA 1. Ver comentario de bloco acima.
+
+    `event` e um destes dois: "refused_local_action" (caiu no guarda) ou
+    "escaped_to_orchestrator" (fugiu para o LLM com sinal amplo de acao).
+    `path` e "voice" ou "text", pela mesma razao que todo `[VOICE_TRACE]`
+    ja distingue os dois caminhos.
+    """
+    print(
+        f"[INTENT_TELEMETRY] event={event} path={path} text={text!r}",
+        flush=True,
+    )
+
+
 def _tts_voice_name(obj: object) -> str:
     """Best-effort name of the voice a TTS engine is configured to use.
 
@@ -2424,6 +2482,7 @@ class IPCHandler:
                 )
                 return
             if _looks_like_unhandled_local_action(text):
+                _log_intent_telemetry("refused_local_action", "voice", text)
                 reply = RESPOSTA_NAO_SEI
                 await self._append_conversation_message("assistant", reply, "local_action_guard")
                 await self.send_event('message', {
@@ -2432,6 +2491,9 @@ class IPCHandler:
                 })
                 await self._speak_response(reply)
                 return
+            # ETAPA 1 (raciocinio livre): guarda a frase original, antes do
+            # enriquecimento de memoria, so para o log de telemetria abaixo.
+            _telemetry_raw_text = text
             # ZARA-USER-MEMORY-CONTEXT-001: enriquece com memorias relevantes
             text = await self._enrich_with_memory(text)
             # Supercérebro routes through the real Hermes gateway only while
@@ -2440,6 +2502,8 @@ class IPCHandler:
                 response = await self.hermes.send_message(text, history=[], team="general")
                 engine_used = "hermes_gateway"
             elif self.orchestrator:
+                if _has_broad_action_language_signal(_telemetry_raw_text):
+                    _log_intent_telemetry("escaped_to_orchestrator", "voice", _telemetry_raw_text)
                 response = await self.orchestrator.process_message(text, engine=self.current_engine)
                 engine_used = self.orchestrator.last_engine_used or self.current_engine
             else:
@@ -3318,6 +3382,7 @@ class IPCHandler:
             return
 
         if _looks_like_unhandled_local_action(text):
+            _log_intent_telemetry("refused_local_action", "text", text)
             reply = RESPOSTA_NAO_SEI
             await self._append_conversation_message("assistant", reply, "local_action_guard")
             await self.send_response(msg.request_id, {
@@ -3325,6 +3390,11 @@ class IPCHandler:
                 'engine': 'local_action_guard',
             })
             return
+
+        # ETAPA 1 (raciocinio livre): guarda a frase original, antes do
+        # enriquecimento de memoria e do contexto do mentor, so para o log de
+        # telemetria abaixo.
+        _telemetry_raw_text = text
 
         # ZARA-USER-MEMORY-CONTEXT-001: enriquece com memorias relevantes (top-K)
         text = await self._enrich_with_memory(text)
@@ -3339,6 +3409,8 @@ class IPCHandler:
                 response = await self.hermes.send_message(text, history=history, team="general")
                 engine_used = "hermes_gateway"
             elif self.orchestrator:
+                if _has_broad_action_language_signal(_telemetry_raw_text):
+                    _log_intent_telemetry("escaped_to_orchestrator", "text", _telemetry_raw_text)
                 response = await self.orchestrator.process_message(
                     text, engine=engine, history=history
                 )

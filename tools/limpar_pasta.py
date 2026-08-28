@@ -32,9 +32,6 @@ BAT_PERMANENTES = {
     "MEUS-LEMBRETES.bat",
     "ABRIR-A-ZARA.bat",
     "LIGAR-O-EXECUTOR.bat",
-    # ZARA-TELEGRAM-001: usado uma vez para ligar, mas precisa continuar ali
-    # para o dia em que ele trocar a chave do robo.
-    "COLAR-CHAVE-DO-TELEGRAM.bat",
 }
 
 # Arquivos de saida que o projeto gera. Vao para .zara-dev/reports/.

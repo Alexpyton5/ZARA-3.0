@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar validação de números de cartão usando regex para identificar padrões de bandeira",
+  "context": "Parte da tarefa de captura segura: identificar números de cartão de crédito antes do processamento de OCR",
+  "expected_behavior": [
+    "Identifica padrões de número de cartão Visa (inicia com 4, 13 ou 16 dígitos)",
+    "Identifica padrões de número de cartão MasterCard (inicia com 51-55 ou 2221-2720, 16 dígitos)",
+    "Identifica padrões de número de cartão American Express (inicia com 34 ou 37, 15 dígitos)",
+    "Identifica padrões de número de cartão Discover (inicia com 6011, 622126-622925, 644-649, 65, 16 dígitos)",
+    "Ignora sequências que não correspondem a padrões de bandeira conhecidos"
+  ],
+  "verification": [
+    "Teste unitário: test_visa_pattern_recognition()",
+    "Teste unitário: test_mastercard_pattern_recognition()",
+    "Teste unitário: test_amex_pattern_recognition()",
+    "Teste unitário: test_discover_pattern_recognition()",
+    "Teste real: processe screenshot com números de cartão de diferentes bandeiras, verifique detecção"
+  ],
+  "files_to_touch": [
+    "core/vision/pii_detector.py",
+    "tests/vision/test_credit_card_detection.py"
+  ]
+}

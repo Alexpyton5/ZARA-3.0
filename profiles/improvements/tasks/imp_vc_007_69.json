@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar sistema de explicação que esclarece por que uma antecipação foi feita",
+  "context": "Parte do sistema de antecipação: construir confiança através da transparência",
+  "expected_behavior": [
+    "Quando sugestão antecipativa é feita, inclui breve explicação do porquê",
+    "Exemplo: 'Notei que você sempre verifica o clima às 7h, quer que eu faça isso agora?'",
+    "Explicação é curta (1 frase) e tecnica o suficiente para ser compreensível",
+    "Não repete exatamente a mesma explicação para evitar soar robótico",
+    "Permite que usuário solicite mais detalhes se quiser entender melhor o raciocínio"
+  ],
+  "verification": [
+    "Teste unitario: test_anticipation_includes_brief_explanation()",
+    "Teste unitario: test_explanation_references_observed_pattern()",
+    "Teste unitario: test_explanation_is_one_sentence_and_understandable()",
+    "Teste real: após gatilho de antecipação, verifique que sugestão vem com explicação",
+    "Teste de variação: confirme que explicações variam suficientemente para não soar robótico"
+  ],
+  "files_to_touch": [
+    "core/anticipation.py",
+    "tests/anticipation/test_explanation_system.py"
+  ]
+}

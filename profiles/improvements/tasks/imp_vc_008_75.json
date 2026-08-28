@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar modo de operação em lote para processamento de áudio já gravado",
+  "context": "Parte do microfone mais preciso: permitir transcrição de alta precisão de gravações existentes",
+  "expected_behavior": [
+    "Aceita arquivos de áudio em formatos comuns (WAV, MP3, OGG) como entrada",
+    "Aplica todo o pipeline de melhoria (buffer pós-frase, VAD, correção de homofonia)",
+    "Fornece opção de exportar transcrição em formato texto simples ou com timestamps",
+    "Mantém estatísticas de desempenho (tempo de processamento, taxa de sucesso)",
+    "Não requer microfone ativo ou conexão em tempo real para funcionar"
+  ],
+  "verification": [
+    "Teste unitario: test_wav_file_acceptance_and_processing()",
+    "Teste unitario: test_mp3_and_ogg_format_support()",
+    "Teste unitario: test_output_format_options()",
+    "Teste real: processar gravação de áudio conhecida, verifique transcrição melhorada",
+    "Teste de independência: confirme que funciona sem microfone ou serviços de tempo real"
+  ],
+  "files_to_touch": [
+    "core/voice/batch_processor.py",
+    "tests/voice/test_batch_processing.py"
+  ]
+}

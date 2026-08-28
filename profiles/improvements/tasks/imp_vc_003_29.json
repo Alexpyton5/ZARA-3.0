@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar deteção de barras de progresso (progress bar)",
+  "context": "Parte da tarefa de detetor de elementos UI: identificar elementos de feedback de operação",
+  "expected_behavior": [
+    "Detecta barras de progresso determinadas (com valor mínimo, máximo e atual)",
+    "Detecta barras de progresso indeterminadas (animação contínua)",
+    "Identifica porcentagem concluída quando disponível e visível",
+    "Funciona com temas claro e escuro do Windows",
+    "Retorna coordenadas, tamanho, valor atual, mínimo, máximo e estado indeterminado"
+  ],
+  "verification": [
+    "Teste unitario: test_detect_determinate_progress_bar()",
+    "Teste unitario: test_detect_indeterminate_progress_bar()",
+    "Teste unitario: test_identify_percentage_when_visible()",
+    "Teste real: processe screenshot com operação em andamento (ex: cópia de arquivos), verifique deteção",
+    "Teste de desempenho: <50ms para processar região 300x300px contendo barra de progresso"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "tests/vision/test_progress_bar_detection.py"
+  ]
+}

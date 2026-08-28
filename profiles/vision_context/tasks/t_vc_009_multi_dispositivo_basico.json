@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar sincronização básica de estado entre dispositivos para continuar onde parou",
+  "context": "Baseado em IDEIAS-DO-ALEX.md 'Na fila' - item 5: 'Multi-dispositivo'. Começar com sincronização de aprendizado e diário.",
+  "expected_behavior": [
+    "Definir formato neutro para troca de aprendizado e entradas de diario",
+    "Implementar mecanismo de sincronização via pasta compartilhada ou rede local",
+    "Resolver conflitos quando mesmo dado modificado em dois dispositivos",
+    "Permitir que usuário escolha quais tipos de dados sincronizar",
+    "Funcionar mesmo com intermittência de conexão (modo offline com sync posterior)"
+  ],
+  "verification": [
+    "Unit test: test_sync_formats_learning_and_diary()",
+    "Unit test: test_sync_conflict_resolution_latest_wins()",
+    "Teste real: simular dois dispositivos modificando aprendizado, verificar sync correto",
+    "Verificar que dados pessoais sensíveis não são sincronizados sem consentimento explícito"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_manager.py",
+    "core/sync/sync_protocol.py",
+    "tests/sync/test_sync_system.py"
+  ]
+}

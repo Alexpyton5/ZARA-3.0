@@ -1,0 +1,22 @@
+{
+  "goal": "Criar pipeline de OCR especializado em termos técnicos do ambiente de desenvolvimento (nomes de funções, variáveis, logs de erro)",
+  "context": "Alex precisa que a ZARA entenda o que vê em telas de código, não apenas texto geral. Baseado em suas reclamações sobre erros de transcrição em nomes como 'getUserData' vs 'getUserDa7a'.",
+  "expected_behavior": [
+    "Treina Tesseract com fontes de código (Fira Code, JetBrains Mono, Cascadia)",
+    "Aplica dicionário personalizado de termos técnicos do Windows/dev",
+    "Usa pós-processamento para corrigir confusões comuns (O/0, l/1, 5/S)",
+    "Retorna confiança por segmento para decidir quando acionar fallback de visão",
+    "Integra com histórico de correções do usuário (aprendizado)"
+  ],
+  "verification": [
+    "Unit test: test_ocr_technical_terms_recognizes_fira_code()",
+    "Unit test: test_ocr_postprocess_fixes_common_OCR_errors()",
+    "Teste real: processe screenshot do VS Code com código Python, verifique >90% acurácia em identificação de funções",
+    "Teste de fallback: quando confiança <70%, acionar modelo de visão gratuito"
+  ],
+  "files_to_touch": [
+    "core/vision/ocr_processor.py",
+    "core/vision/technical_dict.json",
+    "tests/vision/test_ocr_technical.py"
+  ]
+}

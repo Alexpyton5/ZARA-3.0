@@ -1,11 +1,13 @@
 from unittest.mock import AsyncMock, Mock
-
 import pytest
-
 from core.actions import os_ops
 from core.ipc_handlers import IPCHandler
 from core.pc_voice_intent import PcVoiceIntentDetector
+from core.action_registry import get_registry
 
+# Set pc_control_allowed to True for these tests
+registry = get_registry()
+registry.pc_control_allowed = True
 
 @pytest.mark.parametrize(
     ("phrase", "action", "param"),
@@ -24,7 +26,6 @@ def test_browser_intents(phrase, action, param):
     assert result.action == action
     assert result.param == param
 
-
 def test_domain_normalization_and_dispatch(monkeypatch):
     startfile = Mock()
     monkeypatch.setattr(os_ops.platform, "system", lambda: "Windows")
@@ -39,7 +40,6 @@ def test_domain_normalization_and_dispatch(monkeypatch):
     assert result.data["target_page_proven"] is False
     startfile.assert_called_once_with("https://google.com/")
 
-
 def test_search_uses_encoding_not_shell(monkeypatch):
     startfile = Mock()
     monkeypatch.setattr(os_ops.platform, "system", lambda: "Windows")
@@ -51,10 +51,9 @@ def test_search_uses_encoding_not_shell(monkeypatch):
     assert result.data["search_url"].endswith("q=caf%C3%A9+%26+asyncio")
     startfile.assert_called_once_with(result.data["search_url"])
 
-
 @pytest.mark.parametrize(
     "payload",
-    ["file:///C:/Windows", "javascript:alert(1)", "data:text/html,x", "shell:AppsFolder", r"\\server\share", "https://example.com/a.exe", "https://user:pass@example.com"],
+    ["file:///C:/Windows/", "javascript:alert(1)", "data:text/html,x", "shell:AppsFolder", r"\\server\share", "https://example.com/a.exe", "https://user:pass@example.com"],
 )
 def test_dangerous_schemes_and_payloads_are_blocked(monkeypatch, payload):
     startfile = Mock()
@@ -62,19 +61,15 @@ def test_dangerous_schemes_and_payloads_are_blocked(monkeypatch, payload):
     assert os_ops.browser_open_url_action(payload).success is False
     startfile.assert_not_called()
 
-
 def test_ambiguous_phrase_is_not_browser_navigation():
     result = PcVoiceIntentDetector(pc_control_allowed=True).detect("abra uma possibilidade")
     assert result.action not in {"browser_open_url", "browser_search"}
-
 
 @pytest.mark.asyncio
 async def test_capability_gate_blocks_browser_dispatch(monkeypatch):
     execute = AsyncMock()
     handler = IPCHandler(AsyncMock())
     monkeypatch.setattr("core.action_registry.execute_action", execute)
-
     reply = await handler._try_pc_intent("abra google.com")
-
     assert reply == "Para controlar o computador, ative o Supercérebro."
     execute.assert_not_awaited()

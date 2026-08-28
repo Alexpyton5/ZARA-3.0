@@ -7,6 +7,7 @@ import pytest
 import core.ipc_handlers as ipc_handlers
 from core.action_confirmation import ConfirmationProof
 from core.action_registry import ActionResult, get_registry
+from core.actions import terminal as terminal_actions
 from core.ipc_handlers import IPCHandler, IPCMessage
 
 
@@ -226,6 +227,68 @@ def test_action_execute_rejects_confirmation_proof_on_normal_route():
     )
 
     assert sent[-1].error == "Confirmation proof is only accepted by action-confirm"
+
+
+@pytest.mark.parametrize(
+    ("handler_name", "executor_name", "payload"),
+    [
+        (
+            "handle_action_execute",
+            "execute_action",
+            {"action": "test_action", "params": {}},
+        ),
+        (
+            "handle_action_confirm",
+            "execute_confirmed_action",
+            {
+                "action": "test_action",
+                "params": {},
+                "confirmation_id": "confirmation",
+                "action_fingerprint": "fingerprint",
+            },
+        ),
+    ],
+)
+def test_action_ipc_propagates_failed_action_truth(
+    monkeypatch, handler_name, executor_name, payload
+):
+    handler, sent = _handler()
+    failed = ActionResult(
+        success=False,
+        error="EXECUTOR_PROBE_FAILED",
+        verificado=False,
+    )
+
+    async def fake_execute(*_args, **_kwargs):
+        return failed
+
+    monkeypatch.setattr(ipc_handlers, executor_name, fake_execute)
+
+    asyncio.run(
+        getattr(handler, handler_name)(
+            IPCMessage(type="action", request_id="truth", payload=payload)
+        )
+    )
+
+    response = sent[-1].response
+    assert response["success"] is False
+    assert response["error"] == "EXECUTOR_PROBE_FAILED"
+    assert response["verificado"] is False
+    assert response["result"] is failed
+
+
+def test_background_terminal_returns_started_without_verification(monkeypatch, tmp_path):
+    class FakeProcess:
+        pid = 4321
+
+    monkeypatch.setattr(terminal_actions.subprocess, "Popen", lambda *_args, **_kwargs: FakeProcess())
+
+    result = terminal_actions.terminal_bg_action("echo safe", cwd=str(tmp_path))
+
+    assert result.success is True
+    assert result.verificado is False
+    assert result.data["status"] == "STARTED"
+    assert "STARTED" in result.output
 
 
 def test_action_confirm_forwards_direct_contract_without_logging_params(monkeypatch, capsys):

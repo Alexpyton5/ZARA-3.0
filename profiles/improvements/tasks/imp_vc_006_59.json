@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar integração com sistema de aprendizado para melhorar deteção de limite baseado em padrões de sucesso",
+  "context": "Parte do sistema de conhecer limites: usar aprendizado geral para informar quando é verdadeiro limite",
+  "expected_behavior": [
+    "Usa taxa de sucesso histórica em contexto semelhante para ajustar sensibilidade de deteção de limite",
+    "Contextos com baixa taxa de sucesso histórica têm limiar menor para marcação de limite (ex: 2 falhas)",
+    "Contextos com alta taxa de sucesso histórica têm limiar maior (ex: 5 falhas)",
+    "Aprende continuamente: atualiza limiares à medida que mais dados ficam disponíveis",
+    "Não substitui deteção básica de 3 falhas, mas a ajusta baseado em evidência"
+  ],
+  "verification": [
+    "Teste unitario: test_historical_success_rate_adjusts_limit_threshold()",
+    "Teste unitario: test_low_success_context_has_lower_threshold()",
+    "Teste unitario: test_high_success_context_has_higher_threshold()",
+    "Teste real: após estabelecer padrão de sucesso em contexto, verifique ajuste no comportamento de limite",
+    "Teste de aprendizagem: confirme que sistema melhora julgamento de limite com experiência"
+  ],
+  "files_to_touch": [
+    "core/limit_tracker.py",
+    "core/aprendizado.py",
+    "tests/limit_tracker/test_limit_learning_integration.py"
+  ]
+}

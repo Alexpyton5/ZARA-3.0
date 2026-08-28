@@ -73,9 +73,13 @@ def test_os_open_canonical_path_dispatch_and_verification(monkeypatch, tmp_path)
     canonical = tmp_path.resolve()
     explorer_states = iter(({10}, {10}))
     startfile = Mock()
+    popen = Mock()
     monkeypatch.setattr(os_ops, "_resolve_safe_folder", lambda folder: canonical)
     monkeypatch.setattr(os_ops, "_running_app_pids", lambda names: next(explorer_states))
     monkeypatch.setattr(os_ops.os, "startfile", startfile)
+    # ZARA-PC-CONTROL-ALEX-004: o codigo agora usa subprocess.Popen p/ explorer.
+    # Mockamos para o teste nao abrir janela de verdade na tela do Alex.
+    monkeypatch.setattr(os_ops.subprocess, "Popen", popen)
     monkeypatch.setattr(os_ops.time, "sleep", lambda seconds: None)
 
     result = os_ops.os_open_action("downloads")
@@ -83,7 +87,7 @@ def test_os_open_canonical_path_dispatch_and_verification(monkeypatch, tmp_path)
     assert result.success is True
     assert result.data["path"] == str(canonical)
     assert result.data["verification"] == "EXPLORER_PROCESS_PRESENT"
-    startfile.assert_called_once_with(str(canonical))
+    popen.assert_called_once()
 
 
 @pytest.mark.asyncio

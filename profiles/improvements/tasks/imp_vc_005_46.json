@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar detecção de anomalias no uso (picos repentinos, períodos de inatividade)",
+  "context": "Parte do diário automático: identificar eventos fora do padrão que podem precisar de atenção",
+  "expected_behavior": [
+    "Detecta aumento súbito no volume de comandos (acima de 2 desvios padrão da média)",
+    "Identifica períodos prolongados de inatividade (mais de 4 horas sem comandos durante período ativo)",
+    "Sinaliza possíveis problemas de acessibilidade (comandos repetidamente falhando na mesma ação)",
+    "Distinguir entre anomalias legítimas (férias, fim de semana) e possíveis problemas",
+    "Fornece contexto suficiente para decidir se intervenção é necessária"
+  ],
+  "verification": [
+    "Teste unitario: test_sudden_spike_in_command_volume_detection()",
+    "Teste unitario: test_prolonged_inactivity_period_detection()",
+    "Teste unitario: test_repeated_failure_on_same_action_flagged()",
+    "Teste real: simular uso anómalo por um dia, verifique que anomalia é detectada e contextualizada",
+    "Teste de discernimento: confirme que fim de semana típico não é marcado como anomalia"
+  ],
+  "files_to_touch": [
+    "core/diary.py",
+    "core/diary_anomaly_detector.py",
+    "tests/diary/test_anomaly_detection.py"
+  ]
+}

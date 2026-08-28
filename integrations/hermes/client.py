@@ -32,11 +32,16 @@ def _resolve_api_key(config: dict | None) -> str:
 
 
 class HermesClient:
-    def __init__(self, config: dict | None = None):
+    def __init__(self, config: dict | None = None, model: str | None = None):
         cfg = config or {}
         self.base_url = str(cfg.get("url") or GATEWAY_URL).rstrip("/")
         self.api_key = _resolve_api_key(cfg)
         self.timeout = float(cfg.get("timeout") or TIMEOUT)
+        # ZARA-TELEGRAM-AGENTES-001: quando vazio, cai no perfil default do
+        # gateway (o Supercérebro / @hermes). Quando nomeado (ex.:
+        # "ceo_mentor"), o gateway roteia para aquele perfil específico, então
+        # a mesma ponte fala com qualquer agente da equipe pelo grupo.
+        self.model = model or cfg.get("model") or "default"
 
     def _headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
@@ -53,7 +58,9 @@ class HermesClient:
                 if role in ("user", "assistant") and content.strip():
                     messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": request})
-        return {"model": "default", "messages": messages, "stream": False}
+        # ZARA-TELEGRAM-AGENTES-001: "default" = Supercérebro (@hermes); qualquer
+        # outro nome válido roteia para aquele perfil no gateway.
+        return {"model": self.model, "messages": messages, "stream": False}
 
     def _post(self, payload: dict) -> dict[str, Any]:
         """POST cru ao gateway (para AgentTeam). Levanta exceção em erro HTTP."""

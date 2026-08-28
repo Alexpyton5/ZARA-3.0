@@ -19,6 +19,14 @@ import threading
 import time
 from pathlib import Path
 
+# ZARA-PROBE-ENCODING-001: a saida do backend traz emoji. No console cp1252 do
+# Windows o print quebrava a sonda com UnicodeEncodeError e o VEREDITO nunca
+# saia — o build automatico lia isso como "a Kore NAO subiu" mesmo com a voz OK.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parent.parent
 JANELA_SEGUNDOS = 45
 

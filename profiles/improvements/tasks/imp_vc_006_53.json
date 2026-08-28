@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar resposta honesta quando limite conhecido for detectado",
+  "context": "Parte do sistema de conhecer limites: comunicar limitação ao usuário com transparência",
+  "expected_behavior": [
+    "Quando limite conhecido detectado, responde com frase padrão honesta",
+    "Frase inclui número de tentativas realizadas e convite para abordagem alternativa",
+    "Exemplo: 'Isso eu já tentei 3 vezes e nunca deu certo. Que tal tentarmos de outra forma?'",
+    "Permite customização da frase de resposta através de configuração",
+    "Não repete a mesma frase exatamente a cada vez para evitar soar robótico"
+  ],
+  "verification": [
+    "Teste unitario: test_honest_response_includes_attempt_count()",
+    "Teste unitario: test_response_invites_alternative_approach()",
+    "Teste unitario: test_response_phrase_customizable()",
+    "Teste real: após 3 falhas consecutivas, solicitar mesma ação, verifique resposta honesta",
+    "Teste de variação: confirme que respostas não são exatamente iguais em múltiplas ocorrências"
+  ],
+  "files_to_touch": [
+    "core/limit_tracker.py",
+    "core/aprendizado.py",
+    "tests/limit_tracker/test_honest_response.py"
+  ]
+}

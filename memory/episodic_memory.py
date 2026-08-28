@@ -28,9 +28,9 @@ try:
     DATABASE_PATH = _memory_dir() / "zara_episodes.sqlite3"
 except Exception:
     DATABASE_PATH = _base_dir() / "memory" / "zara_episodes.sqlite3"
-VECTOR_SIZE = 256
+VECTOR_SIZE = 768
 MAX_EPISODE_CHARS = 1_200
-_TOKEN_RE = re.compile(r"[\wÀ-ÿ]+", re.UNICODE)
+_TOKEN_RE = re.compile(r"[\\wÀ-ÿ]+", re.UNICODE)
 
 
 def _tokens(text: str) -> list[str]:
@@ -38,15 +38,26 @@ def _tokens(text: str) -> list[str]:
 
 
 def _embed(text: str) -> array:
-    """Create a deterministic local vector without downloading a model."""
-    vector = array("f", [0.0]) * VECTOR_SIZE
-    tokens = _tokens(text)
-    for index, token in enumerate(tokens):
-        features = (token, f"{tokens[index - 1]}:{token}" if index else token)
-        for feature in features:
-            digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
-            bucket = int.from_bytes(digest[:4], "little") % VECTOR_SIZE
-            vector[bucket] += 1.0 if digest[4] & 1 else -1.0
+    """Get embedding from Ollama's nomic-embed-text model."""
+    # Try to use the Ollama Python package
+    try:
+        from ollama import Client
+        client = Client()
+        response = client.embeddings(model='nomic-embed-text', prompt=text)
+        vector = array('f', response['embedding'])
+    except Exception as e:
+        # Fallback to HTTP
+        import urllib.request
+        import json
+        url = "http://localhost:11434/api/embeddings"
+        data = json.dumps({"model": "nomic-embed-text", "prompt": text})
+        data = data.encode('utf-8')
+        req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+        response = urllib.request.urlopen(req)
+        result = json.load(response)
+        vector = array('f', result['embedding'])
+
+    # Normalize the vector
     magnitude = math.sqrt(sum(value * value for value in vector))
     if magnitude:
         for index, value in enumerate(vector):

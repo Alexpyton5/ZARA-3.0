@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar modo de operação offline que acumula mudanças para sincronização posterior",
+  "context": "Parte da multi-dispositivo básico: garantir funcionamento quando sem conexão",
+  "expected_behavior": [
+    "Quando desconectado, acumula mudanças localmente em fila de saída",
+    "Continua funcionando normalmente para todas as operações locais",
+    "Tenta sincronizar assim que conexão for restabelecida",
+    "Limita tamanho da fila de saída para evitar crescimento indefinido",
+    "Fornece indicador claro do status de conexão (conectado/desconectado/sincronizando)"
+  ],
+  "verification": [
+    "Teste unitario: test_offline_mode_accumulates_changes_locally()",
+    "Teste unitario: test_normal_operation_continues_when_offline()",
+    "Teste unitario: test_attempts_sync_when_connection_restored()",
+    "Teste real: desconectar dispositivo, fazer alterações, reconectar, verifique sincronização",
+    "Teste de limites: confirme que fila de saída não cresce indefinidamente"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_manager.py",
+    "tests/sync/test_offline_operation.py"
+  ]
+}

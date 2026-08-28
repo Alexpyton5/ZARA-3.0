@@ -175,7 +175,7 @@ def _looks_like_unhandled_local_action(text: str) -> bool:
         r"ligue|liga|ligar|desligue|desliga|desligar|"
         r"habilite|habilita|desabilite|desabilita|"
         # definir valor
-        r"coloque|coloca|colocar|ponha|poe|por|bote|bota|"
+        r"coloque|coloca|colocar|ponha|p[oõ]e|por|bote|bota|"
         r"defina|define|definir|deixe|deixa|deixar|ajuste|ajusta|"
         r"muda|mude|mudar|troca|troque|trocar|"
         # mover / copiar / colar

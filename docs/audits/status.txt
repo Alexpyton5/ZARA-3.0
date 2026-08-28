@@ -1,0 +1,9 @@
+FEITO:
+Atualizei build_exe.py para suportar uma construção total (--full) que limpa artefatos, instala dependências, roda testes, constrói o sidecar e o instalador. Criei docs/BUILD-UNICO.md documentando o comando.
+PROVA:
+- build_exe.py modificado (linhas 1-499) com funções build_full, clean_frontend_dirs, instalação de dependências via venv, execução de testes, construção do instalador e atualização de manifestos.
+- docs/BUILD-UNICO.md criado com instruções detalhadas do comando único.
+NAO FEITO:
+Não foi possível executar a construção total até o fim devido a um IndentationError em core/ipc_handlers.py linha 328: unexpected indent, que impede a execução dos testes. Conforme restrições da tarefa, não é permitido modificar core/.
+PROXIMO:
+Aguardar a correção do erro de indentacao em core/ipc_handlers.py (por quem tem permissão para modificar core/) e, em seguida, executar o comando completo: python build_exe.py --full do zero (limpando dist/build antes) para validar exit code 0 e artefato final gerado.

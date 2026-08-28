@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar aplicação de regras de pós-processamento específicas por linguagem de programação detectada",
+  "context": "Parte da tarefa de OCR otimizado para PT-BR técnico: aplicar correções específicas após deteção de linguagem",
+  "expected_behavior": [
+    "Aplica correções O/0 específicas quando linguagem detectada for Python, JavaScript, Java, C#, etc.",
+    "Aplica correções l/I/1 específicas quando linguagem detectada for Python, JavaScript, Java, C#, etc.",
+    "Aplica correções 5/S específicas quando linguagem detectada for linguagens que usam hexadecimal frequentemente",
+    "Desativa correções específicas quando confiança na deteção de linguagem estiver abaixo de limite configurável",
+    "Mantém aplicacao das correções gerais de português técnico independente da linguagem detectada"
+  ],
+  "verification": [
+    "Teste unitario: test_apply_specific_rules_for_Python_language()",
+    "Teste unitario: test_apply_specific_rules_for_JavaScript_language()",
+    "Teste unitario: test_disable_specific_rules_low_language_confidence()",
+    "Teste real: processe screenshot com código Python contendo ambiguidades, verifique correção específica aplicada",
+    "Teste de regressão: confirme que correções gerais de português técnico ainda funcionam"
+  ],
+  "files_to_touch": [
+    "core/vision/ocr_processor.py",
+    "tests/vision/test_language_specific_postprocess.py"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar sistema de gatilho que detecta quando condições de antecipação são atendidas",
+  "context": "Parte do sistema de antecipação: determinar quando agir com base em padrões detectados",
+  "expected_behavior": [
+    "Monitora estado atual (horário, comando recente, aplicação ativa) em tempo real",
+    "Compara com padrões aprendidos do diário para detectar correspondência",
+    "Ativa gatilho quando probabilidade condicional estiver acima de limite configurável",
+    "Permite configuração de diferentes limites para diferentes tipos de antecipação",
+    "Fornece confiança na deteção do gatilho para evitar falsos positivos"
+  ],
+  "verification": [
+    "Teste unitario: test_trigger_activation_when_conditions_match_pattern()",
+    "Teste unitario: test_configurable_thresholds_for_different_anticipation_types()",
+    "Teste unitario: test_confidence_in_trigger_detection()",
+    "Teste real: configurar gatilho conhecido, simular condições de ativação, verifique deteção",
+    "Teste de desempenho: confirma que verificação de gatilho adiciona <5ms de latência"
+  ],
+  "files_to_touch": [
+    "core/anticipation.py",
+    "tests/anticipation/test_trigger_system.py"
+  ]
+}

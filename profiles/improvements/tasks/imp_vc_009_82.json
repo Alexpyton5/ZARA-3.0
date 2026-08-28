@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar formato neutro para sincronização de entradas de diário entre dispositivos",
+  "context": "Parte da multi-dispositivo básico: definir como o diário será compartilhado entre dispositivos",
+  "expected_behavior": [
+    "Define estrutura JSON para entrada de diário (data, métricas, padrões, insights)",
+    "Inclui ID de dispositivo para rastrear origem da entrada",
+    "Usa timestamp UTC absoluto para marcar quando entrada foi criada",
+    "Separa dados agregados de dados brutos para facilitar fusão",
+    "Permite extensão futura através de campos reservados no formato"
+  ],
+  "verification": [
+    "Teste unitario: test_diary_neutral_format_includes_required_fields()",
+    "Teste unitario: test_device_id_present_in_diary_format()",
+    "Teste unitario: test_utc_timestamp_used_for_diary_entries()",
+    "Teste real: criar entrada de diário em dispositivo A, verificar que formato é neutro",
+    "Teste de extensibilidade: confirme que campos reservados estão presentes para futuro uso"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_format.py",
+    "tests/sync/test_diary_neutral_format.py"
+  ]
+}

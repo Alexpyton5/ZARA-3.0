@@ -8,7 +8,8 @@ import asyncio
 
 import pytest
 
-from core.action_registry import ActionRegistry
+import core.action_registry as action_registry
+from core.action_registry import ActionRegistry, action
 
 
 def _isolated_registry() -> ActionRegistry:
@@ -103,6 +104,23 @@ def test_supercerebro_off_blocks_non_read_only_even_with_confirmation():
     assert calls == []
 
 
+def test_direct_decorated_pc_control_cannot_bypass_registry_gate(monkeypatch):
+    registry = _isolated_registry()
+    calls: list[str] = []
+    monkeypatch.setattr(action_registry, "registry", registry)
+
+    @action(name="decorated_pc_control", capability="PC_CONTROL")
+    def decorated_pc_control_action() -> str:
+        calls.append("ran")
+        return "done"
+
+    result = decorated_pc_control_action()
+
+    assert not result.success
+    assert "Superc" in result.error
+    assert calls == []
+
+
 def test_supercerebro_off_keeps_sanitized_read_only_available():
     registry = _isolated_registry()
     registry.register("fake_read", lambda: "safe", capability="READ_ONLY")
@@ -145,7 +163,46 @@ def test_local_pc_control_does_not_bypass_medium_risk_gate():
     assert calls == ["ran"]
 
 
-@pytest.mark.parametrize("capability", ["PC_CONTROL", "REMOTE_PC_CONTROL", "AGENTIC_PC_CONTROL"])
+@pytest.mark.parametrize(
+    ("name", "category", "risk"),
+    [
+        ("local_high", "general", "HIGH"),
+        ("mcp_local_low", "general", "LOW"),
+        ("mcp_local_medium", "general", "MEDIUM"),
+        ("mcp_local_high", "general", "HIGH"),
+        ("local_mcp_low", "mcp", "LOW"),
+        ("local_mcp_medium", "mcp", "MEDIUM"),
+        ("local_mcp_high", "mcp", "HIGH"),
+    ],
+)
+def test_registration_rejects_invalid_local_pc_control_without_orphan_metadata(name, category, risk):
+    registry = _isolated_registry()
+
+    with pytest.raises(ValueError):
+        registry.register(
+            name,
+            lambda: "must not register",
+            category=category,
+            risk=risk,
+            capability="LOCAL_PC_CONTROL",
+        )
+
+    assert registry.get(name) is None
+    assert registry.get_spec(name) is None
+    assert name not in registry.list_actions(category)
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        "PC_CONTROL",
+        "REMOTE_PC_CONTROL",
+        "AGENTIC_PC_CONTROL",
+        "FILES_MUTATE",
+        "CODE_EXECUTION",
+        "SYSTEM_POWER",
+    ],
+)
 def test_supercerebro_off_blocks_remote_or_agentic_domains(capability):
     registry = _isolated_registry()
     calls: list[str] = []

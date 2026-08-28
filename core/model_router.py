@@ -26,6 +26,7 @@ class ModelProvider(StrEnum):
     ZAI = "zai"
     XAI = "xai"
     HERMES = "hermes"
+    OLLAMA = "ollama"
 
 
 class TaskType(StrEnum):
@@ -79,6 +80,39 @@ class ModelConfig:
 
 
 MODEL_REGISTRY: list[ModelConfig] = [
+    # Ollama — Local models with no API key needed
+    ModelConfig(
+        id="ollama_qwen3_8b",
+        name="Ollama qwen3:8b",
+        provider=ModelProvider.OLLAMA,
+        api_model="qwen3:8b",
+        task_types=[TaskType.REASONING, TaskType.CODING, TaskType.TOOL_USE, TaskType.GENERAL_CHAT],
+        api_key_env="OLLAMA_API_KEY",
+        base_url="http://127.0.0.1:11434",
+        max_tokens=16384,
+        free_tier_limit="Ollama • Local unlimited",
+        priority=1,
+        smart_bias=30,
+        economy_bias=30,
+        supports_tools=True,
+        zero_cost_eligible=True,
+    ),
+    ModelConfig(
+        id="ollama_qwen3_4b",
+        name="Ollama qwen3:4b",
+        provider=ModelProvider.OLLAMA,
+        api_model="qwen3:4b",
+        task_types=[TaskType.REASONING, TaskType.CODING, TaskType.TOOL_USE, TaskType.GENERAL_CHAT],
+        api_key_env="OLLAMA_API_KEY",
+        base_url="http://127.0.0.1:11434",
+        max_tokens=16384,
+        free_tier_limit="Ollama • Local unlimited",
+        priority=2,
+        smart_bias=25,
+        economy_bias=25,
+        supports_tools=True,
+        zero_cost_eligible=True,
+    ),
     # NVIDIA NIM — free prototype endpoints / trial limits apply.
     ModelConfig(
         id="nvidia_nemotron_ultra",
@@ -695,3 +729,37 @@ def get_model_config(model_id: str) -> ModelConfig | None:
         if model.id == model_id:
             return model
     return None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

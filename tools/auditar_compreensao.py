@@ -13,7 +13,9 @@ Historico:
   2026-08-12 antes do ZARA-VOICE-VERBOS: 27 entendidos / 46 perdidos
   2026-08-12 depois                     : 67 entendidos /  6 perdidos / 0 falsos
 """
-import os, sys
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.pc_voice_intent import PcVoiceIntentDetector as D
 

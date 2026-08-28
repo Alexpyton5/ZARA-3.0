@@ -48,6 +48,7 @@ def test_absolute_brightness_clamps_and_verifies(monkeypatch):
         "target": 100,
         "observed": 100,
         "backend": "ddcci",
+        "tolerance": 2,
     }
 
 

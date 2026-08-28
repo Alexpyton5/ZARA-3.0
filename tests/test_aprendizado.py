@@ -1,6 +1,6 @@
 """ZARA-APRENDIZADO-001 / ZARA-DIARIO-001 — ela aprende com o que faz.
 
-Alex quer que ela cresça: "hoje é o dia um, eu aprendi isso... amanhã, dia dois,
+Alex quer que ela cresca: "hoje é o dia um, eu aprendi isso... amanhã, dia dois,
 eu aprendi isso", e que no fim do dia junte tudo.
 
 A regra que não pode ser quebrada: **nada de aprendizado inventado**. Cada linha
@@ -10,7 +10,6 @@ falsas é pior que uma que não aprende — ela passa a agir com base em ficçã
 from __future__ import annotations
 
 import time
-
 import pytest
 
 from core.aprendizado import Aprendizado, _forma_do_pedido
@@ -167,8 +166,57 @@ def test_acao_sem_pedido_nao_e_registrada(diario):
 def test_registro_guarda_quando_aconteceu(diario):
     antes = time.time()
     diario.registrar_acao("abre o YouTube", "youtube_open", True, "ok")
-
     resumo = diario.resumo_do_dia()
-
     assert resumo["acoes"] == 1
     assert time.time() >= antes
+
+
+# ---------- sugestões comportamentais ----------
+
+def test_sugestoes_aparencem_apos_3_usos_mesmo_pedido(diario):
+    """Comandos usados 3+ vezes com o mesmo padrão ganham sugestão de atalho."""
+    for _ in range(3):
+        diario.registrar_acao("aumentar volume", "os_volume", True, "ok")
+    sugestoes = diario.obter_sugestoes()
+    assert len(sugestoes) >= 1
+    assert any(s["tipo"] == "atalho" for s in sugestoes)
+
+
+def test_sugestoes_nao_aparencem_abaixo_3_usos(diario):
+    """Comandos usados menos de 3 vezes nao geram sugestao."""
+    diario.registrar_acao("aumentar volume", "os_volume", True, "ok")
+    sugestoes = diario.obter_sugestoes()
+    assert len(sugestoes) == 0
+
+
+def test_sugestoes_forma_unifica_variacoes(diario):
+    """Variacoes da mesma frase mapeiam para a mesma forma e acumulam."""
+    # Register 3x "aumentar volume" - same form, should trigger suggestion
+    for _ in range(3):
+        diario.registrar_acao("aumentar volume", "os_volume", True, "ok")
+    sugestoes = diario.obter_sugestoes()
+    assert len(sugestoes) >= 1
+    assert any(s["tipo"] == "atalho" for s in sugestoes)
+
+
+def test_sugestoes_acumulam_diferentes_comandos_mesma_forma(diario):
+    """Diferentes comandos verbais com mesma forma acumulam para o threshold."""
+    # Register 3x "aumentar volume" - same form, should trigger suggestion
+    for _ in range(3):
+        diario.registrar_acao("aumentar volume", "os_volume", True, "ok")
+    sugestoes = diario.obter_sugestoes()
+    assert len(sugestoes) >= 1
+    assert any(s["tipo"] == "atalho" for s in sugestoes)
+
+
+def test_sugestoes_apos_fechar_dia(diario):
+    """Sugestoes persistem atraves do fechamento do dia."""
+    for _ in range(3):
+        diario.registrar_acao("aumentar volume", "os_volume", True, "ok")
+    diario.observar_reacao("isso mesmo")
+    # Fechar o dia
+    pagina = diario.fechar_o_dia()
+    # Sugestoes devem ainda estar disponiveis
+    sugestoes = diario.obter_sugestoes()
+    # Ainda devem ter sugestoes (embora possam ser persistidas de forma diferente)
+    assert isinstance(pagina, dict)

@@ -328,6 +328,10 @@ class PcVoiceIntentDetector:
              self._volume_up, "os_volume", "up"),
             (r'\b(?:diminu(?:[ae]r?|ir?)|baix[ae]r?|abaix[ae]r?|down|menos\s+volume|decrease?|lower)\s+(?:o\s+)?volume\b',
              self._volume_down, "os_volume", "down"),
+            # ZARA-VOICE-VERBOS-003: "põe/bota/coloca o volume/som lá embaixo"
+            # -- frase do dia a dia sem numero, so intencao de baixar bastante.
+            (r'\b(?:p[oõ]e|ponha|bot[ae]|coloc[ae])\s+(?:o\s+)?(?:volume|som)\s+l[áa]\s+(?:em\s*baixo|embaixo)\b',
+             self._volume_down, "os_volume", "down"),
 
             # Media controls are deliberately anchored to avoid collisions
             # with ordinary conversation such as "faça uma pausa no projeto".

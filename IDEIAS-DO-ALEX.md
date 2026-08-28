@@ -8,59 +8,6 @@ atual fechar e for testada, eu trago esta lista de volta e ele escolhe a próxim
 
 ---
 
-## Em construção agora
-
-- **Ela aprender com o que faz** — registra o que foi pedido, o que fez, se deu
-  certo, e como Alex reagiu. Para de repetir erro.
-- **Diário dela** — fecha o dia sozinha e vai acumulando "dia 1, dia 2...".
-
-## Na fila, por ordem de valor
-
-1. **Ela absorver o que VÊ na tela**, não só o que ouve e o que lê das nossas
-   conversas. Hoje ela aprende do que Claude e Codex escrevem; falta o resto do
-   que acontece no computador.
-
-2. **Antecipar** — perceber que ele sempre pede X depois de Y, e se adiantar.
-   Depende do diário ter alguns dias de dados; não adianta construir antes.
-
-3. **Ela conhecer os próprios limites** — "isso eu já tentei três vezes e nunca
-   deu certo", em vez de tentar de novo com a mesma cara.
-
-4. **Microfone mais preciso.** Já foi metade: ela aprendeu o vocabulário da casa
-   (Claude, Codex, ZARA, Kore...) e parou de ouvir "Cláudio". O resto seria
-   transcrever de novo, com mais calma, depois que ele terminar a frase —
-   ganha precisão e custa latência. Medir antes de decidir.
-
-5. **Multi-dispositivo** — ela existir fora do desktop (celular, outro
-   computador). É o item mais caro da lista e não deve vir antes de a base estar
-   sólida aqui.
-
-6. **Trocar de modelo quando o crédito acabar** — o roteador já está instalado e
-   desligado em `C:\Users\alexp\omniroute\`. Falta ele colar a chave e ligar.
-
----
-
-## Aprovar do celular — carimbado em 15/08
-
-Alex: *"se eu deixar o computador em casa, eu não vou poder clicar nisso e a
-gente vai ficar com o projeto parado, não existe isso"*.
-
-**ISSO SERVE, E É PRÉ-REQUISITO DO TRABALHO REMOTO.** Hoje, quando eu preciso de
-permissão, tudo para até ele voltar. Se ele sair às 8h e voltar às 18h, foram
-dez horas paradas.
-
-**Como NÃO fazer:** a ZARA clicar sozinha. Aí a trava deixa de existir e ela
-aprova qualquer coisa, inclusive besteira minha. Trocar segurança por
-conveniência aqui é o pior negócio possível.
-
-**Como fazer:** o pedido vai ao Telegram — "o Claude quer fazer X, responde SIM
-ou NÃO" — ele responde de onde estiver, e a ZARA clica por ele. A trava continua
-existindo; só mudou de lugar, do mouse para o bolso dele.
-
-Depende de: nada. Pode ser construído a qualquer momento.
-
----
-
 ## Interface premium — carimbado em 15/08
 
 Alex: *"a interface pra mim é a cereja do bolo, ela tem que ser incrível pra
@@ -93,7 +40,7 @@ Mesmo alerta que dei sobre o Hermes no dia anterior.
 **ISSO SERVE — níveis de autonomia (fase 3).** A única ideia realmente boa do
 pacote. Cada capacidade da ZARA ganha etiqueta: *pergunta antes* / *faz e avisa*
 / *faz sozinha*. Volume ela faz sozinha; apagar arquivo, nunca. Responde direto
-a pergunta dele ("vai funcionar bem ou vai dar problema?") e é a peça que
+a pergunta dela ("vai funcionar bem ou vai dar problema?") e é a peça que
 faltava para ela agir sem ser mandada. Não exige instalar nada.
 
 **ISSO SERVE — Claude sem janela.** O "conductor" do vídeo é Claude Code
@@ -167,6 +114,8 @@ dispara, continua rápida, e avisa quando ficar pronto.
 **Cuidado permanente:** ambiente do Hermes já contaminou o build da ZARA uma vez.
 Integração é por rede (`http://127.0.0.1:8642`), nunca por compartilhar Python,
 venv ou PATH.
+
+---
 
 ## Descartado, com motivo
 

@@ -19,7 +19,8 @@ def test_open_latest_skips_newer_executable_and_requires_window_proof(tmp_path, 
     unsafe.write_bytes(b"exe")
     unsafe.touch()
     opened = []
-    monkeypatch.setattr("core.actions.files.os.startfile", opened.append)
+    # ZARA-PC-CONTROL-ALEX-004: codigo usa subprocess.Popen, nao os.startfile.
+    monkeypatch.setattr("core.actions.files.subprocess.Popen", lambda *a, **k: opened.append(a[0]))
     monkeypatch.setattr("core.actions.files._window_snapshot", lambda: {})
     monkeypatch.setattr(
         "core.actions.files._confirm_file_window",
@@ -37,7 +38,7 @@ def test_open_latest_skips_newer_executable_and_requires_window_proof(tmp_path, 
 def test_open_latest_never_claims_success_without_window_proof(tmp_path, monkeypatch):
     target = tmp_path / "nota.txt"
     target.write_text("ok", encoding="utf-8")
-    monkeypatch.setattr("core.actions.files.os.startfile", lambda path: None)
+    monkeypatch.setattr("core.actions.files.subprocess.Popen", lambda *a, **k: None)
     monkeypatch.setattr("core.actions.files._window_snapshot", lambda: {})
     monkeypatch.setattr("core.actions.files._confirm_file_window", lambda target, before: None)
 

@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar mecanismo de troca assíncrona via pasta compartilhada ou rede local",
+  "context": "Parte da multi-dispositivo básico: trocar dados entre dispositivos sem depender de nuvem",
+  "expected_behavior": [
+    "Suporta troca via pasta compartilhada (SMB, NFS, ou pasta local sincronizada)",
+    "Suporta troca via rede local (descoberta mDNS + transferência direta)",
+    "Deteta automaticamente disponibilidade de métodos de troca",
+    "Faz várias tentativas com backoff exponencial em caso de falha",
+    "Fornece feedback sobre sucesso ou falha da troca através de log"
+  ],
+  "verification": [
+    "Teste unitario: test_shared_folder_exchange_mechanism()",
+    "Teste unitario: test_local_network_discovery_and_transfer()",
+    "Teste unitario: test_automatic_detection_of_available_methods()",
+    "Teste unitario: test_exponential_backoff_on_failure()",
+    "Teste real: configurar dois dispositivos com pasta compartilhada, verifique troca de dados",
+    "Teste de robustez: confirme que mecanismo lida bem com intermitência de rede"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_transport.py",
+    "tests/sync/test_transport_mechanisms.py"
+  ]
+}

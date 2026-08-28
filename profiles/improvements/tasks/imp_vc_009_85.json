@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar política de resolução de conflitos 'fusão inteligente' para diários",
+  "context": "Parte da multi-dispositivo básico: decidir como resolver conflitos de diário de forma útil",
+  "expected_behavior": [
+    "Quando conflito detectado, combina métricas de ambos os dispositivos (soma totais, média de taxas)",
+    "Preserva insights únicos de cada dispositivo em vez de escolher apenas um",
+    "Para padrões conflitantes, escolhe aquele com maior força estatística",
+    "Mantém registro de como conflito foi resolvido para auditoria",
+    "Funciona mesmo quando dispositivos estiveram desconectados por período prolongado"
+  ],
+  "verification": [
+    "Teste unitario: test_smart_merge_combines_metrics_from_both_devices()",
+    "Teste unitario: test_unique_insights_preserved_from_both_sides()",
+    "Teste unitario: test_conflicting_patterns_resolved_by_statistical_strength()",
+    "Teste real: simular conflito de diário, verifique que métricas foram combinadas e insights preservados",
+    "Teste de auditabilidade: confirme que decisões de fusão são rastreadas"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_resolution_policy.py",
+    "tests/sync/test_smart_merge_policy.py"
+  ]
+}

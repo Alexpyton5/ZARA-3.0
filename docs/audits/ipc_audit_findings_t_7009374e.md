@@ -1,0 +1,12 @@
+FEITO: Mapeado contratos IPC do frontend (preload.ts) e comparado com os handlers implementados no backend (ipc_handlers.py). Identificadas divergências reais com caminhos e símbolos exatos.
+
+PROVA: 
+- Frontend invoke methods: action-list, config-get, conversation-history-clear, engine-list, interrupt, lab-state, memory-galaxy-list, supercerebro-status, system-info, system-metrics, voice-start, voice-status, voice-stop, window-close, window-maximize, window-minimize (extraídos via `grep -o "ipcRenderer\.invoke(['\"][^'\"]*['\"])" frontend/src/preload.ts | sed "s/ipcRenderer\.invoke(['\"]//;s/['\"])//g" | sort`).
+- Backend handlers via handle_message map: action-confirm, action-confirm-cancel, action-execute, action-list, config-get, config-set, conversation-history-clear, conversation-history-list, engine-change, engine-list, interrupt, lab-proposal-create, lab-proposal-decide, lab-send, lab-state, memory-galaxy-list, memory-user-add, memory-user-forget, memory-user-list, memory-user-search, project-memory-get, project-memory-list, reminder-cancel, reminder-create, reminder-list, self-status, send-message, soul-get, supercerebro-status, supercerebro-toggle, system-info, system-metrics, voice-mic-chunk, voice-mute, voice-start, voice-status, voice-stop (extraídos via `grep -A 50 "handler_map = {" core/ipc_handlers.py | grep -o "'[^']*': self.handle_" | sed "s/'//g;s/: self.handle_//" | sort`).
+- Diferenças críticas (frontend sem backend): window-close, window-maximize, window-minimize (ausentes no backend). Também frontend falta métodos como config-set, conversation-history-list, engine-change, lab-proposal-create, lab-proposal-decide, lab-send, memory-user-*, project-memory-*, reminder-*, send-message, soul-get, self-status, supercerebro-toggle, voice-mic-chunk, voice-mute (métodos que o backend implementa mas o frontend não chama).
+
+NAO FEITO: Nenhum; escopo fechado cumprido (apenas mapeamento e relato, nenhuma alteração de arquivos).
+
+BLOQUEIO: Nenhum.
+
+PROXIMO: Encaminhar achados para a equipe de desenvolvimento (executor_dev) priorizando a implementação dos handlers de janela (window-close, window-maximize, window-minimize) e revisar se outros métodos faltantes são intencionalmente não expostos ou representam lacunas de integração. Próxima tarefa poderia ser criar testes de aceitação para validar cada método IPC em ambos os lados.

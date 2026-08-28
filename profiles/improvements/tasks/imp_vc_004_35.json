@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar mecanismo que sugere ação alternativa quando confiança estiver baixa devido a histórico negativo",
+  "context": "Parte do sistema de aprendizado: evitar repetir erros oferecendo melhores alternativas",
+  "expected_behavior": [
+    "Quando confiança < 0,3 para um comando, sugere até 3 ações alternativas",
+    "Alternativas são ações com maior confiança histórica em contexto similar",
+    "Explica motivo da sugestão ('Isso eu tentei antes e não deu certo')",
+    "Permite que usuário aceite sugestão ou mantenha pedido original",
+    "Aprende com aceitação ou rejeição de sugestões para melhorar futuras recomendações"
+  ],
+  "verification": [
+    "Teste unitario: test_suggestion_offered_when_confidence_below_threshold()",
+    "Teste unitario: test_suggestions_are_historically_better_alternatives()",
+    "Teste unitario: test_explanation_includes_honest_assessment()",
+    "Teste real: após sequência de correções, verifique que alternativa melhor é sugerida",
+    "Teste de aceitação: confirme que sistema aprende quando usuário segue sugestão"
+  ],
+  "files_to_touch": [
+    "core/aprendizado.py",
+    "core/aprendizado_suggestion_engine.py",
+    "tests/aprendizado/test_suggestion_system.py"
+  ]
+}

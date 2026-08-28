@@ -49,6 +49,11 @@ dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "ruff>=0.4.0", "mypy>=1.9.0", 
 [project.scripts]
 zara = "main:main"
 zara-build = "build_exe:build"
+zara-cli = "scripts.cli:main"
+zara-build-cli = "scripts.build:main"
+zara-deploy = "scripts.deploy:main"
+zara-sync = "scripts.sync:main"
+zara-health = "scripts.health_check:main"
 
 [tool.uv]
 dev-dependencies = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "ruff>=0.4.0", "mypy>=1.9.0"]

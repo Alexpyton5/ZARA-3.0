@@ -129,10 +129,15 @@ const zaraAPI = {
       return () => ipcRenderer.off('reminder-created', handler)
     },
     reminderFired: (callback: (reminder: ReminderEvent) => void) => {
-      const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)
-      ipcRenderer.on('reminder-fired', handler)
-      return () => ipcRenderer.off('reminder-fired', handler)
-    },
+          const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)
+          ipcRenderer.on('reminder-fired', handler)
+          return () => ipcRenderer.off('reminder-fired', handler)
+        },
+        routingTelemetry: (callback: (telemetry: { success: boolean; latency: number | null; fallback: boolean; pendingReview: number; error?: string | null }) => void) => {
+          const handler = (_event: unknown, telemetry: any) => callback(telemetry)
+          ipcRenderer.on('routing-telemetry', handler)
+          return () => ipcRenderer.off('routing-telemetry', handler)
+        },
   },
 }
 

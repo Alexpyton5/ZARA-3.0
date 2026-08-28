@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar geração de insights de produtividade baseado no diário",
+  "context": "Parte do diário automático: ir além do resumo para dar conselhos úteis",
+  "expected_behavior": [
+    "Identifica horários mais produtivos (maior taxa de sucesso, menor tempo de resposta)",
+    "Sugere agendamento de tarefas complexas para horários de pico de produtividade",
+    "Identifica gatilhos comuns de erros específicos para evitar repetições",
+    "Fornece conselhos práticos e específicos ('Tente verificar e-mail antes das 11h para menos erros')",
+    "Limita insights a 1-2 por dia para evitar sobrecarga de informações"
+  ],
+  "verification": [
+    "Teste unitario: test_identify_most_productive_hours_of_day()",
+    "Teste unitario: test_suggest_scheduling_complex_tasks_during_peak()",
+    "Teste unitario: test_identify_common_error_triggers()",
+    "Teste real: após varios dias de uso, verifique que insights úteis são gerados",
+    "Teste de praticidade: confirme que conselhos são específicos e acionáveis"
+  ],
+  "files_to_touch": [
+    "core/diary.py",
+    "core/diary_insights_generator.py",
+    "tests/diary/test_insights_generation.py"
+  ]
+}

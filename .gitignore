@@ -61,3 +61,7 @@ graphify-out/
 # para sempre, mesmo depois de apagadas.
 config/api_keys*
 !config/api_keys.example.json
+
+# Historical snapshots may contain retired credentials. Keep the recoverable
+# quarantine local and permanently outside version control.
+_quarentena/snapshots-inseguros/

@@ -1,0 +1,34 @@
+Auditoria de Testes Críticos da ZARA [continuidade 129]
+====================================================
+
+Resumo das ações realizadas:
+- Execução de testes direcionados de voz, IPC, Telegram e segurança.
+- Todos os testes dirigidos passaram.
+- Cobertura geral: 50,0% (via check_cov.py).
+- Cobertura de módulos críticos:
+    core\\gemini_live_voice.py: 43,34%
+    core\\action_registry.py: 75,95%
+    core\\url_security.py: 77,05%
+    core\\reminder_engine.py: 77,42%
+    core\\mentor_relay.py: 91,47%
+
+Testes realizados e resultados:
+1. pytest tests/test_voice_barge_in.py -v → 4 passed
+2. pytest tests/test_voice_latency_vad.py -v → 7 passed
+3. pytest tests/test_voice_not_configured_213.py -v → 7 passed
+4. pytest tests/test_ipc_action_safety.py -v → 12 passed
+5. pytest tests/test_telegram_approval_adapter.py -v → 4 passed
+6. pytest tests/test_nunca_inventar_numero.py -v → 31 passed
+
+Próximos testes de maior valor (recomendados):
+1. Teste de detecção de palavra de wakeword e streaming de áudio em core/gemini_live_voice.py.
+   Objetivo: garantir que o wake word seja detectado corretamente e que o áudio seja processado em streaming sem perda.
+2. Teste de registro e roteamento de mensagens críticas de IPC (volume, brilho, luz noturna, janelas) em core/ipc_handlers.py.
+   Objetivo: verificar que cada comando de voz resulta na chamada correta ao handler de IPC e que o estado do sistema é atualizado.
+3. Teste de tratamento de falhas de rede e JSON malformado no adaptador de aprovação do Telegram (core/telegram_approval_adapter.py).
+   Objetivo: assegurar que erros de rede ou respostas inválidas não causam crash e são tratados com mensagens de erro apropriadas.
+
+Observações:
+- Nenhum arquivo do projeto foi alterado, excluído ou movido.
+- Não foi rodada a suite completa de testes, apenas testes direcionados leves.
+- Provas dos comandos e saídas estão disponíveis no histórico de terminal desta sessão.

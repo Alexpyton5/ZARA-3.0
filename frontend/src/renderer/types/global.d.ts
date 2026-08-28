@@ -55,6 +55,7 @@ declare global {
         supercerebroChange?: (callback: (active: boolean) => void) => () => void;
         reminderCreated?: (callback: (reminder: ReminderEvent) => void) => () => void;
         reminderFired?: (callback: (reminder: ReminderEvent) => void) => () => void;
+        routingTelemetry?: (callback: (telemetry: { success: boolean; latency: number | null; fallback: boolean; pendingReview: number; error?: string | null }) => void) => () => void;
       };
     };
   }

@@ -101,7 +101,7 @@ type LabState = {
 };
 
 const emptyState: LabState = {
-  version: 'LAB-AUTONOMY-001', execution_runtime: 'AUTONOMY ONLINE • WORKER EXECUTION LOCKED', approval_gate: true,
+  version: 'LAB-AUTONOMY-001', execution_runtime: '', approval_gate: true,
   workers: [], messages: [], proposals: [], tasks: [], activity: [],
   autonomy: { status: 'STARTING', persistent: true, execution_enabled: false, total_tasks: 0, counts: {}, online_workers: 0 },
   mentor_relay: { state: 'EXTERNAL', detail: 'Relay ainda não conectado.', online: false, pending: 0 },

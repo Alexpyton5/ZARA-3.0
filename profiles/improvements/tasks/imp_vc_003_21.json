@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar deteção de botões padrão do Windows usando contornos e template matching",
+  "context": "Parte da tarefa de detetor de elementos UI: identificar botões interativos na tela",
+  "expected_behavior": [
+    "Detecta botões com estilo clássico do Windows (borda elevada, texto centralizado)",
+    "Funciona com botões de diálogo padrão (OK, Cancelar, Sim, Não, Aplicar)",
+    "Ignora elementos que não são botões (caixas de texto, rótulos, painéis)",
+    "Funciona com temas claro e escuro do Windows",
+    "Retorna coordenadas, tamanho e texto do botão detectado"
+  ],
+  "verification": [
+    "Teste unitario: test_detect_windows_classic_button()",
+    "Teste unitario: test_detect_standard_dialog_buttons()",
+    "Teste unitario: test_ignore_non_button_elements()",
+    "Teste real: processe screenshot com diálogo do Windows, verifique deteção de botões OK e Cancelar",
+    "Teste de desempenho: <50ms para processar região 300x300px contendo botões"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "core/vision/template_matcher.py",
+    "tests/vision/test_windows_button_detection.py"
+  ]
+}

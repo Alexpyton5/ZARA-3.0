@@ -333,9 +333,8 @@ def test_confirma_quando_a_mensagem_aparece_na_conversa_certa(monkeypatch):
     )
 
     r = claude_enviar_action("funcionou")
-
     assert r.success is True
-    assert r.output == "Mandei para o Claude."
+    assert r.output == "Mensagem enviada e confirmada no histórico do Claude."
 
 
 def test_nao_envia_mensagem_vazia():

@@ -20,14 +20,14 @@ const pendingRequests = new Map<string, { resolve: (value: any) => void; reject:
 
 // ZARA-BANDEJA-001
 //
-// Alex: "eu consigo me comunicar com voces sem o app aberto so pelo telegram?".
-// Não conseguia, e o motivo é estrutural: quem escuta o Telegram é o sidecar
-// dentro deste app. App fechado, ninguém escutando — e ele descobria isso
-// mandando mensagem e ficando sem resposta.
+// A ZARA permanece disponível na bandeja quando a janela é fechada.
+// O sidecar mantém voz, lembretes e automações locais enquanto a janela está oculta.
+// Fechar a janela não encerra o aplicativo; sair de verdade usa o menu da bandeja.
+
 //
 // Fechar a janela passa a ESCONDER a janela, não a encerrar a ZARA. O X vira
 // "some da minha frente", e sair de verdade fica no menu da bandeja. Assim o
-// Telegram funciona o dia inteiro sem ele precisar deixar uma janela aberta.
+// A ZARA funciona em segundo plano sem manter a janela aberta.
 //
 // Isto NÃO enfraquece a proteção contra sidecar órfão: `saindoDeVerdade` só
 // fica verdadeiro no caminho de saída explícito, e aí `before-quit` e
@@ -535,7 +535,7 @@ function definirInicioAutomatico(ligado: boolean): void {
 
 /** Liga o início automático UMA vez, e nunca mais decide por ele.
  *
- * O Alex pediu que a ZARA atenda o Telegram o dia inteiro, e isso exige ela
+ * A ZARA precisa permanecer disponível em segundo plano, e isso exige ela
  * ligada. Mas se ele desligar essa opção no menu da bandeja, religar na próxima
  * abertura seria o app desfazendo a escolha dele — o mesmo defeito do botão de
  * mudo que ele já reclamou. O carimbo em disco existe para isso: marca que a
@@ -588,7 +588,7 @@ function atualizarMenuDaBandeja(): void {
       },
     },
     { type: 'separator' },
-    { label: 'Sair (para de atender o Telegram)', click: sairDeVerdade },
+    { label: 'Sair da ZARA', click: sairDeVerdade },
   ]))
 }
 
@@ -863,7 +863,7 @@ app.on('before-quit', () => {
 })
 app.on('window-all-closed', () => {
   // ZARA-BANDEJA-001: com a bandeja no ar, ficar sem janela é estado normal —
-  // é assim que ela atende o Telegram o dia inteiro. Encerrar aqui mataria o
+  // é assim que ela continua disponível em segundo plano. Encerrar aqui mataria o
   // sidecar e o Alex voltaria a ficar sem resposta no celular.
   if (tray && !saindoDeVerdade) return
   stopPython()

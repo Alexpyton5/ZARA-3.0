@@ -10,9 +10,9 @@ from core.action_registry import ActionResult, action
 from core.actions.os_ops import (
     _eligible_windows,
     _foreground_window,
+    _send_url_to_default_browser,
     _window_process_name,
     _window_text,
-    browser_open_url_action,
 )
 
 _YOUTUBE_SKIP_NAMES = (
@@ -321,7 +321,7 @@ def youtube_search_action(query: str) -> ActionResult:
     if value is None:
         return ActionResult(success=False, error="Pesquisa do YouTube inválida.")
     url = f"https://www.youtube.com/results?search_query={quote_plus(value)}"
-    result = browser_open_url_action(url)
+    result = _send_url_to_default_browser(url)
     if result.success:
         result.output = f"Pesquisa por “{value}” enviada ao YouTube."
         result.data = {**(result.data or {}), "service": "youtube", "query": value}
@@ -330,7 +330,7 @@ def youtube_search_action(query: str) -> ActionResult:
 
 @action(name="youtube_open", category="media", description="Open the fixed YouTube home destination", capability="LOCAL_PC_CONTROL")
 def youtube_open_action() -> ActionResult:
-    result = browser_open_url_action("https://www.youtube.com/")
+    result = _send_url_to_default_browser("https://www.youtube.com/")
     if result.success:
         result.output = "YouTube enviado ao navegador padrão."
         result.data = {**(result.data or {}), "service": "youtube", "route": "home"}
@@ -343,7 +343,7 @@ def spotify_search_action(query: str) -> ActionResult:
     if value is None:
         return ActionResult(success=False, error="Pesquisa do Spotify inválida.")
     url = f"https://open.spotify.com/search/{quote(value, safe='')}"
-    result = browser_open_url_action(url)
+    result = _send_url_to_default_browser(url)
     if result.success:
         result.output = f"Pesquisa por “{value}” enviada ao Spotify."
         result.data = {**(result.data or {}), "service": "spotify", "query": value}

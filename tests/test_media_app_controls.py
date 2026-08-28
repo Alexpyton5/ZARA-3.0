@@ -18,11 +18,17 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 
 
 def test_youtube_open_uses_fixed_home_route(monkeypatch):
+    # AUDITORIA_2026-08-27 (Alex, ao vivo): youtube_open e LOCAL_PC_CONTROL de
+    # proposito -- nao pode depender do Supercerebro. Antes este teste
+    # simulava browser_open_url via registry._actions, o que so funcionava
+    # porque youtube_open reentrava no gate de browser_open_url (o bug que
+    # bloqueava "abra o youtube" sem Supercerebro). Agora simula a funcao
+    # crua que youtube_open realmente chama.
     open_url = Mock(return_value=ActionResult(success=True, output="sent", data={"dispatch": "DISPATCH_PROVEN"}))
+    monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
     assert load_capability("browser_open_url")
-    monkeypatch.setitem(registry._actions, "browser_open_url", open_url)
-    monkeypatch.setattr(registry, "pc_control_allowed", True)
+    monkeypatch.setattr(registry, "pc_control_allowed", False)
 
     result = registry.execute("youtube_open")
 
@@ -30,7 +36,7 @@ def test_youtube_open_uses_fixed_home_route(monkeypatch):
     assert result.output == "YouTube enviado ao navegador padrão."
     assert result.data["service"] == "youtube"
     assert result.data["route"] == "home"
-    open_url.assert_called_once_with(url="https://www.youtube.com/")
+    open_url.assert_called_once_with("https://www.youtube.com/")
 
 
 @pytest.mark.parametrize(
@@ -47,10 +53,10 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
         opened.append(url)
         return ActionResult(success=True, data={"dispatch": "DISPATCH_PROVEN"})
 
+    monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
     assert load_capability("browser_open_url")
-    monkeypatch.setitem(registry._actions, "browser_open_url", open_url)
-    monkeypatch.setattr(registry, "pc_control_allowed", True)
+    monkeypatch.setattr(registry, "pc_control_allowed", False)
 
     result = registry.execute(action_name, query=query)
 
@@ -67,24 +73,23 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
         ("spotify_search", {"query": "jazz focus"}, "open.spotify.com/search/jazz%20focus"),
     ],
 )
-def test_browser_opening_media_actions_use_registry_pc_control_gate(monkeypatch, action_name, kwargs, expected):
+def test_browser_opening_media_actions_work_without_supercerebro(monkeypatch, action_name, kwargs, expected):
+    # AUDITORIA_2026-08-27 (Alex, ao vivo): "abra o youtube" parou de
+    # funcionar, exigindo Supercerebro sem motivo -- youtube_open/search e
+    # spotify_search sao LOCAL_PC_CONTROL de proposito e tem que funcionar
+    # com Supercerebro OFF (o padrao de boot). Este teste antes esperava o
+    # oposto (bloqueado sem Supercerebro), o que era o proprio bug.
     calls: list[str] = []
 
     def open_url(url):
         calls.append(url)
         return ActionResult(success=True, data={"dispatch": "DISPATCH_PROVEN"})
 
+    monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
     assert load_capability("browser_open_url")
-    monkeypatch.setitem(registry._actions, "browser_open_url", open_url)
+    monkeypatch.setattr(registry, "pc_control_allowed", False)
 
-    blocked = registry.execute(action_name, **kwargs)
-
-    assert not blocked.success
-    assert "Superc" in blocked.error
-    assert calls == []
-
-    monkeypatch.setattr(registry, "pc_control_allowed", True)
     allowed = registry.execute(action_name, **kwargs)
 
     assert allowed.success

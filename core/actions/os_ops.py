@@ -295,8 +295,20 @@ def _normalize_browser_url(raw: str) -> str | None:
         return None
 
 
-@action(name="browser_open_url", category="os", description="Open a validated HTTP(S) URL in the default browser", capability="PC_CONTROL")
-def browser_open_url_action(url: str) -> ActionResult:
+def _send_url_to_default_browser(url: str) -> ActionResult:
+    """Nucleo real de browser_open_url, fora do decorator @action.
+
+    AUDITORIA_2026-08-27 (Alex): youtube_open (capability LOCAL_PC_CONTROL,
+    nao precisa de Supercerebro) chamava browser_open_url_action(...) por
+    dentro. Como toda funcao decorada com @action reentra no
+    ActionRegistry.execute() mesmo em chamada direta em Python, isso
+    reaplicava o gate de browser_open_url (capability PC_CONTROL, exige
+    Supercerebro) por cima de uma acao que ja tinha sido autorizada com um
+    nivel mais permissivo -- "abra o youtube" comecou a exigir Supercerebro
+    OFF sem nenhum motivo, regressao real reportada pelo Alex ao vivo.
+    Acoes que compoem outras acoes devem chamar a logica crua, nunca a
+    funcao decorada.
+    """
     normalized = _normalize_browser_url(url)
     if normalized is None:
         return ActionResult(success=False, error="URL bloqueada: use somente um destino HTTP/HTTPS público válido.")
@@ -331,13 +343,18 @@ def browser_open_url_action(url: str) -> ActionResult:
     )
 
 
+@action(name="browser_open_url", category="os", description="Open a validated HTTP(S) URL in the default browser", capability="PC_CONTROL")
+def browser_open_url_action(url: str) -> ActionResult:
+    return _send_url_to_default_browser(url)
+
+
 @action(name="browser_search", category="os", description="Search safely in the default browser", capability="PC_CONTROL")
 def browser_search_action(query: str) -> ActionResult:
     text = str(query or "").strip()
     if not text or len(text) > 500 or any(ord(char) < 32 for char in text):
         return ActionResult(success=False, error="Consulta de pesquisa inválida.")
     url = f"https://www.google.com/search?q={quote_plus(text)}"
-    result = browser_open_url_action(url)
+    result = _send_url_to_default_browser(url)
     if result.success:
         result.output = "Pesquisa enviada ao navegador padrão."
         result.data = {**(result.data or {}), "search_url": url}

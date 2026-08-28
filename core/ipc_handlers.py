@@ -27,6 +27,55 @@ def _sanitize_observation(value: object) -> str:
     return " ".join(text.split())[:180]
 
 
+def _extract_memory_links(nodes: list[dict], max_links: int = 200) -> list[dict]:
+    """Derive graph edges from cross-references between node titles.
+
+    Pure function, read-only: given the same `nodes` list the Memory Galaxy
+    handler already builds (each with at least {id, title, content}), look
+    for one node's title appearing as a substring (case-insensitive) inside
+    another node's content, and emit {"source": id_a, "target": id_b}.
+
+    Guards:
+    - never links a node to itself (id_a == id_b)
+    - never emits both A->B and B->A for the same unordered pair
+    - skips titles too short to be meaningful (< 3 chars) to avoid noise
+    - stops at `max_links` to keep the payload bounded
+    """
+    links: list[dict] = []
+    if not nodes:
+        return links
+
+    seen_pairs: set[frozenset] = set()
+
+    entries = []
+    content_by_id: dict[str, str] = {}
+    for node in nodes:
+        node_id = str(node.get("id") or "").strip()
+        title = str(node.get("title") or "").strip()
+        content_by_id[node_id] = str(node.get("content") or "").lower()
+        if not node_id or not title or len(title) < 3:
+            continue
+        entries.append((node_id, title.lower()))
+
+    for a_id, a_title in entries:
+        content_a = content_by_id.get(a_id, "")
+        if not content_a:
+            continue
+        for b_id, b_title in entries:
+            if a_id == b_id:
+                continue
+            if b_title not in content_a:
+                continue
+            pair = frozenset((a_id, b_id))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            links.append({"source": a_id, "target": b_id})
+            if len(links) >= max_links:
+                return links
+    return links
+
+
 _WAKE_PREFIX_RE = re.compile(
     # ZARA-VOICE-WAKE-SAUDACAO-001
     #
@@ -2573,8 +2622,13 @@ class IPCHandler:
             except Exception as exc:
                 print(f"[IPC] Memory Galaxy history read failed: {type(exc).__name__}")
                 if sources["context"] != "AVAILABLE": sources["context"] = "ERROR"
+        try:
+            links = _extract_memory_links(nodes)
+        except Exception as exc:
+            print(f"[IPC] Memory Galaxy links extraction failed: {type(exc).__name__}: {exc}")
+            links = []
         await self.send_response(msg.request_id, {"success": True, "nodes": nodes,
-            "count": len(nodes), "sources": sources, "read_only": True})
+            "count": len(nodes), "sources": sources, "read_only": True, "links": links})
 
     async def handle_conversation_history_list(self, msg: IPCMessage):
         """Load the private Home transcript in chronological display order."""

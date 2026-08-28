@@ -258,6 +258,132 @@ def _log_intent_telemetry(event: str, path: str, text: str) -> None:
     )
 
 
+# --- ETAPA 3 do plano de raciocinio livre -----------------------------------
+# docs/audits/PROPOSTA_RACIOCINIO_LIVRE_2026-08-28.md.
+#
+# Plugar o classificador da Etapa 2 (core/intent_classifier.py) SO no caminho
+# de TEXTO (voz e a Etapa 4, area do ENGENHEIRO_LATENCIA, precisa de trava
+# nomeada por tocar model_router.py), atras de uma flag lida do disco a cada
+# chamada -- desligar e so mudar um arquivo, sem rebuild, sem redeploy.
+#
+# So roda DEPOIS que toda a cadeia deterministica ja tentou e falhou (o
+# proprio guarda `_looks_like_unhandled_local_action` ja decidiu recusar).
+# Nao compete em velocidade com o comando do dia a dia: o caminho rapido de
+# regex continua identico, byte a byte, pra quem a flag nunca tocou.
+#
+# Rollback: desligar a flag no arquivo -- a cadeia volta a ser 100% regex +
+# guarda, sem reverter nenhum arquivo de codigo.
+
+_FEATURE_FLAGS_FILE_NAME = "feature_flags.json"
+
+# Conjunto pequeno e deliberado: so acoes onde o parametro do classificador
+# (uma string livre) da pra converter com seguranca pro tipo que a action
+# realmente espera. O classificador ja e limitado a acoes que existem no
+# ActionRegistry (core/intent_classifier.py); esta lista e uma SEGUNDA trava,
+# mais apertada, so pra decidir em quais delas confiamos o suficiente pra
+# montar o parametro sem confirmacao humana no meio.
+_ETAPA3_ALLOWED_ACTIONS = (
+    "os_volume",
+    "os_brightness_absolute",
+    "audio_mute",
+    "audio_unmute",
+    "os_app",
+    "os_close_safe_app",
+    "youtube_open",
+    "system_time",
+    "system_info",
+)
+
+
+def _raciocinio_livre_fallback_texto_habilitado() -> bool:
+    """Le a flag do disco a cada chamada -- desligar nao pede reinicio.
+
+    Falha fechada: arquivo ausente, ilegivel ou campo faltando = desligado.
+    """
+    try:
+        from core.paths import config_dir
+        flags_path = config_dir() / _FEATURE_FLAGS_FILE_NAME
+        if not flags_path.exists():
+            return False
+        import json
+        data = json.loads(flags_path.read_text(encoding="utf-8"))
+        return bool(data.get("raciocinio_livre_fallback_texto", False))
+    except Exception:
+        return False
+
+
+def _montar_parametros_etapa3(action: str, param: str | None) -> dict | None:
+    """Converte o palpite do classificador (string livre) pro tipo real da
+    action. None quando a conversao nao e segura -- quem chamar deve desistir
+    honestamente, nunca executar com um palpite de tipo errado."""
+    if action in {"audio_mute", "audio_unmute", "youtube_open", "system_time", "system_info"}:
+        return {}
+    if action == "os_volume":
+        try:
+            return {"level": max(0, min(100, int(float(param))))}
+        except (TypeError, ValueError):
+            return None
+    if action == "os_brightness_absolute":
+        try:
+            return {"level": max(0, min(100, int(float(param))))}
+        except (TypeError, ValueError):
+            return None
+    if action in {"os_app", "os_close_safe_app"}:
+        if not param or not str(param).strip():
+            return None
+        return {"app": str(param).strip()}
+    return None
+
+
+async def _tentar_raciocinio_livre_texto(self, text: str) -> str | None:
+    """ETAPA 3: ultimo recurso, so por texto, so atras da flag.
+
+    Devolve None sempre que nao houver certeza suficiente -- quem chamar
+    segue com a recusa honesta de sempre (RESPOSTA_NAO_SEI). Nunca finge
+    sucesso: a resposta so sai afirmativa quando `result.success` e real.
+    """
+    if not _raciocinio_livre_fallback_texto_habilitado():
+        return None
+
+    try:
+        from core.intent_classifier import classify_intent_with_llm
+    except Exception:
+        return None
+
+    guess = classify_intent_with_llm(text, list(_ETAPA3_ALLOWED_ACTIONS))
+    if guess is None:
+        return None
+
+    params = _montar_parametros_etapa3(guess.action, guess.param)
+    if params is None:
+        return None
+
+    import core.actions  # noqa: F401
+    from core.action_registry import execute_action
+
+    print(
+        f"[INTENT_TELEMETRY] event=free_reasoning_fallback_attempt path=text "
+        f"action={guess.action} confidence={guess.confidence:.2f} text={text!r}",
+        flush=True,
+    )
+
+    result = await execute_action(guess.action, **params)
+    self._anotar_experiencia(
+        text,
+        guess.action,
+        bool(result is not None and getattr(result, "success", False)),
+        str(getattr(result, "output", "") or getattr(result, "error", "") or ""),
+        "raciocinio_livre_texto",
+    )
+    if result is None or not getattr(result, "success", False):
+        # Falhou de verdade (gate de risco, app nao encontrado, etc) -- a
+        # mensagem do proprio executor ja e honesta, so repassa.
+        return str(getattr(result, "error", "") or None) or None
+    return str(getattr(result, "output", "") or "Feito.")
+
+
+
+
 def _tts_voice_name(obj: object) -> str:
     """Best-effort name of the voice a TTS engine is configured to use.
 
@@ -3383,11 +3509,17 @@ class IPCHandler:
 
         if _looks_like_unhandled_local_action(text):
             _log_intent_telemetry("refused_local_action", "text", text)
-            reply = RESPOSTA_NAO_SEI
-            await self._append_conversation_message("assistant", reply, "local_action_guard")
+            # ETAPA 3 (raciocinio livre): ultimo recurso, atras de flag, so
+            # aqui -- depois que a cadeia deterministica inteira ja recusou.
+            # Nao muda nada no comando do dia a dia; flag desligada (padrao)
+            # e byte a byte o comportamento de antes.
+            fallback_reply = await _tentar_raciocinio_livre_texto(self, text)
+            reply = fallback_reply if fallback_reply is not None else RESPOSTA_NAO_SEI
+            engine_usado = 'raciocinio_livre_texto' if fallback_reply is not None else 'local_action_guard'
+            await self._append_conversation_message("assistant", reply, engine_usado)
             await self.send_response(msg.request_id, {
                 'response': reply,
-                'engine': 'local_action_guard',
+                'engine': engine_usado,
             })
             return
 

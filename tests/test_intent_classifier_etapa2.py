@@ -116,14 +116,18 @@ def test_prompt_lista_as_acoes_permitidas():
         assert acao in visto["prompt"]
 
 
-def test_etapa_2_ainda_nao_esta_plugada_na_cadeia():
-    """Fronteira da etapa: plugar e a Etapa 3, atras de flag, so no texto.
+def test_uso_do_classificador_esta_sempre_atras_de_flag():
+    """A Etapa 3 pluga o classificador -- ver tests/test_free_reasoning_etapa3.py.
 
-    Se este teste quebrar, alguem plugou o classificador sem passar pela
-    Etapa 3 -- e a cadeia de producao passou a depender de rede sem flag de
-    desligar, violando a Lei Arquitetural (reflexo local nao depende de rede).
+    O que este teste ainda garante, mesmo depois de plugado: toda linha que
+    chama intent_classifier em ipc_handlers.py esta dentro (textualmente
+    antes, na mesma funcao) de uma checagem de flag, nunca incondicional. Se
+    isso quebrar, o fallback de rede deixou de ser desligavel sem redeploy --
+    violando a Lei Arquitetural (reflexo local nao depende de rede).
     """
     from pathlib import Path
 
     fonte = Path(__file__).resolve().parent.parent / "core" / "ipc_handlers.py"
-    assert "intent_classifier" not in fonte.read_text(encoding="utf-8")
+    texto = fonte.read_text(encoding="utf-8")
+    assert "intent_classifier" in texto, "Etapa 3 deveria ter plugado o classificador"
+    assert "_raciocinio_livre_fallback_texto_habilitado" in texto

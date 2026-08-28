@@ -1,7 +1,6 @@
 import React, { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
-import { MemoryGalaxyModal } from './MemoryGalaxyModal';
-import { PainelConfiguracoes, aplicarAparencia, useAparencia } from './PainelConfiguracoes';
+import { aplicarAparencia, useAparencia, PainelConfiguracoes } from './PainelConfiguracoes';
 import { ZaraLab } from './ZaraLab';
 import { normalizeReminderEvent } from '../../../reminderEvents';
 import { ChatMessage, normalizeHistoryResponse } from '../../lib/chatHistory';
@@ -95,7 +94,6 @@ export const ZaraControlCenter: React.FC = () => {
   const [mudo, setMudo] = useState(false);
   const [voiceOn, setVoiceOn] = useState(false);
   const [supercerebro, setSupercerebro] = useState(false);
-  const [galaxyOpen, setGalaxyOpen] = useState(false);
   // O lugar da direita nao e do Lab: e do que Alex escolher. O Lab e so o
   // primeiro inquilino. Pelos tres pontos ele troca o inquilino ou esvazia.
   const [painel, setPainel] = useState<'lab' | 'conversa'>(() => (localStorage.getItem('zara-painel') as 'lab' | 'conversa') || 'lab');
@@ -116,7 +114,7 @@ export const ZaraControlCenter: React.FC = () => {
   const [miniLabInput, setMiniLabInput] = useState('');
   const [miniLabBusy, setMiniLabBusy] = useState(false);
   const [miniLabOnline, setMiniLabOnline] = useState(false);
-  const logRef = useRef<HTMLDivElement>(null);
+    const logRef = useRef<HTMLDivElement>(null);
   const labFimRef = useRef<HTMLDivElement>(null);
   const toastIdRef = useRef(0);
   const historyReadyRef = useRef(false);
@@ -148,10 +146,11 @@ export const ZaraControlCenter: React.FC = () => {
   // ele é o dono do áudio; no modo local o PortAudio já capturou, e duas capturas
   // concorrentes brigariam pelo dispositivo.
   const ligarAecSePreciso = useCallback(async (resultado: { audio_transport?: string } | null) => {
-    if (resultado?.audio_transport !== 'renderer') return;
+    if (resultado?.audio_transport !== 'renderer') return true;
     const r = await iniciarAudioAec((pcm) => window.zaraIPC?.voice?.sendMicChunk?.(pcm));
-    if (!r.ok) { notify('Não consegui abrir o microfone; a voz não vai ouvir você.', 'error'); return; }
+    if (!r.ok) { notify('Não consegui abrir o microfone; a voz não vai ouvir você.', 'error'); return false; }
     if (!r.aecAtivo) notify('Microfone aberto sem cancelamento de eco — ela pode se ouvir falar.', 'warn');
+    return true;
   }, [notify]);
 
   // ZARA-BOTAO-MUDO-005 — o backend guarda a escolha; o botão abre na cor certa.
@@ -200,14 +199,13 @@ export const ZaraControlCenter: React.FC = () => {
     }));
     if (api.on?.supercerebroChange) offs.push(api.on.supercerebroChange((active: boolean) => setSupercerebro(Boolean(active))));
     if (api.on?.reminderFired) offs.push(api.on.reminderFired((rawReminder: unknown) => {
-      const reminder = normalizeReminderEvent(rawReminder);
-      if (!reminder) return;
-      const incoming: ChatMessage = { role: 'assistant', content: `🔔 Lembrete: ${reminder.text}`, timestamp: Date.now() };
-      if (!historyReadyRef.current) pendingHistoryMessagesRef.current.push(incoming);
-      else setMessages((current) => [...current, incoming]);
-      notify(`🔔 ${reminder.text}`);
-    }));
-
+          const reminder = normalizeReminderEvent(rawReminder);
+          if (!reminder) return;
+          const incoming: ChatMessage = { role: 'assistant', content: `🔔 Lembrete: ${reminder.text}`, timestamp: Date.now() };
+          if (!historyReadyRef.current) pendingHistoryMessagesRef.current.push(incoming);
+          else setMessages((current) => [...current, incoming]);
+          notify(`🔔 ${reminder.text}`);
+        }));
     const completeHistoryLoad = (persisted: ChatMessage[]) => {
       const pending = pendingHistoryMessagesRef.current;
       pendingHistoryMessagesRef.current = [];
@@ -259,7 +257,13 @@ export const ZaraControlCenter: React.FC = () => {
       autoVoiceStartedRef.current = true;
       setState('PROCESSING');
       api.voice?.start?.().then(async (result: any) => {
-        await ligarAecSePreciso(result);
+        const aecOk = await ligarAecSePreciso(result);
+        if (!aecOk) {
+          await api.voice?.stop?.();
+          setVoiceOn(false);
+          setState('STANDBY');
+          return;
+        }
         if (result?.mode === 'gemini_live') setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
         else if (result?.mode) setVoiceLabel(String(result.mode).toUpperCase());
         setVoiceOn(true);
@@ -444,7 +448,13 @@ export const ZaraControlCenter: React.FC = () => {
       } else {
         setState('PROCESSING');
         const result: any = await window.zaraIPC?.voice?.start?.();
-        await ligarAecSePreciso(result);
+        const aecOk = await ligarAecSePreciso(result);
+        if (!aecOk) {
+          await window.zaraIPC?.voice?.stop?.();
+          setVoiceOn(false);
+          setState('STANDBY');
+          return;
+        }
         if (result?.mode === 'gemini_live') setVoiceLabel(`GEMINI LIVE • ${String(result?.voice || 'Kore').toUpperCase()}`);
         else if (result?.mode) setVoiceLabel(String(result.mode).toUpperCase());
         setVoiceOn(true); setState('LISTENING');
@@ -470,14 +480,11 @@ export const ZaraControlCenter: React.FC = () => {
     }
   };
 
-  const send = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const text = input.trim();
+  const enviarTexto = async (text: string) => {
     if (!text || busy) return;
     if (!historyReady) { notify('A conversa ainda está sendo carregada.', 'warn'); return; }
     const userMessage: ChatMessage = { role: 'user', content: text, timestamp: Date.now() };
     setMessages((current) => [...current, userMessage]);
-    setInput('');
     setBusy(true);
     setState('THINKING');
     try {
@@ -494,6 +501,14 @@ export const ZaraControlCenter: React.FC = () => {
       setBusy(false);
       setState(voiceOn ? 'LISTENING' : 'STANDBY');
     }
+  };
+
+  const send = async (event?: FormEvent) => {
+    event?.preventDefault();
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+    await enviarTexto(text);
   };
 
   const sendMiniLab = async (event?: FormEvent) => {
@@ -580,7 +595,17 @@ export const ZaraControlCenter: React.FC = () => {
   };
 
   const handleNavigation = (key: string) => {
-    if (key === 'MEMORY CORE') { setGalaxyOpen(true); return; }
+    if (key === 'MEMORY CORE') {
+      // AUDITORIA_2026-08-27 (Alex): ele quer o Obsidian de VERDADE (com a
+      // animacao real do grafo dele), nao uma galeria de memoria recriada
+      // dentro da Zara. Em vez de reinventar o visual do Obsidian aqui,
+      // manda o mesmo comando de abrir app que ja funciona por voz/texto --
+      // a memoria do projeto (memory/project_memory.py) ja espelha tudo que
+      // a Zara sabe dentro do cofre real dele, na pasta Zara-Memoria.
+      void enviarTexto('abra o obsidian');
+      setActiveNav(key);
+      return;
+    }
     if (key === 'AUTOMATIONS') { notify('Rotinas aparecerão aqui quando o módulo estiver disponível.', 'warn'); return; }
     setActiveNav(key);
   };
@@ -623,10 +648,10 @@ export const ZaraControlCenter: React.FC = () => {
           </div>
 
           {activeNav === 'CONVERSATIONS' ? (
-            <section className="home-stage"><div className="lab-cheio"><ZaraLab /></div></section>
-          ) : (
-            <section className="home-stage">
-              <div className="presence-stage">
+                      <section className="home-stage"><div className="lab-cheio"><ZaraLab /></div></section>
+                    ) : (
+                      <section className="home-stage">
+                        <div className="presence-stage">
                 <div
                   ref={anelRef}
                   className="orb"
@@ -790,7 +815,6 @@ export const ZaraControlCenter: React.FC = () => {
         temPassado={temPassado}
         temFuturo={temFuturo}
       />
-      {galaxyOpen && <MemoryGalaxyModal onClose={() => setGalaxyOpen(false)}/>}
     </main>
   );
 };

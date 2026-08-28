@@ -124,16 +124,9 @@ class ZaraOrchestrator:
         self.initialized = False
         self.last_engine_used: str | None = None
         self.last_route_policy: str | None = None
-        # ZARA-ALMA-001: a identidade so vira atributo depois do boot, para que
-        # `initialized == False` signifique de verdade "ainda nao sei quem sou".
-        self.soul: Soul | None = None
 
     async def initialize(self):
         """Initialize orchestrator components"""
-        # ZARA-ALMA-001: primeira coisa do boot. Ler quem ela e nao depende de
-        # rede, chave nem modelo, entao acontece antes de qualquer componente
-        # que possa falhar - se o resto cair, ela ainda sabe se apresentar.
-        self.soul = boot_identity()
         # Model router loads API keys on init
         self.initialized = True
         print("[Orchestrator] Initialized with ModelRouter")

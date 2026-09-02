@@ -47,9 +47,8 @@
   inset: 0;
   z-index: 0;
   background-size: cover;
-  background-position: center 55%;
-  opacity: 0.55;
-  filter: saturate(1.05) brightness(0.95);
+  background-position: center 68%;
+  opacity: 0.9;
   pointer-events: none;
 }
 
@@ -399,54 +398,53 @@
 /* ---------- Core ---------- */
 
 .zh-core-wrap {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   position: relative;
 }
 
-/* Plataforma: anéis concêntricos de titânio sob o Core, dando profundidade
- * física em vez de o Core flutuar sozinho no vazio. */
-.zh-core-platform {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 40%, #1c2b26 0%, #0a1310 55%, transparent 75%);
-  box-shadow:
-    0 0 0 1px #ffffff12,
-    0 0 0 24px #05100c66,
-    0 0 0 25px #ffffff0d,
-    0 20px 70px 14px #00000090;
-}
-
 .zh-core {
-  width: 180px;
-  height: 180px;
+  width: 240px;
+  height: 240px;
   border-radius: 50%;
   position: relative;
   z-index: 1;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(circle at 38% 30%, #ffffffcc, transparent 32%),
-    radial-gradient(circle at 60% 70%, #00160fdd 0%, transparent 45%),
-    radial-gradient(circle at 50% 50%, var(--zh-emerald) 0%, var(--zh-emerald-2) 45%, #04241a 85%, #010805 100%);
-  box-shadow:
-    0 0 60px 10px #00bd8244,
-    inset 0 18px 30px -12px #ffffff55,
-    inset 0 -22px 36px -16px #00170eee,
-    inset 0 0 0 1px #ffffff22;
+  /* Glow de cor por trás do vidro — o PNG real (te-sphere-art no site) é
+   * quase preto no centro, então o glow precisa vir de baixo dele, não de
+   * dentro de um gradiente que o substitui. */
+  background: radial-gradient(circle at 50% 55%, var(--zh-emerald) 0%, var(--zh-emerald-2) 40%, #04241a 72%, transparent 85%);
+  filter: drop-shadow(0 0 50px #00bd8255);
   animation: zh-core-breath 2.6s ease-in-out infinite;
 }
 
-.zh-core-mark {
-  width: 46px;
-  height: 34px;
+.zh-core-glass {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 1px 2px #002b1daa) brightness(1.05);
+  pointer-events: none;
+}
+
+.zh-core-shaft {
+  width: 2px;
+  height: 90px;
+  margin-top: -4px;
+  background: linear-gradient(#0000, #3be6a8 38%, #d8f7e8 72%, #14ca88, #0000);
+  box-shadow: 0 0 10px 2px #00d99355;
+  opacity: 0.65;
+}
+
+.zh-core-mark {
+  position: relative;
+  z-index: 1;
+  width: 64px;
+  height: 47px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px #002b1daa) drop-shadow(0 0 6px #00ba7b55) brightness(1.05);
   opacity: 0.95;
 }
 
@@ -480,8 +478,7 @@
 }
 
 .zh-core-label {
-  position: absolute;
-  bottom: -26px;
+  margin-top: 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;

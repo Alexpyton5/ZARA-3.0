@@ -13,7 +13,7 @@ import { VoiceDock } from './VoiceDock';
 import { useZaraCoreState } from './useZaraCoreState';
 import { useSystemMetrics } from './useSystemMetrics';
 import { useBattery } from './useBattery';
-import coreGlass from '../../../assets/zara-home/core-glass.png';
+import auroraBackground from '../../../assets/zara-home/aurora-master-refined.png';
 
 /**
  * Home real da ZARA (Titanium Emerald), renderizada como componentes React
@@ -49,7 +49,7 @@ export function ZaraHome() {
     <div className="zh-root">
       <div
         className="zh-bg-glass"
-        style={{ backgroundImage: `url(${coreGlass})` }}
+        style={{ backgroundImage: `url(${auroraBackground})` }}
         aria-hidden="true"
       />
       <Sidebar active={activeNav} onSelect={setActiveNav} userName={userName} />

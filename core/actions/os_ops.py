@@ -618,6 +618,56 @@ def _set_windows_mute(muted: bool) -> bool:
         return False
 
 
+def _read_windows_volume() -> int | None:
+    """Read the master endpoint volume (0-100) with COM lifecycle isolation."""
+    try:
+        from comtypes import CoInitialize, CoUninitialize
+        from pycaw.pycaw import AudioUtilities
+
+        from core.windows_audio import get_endpoint_volume
+
+        CoInitialize()
+        try:
+            devices = AudioUtilities.GetSpeakers()
+            volume = get_endpoint_volume(devices)
+            return round(volume.GetMasterVolumeLevelScalar() * 100)
+        finally:
+            CoUninitialize()
+    except Exception:
+        return None
+
+
+def _set_windows_volume(level: int) -> bool:
+    """Set master endpoint volume (0-100). Tries nircmd first, falls back to pycaw."""
+    try:
+        subprocess.run(
+            ["nircmd.exe", "setsysvolume", str(int(level * 65535 / 100))],
+            check=True, capture_output=True,
+        )
+        return True
+    except FileNotFoundError:
+        pass
+    except Exception:
+        return False
+
+    try:
+        from comtypes import CoInitialize, CoUninitialize
+        from pycaw.pycaw import AudioUtilities
+
+        from core.windows_audio import get_endpoint_volume
+
+        CoInitialize()
+        try:
+            devices = AudioUtilities.GetSpeakers()
+            volume = get_endpoint_volume(devices)
+            volume.SetMasterVolumeLevelScalar(level / 100, None)
+            return True
+        finally:
+            CoUninitialize()
+    except Exception:
+        return False
+
+
 def _media_semantic_state() -> dict | None:
     """Best-effort semantic playback readback using backends ALREADY present.
 
@@ -961,47 +1011,55 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
         system = platform.system()
 
         if system == "Windows":
-            # Use nircmd or Windows API
-            if level is not None:
-                # Use nircmd if available, otherwise use Windows API
-                try:
-                    subprocess.run(["nircmd.exe", "setsysvolume", str(int(level * 65535 / 100))], check=True, capture_output=True)
-                except FileNotFoundError:
-                    # Use pycaw if available
-                    try:
-                        from comtypes import CoInitialize, CoUninitialize
-                        from pycaw.pycaw import AudioUtilities
+            # Mute-only calls delegate entirely to the dedicated, already-verified
+            # mute action instead of duplicating the read/write/verify dance here.
+            if mute is not None and level is None:
+                return _audio_mute_action(mute)
 
-                        from core.windows_audio import get_endpoint_volume
-                        CoInitialize()
-                        try:
-                            devices = AudioUtilities.GetSpeakers()
-                            volume = get_endpoint_volume(devices)
-                            volume.SetMasterVolumeLevelScalar(level / 100, None)
-                        finally:
-                            CoUninitialize()
-                    except ImportError:
-                        return ActionResult(success=False, error="pycaw or nircmd required for volume control")
+            if level is not None:
+                original = _read_windows_volume()
+                if original == level:
+                    return ActionResult(
+                        success=False,
+                        error=f"Volume já está em {level}.",
+                        data={"original_level": original, "target_level": level, "verified": True},
+                    )
+
+                if not _set_windows_volume(level):
+                    return ActionResult(success=False, error="Não foi possível alterar o volume.")
+
+                # ZARA-BARRINHA-DE-VOLUME-001: confirmação visual, como quando ele
+                # mexe no volume pelo teclado.
+                _mostrar_barrinha_de_volume(level)
+
+                # SAFE_TO_FIX (windows_fs audit #7): dispatch não é prova de que o
+                # Windows mudou (evidence.md). Ler de volta e só declarar sucesso
+                # se bater.
+                observed = _read_windows_volume()
+                if observed is None or abs(observed - level) > 2:
+                    return ActionResult(
+                        success=False,
+                        error=f"Volume não confirmado: pedido {level}, lido {observed}.",
+                        data={
+                            "original_level": original,
+                            "target_level": level,
+                            "observed_level": observed,
+                            "verified": False,
+                        },
+                    )
+                return ActionResult(
+                    success=True,
+                    output="Volume adjusted",
+                    data={
+                        "original_level": original,
+                        "target_level": level,
+                        "observed_level": observed,
+                        "verified": True,
+                    },
+                )
 
             if mute is not None:
-                try:
-                    subprocess.run(["nircmd.exe", "mutesysvolume", "1" if mute else "0"], check=True, capture_output=True)
-                except FileNotFoundError:
-                    # Use pycaw if available
-                    try:
-                        from comtypes import CoInitialize, CoUninitialize
-                        from pycaw.pycaw import AudioUtilities
-
-                        from core.windows_audio import get_endpoint_volume
-                        CoInitialize()
-                        try:
-                            devices = AudioUtilities.GetSpeakers()
-                            volume = get_endpoint_volume(devices)
-                            volume.SetMute(mute, None)
-                        finally:
-                            CoUninitialize()
-                    except ImportError:
-                        return ActionResult(success=False, error="pycaw or nircmd required for mute control")
+                return _audio_mute_action(mute)
 
         elif system == "Linux":
             # Use pactl or amixer
@@ -1016,44 +1074,6 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
                 subprocess.run(["osascript", "-e", f"set volume output volume {level}"], check=True)
             if mute is not None:
                 subprocess.run(["osascript", "-e", f"set volume output muted {str(mute).lower()}"], check=True)
-
-        # ZARA-BARRINHA-DE-VOLUME-001: confirmação visual, como quando ele mexe
-        # no volume pelo teclado. Só para mudança de nível — em mudo o próprio
-        # Windows já desenha o ícone.
-        if level is not None and mute is None:
-            _mostrar_barrinha_de_volume(level)
-
-        # SAFE_TO_FIX (windows_fs audit #7): dispatch não é prova de que o Windows
-        # mudou (evidence.md). Quando possível, ler o nível de volta e só declarar
-        # sucesso se bater; melhor esforço — nunca falha a ação por não conseguir ler.
-        if system == "Windows" and level is not None:
-            try:
-                from comtypes import CoInitialize, CoUninitialize
-                from pycaw.pycaw import AudioUtilities
-
-                from core.windows_audio import get_endpoint_volume
-                CoInitialize()
-                try:
-                    devices = AudioUtilities.GetSpeakers()
-                    volume = get_endpoint_volume(devices)
-                    actual = round(volume.GetMasterVolumeLevelScalar() * 100)
-                    if abs(actual - level) > 2:
-                        return ActionResult(
-                            success=False,
-                            error=f"Volume não confirmado: pedido {level}, lido {actual}.",
-                            data={"requested": level, "actual": actual, "verificado": False},
-                        )
-                    return ActionResult(
-                        success=True,
-                        output="Volume adjusted",
-                        data={"requested": level, "actual": actual, "verificado": True},
-                    )
-                finally:
-                    CoUninitialize()
-            except Exception:
-                # Leitura indisponível (sem pycaw/comtypes) — mantém sucesso por
-                # dispatch, mas sem afirmar verificação.
-                pass
 
         return ActionResult(success=True, output="Volume adjusted")
     except Exception as e:

@@ -132,3 +132,87 @@ B) Limpar a working tree — separar por área quem mexeu em quê, comitar cada 
 C) Ambos (recomendado)
 
 Nenhum EXE deve ser empacotado nem testado fisicamente até isso ser resolvido — não há candidato válido desta missão.
+
+## Continuation — Cleanup, Security Bugs, and a Real Incident
+
+Alex authorized "C" (isolar regressão + limpar working tree) and then told the
+mentor session to run fully autonomous with recommended defaults.
+
+**Regressão de segurança do relatório original**: investigada e não reproduzida.
+Todos os 11 arquivos citados como tendo diffs "escondidos" foram lidos
+integralmente; nenhum continha o gate rebaixado, segredo ecoado ou
+`credentials/token.json` exposto que o relatório descrevia. Tratado como
+NÃO PROVADO — provavelmente um artefato de colisão entre agentes paralelos
+escrevendo no mesmo working tree sem isolamento, não uma regressão real que
+sobreviveu. Um arquivo sem dono (`config/telegram_lido.json`) foi revertido.
+
+**Working tree organizada e commitada por área** (5 commits): tool
+architecture, filesystem/volume, voz, memória, build/runtime.
+
+**Dois bugs de segurança reais encontrados e corrigidos** (pré-existentes,
+não introduzidos esta noite): `system_env` permitia ler qualquer variável de
+ambiente em texto puro quando o nome não batia com um regex de "nome
+sensível" fixo — um segredo com nome não convencional vazava. Reescrito para
+nunca ler/ecoar valores, só define, com gate MEDIUM/CODE_EXECUTION.
+`files_list` nunca filtrava caminhos sensíveis apesar de `_is_sensitive_path`
+já existir para as outras ações de arquivo — agora filtra.
+
+**INCIDENTE**: durante a investigação dos 47 testes falhando na suíte
+completa (vs. isolados), um workflow em background rodou múltiplas cópias
+paralelas de `pytest -q` (suíte inteira) repetidamente. `os_volume_action`
+media o volume real do Windows chamando pycaw diretamente dentro do fluxo
+de verificação-por-leitura adicionado nesta mesma missão (sem seam
+mockável), e pelo menos um teste força `platform.system() == "Windows"`
+sem mockar a chamada real — isso mexeu no volume real da máquina do Alex
+repetidamente enquanto ele tentava dormir. Alex avisou, o mentor matou
+todos os processos de teste e o workflow, e não vai rodar a suíte completa
+em paralelo de novo até isso estar contido.
+
+**Causa raiz corrigida**: extraídas as funções `_read_windows_volume()` /
+`_set_windows_volume()` (espelhando o padrão já existente
+`_read_windows_mute`/`_set_windows_mute`), e `os_volume_action` reescrito
+para usá-las e para delegar chamadas de mudo a `_audio_mute_action` em vez
+de duplicar a lógica. Resultado: 4 dos 7 testes de
+`test_os_ops_truth_contracts.py` agora passam com mocks de verdade (não
+tocam hardware); rodar esse arquivo isolado não mexe mais no volume real.
+
+**Estado final da suíte** (rodada única, sequencial, não paralela):
+44 falhando / 1572 passando / 28 puladas — eram 47 falhando antes desta
+correção. As 44 restantes não foram investigadas uma a uma esta noite
+(ver Tasks pendentes abaixo); pelo menos 3 delas (`test_brightness_rejects_
+observed_value_outside_tolerance`, `test_night_light_never_reports_
+cloudstore_only_success`, `test_window_close_protects_any_zara_window`)
+são bugs reais e pré-existentes em `os_ops.py`, não relacionados ao
+incidente de volume.
+
+### KNOWN_BROKEN (permanece até prova em contrário)
+
+- 44 testes falhando na suíte completa — não classificados um a um esta
+  noite entre "bug real" e "poluição de estado global entre arquivos de
+  teste" (há evidência de pelo menos uma fonte de poluição:
+  `tests/test_browser_dispatch.py` linha 10 muta
+  `registry.pc_control_allowed` em nível de módulo, sem reverter).
+- Brilho: tolerância de leitura de volta não é aplicada de verdade.
+- Luz noturna: pode reportar sucesso mesmo sem confirmar o estado real.
+- Fechar janela: não protege corretamente uma janela da própria ZARA
+  (formato de dado retornado não bate com o esperado).
+- F1–F8 do relatório original (timeout falso no wrapper, cancelamento
+  no-op, defaults de `verificado`/`retryable`, processos órfãos de
+  terminal, long-path, confirmação de delete recursivo sem escopo,
+  PATH-hijack teórico) — nenhum foi tocado nesta continuação.
+
+### Owner decisions ainda pendentes
+
+Nenhuma decisão nova. As oito já listadas na seção "Owner Decisions
+Required" acima continuam de pé; nenhuma foi resolvida nesta continuação.
+
+### Próximos passos recomendados
+
+1. Classificar as 44 falhas restantes uma a uma (isolada vs. suíte
+   completa) SEM rodar testes em paralelo — um processo por vez, e
+   preferencialmente sem tocar `os_ops.py`/áudio real até todos os seams
+   de mock estiverem confirmados.
+2. Corrigir a poluição de estado global em `test_browser_dispatch.py` e
+   qualquer outro arquivo que mute `registry.pc_control_allowed`/
+   `medium_risk_open` sem fixture de reversão.
+3. Não gerar candidato/EXE ainda — este trabalho é só de source.

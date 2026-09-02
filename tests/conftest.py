@@ -155,9 +155,24 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(autouse=True)
 def _nunca_escrever_nos_dados_do_alex(monkeypatch, tmp_path):
-    """Manda toda medição para uma pasta temporária do próprio teste."""
+    """Manda toda medição/estado real para uma pasta temporária do próprio teste.
+
+    INCIDENTE_2026-09-02 (recorrente): `config/telegram_lido.json` foi
+    sobrescrito por pelo menos 3 rodadas de suíte completa nesta mesma
+    madrugada porque `tests/test_telegram_ponte.py` só isola
+    `PonteTelegram._arquivo_marcador` em UM dos seus testes — os outros usam
+    o caminho real via `config_dir()`. Mesma classe de erro do cronômetro
+    (ver comentário do módulo): isolar aqui, uma vez, protege a suíte
+    inteira, inclusive testes futuros que cometeriam o mesmo esquecimento.
+    """
     from core import cronometro
+    from core.telegram_ponte import PonteTelegram
 
     monkeypatch.setattr(
         cronometro, "_arquivo", lambda: tmp_path / "latencia.jsonl", raising=False
+    )
+    monkeypatch.setattr(
+        PonteTelegram, "_arquivo_marcador",
+        staticmethod(lambda: tmp_path / "telegram_lido.json"),
+        raising=False,
     )

@@ -75,3 +75,10 @@ zara-app/node_modules/
 
 # Archived interface source dump (large zip, not canonical source)
 zara-interface-codigo-completo.zip
+
+# ZaraValidationEngine local run history — ephemeral, one folder per run.
+# baseline.json IS tracked (reviewed, intentional); everything else here is not.
+.zara-tests/runs/
+.zara-tests/latest.json
+.zara-tests/history.json
+.zara-tests/test-run.lock

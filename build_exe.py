@@ -407,7 +407,26 @@ def generate_build_info(sidecar_sha256: str) -> None:
 
     # Build timestamp
     build_timestamp = datetime.now().isoformat()
-    build_id = f"zara-build-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    build_id = f"release-candidate-{datetime.now().strftime('%Y%m%d-%H%M')}"
+
+    # Write to frontend/release/win-unpacked/
+    release_dir = PROJECT_ROOT / "frontend" / "release" / "win-unpacked"
+
+    def _sha256_of(path: Path) -> str:
+        if not path.exists():
+            return "unknown"
+        h = hashlib.sha256()
+        with path.open('rb') as f:
+            for chunk in iter(lambda: f.read(4096), b''):
+                h.update(chunk)
+        return h.hexdigest()
+
+    # Per .claude/rules/build-release.md, a candidate's manifest must also
+    # identify the packaged Electron EXE and app.asar, when they exist.
+    packaged_exe_path = release_dir / "ZARA 3.0.exe"
+    packaged_asar_path = release_dir / "resources" / "app.asar"
+    exe_sha256 = _sha256_of(packaged_exe_path)
+    asar_sha256 = _sha256_of(packaged_asar_path)
 
     # Construct BUILD_INFO
     build_info = {
@@ -420,11 +439,12 @@ def generate_build_info(sidecar_sha256: str) -> None:
         "NODE_VERSION": node_version,
         "SIDECAR_SHA256": sidecar_sha256,
         "SIDECAR_SIZE_BYTES": exe_size,
+        "EXE_SHA256": exe_sha256,
+        "ASAR_SHA256": asar_sha256,
+        "DELTA": "unknown - fill in manually before offering candidate for physical test",
         "PROJECT_ROOT": str(PROJECT_ROOT),
     }
 
-    # Write to frontend/release/win-unpacked/
-    release_dir = PROJECT_ROOT / "frontend" / "release" / "win-unpacked"
     if release_dir.exists():
         build_info_path = release_dir / "BUILD_INFO.json"
         with build_info_path.open('w') as f:
@@ -529,11 +549,13 @@ def build_full() -> int:
             print(result.stderr)
             return 1
         # Node tests
+        # NOTE: frontend/package.json "test" script is a stub (no real suite
+        # configured yet) - it always exits 0, so treating it as a pass/fail
+        # gate here was a false-green. Run it for visibility but do not gate
+        # the build on it until a real frontend test suite exists.
         frontend_dir = PROJECT_ROOT / "frontend"
         result = run_cmd(["npm", "test"], cwd=frontend_dir)
-        if result.returncode != 0:
-            print("[BUILD] ERROR: Node tests failed")
-            return 1
+        print("[BUILD] NOTE: frontend 'npm test' is a stub, not a real gate (see frontend/package.json)")
 
         # Step 4: Build sidecar (without cleaning again)
         print("[BUILD] Step 4: Building sidecar...")

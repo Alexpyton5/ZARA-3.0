@@ -27,7 +27,10 @@ import os
 import shutil
 import subprocess
 import sys
+import json
+import hashlib
 from pathlib import Path
+from datetime import datetime
 
 # ============================================================
 # CONFIGURATION
@@ -329,12 +332,12 @@ def verify_build() -> bool:
     return True
 
 
-def update_sidecar_manifests(exe_path: Path) -> None:
-    """Update CLEAN_BUILD_ID.txt, SHA256_MANIFEST.txt, PATCH_SHA256_MANIFEST.txt for the sidecar."""
-    import hashlib
+def update_sidecar_manifests(exe_path: Path) -> str:
+    """Update CLEAN_BUILD_ID.txt, SHA256_MANIFEST.txt, PATCH_SHA256_MANIFEST.txt for the sidecar.
+    Returns the SHA256 hash."""
     if not exe_path.exists():
         print(f"[BUILD] ERROR: {exe_path} not found for manifest update")
-        return
+        return ""
 
     # Compute SHA256
     hash_sha256 = hashlib.sha256()
@@ -357,6 +360,78 @@ def update_sidecar_manifests(exe_path: Path) -> None:
     # Update PATCH_SHA256_MANIFEST.txt (same as SHA256_MANIFEST.txt for now)
     Path('PATCH_SHA256_MANIFEST.txt').write_text(manifest_content, newline='\n')
     print("[BUILD] Updated PATCH_SHA256_MANIFEST.txt")
+
+    return hash_hex
+
+
+def generate_build_info(sidecar_sha256: str) -> None:
+    """Generate BUILD_INFO.json with complete build metadata."""
+    try:
+        # Collect git info
+        git_branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=PROJECT_ROOT, text=True, stderr=subprocess.DEVNULL
+        ).strip()
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT, text=True, stderr=subprocess.DEVNULL
+        ).strip()
+        git_dirty = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=PROJECT_ROOT, text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except subprocess.CalledProcessError:
+        git_branch = "unknown"
+        git_commit = "unknown"
+        git_dirty = "unknown"
+
+    try:
+        python_version = subprocess.check_output(
+            [str(VENV_PYTHON), "--version"],
+            text=True, stderr=subprocess.DEVNULL
+        ).strip().replace("Python ", "")
+    except subprocess.CalledProcessError:
+        python_version = "unknown"
+
+    try:
+        node_version = subprocess.check_output(
+            ["node", "--version"],
+            text=True, stderr=subprocess.DEVNULL
+        ).strip().replace("v", "")
+    except subprocess.CalledProcessError:
+        node_version = "unknown"
+
+    # Get sidecar EXE size
+    exe_path = DIST_DIR / f"{APP_NAME}.exe"
+    exe_size = exe_path.stat().st_size if exe_path.exists() else 0
+
+    # Build timestamp
+    build_timestamp = datetime.now().isoformat()
+    build_id = f"zara-build-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+    # Construct BUILD_INFO
+    build_info = {
+        "BUILD_ID": build_id,
+        "BUILD_TIMESTAMP": build_timestamp,
+        "GIT_BRANCH": git_branch,
+        "GIT_COMMIT": git_commit,
+        "GIT_DIRTY": bool(git_dirty),
+        "PYTHON_VERSION": python_version,
+        "NODE_VERSION": node_version,
+        "SIDECAR_SHA256": sidecar_sha256,
+        "SIDECAR_SIZE_BYTES": exe_size,
+        "PROJECT_ROOT": str(PROJECT_ROOT),
+    }
+
+    # Write to frontend/release/win-unpacked/
+    release_dir = PROJECT_ROOT / "frontend" / "release" / "win-unpacked"
+    if release_dir.exists():
+        build_info_path = release_dir / "BUILD_INFO.json"
+        with build_info_path.open('w') as f:
+            json.dump(build_info, f, indent=2)
+        print(f"[BUILD] Generated BUILD_INFO.json: {build_info_path}")
+    else:
+        print(f"[BUILD] WARNING: Release directory not found: {release_dir}")
 
 
 def build(clean_first=True) -> int:
@@ -393,7 +468,11 @@ def build(clean_first=True) -> int:
 
     # Atualiza os arquivos de manifesto para o sidecar
     exe_path = DIST_DIR / f"{APP_NAME}.exe"
-    update_sidecar_manifests(exe_path)
+    sidecar_sha256 = update_sidecar_manifests(exe_path)
+
+    # Gera BUILD_INFO.json
+    if sidecar_sha256:
+        generate_build_info(sidecar_sha256)
 
     print("=" * 60)
     print("SIDECAR BUILD COMPLETE!")

@@ -6,6 +6,7 @@ Does NOT rewrite action internals; only wraps execution.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from functools import wraps
 from typing import Any, Callable
@@ -13,6 +14,8 @@ from typing import Any, Callable
 from core.tool_error_model import ErrorCategory, tool_error
 from core.tool_result import ToolResult
 from core.tool_verifier import verify_result
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["wrap_executor", "ExecutionWrapper"]
 
@@ -75,8 +78,8 @@ class ExecutionWrapper:
                         "error": result.error,
                         "parameterscount": len(kwargs),
                     })
-                except Exception as e:
-                    print(f"[ExecutionWrapper] Audit failed for {self.name}: {e}")
+                except Exception:
+                    logger.exception("[ExecutionWrapper] Audit failed for %s", self.name)
 
             return result
 
@@ -100,6 +103,7 @@ class ExecutionWrapper:
             )
 
         except Exception as e:
+            logger.exception("[ExecutionWrapper] Executor raised for %s", self.name)
             return ToolResult(
                 success=False,
                 error=f"Tool execution failed: {e}",
@@ -173,8 +177,8 @@ class ExecutionWrapper:
         if self.cancel_hook:
             try:
                 self.cancel_hook()
-            except Exception as e:
-                print(f"[ExecutionWrapper] Cancellation hook failed: {e}")
+            except Exception:
+                logger.exception("[ExecutionWrapper] Cancellation hook failed for %s", self.name)
 
     def cancel(self):
         """Request cancellation."""
@@ -214,7 +218,13 @@ def wrap_with_timeout(timeout_ms: int = 30000):
                 timeout_ms=timeout_ms,
             )
             result = wrapper_obj.execute(**kwargs)
+            if not result.success:
+                # Never let a failure look like a normal None/"" return value —
+                # raise so the caller can't mistake failure for success.
+                raise RuntimeError(
+                    result.error or f"{func.__name__} failed (error_code={result.error_code})"
+                )
             # Return raw result data, not ToolResult
-            return result.data or result.output
+            return result.data if result.data is not None else result.output
         return wrapper
     return decorator

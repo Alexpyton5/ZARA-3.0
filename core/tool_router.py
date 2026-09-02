@@ -7,14 +7,17 @@ NO LLM, deterministic only.
 """
 from __future__ import annotations
 
+import logging
 import time
-from typing import Any
+from typing import Any, Callable
 
 from core.tool_definition import ToolState
 from core.tool_error_model import ErrorCategory, tool_error
 from core.tool_registry import get_tool_registry
 from core.tool_result import ToolResult, ToolVerificationResult
 from core.tool_verifier import verify_result
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["ToolRouter", "ToolRequest", "get_tool_router"]
 
@@ -95,6 +98,18 @@ class ToolRouter:
                 duration_ms=self._elapsed_ms(start_time),
             )
 
+        # STEP 2b: SCHEMA VALIDATION
+        schema_ok, schema_msg = self.registry.validate_schema(
+            request.tool_name, request.parameters
+        )
+        if not schema_ok:
+            return ToolResult(
+                success=False,
+                error=schema_msg,
+                error_code=ErrorCategory.VALIDATION_ERROR,
+                duration_ms=self._elapsed_ms(start_time),
+            )
+
         # STEP 3: PERMISSION_CHECK
         if self._permission_checker:
             try:
@@ -106,6 +121,9 @@ class ToolRouter:
                         duration_ms=self._elapsed_ms(start_time),
                     )
             except Exception as e:
+                logger.exception(
+                    "[ToolRouter] Permission check raised for '%s'", request.tool_name
+                )
                 return ToolResult(
                     success=False,
                     error=f"Permission check failed: {e}",
@@ -136,6 +154,9 @@ class ToolRouter:
                 retryable=True,
             )
         except Exception as e:
+            logger.exception(
+                "[ToolRouter] Executor raised for '%s'", request.tool_name
+            )
             return ToolResult(
                 success=False,
                 error=f"Tool execution failed: {e}",
@@ -170,8 +191,8 @@ class ToolRouter:
                     "duration_ms": result.duration_ms,
                     "error_code": result.error_code,
                 })
-            except Exception as e:
-                print(f"[ToolRouter] Audit hook failed: {e}")
+            except Exception:
+                logger.exception("[ToolRouter] Audit hook failed for '%s'", request.tool_name)
 
         result.duration_ms = self._elapsed_ms(start_time)
         return result
@@ -191,12 +212,13 @@ class ToolRouter:
             result_data.duration_ms = exec_time_ms
             return result_data
 
-        if isinstance(result_data, dict) and "success" in result_data:
+        if isinstance(result_data, dict):
             return ToolResult(
                 success=result_data.get("success", True),
                 data=result_data.get("data"),
                 output=result_data.get("output", ""),
                 error=result_data.get("error", ""),
+                message=result_data.get("message", ""),
                 duration_ms=exec_time_ms,
                 verificado=result_data.get("verificado", True),
             )
@@ -233,6 +255,9 @@ class ToolRouter:
             )
             return ToolResult.from_action_result(action_result)
         except Exception as e:
+            logger.exception(
+                "[ToolRouter] ActionRegistry fallback raised for '%s'", request.tool_name
+            )
             return ToolResult(
                 success=False,
                 error=f"ActionRegistry fallback failed: {e}",

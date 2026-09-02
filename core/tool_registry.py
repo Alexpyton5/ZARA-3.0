@@ -6,11 +6,14 @@ while maintaining backward compatibility with ActionRegistry.
 """
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Callable
 
 from core.tool_definition import ToolDefinition
 from core.tool_risk_model import get_risk_profile
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["ToolRegistry", "get_tool_registry"]
 
@@ -38,36 +41,62 @@ class ToolRegistry:
         self._by_category: dict[str, list[str]] = {}
         self._aliases: dict[str, str] = {}  # alias -> canonical name
         self._action_registry = None
+        self._mutation_lock = threading.Lock()
 
-    def register(self, tool: ToolDefinition) -> None:
-        """Register a tool."""
-        if tool.name in self._tools:
-            print(f"[ToolRegistry] Warning: Overwriting tool '{tool.name}'")
+    def register(self, tool: ToolDefinition) -> bool:
+        """Register a tool.
 
-        self._tools[tool.name] = tool
+        Returns True if this was a new registration, False if an existing
+        tool with the same name was overwritten (caller can detect this).
+        """
+        with self._mutation_lock:
+            overwritten = tool.name in self._tools
+            if overwritten:
+                logger.warning("[ToolRegistry] Overwriting tool '%s'", tool.name)
 
-        # Register aliases
-        for alias in tool.aliases:
-            self._aliases[alias] = tool.name
+            self._tools[tool.name] = tool
 
-        # Register by category
-        if tool.category not in self._by_category:
-            self._by_category[tool.category] = []
-        if tool.name not in self._by_category[tool.category]:
-            self._by_category[tool.category].append(tool.name)
+            # Register aliases (skip any that collide with a real tool name
+            # or an existing alias so lookups can't be silently redirected)
+            for alias in tool.aliases:
+                if alias in self._tools and alias != tool.name:
+                    logger.warning(
+                        "[ToolRegistry] Alias '%s' for tool '%s' collides with an "
+                        "existing tool name; skipping alias",
+                        alias, tool.name,
+                    )
+                    continue
+                existing_target = self._aliases.get(alias)
+                if existing_target is not None and existing_target != tool.name:
+                    logger.warning(
+                        "[ToolRegistry] Alias '%s' already points to '%s'; "
+                        "not redirecting to '%s'",
+                        alias, existing_target, tool.name,
+                    )
+                    continue
+                self._aliases[alias] = tool.name
+
+            # Register by category
+            if tool.category not in self._by_category:
+                self._by_category[tool.category] = []
+            if tool.name not in self._by_category[tool.category]:
+                self._by_category[tool.category].append(tool.name)
+
+        return not overwritten
 
     def unregister(self, name: str) -> None:
         """Unregister a tool."""
-        if name in self._tools:
-            tool = self._tools.pop(name)
-            # Remove from category
-            if tool.category in self._by_category:
-                self._by_category[tool.category] = [
-                    t for t in self._by_category[tool.category] if t != name
-                ]
-            # Remove aliases
-            for alias in tool.aliases:
-                self._aliases.pop(alias, None)
+        with self._mutation_lock:
+            if name in self._tools:
+                tool = self._tools.pop(name)
+                # Remove from category
+                if tool.category in self._by_category:
+                    self._by_category[tool.category] = [
+                        t for t in self._by_category[tool.category] if t != name
+                    ]
+                # Remove aliases
+                for alias in tool.aliases:
+                    self._aliases.pop(alias, None)
 
     def get(self, name: str) -> ToolDefinition | None:
         """Get tool by name or alias."""
@@ -136,12 +165,13 @@ class ToolRegistry:
 
     def set_availability(self, name: str, available: bool, error: str = None) -> None:
         """Set tool availability."""
-        tool = self.get(name)
-        if tool:
-            tool.available = available
-            tool.state = "AVAILABLE" if available else "UNAVAILABLE"
-            if error:
-                tool.last_error = error
+        with self._mutation_lock:
+            tool = self.get(name)
+            if tool:
+                tool.available = available
+                tool.state = "AVAILABLE" if available else "UNAVAILABLE"
+                if error:
+                    tool.last_error = error
 
     def adapt_from_action_registry(self, action_registry) -> int:
         """Adapt all actions from ActionRegistry to ToolRegistry.
@@ -150,10 +180,16 @@ class ToolRegistry:
         """
         self._action_registry = action_registry
         count = 0
+        failed: list[str] = []
 
         try:
             action_specs = action_registry.get_all_specs()
-            for action_name, action_spec in action_specs.items():
+        except Exception:
+            logger.exception("[ToolRegistry] Failed to read specs from ActionRegistry")
+            return count
+
+        for action_name, action_spec in action_specs.items():
+            try:
                 tool = ToolDefinition.from_action_spec(action_spec)
 
                 # Enrich with risk profile if available
@@ -165,8 +201,18 @@ class ToolRegistry:
 
                 self.register(tool)
                 count += 1
-        except Exception as e:
-            print(f"[ToolRegistry] Error adapting ActionRegistry: {e}")
+            except Exception:
+                failed.append(action_name)
+                logger.exception(
+                    "[ToolRegistry] Error adapting action '%s' from ActionRegistry",
+                    action_name,
+                )
+
+        if failed:
+            logger.warning(
+                "[ToolRegistry] %d/%d actions failed to adapt: %s",
+                len(failed), len(action_specs), failed,
+            )
 
         return count
 

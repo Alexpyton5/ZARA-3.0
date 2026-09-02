@@ -220,7 +220,7 @@ class ToolRouter:
                 error=result_data.get("error", ""),
                 message=result_data.get("message", ""),
                 duration_ms=exec_time_ms,
-                verificado=result_data.get("verificado", True),
+                verificado=result_data.get("verificado", False),
             )
 
         if isinstance(result_data, bool):

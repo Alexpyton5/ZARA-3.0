@@ -67,12 +67,12 @@ class ToolResult:
     # Verification: was the action actually executed?
     # True = observed postcondition (file exists, volume changed, etc.)
     # False = action dispatched but could not verify execution
-    verificado: bool = True
+    verificado: bool = False
 
     # Extended metadata
     metadata: dict = field(default_factory=dict)
     verification: ToolVerificationResult | None = None
-    retryable: bool = True
+    retryable: bool = False
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
     def incerto(self) -> bool:

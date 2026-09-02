@@ -52,7 +52,7 @@ class TestToolResult:
 
     def test_tool_result_success(self):
         """Create successful result."""
-        result = ToolResult(success=True, output="OK")
+        result = ToolResult(success=True, output="OK", verificado=True)
         assert result.success is True
         assert bool(result) is True
 

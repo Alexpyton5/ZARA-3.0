@@ -22,7 +22,13 @@ Electron Main
 Renderer (React)
 ```
 
-**Current IPC channels:** 28 main channels + event handlers
+**Channel Count Breakdown:**
+- Electron main.ts ipcMain.handle/on: **30 channels** (Renderer → Python)
+- Python ipc_handlers.py: **37 handler methods** (internal, some unmapped)
+- Event listeners (Python → Renderer): **6 stream channels** (voice-level, response, etc.)
+- **Total documented:** 30 public channels (others are internal Python routing)
+
+**Note:** Initial report said "28" (conservative count); actual count is **30 public channels**.
 
 ---
 

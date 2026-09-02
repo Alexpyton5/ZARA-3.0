@@ -73,6 +73,12 @@ def files_list_action(path: str = ".", pattern: str = "*", recursive: bool = Fal
             return ActionResult(success=False, error=f"Path not found: {path}")
         if not base.is_dir():
             return ActionResult(success=False, error=f"Not a directory: {path}")
+        if _is_sensitive_path(base):
+            return ActionResult(
+                success=False,
+                error="Acesso a caminho sensível (credenciais/chaves) bloqueado.",
+                data=None,
+            )
 
         if recursive:
             files = list(base.rglob(pattern))
@@ -81,6 +87,8 @@ def files_list_action(path: str = ".", pattern: str = "*", recursive: bool = Fal
 
         if not include_hidden:
             files = [f for f in files if not f.name.startswith('.')]
+
+        files = [f for f in files if not _is_sensitive_path(f)]
 
         result = []
         for f in sorted(files):

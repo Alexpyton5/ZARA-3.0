@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Wifi, BatteryCharging, Battery, BatteryWarning } from 'lucide-react';
 import '../../styles/zara-home.css';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -54,10 +55,14 @@ export function ZaraHome() {
       <Sidebar active={activeNav} onSelect={setActiveNav} userName={userName} />
 
       <div className="zh-status-row" aria-label="Status">
-        <span title="Wi-Fi">📶</span>
-        <span title={battery.supported ? `Bateria ${Math.round((battery.level ?? 0) * 100)}%` : 'Bateria não conectada'}>
-          {battery.supported ? (battery.charging ? '⚡' : '🔋') : '🔌'}
-        </span>
+        <Wifi size={15} strokeWidth={1.8} aria-label="Wi-Fi" />
+        {battery.supported ? (
+          battery.charging
+            ? <BatteryCharging size={15} strokeWidth={1.8} aria-label={`Bateria ${Math.round((battery.level ?? 0) * 100)}%, carregando`} />
+            : <Battery size={15} strokeWidth={1.8} aria-label={`Bateria ${Math.round((battery.level ?? 0) * 100)}%`} />
+        ) : (
+          <BatteryWarning size={15} strokeWidth={1.8} aria-label="Bateria não conectada" />
+        )}
         <span>{now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
 
@@ -71,6 +76,7 @@ export function ZaraHome() {
 
           <div className="zh-core-column">
             <ZaraCore state={coreState} />
+            <VoiceDock coreState={coreState} />
           </div>
 
           <aside className="zh-right">
@@ -78,8 +84,6 @@ export function ZaraHome() {
             <ToolsCard />
           </aside>
         </div>
-
-        <VoiceDock coreState={coreState} />
 
         <SystemPanel metrics={metrics} battery={battery} />
       </div>

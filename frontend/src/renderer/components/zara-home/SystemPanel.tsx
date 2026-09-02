@@ -1,4 +1,4 @@
-
+import { Cpu, MemoryStick, HardDrive, BatteryFull, ShieldQuestion, Zap, Wrench } from 'lucide-react';
 import type { BatteryData, SystemMetricsData } from './types';
 
 interface SystemPanelProps {
@@ -10,34 +10,35 @@ function pct(value: number | null): string {
   return value === null ? '—' : `${Math.round(value)}%`;
 }
 
-/**
- * Painel "Sistema" — CPU/RAM/Disco vêm de `window.zaraIPC.system.metrics()`
- * (canal real e já existente). Bateria vem de `navigator.getBattery()`
- * (API real do Chromium). Segurança/Energia/Manutenção do site de
- * referência não têm fonte real na ZARA hoje (nenhuma action de firewall,
- * antivírus ou plano de energia com leitura de estado) — mantidos como
- * estrutura visual real com rótulo NOT_CONNECTED_YET, sem inventar dado.
- */
+// Cor semântica do projeto (ver .claude/rules): branco/titânio = neutro,
+// esmeralda = ativo/saudável, âmbar = alerta, cinza = indisponível. Nenhum
+// dado real de saúde (limiar de "alerta") existe ainda para CPU/RAM/Disco —
+// então tudo fica neutro (titânio) até essa lógica existir de verdade, em
+// vez de inventar limiares arbitrários de cor.
+function metricColorClass(value: number | null): string {
+  return value === null ? 'zh-metric-unknown' : 'zh-metric-neutral';
+}
+
 export function SystemPanel({ metrics, battery }: SystemPanelProps) {
   return (
     <section className="zh-system-row zh-glass-panel" aria-label="Sistema">
       <div className="zh-system-col">
-        <h2>Estado do dispositivo</h2>
+        <h2><Cpu size={14} strokeWidth={1.8} /> Estado do dispositivo</h2>
         <div className="zh-metric-row">
-          <span>CPU</span>
-          <span>{pct(metrics.cpu)}</span>
+          <span><Cpu size={13} strokeWidth={1.8} /> CPU</span>
+          <span className={metricColorClass(metrics.cpu)}>{pct(metrics.cpu)}</span>
         </div>
         <div className="zh-metric-row">
-          <span>RAM</span>
-          <span>{pct(metrics.ram)}</span>
+          <span><MemoryStick size={13} strokeWidth={1.8} /> RAM</span>
+          <span className={metricColorClass(metrics.ram)}>{pct(metrics.ram)}</span>
         </div>
         <div className="zh-metric-row">
-          <span>Disco</span>
-          <span>{pct(metrics.disk)}</span>
+          <span><HardDrive size={13} strokeWidth={1.8} /> Disco</span>
+          <span className={metricColorClass(metrics.disk)}>{pct(metrics.disk)}</span>
         </div>
         <div className="zh-metric-row">
-          <span>Bateria</span>
-          <span>
+          <span><BatteryFull size={13} strokeWidth={1.8} /> Bateria</span>
+          <span className={battery.supported ? 'zh-metric-active' : 'zh-metric-unknown'}>
             {battery.supported && battery.level !== null
               ? `${Math.round(battery.level * 100)}%${battery.charging ? ' ⚡' : ''}`
               : 'NOT_CONNECTED_YET'}
@@ -46,17 +47,17 @@ export function SystemPanel({ metrics, battery }: SystemPanelProps) {
       </div>
 
       <div className="zh-system-col">
-        <h2>Segurança</h2>
+        <h2><ShieldQuestion size={14} strokeWidth={1.8} /> Segurança</h2>
         <p className="zh-not-connected">NOT_CONNECTED_YET — sem leitura real de firewall/antivírus exposta.</p>
       </div>
 
       <div className="zh-system-col">
-        <h2>Energia</h2>
+        <h2><Zap size={14} strokeWidth={1.8} /> Energia</h2>
         <p className="zh-not-connected">NOT_CONNECTED_YET — ação real existe (os_power_plan_list/set), não conectada nesta tela ainda.</p>
       </div>
 
       <div className="zh-system-col">
-        <h2>Manutenção</h2>
+        <h2><Wrench size={14} strokeWidth={1.8} /> Manutenção</h2>
         <p className="zh-not-connected">NOT_CONNECTED_YET — ações de limpeza ainda não expostas a esta tela.</p>
       </div>
     </section>

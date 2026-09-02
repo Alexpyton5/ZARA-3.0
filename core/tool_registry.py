@@ -173,6 +173,21 @@ class ToolRegistry:
                 if error:
                     tool.last_error = error
 
+    @staticmethod
+    def _make_action_registry_executor(action_registry, action_name: str) -> Callable:
+        """Closure que delega para `ActionRegistry.execute(action_name, **kwargs)`.
+
+        `action_name` é capturado por argumento (não por variável de loop) de
+        propósito — closure sobre variável de loop é o bug clássico de
+        late-binding em Python (todas as closures acabariam apontando para o
+        último `action_name` iterado).
+        """
+
+        def _executor(**kwargs):
+            return action_registry.execute(action_name, **kwargs)
+
+        return _executor
+
     def adapt_from_action_registry(self, action_registry) -> int:
         """Adapt all actions from ActionRegistry to ToolRegistry.
 
@@ -198,6 +213,20 @@ class ToolRegistry:
                     tool.risk_level = risk_prof.risk_level
                     tool.requires_confirmation = risk_prof.requires_confirmation
                     tool.requires_superbrain = risk_prof.requires_superbrain
+
+                # BUGFIX_2026-09-02: from_action_spec() nunca ligava
+                # `tool.executor` a nada, então ToolRouter.route() sempre
+                # retornava "No executor for '<name>'" para qualquer tool
+                # adaptada daqui — nenhum caminho de produção chamava
+                # get_tool_router() antes do Planner (ver
+                # core/planner/execution.py), então isso nunca foi notado.
+                # Delegar para ActionRegistry.execute() completa o "adapter
+                # pattern" que o docstring de from_action_spec já dizia
+                # implementar: ActionRegistry.execute() já aplica os gates
+                # de capability/risk/permission de qualquer forma, então
+                # nenhuma checagem é pulada ao rotear por aqui.
+                tool.executor = self._make_action_registry_executor(action_registry, action_name)
+                tool.async_execution = bool(action_spec.async_execution)
 
                 self.register(tool)
                 count += 1

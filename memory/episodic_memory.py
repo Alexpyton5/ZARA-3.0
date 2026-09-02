@@ -37,12 +37,15 @@ def _tokens(text: str) -> list[str]:
     return [token.lower() for token in _TOKEN_RE.findall(text or "") if len(token) > 1]
 
 
+_EMBED_TIMEOUT_SECONDS = 3
+
+
 def _embed(text: str) -> array:
     """Get embedding from Ollama's nomic-embed-text model."""
     # Try to use the Ollama Python package
     try:
         from ollama import Client
-        client = Client()
+        client = Client(timeout=_EMBED_TIMEOUT_SECONDS)
         response = client.embeddings(model='nomic-embed-text', prompt=text)
         vector = array('f', response['embedding'])
     except Exception as e:
@@ -53,7 +56,7 @@ def _embed(text: str) -> array:
         data = json.dumps({"model": "nomic-embed-text", "prompt": text})
         data = data.encode('utf-8')
         req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
-        response = urllib.request.urlopen(req)
+        response = urllib.request.urlopen(req, timeout=_EMBED_TIMEOUT_SECONDS)
         result = json.load(response)
         vector = array('f', result['embedding'])
 
@@ -133,6 +136,10 @@ class EpisodicMemory:
             vector = array("f")
             vector.frombytes(raw_vector)
             if len(vector) != VECTOR_SIZE:
+                print(
+                    f"[EpisodicMemory] Skipping episode {episode_id}: vector size "
+                    f"{len(vector)} != expected {VECTOR_SIZE} (embedding model mismatch?)"
+                )
                 continue
             lexical_overlap = len(query_tokens.intersection(_tokens(content))) / max(1, len(query_tokens))
             score = _cosine(query_vector, vector) + (0.35 * lexical_overlap)

@@ -11,7 +11,16 @@ from typing import Any, Callable
 
 from core.tool_result import ToolVerificationResult
 
-__all__ = ["ToolVerifier", "VerificationState", "verify_result"]
+__all__ = [
+    "ToolVerifier",
+    "VerificationState",
+    "verify_result",
+    "AlwaysVerified",
+    "FileExistsVerifier",
+    "FileDeletedVerifier",
+    "VolumeChangeVerifier",
+    "ProcessExistsVerifier",
+]
 
 
 class VerificationState:
@@ -125,11 +134,45 @@ class VolumeChangeVerifier(ToolVerifier):
     def verify(
         self, parameters: dict[str, Any], result_data: Any
     ) -> ToolVerificationResult:
-        # TODO: Implement actual volume readback
-        return ToolVerificationResult(
-            state=VerificationState.UNKNOWN,
-            error="Volume verifier not yet implemented",
-        )
+        requested_level = parameters.get("level")
+        if requested_level is None:
+            return ToolVerificationResult(
+                state=VerificationState.UNKNOWN,
+                error="No volume level in parameters",
+            )
+
+        # Try to read current volume (Windows via pycaw if available)
+        try:
+            from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
+
+            devices = AudioUtilities.GetSpeakers()
+            interface = devices.Activate(ISimpleAudioVolume._iid_, 0, None)
+            volume = interface.QueryInterface(ISimpleAudioVolume)
+            current_level = int(volume.GetMasterVolume() * 100)
+
+            # Check if volume is within 1% of requested
+            if abs(current_level - requested_level) <= 1:
+                return ToolVerificationResult(
+                    state=VerificationState.VERIFIED,
+                    proof={"current_level": current_level, "requested_level": requested_level},
+                    confidence=0.95,
+                )
+            else:
+                return ToolVerificationResult(
+                    state=VerificationState.FAILED,
+                    error=f"Volume mismatch: requested {requested_level}%, got {current_level}%",
+                    confidence=0.0,
+                )
+        except ImportError:
+            return ToolVerificationResult(
+                state=VerificationState.UNKNOWN,
+                error="pycaw not available for volume verification",
+            )
+        except Exception as e:
+            return ToolVerificationResult(
+                state=VerificationState.UNKNOWN,
+                error=f"Volume verification error: {e}",
+            )
 
 
 class ProcessExistsVerifier(ToolVerifier):
@@ -145,11 +188,40 @@ class ProcessExistsVerifier(ToolVerifier):
                 error="No process name in parameters",
             )
 
-        # TODO: Check if process is running
-        return ToolVerificationResult(
-            state=VerificationState.UNKNOWN,
-            error="Process verifier not yet implemented",
-        )
+        try:
+            import psutil
+
+            # Normalize process name (remove path, extension)
+            proc_base = Path(process_name).stem.lower()
+
+            # Check running processes
+            for proc in psutil.process_iter(["pid", "name"]):
+                try:
+                    proc_name = proc.info["name"].lower()
+                    # Match by name or executable
+                    if proc_base in proc_name or proc_name.endswith(f"{proc_base}.exe"):
+                        return ToolVerificationResult(
+                            state=VerificationState.VERIFIED,
+                            proof={"pid": proc.info["pid"], "name": proc_name},
+                            confidence=0.9,
+                        )
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            return ToolVerificationResult(
+                state=VerificationState.FAILED,
+                error=f"Process not found: {process_name}",
+            )
+        except ImportError:
+            return ToolVerificationResult(
+                state=VerificationState.UNKNOWN,
+                error="psutil not available for process verification",
+            )
+        except Exception as e:
+            return ToolVerificationResult(
+                state=VerificationState.UNKNOWN,
+                error=f"Process verification error: {e}",
+            )
 
 
 def verify_result(

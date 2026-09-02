@@ -1,9 +1,24 @@
 
+import {
+  House, MessageCircle, Folder, File, LayoutGrid, Workflow,
+  BrainCircuit, FlaskConical, Monitor, Cpu, Settings,
+} from 'lucide-react';
 import zaraLogo from '../../../assets/zara-home/zara-logo.png';
 
-const NAV_ITEMS = [
-  'Hoje', 'Conversas', 'Projetos', 'Arquivos', 'Aplicativos', 'Automações',
-  'Memórias', 'ZARA Lab', 'Dispositivos', 'Sistema', 'Configurações',
+// Ícones confirmados 1:1 com o site de referência (lucide-react, mesma lib
+// já usada no resto da ZARA) — inspecionados via classList dos <svg> reais.
+const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [
+  { label: 'Hoje', Icon: House },
+  { label: 'Conversas', Icon: MessageCircle },
+  { label: 'Projetos', Icon: Folder },
+  { label: 'Arquivos', Icon: File },
+  { label: 'Aplicativos', Icon: LayoutGrid },
+  { label: 'Automações', Icon: Workflow },
+  { label: 'Memórias', Icon: BrainCircuit },
+  { label: 'ZARA Lab', Icon: FlaskConical },
+  { label: 'Dispositivos', Icon: Monitor },
+  { label: 'Sistema', Icon: Cpu },
+  { label: 'Configurações', Icon: Settings },
 ];
 
 interface SidebarProps {
@@ -28,14 +43,15 @@ export function Sidebar({ active, onSelect, userName, userPhotoUrl }: SidebarPro
         <span>ZARA</span>
       </div>
       <nav className="zh-nav">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.map(({ label, Icon }) => (
           <button
-            key={item}
+            key={label}
             className="zh-nav-item"
-            data-active={item === active}
-            onClick={() => onSelect(item)}
+            data-active={label === active}
+            onClick={() => onSelect(label)}
           >
-            {item}
+            <Icon size={17} strokeWidth={1.6} aria-hidden="true" />
+            <span>{label}</span>
           </button>
         ))}
       </nav>

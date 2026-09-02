@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import '../../styles/zara-home.css';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -18,6 +18,12 @@ import coreGlass from '../../../assets/zara-home/core-glass.png';
  * Home real da ZARA (Titanium Emerald), renderizada como componentes React
  * de verdade — não um iframe apontando para um build estático separado.
  *
+ * Composição (linhas/colunas) alinhada à referência real do Sites:
+ * topo = coluna principal (saudação + comando + Para você + Comunicações)
+ * ao lado de uma coluna direita ESTREITA (Projeto ativo + Ferramentas);
+ * Core grande e centralizado entre as duas; Sistema como FAIXA HORIZONTAL
+ * de largura total no rodapé (não empilhado dentro da coluna direita).
+ *
  * Ver ZARA_HOME_UI_INTEGRATION.md para a auditoria completa de onde cada
  * cor/asset veio e o que ainda está NOT_CONNECTED_YET.
  */
@@ -26,6 +32,12 @@ export function ZaraHome() {
   const coreState = useZaraCoreState();
   const metrics = useSystemMetrics();
   const battery = useBattery();
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // TODO: nome/foto reais dependem de uma integração de conta ainda não
   // construída (Google/Microsoft) — fora do escopo desta missão, per
@@ -41,20 +53,36 @@ export function ZaraHome() {
       />
       <Sidebar active={activeNav} onSelect={setActiveNav} userName={userName} />
 
-      <main className="zh-main">
-        <Header userFirstName={userName.split(' ')[0] ?? userName} />
-        <ForYouCard />
-        <CommunicationsCard />
-        <ZaraCore state={coreState} />
-      </main>
+      <div className="zh-status-row" aria-label="Status">
+        <span title="Wi-Fi">📶</span>
+        <span title={battery.supported ? `Bateria ${Math.round((battery.level ?? 0) * 100)}%` : 'Bateria não conectada'}>
+          {battery.supported ? (battery.charging ? '⚡' : '🔋') : '🔌'}
+        </span>
+        <span>{now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
 
-      <aside className="zh-right">
-        <ActiveProjectCard />
-        <ToolsCard />
+      <div className="zh-content">
+        <div className="zh-content-top">
+          <main className="zh-main">
+            <Header userFirstName={userName.split(' ')[0] ?? userName} />
+            <ForYouCard />
+            <CommunicationsCard />
+          </main>
+
+          <div className="zh-core-column">
+            <ZaraCore state={coreState} />
+          </div>
+
+          <aside className="zh-right">
+            <ActiveProjectCard />
+            <ToolsCard />
+          </aside>
+        </div>
+
+        <VoiceDock coreState={coreState} />
+
         <SystemPanel metrics={metrics} battery={battery} />
-      </aside>
-
-      <VoiceDock coreState={coreState} />
+      </div>
     </div>
   );
 }

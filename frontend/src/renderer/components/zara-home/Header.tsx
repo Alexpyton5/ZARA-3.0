@@ -20,7 +20,6 @@ export function Header({ userFirstName }: HeaderProps) {
     return () => clearInterval(id);
   }, []);
 
-  const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const date = now.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
 
   return (
@@ -29,7 +28,6 @@ export function Header({ userFirstName }: HeaderProps) {
       <p>Produtividade com inteligência.</p>
       <TextCommandInput />
       <div className="zh-clock-row">
-        <span>{time}</span>
         <span>{date}</span>
       </div>
     </header>

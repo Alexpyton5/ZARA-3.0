@@ -26,6 +26,7 @@ interface ZaraCoreProps {
 export function ZaraCore({ state }: ZaraCoreProps) {
   return (
     <div className="zh-core-wrap" role="region" aria-label={`ZARA Core: ${state}`}>
+      <div className="zh-core-platform" aria-hidden="true" />
       <div className="zh-core" data-state={state} />
       <div className="zh-core-label">{LABELS[state]}</div>
     </div>

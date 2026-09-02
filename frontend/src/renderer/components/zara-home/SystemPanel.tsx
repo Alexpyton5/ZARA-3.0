@@ -20,37 +20,45 @@ function pct(value: number | null): string {
  */
 export function SystemPanel({ metrics, battery }: SystemPanelProps) {
   return (
-    <section className="zh-section zh-glass-panel" aria-label="Sistema">
-      <h2>Estado do dispositivo</h2>
-      <div className="zh-metric-row">
-        <span>CPU</span>
-        <span>{pct(metrics.cpu)}</span>
-      </div>
-      <div className="zh-metric-row">
-        <span>RAM</span>
-        <span>{pct(metrics.ram)}</span>
-      </div>
-      <div className="zh-metric-row">
-        <span>Disco</span>
-        <span>{pct(metrics.disk)}</span>
-      </div>
-      <div className="zh-metric-row">
-        <span>Bateria</span>
-        <span>
-          {battery.supported && battery.level !== null
-            ? `${Math.round(battery.level * 100)}%${battery.charging ? ' ⚡' : ''}`
-            : 'NOT_CONNECTED_YET'}
-        </span>
+    <section className="zh-system-row zh-glass-panel" aria-label="Sistema">
+      <div className="zh-system-col">
+        <h2>Estado do dispositivo</h2>
+        <div className="zh-metric-row">
+          <span>CPU</span>
+          <span>{pct(metrics.cpu)}</span>
+        </div>
+        <div className="zh-metric-row">
+          <span>RAM</span>
+          <span>{pct(metrics.ram)}</span>
+        </div>
+        <div className="zh-metric-row">
+          <span>Disco</span>
+          <span>{pct(metrics.disk)}</span>
+        </div>
+        <div className="zh-metric-row">
+          <span>Bateria</span>
+          <span>
+            {battery.supported && battery.level !== null
+              ? `${Math.round(battery.level * 100)}%${battery.charging ? ' ⚡' : ''}`
+              : 'NOT_CONNECTED_YET'}
+          </span>
+        </div>
       </div>
 
-      <h2 style={{ marginTop: 16 }}>Segurança</h2>
-      <p className="zh-not-connected">NOT_CONNECTED_YET — sem leitura real de firewall/antivírus exposta.</p>
+      <div className="zh-system-col">
+        <h2>Segurança</h2>
+        <p className="zh-not-connected">NOT_CONNECTED_YET — sem leitura real de firewall/antivírus exposta.</p>
+      </div>
 
-      <h2 style={{ marginTop: 16 }}>Energia</h2>
-      <p className="zh-not-connected">NOT_CONNECTED_YET — sem leitura/troca real de plano de energia exposta ao renderer.</p>
+      <div className="zh-system-col">
+        <h2>Energia</h2>
+        <p className="zh-not-connected">NOT_CONNECTED_YET — ação real existe (os_power_plan_list/set), não conectada nesta tela ainda.</p>
+      </div>
 
-      <h2 style={{ marginTop: 16 }}>Manutenção</h2>
-      <p className="zh-not-connected">NOT_CONNECTED_YET — ações de limpeza ainda não expostas a esta tela.</p>
+      <div className="zh-system-col">
+        <h2>Manutenção</h2>
+        <p className="zh-not-connected">NOT_CONNECTED_YET — ações de limpeza ainda não expostas a esta tela.</p>
+      </div>
     </section>
   );
 }

@@ -37,8 +37,7 @@
   background: radial-gradient(120% 120% at 20% 0%, var(--zh-obsidian-2), var(--zh-obsidian) 60%);
   width: 100%;
   height: 100%;
-  display: grid;
-  grid-template-columns: 220px 1fr 320px;
+  display: flex;
   overflow: hidden;
   position: relative;
 }
@@ -55,11 +54,51 @@
 }
 
 .zh-sidebar,
-.zh-main,
-.zh-right,
-.zh-dock {
+.zh-content,
+.zh-status-row {
   position: relative;
   z-index: 1;
+}
+
+/* Faixa de status (Wi-Fi/bateria/hora) no canto superior direito — mesma
+ * posição relativa do site de referência, fora da coluna de conteúdo. */
+.zh-status-row {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--zh-muted);
+  z-index: 2;
+}
+
+/* Coluna de conteúdo: linha superior (main | core | right) + dock + Sistema
+ * como faixa de largura total no rodapé — mesma composição do site de
+ * referência (Sistema nunca fica dentro da coluna direita). */
+.zh-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 20px 24px;
+  gap: 16px;
+  min-width: 0;
+}
+
+.zh-content-top {
+  display: grid;
+  grid-template-columns: 1fr 200px 280px;
+  gap: 16px;
+  align-items: start;
+}
+
+.zh-core-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
 }
 
 .zh-glass-panel {
@@ -183,10 +222,8 @@
 .zh-main {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  padding: 24px 28px 140px;
-  gap: 20px;
-  position: relative;
+  gap: 14px;
+  min-width: 0;
 }
 
 .zh-header h1 {
@@ -257,6 +294,22 @@
 
 .zh-section {
   padding: 16px;
+}
+
+.zh-system-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  padding: 18px 20px;
+}
+
+.zh-system-col h2 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--zh-muted);
+  margin: 0 0 10px;
 }
 
 .zh-section h2 {
@@ -330,27 +383,41 @@
 /* ---------- Core ---------- */
 
 .zh-core-wrap {
-  position: absolute;
-  left: 50%;
-  bottom: 90px;
-  transform: translateX(-50%);
   display: grid;
   place-items: center;
-  z-index: 2;
-  pointer-events: none;
+  position: relative;
+}
+
+/* Plataforma: anéis concêntricos de titânio sob o Core, dando profundidade
+ * física em vez de o Core flutuar sozinho no vazio. */
+.zh-core-platform {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #1c2b26 0%, #0a1310 55%, transparent 75%);
+  box-shadow:
+    0 0 0 1px #ffffff12,
+    0 0 0 18px #05100c66,
+    0 0 0 19px #ffffff0d,
+    0 20px 60px 10px #00000080;
 }
 
 .zh-core {
-  width: 96px;
-  height: 96px;
+  width: 128px;
+  height: 128px;
   border-radius: 50%;
   position: relative;
+  z-index: 1;
   background:
-    radial-gradient(circle at 50% 40%, #ffffffaa, transparent 40%),
-    radial-gradient(circle at 50% 55%, var(--zh-emerald) 0%, var(--zh-emerald-2) 55%, #063b2a 100%);
+    radial-gradient(circle at 38% 30%, #ffffffcc, transparent 32%),
+    radial-gradient(circle at 60% 70%, #00160fdd 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, var(--zh-emerald) 0%, var(--zh-emerald-2) 45%, #04241a 85%, #010805 100%);
   box-shadow:
-    0 0 40px 6px #00bd8255,
-    inset 0 -12px 22px -12px #00170eaa;
+    0 0 50px 8px #00bd8244,
+    inset 0 14px 24px -10px #ffffff55,
+    inset 0 -18px 30px -14px #00170eee,
+    inset 0 0 0 1px #ffffff22;
   animation: zh-core-breath 2.6s ease-in-out infinite;
 }
 
@@ -360,47 +427,50 @@
 .zh-core[data-state='executing'] { animation-duration: 0.5s; }
 .zh-core[data-state='speaking'] { animation-duration: 0.9s; }
 .zh-core[data-state='error'] {
-  background: radial-gradient(circle at 50% 55%, #ff6467 0%, #b5302f 60%, #3a0d0c 100%);
-  box-shadow: 0 0 40px 6px #ff646755;
+  background:
+    radial-gradient(circle at 38% 30%, #ffffffcc, transparent 32%),
+    radial-gradient(circle at 50% 50%, #ff6467 0%, #b5302f 55%, #250807 100%);
+  box-shadow: 0 0 50px 8px #ff646744, inset 0 14px 24px -10px #ffffff55, inset 0 -18px 30px -14px #170303ee;
 }
 .zh-core[data-state='offline'] {
-  background: radial-gradient(circle at 50% 55%, #4a4a4a, #1c1c1c 60%);
-  box-shadow: none;
+  background: radial-gradient(circle at 50% 50%, #5a5a5a, #1c1c1c 65%);
+  box-shadow: inset 0 -14px 24px -10px #000000aa;
   animation: none;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 .zh-core[data-state='awaiting_authorization'] {
-  background: radial-gradient(circle at 50% 55%, #f4c520, #b5860f 60%, #3a2b0c 100%);
-  box-shadow: 0 0 40px 6px #f4c52055;
+  background:
+    radial-gradient(circle at 38% 30%, #ffffffcc, transparent 32%),
+    radial-gradient(circle at 50% 50%, #f4c520 0%, #b5860f 55%, #2c2007 100%);
+  box-shadow: 0 0 50px 8px #f4c52044, inset 0 14px 24px -10px #ffffff55;
 }
 
 @keyframes zh-core-breath {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
+  50% { transform: scale(1.045); }
 }
 
 .zh-core-label {
-  margin-top: 10px;
+  position: absolute;
+  bottom: -26px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--zh-muted);
   text-align: center;
+  white-space: nowrap;
 }
 
 /* ---------- Dock ---------- */
 
 .zh-dock {
-  position: absolute;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
+  align-self: center;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px;
   border-radius: 999px;
-  z-index: 3;
+  box-shadow: 0 10px 30px -10px #000000cc, inset 0 1px 0 #ffffff14;
 }
 
 .zh-dock-btn {
@@ -451,12 +521,10 @@
 /* ---------- Right column ---------- */
 
 .zh-right {
-  border-left: 1px solid var(--zh-line);
-  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
+  gap: 14px;
+  min-width: 0;
 }
 
 .zh-progress-track {

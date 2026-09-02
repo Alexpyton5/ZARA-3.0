@@ -3,10 +3,11 @@ Voice TTS — cascata de vozes da ZARA.
 
 Ordem de preferencia: Kore (Gemini Live, melhor entonacao, tem cota) ->
 Edge Neural (gratuita, sem chave, sem cota, precisa de internet) ->
-Kokoro ONNX (local, offline, sem limite) -> Gemini HTTP -> Windows SAPI.
+Kokoro ONNX (local, offline, sem limite) -> Gemini HTTP.
 
-A regra de produto e simples: a ZARA nunca pode ficar muda, e nunca pode cair
-direto do Kore para a voz robotica do Windows.
+ZARA-VOZ-UNICA-002 removeu o Windows SAPI da cascata em definitivo. O teste
+`test_a_voz_do_windows_nunca_mais_e_chamada` garante que `_speak_windows_sapi`
+nunca e chamado. A regra de produto e simples: a ZARA nunca pode ficar muda.
 """
 from __future__ import annotations
 

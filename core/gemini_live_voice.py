@@ -404,7 +404,8 @@ class GeminiLiveVoice:
                 rec.Reset()
                 self._wake_rolling = b""
             return False
-        except Exception:
+        except Exception as exc:
+            print(f"[VOICE_TRACE] stage=WAKE_DETECT_ERROR result={exc!r}")
             return False
 
     @property

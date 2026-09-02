@@ -65,3 +65,13 @@ config/api_keys*
 # Historical snapshots may contain retired credentials. Keep the recoverable
 # quarantine local and permanently outside version control.
 _quarentena/snapshots-inseguros/
+
+# Tauri prototype build artifacts (never versioned: Rust target dir is ~5GB)
+zara-app/src-tauri/target/
+zara-app/node_modules/
+
+# Inspection/debug scratch dirs
+.dsh-inspect/
+
+# Archived interface source dump (large zip, not canonical source)
+zara-interface-codigo-completo.zip

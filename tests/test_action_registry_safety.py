@@ -136,6 +136,7 @@ def test_supercerebro_off_allows_closed_local_pc_control():
     registry.register(
         "local_volume",
         lambda level: f"volume={level}",
+        category="os",
         capability="LOCAL_PC_CONTROL",
     )
 
@@ -151,6 +152,7 @@ def test_local_pc_control_does_not_bypass_medium_risk_gate():
     registry.register(
         "local_clipboard_write",
         lambda: calls.append("ran") or "done",
+        category="os",
         risk="MEDIUM",
         capability="LOCAL_PC_CONTROL",
     )

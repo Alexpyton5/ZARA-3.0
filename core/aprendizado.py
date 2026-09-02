@@ -208,6 +208,33 @@ class Aprendizado:
         return {"acao": linha["acao"], "erros": linha["erros"],
                 "acertos": linha["acertos"], "exemplo": linha["exemplo"]}
 
+    def intencao_aprendida(self, pedido: str) -> dict | None:
+        """Antes de agir: já temos uma lição POSITIVA para essa forma de pedido?
+        
+        Retorna a ação com mais acertos que erros para a forma do pedido,
+        se houver confiança suficiente. Usado pelo Fast Path local para
+        evitar consultar o LLM quando já temos um mapeamento aprendido.
+        """
+        forma = _forma_do_pedido(pedido)
+        if not forma:
+            return None
+        try:
+            with self._lock, self._conectar() as conn:
+                # Pega a ação com melhor balanço acertos vs erros para essa forma
+                linha = conn.execute(
+                    """SELECT acao, acertos, erros, exemplo FROM licoes
+                       WHERE forma=? AND acertos > erros
+                       ORDER BY (acertos - erros) DESC, ultima DESC
+                       LIMIT 1""",
+                    (forma,)
+                ).fetchone()
+        except Exception:
+            return None
+        if linha is None:
+            return None
+        return {"acao": linha["acao"], "acertos": linha["acertos"],
+                "erros": linha["erros"], "exemplo": linha["exemplo"]}
+
     def o_que_aprendeu(self, desde_horas: float = 24.0, limite: int = 8) -> list[dict]:
         """Para Alex poder perguntar: 'o que você aprendeu hoje?'"""
         corte = time.time() - desde_horas * 3600
@@ -404,3 +431,37 @@ class Aprendizado:
         except Exception:
             return {"acoes": 0, "certas": 0, "corrigidas": 0}
         return {"acoes": int(total), "certas": int(ok), "corrigidas": int(corrigidas)}
+
+    def obter_sugestoes(self) -> list[dict]:
+        """Devolve sugestões comportamentais baseadas no uso repetido.
+
+        Uma forma/acao que foi usada 3+ vezes (contagem de episódios)
+        ganha sugestao de "atalho" — o Alex pode configurar um atalho
+        real para esse comando.
+        """
+        try:
+            with self._lock, self._conectar() as conn:
+                linhas = conn.execute(
+                    "SELECT forma, acao, COUNT(*) as usos, "
+                    "SUM(CASE WHEN sucesso=1 THEN 1 ELSE 0 END) as acertos, "
+                    "SUM(CASE WHEN sucesso=0 THEN 1 ELSE 0 END) as erros, "
+                    "MAX(pedido) as exemplo "
+                    "FROM episodios "
+                    "GROUP BY forma, acao "
+                    "HAVING usos >= 3 "
+                    "ORDER BY usos DESC"
+                ).fetchall()
+        except Exception:
+            return []
+        sugestoes = []
+        for linha in linhas:
+            sugestoes.append({
+                "tipo": "atalho",
+                "forma": linha["forma"],
+                "acao": linha["acao"],
+                "usos": linha["usos"],
+                "acertos": linha["acertos"],
+                "erros": linha["erros"],
+                "exemplo": linha["exemplo"],
+            })
+        return sugestoes

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>ZARA Painel</title>
+    <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#060a07}#stage{width:100%;height:100%;display:grid;place-items:center;overflow:hidden}iframe{width:1440px;height:900px;border:0;transform-origin:center;box-shadow:0 20px 60px #000}#win-controls{position:fixed;z-index:10;top:14px;right:16px;display:flex;gap:7px}#win-controls button{width:28px;height:28px;border:1px solid rgba(176,208,164,.22);border-radius:50%;background:rgba(16,28,18,.86);color:#d8ead4;font:18px/1 system-ui;cursor:pointer}#win-controls button:hover{background:#31583a}#win-controls .close:hover{background:#b64f4a}</style>
+  </head>
+  <body><div id="stage"><iframe id="claude-panel" src="/claude-panel/Main.dc.html" title="Painel da ZARA"></iframe></div><nav id="win-controls" aria-label="Janela"><button id="minimize" title="Minimizar">−</button><button id="maximize" title="Maximizar">□</button><button id="close" class="close" title="Fechar">×</button></nav>
+    <script type="module">
+      import { invoke } from '@tauri-apps/api/core';
+      import { getCurrentWindow } from '@tauri-apps/api/window';
+      const f=document.querySelector('#claude-panel');
+      const fit=()=>f.style.transform=`scale(${Math.min(innerWidth/1440,innerHeight/900)})`;
+      addEventListener('resize',fit);fit();
+      const appWindow=getCurrentWindow();
+      document.querySelector('#minimize').addEventListener('click',()=>appWindow.minimize());
+      document.querySelector('#maximize').addEventListener('click',()=>appWindow.toggleMaximize());
+      document.querySelector('#close').addEventListener('click',()=>appWindow.close());
+      const call=(requestType,payload={})=>invoke('zara_request',{requestType,payload});
+      const exact=(doc,text)=>[...doc.querySelectorAll('*')].find(el=>el.children.length===0&&el.textContent.trim()===text);
+      f.addEventListener('load',async()=>{
+        const doc=f.contentDocument;
+        if(!doc)return;
+        const mic=exact(doc,'Microfone');
+        if(mic){
+          mic.closest('div[style]')?.addEventListener('click',async()=>{
+            const next=mic.textContent.trim()==='Microfone';
+            try{const r=await call(next?'voice-start':'voice-stop');if(r?.success===false)throw Error(r.message||'A ZARA não confirmou a mudança.');mic.textContent=next?'Ouvindo':'Microfone';}
+            catch(e){alert(e instanceof Error?e.message:'Não consegui mudar a escuta.');}
+          });
+        }
+        const memory=exact(doc,'memórias');
+        try{const r=await call('memory-galaxy-list');const count=Array.isArray(r?.nodes)?r.nodes.length:0;if(memory&&count){const number=memory.previousElementSibling; if(number)number.textContent=String(count);}}
+        catch{}
+      });
+    </script>
+  </body>
+</html>

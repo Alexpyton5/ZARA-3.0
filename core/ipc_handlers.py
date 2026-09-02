@@ -312,6 +312,32 @@ def _raciocinio_livre_fallback_texto_habilitado() -> bool:
         return False
 
 
+# ZARA-INTENSIDADE-VOLUME-001 (Alex, 2026-08-28)
+# "põe o som lá em baixo" e "diminua muito o volume" caíam num passo fixo de
+# 10 pontos, igual a "diminua um pouco" -- nenhuma diferença de magnitude.
+# O PcVoiceIntentDetector (core/pc_voice_intent.py) agora anexa um sufixo
+# fechado ("_pouco"/"_muito") ao param "up"/"down" quando a frase carrega
+# intensidade explícita ou idiomática. Aqui só se decodifica esse sufixo em
+# um passo real -- sem chamada nova, sem latência nova, mesmo caminho
+# determinístico de sempre.
+_PASSO_POR_INTENSIDADE = {None: 10, "pouco": 5, "muito": 30}
+
+
+def _resolver_direcao_e_delta(param: str | None) -> tuple[str, int] | None:
+    """Decodifica 'up'/'down' (+ sufixo opcional _pouco/_muito) num delta
+    assinado. None quando o param não é uma direção reconhecida -- quem
+    chamar deve tratar como valor absoluto ou desistir honestamente."""
+    if not isinstance(param, str):
+        return None
+    direcao, _, sufixo = param.partition("_")
+    if direcao not in ("up", "down"):
+        return None
+    passo = _PASSO_POR_INTENSIDADE.get(sufixo or None)
+    if passo is None:
+        return None
+    return direcao, (passo if direcao == "up" else -passo)
+
+
 def _montar_parametros_etapa3(action: str, param: str | None) -> dict | None:
     """Converte o palpite do classificador (string livre) pro tipo real da
     action. None quando a conversao nao e segura -- quem chamar deve desistir
@@ -537,7 +563,9 @@ class IPCHandler:
         self.model_router: ModelRouter | None = None
         self.memory: MemoryManager | None = None
         self.hermes: HermesIntegration | None = None
-        self.current_engine: str = "auto_smart"
+        # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): resposta por voz tem
+        # que ser rápida por padrão -- não é mais preciso pedir "modo rápido".
+        self.current_engine: str = "auto_fast"
         self.supercerebro_active: bool = False
         self._set_supercerebro_state(False)
         # ZARA-TELEGRAM-GRUPO-001: ponte do grupo, em paralelo com a privada.
@@ -972,7 +1000,7 @@ class IPCHandler:
             engine = str(config.get("ai_engine") or "auto_smart").strip()
             if engine in {"auto", "auto_router"}:
                 engine = "auto_smart"
-            self.current_engine = engine or "auto_smart"
+            self.current_engine = engine or "auto_fast"
         except Exception as exc:
             print(f"[IPC] Could not load runtime preferences: {exc}")
 
@@ -1976,8 +2004,16 @@ class IPCHandler:
                     f"não existe ação registrada para '{res.action}'."
                 )
             params = {}
+            # ZARA-INTENSIDADE-VOLUME-001: por padrão executa a própria action
+            # detectada; volume/brilho relativo passam a executar a versão
+            # absoluta (mesmo executor de sempre) com o nível já calculado
+            # aqui, porque "up_muito"/"down_pouco" não é um tipo que a action
+            # em si entenda -- ela só recebe o resultado já resolvido.
+            action_to_execute = res.action
             if res.action == "os_volume":
-                if res.param in ("up", "down"):
+                direcao_delta = _resolver_direcao_e_delta(res.param)
+                if direcao_delta is not None:
+                    _, delta = direcao_delta
                     current = (
                         self._last_volume_level
                         if res.contextual
@@ -1985,7 +2021,7 @@ class IPCHandler:
                     )
                     if current is None:
                         return "Não consegui ler o volume do sistema."
-                    params["level"] = max(0, min(100, current + (10 if res.param == "up" else -10)))
+                    params["level"] = max(0, min(100, current + delta))
                 else:
                     try:
                         params["level"] = max(0, min(100, int(float(res.param))))
@@ -2002,6 +2038,20 @@ class IPCHandler:
                     params["level"] = max(0, min(100, int(float(res.param))))
                 except (TypeError, ValueError):
                     return None
+            elif res.action in ("os_brightness_up", "os_brightness_down"):
+                direcao_delta = _resolver_direcao_e_delta(res.param)
+                if direcao_delta is None:
+                    return None
+                _, delta = direcao_delta
+                current = (
+                    self._last_brightness_level
+                    if res.contextual
+                    else _read_windows_brightness_level()
+                )
+                if current is None:
+                    return "Não consegui ler o brilho da tela."
+                params["level"] = max(0, min(100, current + delta))
+                action_to_execute = "os_brightness_absolute"
             elif res.action in {"window_minimize", "window_maximize", "window_restore", "window_move", "window_resize_larger", "window_close"}:
                 if self._last_window_hwnd is not None:
                     params["hwnd"] = self._last_window_hwnd
@@ -2050,7 +2100,7 @@ class IPCHandler:
                     return f"Posso copiar esse conteúdo sensível de {len(pending)} caracteres?"
                 return f"Posso copiar ‘{preview}’?"
             stage = "executor"
-            result = await execute_action(res.action, **params)
+            result = await execute_action(action_to_execute, **params)
             # ZARA-NAO-VERIFICADO-001: guardado para o embrulho decidir se a
             # frase pode sair afirmativa ou precisa da ressalva honesta.
             self._ultimo_resultado_de_acao = result
@@ -4561,6 +4611,15 @@ class IPCHandler:
         """Return zero-cost text engines and AUTO policies without exposing keys."""
         engines: list[dict[str, Any]] = [
             {
+                # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): padrão agora.
+                # Primeiro na lista de propósito -- é a opção recomendada.
+                'id': 'auto_fast',
+                'name': 'AUTO • RÁPIDO',
+                'provider': 'zara',
+                'free_tier': 'Prioriza o motor mais rápido disponível + fallback R$0',
+                'status': 'READY',
+            },
+            {
                 'id': 'auto_smart',
                 'name': 'AUTO • INTELIGENTE',
                 'provider': 'zara',
@@ -4588,10 +4647,10 @@ class IPCHandler:
                 })
 
         if self.current_engine in {'auto', 'auto_router'}:
-            self.current_engine = 'auto_smart'
+            self.current_engine = 'auto_fast'
         available_ids = {engine['id'] for engine in engines}
         if self.current_engine not in available_ids:
-            self.current_engine = 'auto_smart'
+            self.current_engine = 'auto_fast'
 
         await self.send_response(msg.request_id, {
             'current': self.current_engine,

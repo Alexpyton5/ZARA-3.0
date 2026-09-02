@@ -6,10 +6,18 @@ PC voice intent detector. Maps natural language Windows commands to existing PC 
 With Supercerebro OFF, detected intents are blocked (BLOCKED_PC_CONTROL).
 """
 
+import json
+import os
 import re
+import time
 from dataclasses import dataclass
+from typing import Optional
+
+import httpx
 
 from core.actions.os_ops import resolve_app_alias, _SAFE_CLOSE_APPS
+from core.action_registry import get_registry
+from core.aprendizado import Aprendizado, _forma_do_pedido
 
 # ZARA-RECUSA-UNICA-001 (Alex, 2026-08-13)
 # "eu nao quero que ela ofereça calculadora, quando ela nao puder fazer algo,
@@ -59,6 +67,10 @@ _LOCAL_DETERMINISTIC_ACTIONS = frozenset({
     "system_time", "system_info", "system_metrics", "system_processes", "os_clipboard", "os_clipboard_read",
     "input_type_text", "input_hotkey",
     "audio_status",
+    "os_service_list", "os_task_list", "os_power_plan_list", "os_network_adapters",
+    "os_wifi_profiles", "os_vpn_list", "os_clipboard_history", "os_recycle_bin_list",
+    "window_snap", "window_virtual_desktop_create", "window_virtual_desktop_switch",
+    "window_virtual_desktop_move", "window_minimize_all", "window_show_desktop",
     # ZARA-PONTE-CLAUDE-001: falar com o Claude Code é reflexo local, não pode
     # depender do Supercérebro estar ligado — que é o estado padrão no boot.
     "claude_ler", "claude_enviar", "codex_ler", "codex_enviar", "ponte_repassar",
@@ -66,6 +78,34 @@ _LOCAL_DETERMINISTIC_ACTIONS = frozenset({
     # do Supercérebro nem de rede.
     "aprendizado_resumo",
 })
+
+
+# ZARA-INTENSIDADE-VOLUME-001 (Alex, 2026-08-28)
+# "põe o som lá em baixo" virou -10% fixo; "diminua muito o volume" nem
+# reconhecia. Alex: "quando eu peça pra diminuir muito, diminua muito na
+# mesma hora" -- raciocinar sobre a MAGNITUDE do pedido, nao só a direção,
+# sem sair do caminho determinístico (zero rede, zero latência nova).
+#
+# Vocabulário fechado de proposito, mesma disciplina do classificador de
+# raciocínio livre (core/intent_classifier.py): nunca um número livre vindo
+# de regex, só um rótulo de um conjunto pequeno e auditável.
+_INTENSIDADE_POUCO = {"um pouco", "um pouquinho", "levemente"}
+_INTENSIDADE_MUITO = {"muito", "bastante", "demais", "bem"}
+
+
+def _encode_intensity(direction: str, intensity_text: str | None) -> str:
+    """Traduz o texto de intensidade capturado no regex num sufixo fechado
+    ('_pouco'/'_muito') que core/ipc_handlers.py usa para escolher o passo
+    real. Sem captura -> passo padrão de sempre (10 pontos), comportamento
+    inalterado para quem já falava sem qualificador."""
+    if not intensity_text:
+        return direction
+    texto = " ".join(intensity_text.strip().lower().split())
+    if texto in _INTENSIDADE_POUCO:
+        return f"{direction}_pouco"
+    if texto in _INTENSIDADE_MUITO:
+        return f"{direction}_muito"
+    return direction
 
 
 @dataclass
@@ -93,6 +133,39 @@ class PcVoiceIntentDetector:
         self.volume_context_level = volume_context_level
         self.window_context_available = window_context_available
         self.folder_context = folder_context
+
+        # Advanced OS commands. Each tuple is (regex, action, default_param).
+        # Mutating items still pass the Supercerebro and registry risk gates.
+        self.advanced_patterns = [
+            (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre|quais\s+s[ãa]o)\s+(?:os\s+)?servi[cç]os(?:\s+do\s+windows)?\s*[.!?]*$', "os_service_list", ""),
+            (r'^(?:zara[,.\s]+)?(?:inicie|inicia|ligue)\s+(?:o\s+)?servi[cç]o\s+(.+?)\s*[.!?]*$', "os_service_start", None),
+            (r'^(?:zara[,.\s]+)?(?:pare|parar|desligue)\s+(?:o\s+)?servi[cç]o\s+(.+?)\s*[.!?]*$', "os_service_stop", None),
+            (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre)\s+(?:as\s+)?tarefas\s+agendadas\s*[.!?]*$', "os_task_list", ""),
+            (r'^(?:zara[,.\s]+)?(?:execute|executa|rode|roda)\s+(?:a\s+)?tarefa\s+agendada\s+(.+?)\s*[.!?]*$', "os_task_run", None),
+            (r'^(?:zara[,.\s]+)?crie\s+(?:a\s+)?tarefa\s+agendada\s+(.+?)\s*[.!?]*$', "os_task_create", None),
+            (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre)\s+(?:os\s+)?planos\s+de\s+energia\s*[.!?]*$', "os_power_plan_list", ""),
+            (r'^(?:zara[,.\s]+)?(?:ative|ativa|use)\s+(?:o\s+)?plano\s+de\s+energia\s+(.+?)\s*[.!?]*$', "os_power_plan_set", None),
+            (r'^(?:zara[,.\s]+)?(?:suspenda|suspende|durma|dorme)(?:\s+o\s+(?:computador|pc))?\s*[.!?]*$', "os_sleep", "sleep"),
+            (r'^(?:zara[,.\s]+)?(?:hiberne|hiberna)(?:\s+o\s+(?:computador|pc))?\s*[.!?]*$', "os_sleep", "hibernate"),
+            (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre)\s+(?:os\s+)?adaptadores\s+de\s+rede\s*[.!?]*$', "os_network_adapters", ""),
+            (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre)\s+(?:as\s+)?redes\s+wi-?fi\s+salvas\s*[.!?]*$', "os_wifi_profiles", ""),
+            (r'^(?:zara[,.\s]+)?(?:conecte|conecta)\s+(?:no|ao)\s+wi-?fi\s+(.+?)\s*[.!?]*$', "os_wifi_connect", None),
+            (r'^(?:zara[,.\s]+)?(?:ligue|liga|ative|ativa)\s+(?:o\s+)?hotspot\s*[.!?]*$', "os_hotspot_toggle", "on"),
+            (r'^(?:zara[,.\s]+)?(?:desligue|desliga|desative|desativa)\s+(?:o\s+)?hotspot\s*[.!?]*$', "os_hotspot_toggle", "off"),
+            (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre)\s+(?:as\s+)?vpns?\s*[.!?]*$', "os_vpn_list", ""),
+            (r'^(?:zara[,.\s]+)?(?:conecte|conecta)\s+(?:na|a)\s+vpn\s+(.+?)\s*[.!?]*$', "os_vpn_connect", None),
+            (r'^(?:zara[,.\s]+)?(?:mostre|mostra|abra|liste)\s+(?:o\s+)?hist[oó]rico\s+(?:da\s+)?[aá]rea\s+de\s+transfer[eê]ncia\s*[.!?]*$', "os_clipboard_history", ""),
+            (r'^(?:zara[,.\s]+)?fixe\s+(.+?)\s+(?:no\s+)?hist[oó]rico\s+(?:da\s+)?[aá]rea\s+de\s+transfer[eê]ncia\s*[.!?]*$', "os_clipboard_pin", None),
+            (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre)\s+(?:os\s+)?itens\s+(?:da|na)\s+lixeira\s*[.!?]*$', "os_recycle_bin_list", ""),
+            (r'^(?:zara[,.\s]+)?(?:restaure|restaura)\s+(?:da\s+lixeira\s+)(.+?)\s*[.!?]*$', "os_recycle_bin_restore", None),
+            (r'^(?:zara[,.\s]+)?(?:esvazie|esvazia|limpe|limpa)\s+(?:a\s+)?lixeira\s*[.!?]*$', "os_recycle_bin_empty", ""),
+            (r'^(?:zara[,.\s]+)?(?:encaixe|encaixa)\s+(?:a\s+)?janela\s+(?:na|para\s+a)\s+(esquerda|direita|cima|baixo)\s*[.!?]*$', "window_snap", None),
+            (r'^(?:zara[,.\s]+)?crie\s+(?:um\s+)?novo\s+desktop\s+virtual\s*[.!?]*$', "window_virtual_desktop_create", ""),
+            (r'^(?:zara[,.\s]+)?(?:v[aá]|mude|troque)\s+(?:para\s+)?(?:o\s+)?desktop\s+(?:virtual\s+)?(anterior|seguinte|esquerda|direita)\s*[.!?]*$', "window_virtual_desktop_switch", None),
+            (r'^(?:zara[,.\s]+)?mova\s+(?:a\s+)?janela\s+(?:para\s+)?(?:o\s+)?desktop\s+(?:virtual\s+)?(anterior|seguinte|esquerda|direita)\s*[.!?]*$', "window_virtual_desktop_move", None),
+            (r'^(?:zara[,.\s]+)?minimize\s+todas\s+(?:as\s+)?janelas\s*[.!?]*$', "window_minimize_all", ""),
+            (r'^(?:zara[,.\s]+)?(?:mostre|mostra|exiba)\s+(?:o\s+)?desktop\s*[.!?]*$', "window_show_desktop", ""),
+        ]
 
         # Intent patterns
         self.patterns = [
@@ -318,20 +391,26 @@ class PcVoiceIntentDetector:
 
             # Volume
             # ZARA-VOICE-VERBOS-002: faltavam "poe/bota/ajusta" e a preposicao "pra".
-            (r'\b(?:coloc[ae]r?|defin[ae]r?|ponha|poe|bot[ae]r?|deix[ae]r?|ajust[ae]r?|set)\s+(?:o\s+)?volume\s+(?:em|para|pra|a)\s*(\d{1,3})\s*%?\b',
+            (r'\b(?:coloc[ae]r?|defin[ae]r?|ponha|p[oõ]e|bot[ae]r?|deix[ae]r?|ajust[ae]r?|set)\s+(?:o\s+)?volume\s+(?:em|para|pra|a)\s*(\d{1,3})\s*%?\b',
              self._volume_level, "os_volume", None),
             (r'\bvolume\s+(?:em\s+|para\s+|pra\s+|a\s+)?(\d{1,3})\s*%?\b',
              self._volume_level, "os_volume", None),
             # Volume (aceita imperativo E infinitivo: "aumente/aumentar/aumenta",
             # "diminua/diminuir", "suba/subir", "baixe/baixar/abaixar").
-            (r'\b(?:aument[ae]r?|sob[ae]|suba|subir|subo|up|mais\s+volume|increase?)\s+(?:o\s+)?volume\b',
+            (r'\b(?:aument[ae]r?|sob[ae]|suba|subir|subo|up|mais\s+volume|increase?)\s+'
+             r'(?:(?P<intensity>um\s+pouquinho|um\s+pouco|levemente|muito|bastante|demais|bem)\s+)?'
+             r'(?:o\s+)?volume\b',
              self._volume_up, "os_volume", "up"),
-            (r'\b(?:diminu(?:[ae]r?|ir?)|baix[ae]r?|abaix[ae]r?|down|menos\s+volume|decrease?|lower)\s+(?:o\s+)?volume\b',
+            (r'\b(?:diminu(?:[ae]r?|ir?)|baix[ae]r?|abaix[ae]r?|down|menos\s+volume|decrease?|lower)\s+'
+             r'(?:(?P<intensity>um\s+pouquinho|um\s+pouco|levemente|muito|bastante|demais|bem)\s+)?'
+             r'(?:o\s+)?volume\b',
              self._volume_down, "os_volume", "down"),
             # ZARA-VOICE-VERBOS-003: "põe/bota/coloca o volume/som lá embaixo"
             # -- frase do dia a dia sem numero, so intencao de baixar bastante.
+            # ZARA-INTENSIDADE-VOLUME-001: o idioma "lá embaixo" já É um pedido
+            # forte por natureza -- não existe "lá embaixo, mas só um pouco".
             (r'\b(?:p[oõ]e|ponha|bot[ae]|coloc[ae])\s+(?:o\s+)?(?:volume|som)\s+l[áa]\s+(?:em\s*baixo|embaixo)\b',
-             self._volume_down, "os_volume", "down"),
+             self._volume_down_forte, "os_volume", "down_muito"),
 
             # Media controls are deliberately anchored to avoid collisions
             # with ordinary conversation such as "faça uma pausa no projeto".
@@ -359,7 +438,7 @@ class PcVoiceIntentDetector:
              self._audio_unmute, "audio_unmute", "unmute"),
             (r'\b(?:tir[ae]r?\s+(?:do\s+|o\s+)?mudo|retir[ae]r?\s+do\s+mudo|desativ[ae]r?\s+(?:o\s+)?mudo|desmut[ae]r?|unmute)\b',
              self._audio_unmute, "audio_unmute", "unmute"),
-            (r'^(?:zara[,\s]+)?(?:mute|mut[ae]|silenci[ae]|(?:ativ(?:a|e)|lig(?:a|ue)|coloc(?:a|ue)|deix(?:a|e)|poe|ponha)\s+(?:no\s+|o\s+)?mudo)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:mute|mut[ae]|silenci[ae]|(?:ativ(?:a|e)|lig(?:a|ue)|coloc(?:a|ue)|deix(?:a|e)|p[oõ]e|ponha)\s+(?:no\s+|o\s+)?mudo)\s*[.!?]*$',
              self._audio_mute, "audio_mute", "mute"),
             (r'^(?:zara[,\s]+)?(?:tir(?:a|e)|cort(?:a|e)|deslig(?:a|ue))\s+(?:o\s+)?(?:som|audio|áudio)\s*[.!?]*$',
              self._audio_mute, "audio_mute", "mute"),
@@ -389,22 +468,26 @@ class PcVoiceIntentDetector:
             # "o brilho daquele quadro e uns 80" nao disparam isto (verificado
             # empiricamente). A preposicao "a" foi removida por ser generica
             # demais e coincidir com expressoes de hora ("brilho a 3 da tarde").
-            (r'\b(?:coloc\w+|ponha|poe|bote|bota|defin\w+|deix\w+|ajust\w+|deixa)?\s*'
+            (r'\b(?:coloc\w+|ponha|p[oõ]e|bote|bota|defin\w+|deix\w+|ajust\w+|deixa)?\s*'
              r'(?:o\s+)?brilho\s+(?:em|para|pra)?\s*(\d{1,3})\s*%?',
              self._brightness_level, "os_brightness_absolute", None),
             (r'\bbrilho\s+(?:em\s+)?(\d{1,3})\s*%?',
              self._brightness_level, "os_brightness_absolute", None),
-            (r'\b(?:aument\w+|sob[ae]|sub\w+|clarei\w+)\s+(?:um\s+pouco\s+)?(?:o\s+)?brilho',
+            (r'\b(?:aument\w+|sob[ae]|sub\w+|clarei\w+)\s+'
+             r'(?:(?P<intensity>um\s+pouquinho|um\s+pouco|levemente|muito|bastante|demais|bem)\s+)?'
+             r'(?:o\s+)?brilho',
              self._brightness_up, "os_brightness_up", "up"),
             (r'\b(?:mais\s+claro|clareia|clareie)\b',
              self._brightness_up, "os_brightness_up", "up"),
-            (r'\b(?:diminu\w+|abaix\w+|baix\w+|reduz\w*|escurec\w+)\s+(?:um\s+pouco\s+)?(?:o\s+)?brilho',
+            (r'\b(?:diminu\w+|abaix\w+|baix\w+|reduz\w*|escurec\w+)\s+'
+             r'(?:(?P<intensity>um\s+pouquinho|um\s+pouco|levemente|muito|bastante|demais|bem)\s+)?'
+             r'(?:o\s+)?brilho',
              self._brightness_down, "os_brightness_down", "down"),
             (r'\b(?:mais\s+escur[oa]|escurece|escureca)\b',
              self._brightness_down, "os_brightness_down", "down"),
             # ZARA-VOICE-VERBOS-002: "ativa o modo noturno", "liga a luz noturna",
             # "tira o modo noturno" nao casavam. Agora delimitado por \b.
-            (r'\b(?:ativ(?:a|e|ar)|lig(?:a|ue|ar)|coloc(?:a|ue|ar)|poe|ponha)\s+(?:(?:a\s+)?luz|(?:o\s+)?modo)\s+noturn[oa]\b',
+            (r'\b(?:ativ(?:a|e|ar)|lig(?:a|ue|ar)|coloc(?:a|ue|ar)|p[oõ]e|ponha)\s+(?:(?:a\s+)?luz|(?:o\s+)?modo)\s+noturn[oa]\b',
              self._night_light_on, "os_night_light_on", "on"),
             (r'\b(?:desativ(?:a|e|ar)|deslig(?:a|ue|ar)|tir(?:a|e|ar)|remov(?:a|e|er))\s+(?:(?:a\s+)?luz|(?:o\s+)?modo)\s+noturn[oa]\b',
              self._night_light_off, "os_night_light_off", "off"),
@@ -474,6 +557,29 @@ class PcVoiceIntentDetector:
 
         text_lower = text.lower().strip()
 
+        # Fast Path - Intenções Aprendidas: Verificar primeiro no cache de aprendizados
+        # Se uma forma de pedido já foi aprendida (acertos >= erros), usar diretamente
+        # sem consultar LLM.
+        try:
+            aprendizado = Aprendizado()
+            intencao = aprendizado.intencao_aprendida(text_lower)
+            if intencao and intencao.get("acao"):
+                action_name = intencao["acao"]
+                # Verificar se a ação ainda existe no registry
+                registry = get_registry()
+                if action_name in registry.get_all_specs():
+                    blocked = not self.pc_control_allowed and action_name not in _LOCAL_DETERMINISTIC_ACTIONS
+                    return PcVoiceResult(
+                        is_pc_intent=True,
+                        action=action_name,
+                        param="",  # Parâmetros podem ser extraídos depois pelo ipc_handlers se necessário
+                        blocked=blocked,
+                        physical_effect=0 if blocked else 1,
+                        reply="" if not blocked else "Para controlar o computador, ative o Supercérebro."
+                    )
+        except Exception:
+            pass  # Falha silenciosa para não atrapalhar o fluxo principal
+
         type_match = re.fullmatch(
             r'(?:zara[,\s]+)?(?:digite|digita|escreva|escreve)\s+[\'\"“”‘’](.+)[\'\"“”‘’]\s*[.!?]*',
             str(text or "").strip(), flags=re.IGNORECASE,
@@ -530,7 +636,9 @@ class PcVoiceIntentDetector:
             )
 
         contextual_volume = re.search(
-            r'\b(?:(?:deixa?|deixe)\s+(?:o\s+volume\s+)?um\s+pouco\s+|agora\s+)?mais\s+(alto|baixo)\b',
+            r'\b(?:(?:deixa?|deixe)\s+(?:o\s+volume\s+)?|agora\s+)?'
+            r'(?:(?P<intensity>um\s+pouquinho|um\s+pouco|levemente|muito|bastante|demais|bem)\s+)?'
+            r'mais\s+(?P<direction>alto|baixo)\b',
             text_lower,
         )
         if contextual_volume:
@@ -543,10 +651,11 @@ class PcVoiceIntentDetector:
                     contextual=True,
                 )
             blocked = self._blocked_by_superbrain("os_volume")
+            direction = "up" if contextual_volume.group("direction") == "alto" else "down"
             return PcVoiceResult(
                 is_pc_intent=True,
                 action="os_volume",
-                param="up" if contextual_volume.group(1) == "alto" else "down",
+                param=_encode_intensity(direction, contextual_volume.groupdict().get("intensity")),
                 blocked=blocked,
                 physical_effect=0 if blocked else 1,
                 reply="Para controlar o computador, ative o Supercérebro." if blocked else "",
@@ -646,6 +755,23 @@ class PcVoiceIntentDetector:
             # Still check if it's a clear command
             pass
 
+        for pattern, action, default_param in self.advanced_patterns:
+            advanced_match = re.search(pattern, text_lower)
+            if not advanced_match:
+                continue
+            param = advanced_match.group(1).strip() if advanced_match.lastindex else default_param
+            translations = {
+                "esquerda": "left", "direita": "right", "cima": "up", "baixo": "down",
+                "anterior": "previous", "seguinte": "next",
+            }
+            param = translations.get(str(param), param)
+            blocked = self._blocked_by_superbrain(action)
+            return PcVoiceResult(
+                is_pc_intent=True, action=action, param=param or "", blocked=blocked,
+                physical_effect=0 if blocked else 1,
+                reply="Para controlar o computador, ative o SupercÃ©rebro." if blocked else "",
+            )
+
         for pattern, handler, action, default_param in self.patterns:
             m = re.search(pattern, text_lower)
             if m:
@@ -719,6 +845,120 @@ class PcVoiceIntentDetector:
                     reply=reply
                 )
 
+        # Try free reasoning fallback as last resort
+        # Quick heuristic: if text is very short or looks like greeting/small talk, skip
+        text_clean = text.strip().lower()
+        if len(text_clean) >= 3 and text_clean not in {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay"}:
+            try:
+                # Get available actions for validation
+                registry = get_registry()
+                available_actions = set(registry.get_all_specs().keys())
+                
+                # Prepare the LLM prompt for tool use
+                # Use all available actions but limit prompt size if needed
+                action_list = sorted(list(available_actions))
+                
+                # If action list is too long, prioritize PC control actions
+                # (those in _LOCAL_DETERMINISTIC_ACTIONS are safe to use without Supercérebro)
+                # But for completeness, we'll use all actions and let validation handle it
+                action_json = json.dumps(action_list, ensure_ascii=False)
+                
+                # Safety check: if prompt would be excessively long, truncate to most common actions
+                if len(action_json) > 2000:  # Arbitrary limit to keep prompt reasonable
+                    # Fall back to a reasonable subset of common PC control actions
+                    common_actions = [
+                        "os_volume", "os_brightness_absolute", "os_brightness_up", "os_brightness_down",
+                        "os_night_light_on", "os_night_light_off", "os_wifi_on", "os_wifi_off",
+                        "os_bluetooth_on", "os_bluetooth_off", "media_play_pause", "media_next",
+                        "media_previous", "window_minimize", "window_maximize", "window_restore",
+                        "window_close", "window_switch", "window_switch_next", "os_app", "os_open",
+                        "os_close_safe_app", "input_type_text", "input_hotkey", "browser_new_tab",
+                        "browser_back", "browser_forward", "youtube_search", "youtube_open",
+                        "youtube_play_by_name", "spotify_search", "system_time", "system_info",
+                        "claude_ler", "claude_enviar", "codex_ler", "codex_enviar", "ponte_repassar",
+                        "aprendizado_resumo"
+                    ]
+                    # Filter to only actions that actually exist
+                    action_list = [a for a in common_actions if a in available_actions]
+                    action_json = json.dumps(action_list, ensure_ascii=False)
+                
+                prompt = f"""You are a PC control intent classifier for ZARA assistant.
+Determine if the user's text is a command to control their Windows PC.
+If YES, respond with JSON selecting the BEST matching action from this list:
+{action_json}
+
+If NO or uncertain, respond with {{"action": null}}.
+
+User text: "{text}"
+
+Respond ONLY with valid JSON, no extra text."""
+                
+                # Try Ollama qwen3:8b first (fastest local tool-capable model)
+                ollama_url = "http://127.0.0.1:11434/v1/chat/completions"
+                payload = {
+                    "model": "qwen3:8b",
+                    "messages": [
+                        {"role": "system", "content": "You are a precise intent classifier. Respond only with valid JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.1,  # Low temperature for consistent classification
+                    "max_tokens": 100,   # We only need a short JSON response
+                    "stream": False
+                }
+                
+                # Make synchronous HTTP call with short timeout
+                response = httpx.post(
+                    ollama_url,
+                    json=payload,
+                    timeout=3.0  # 3 second timeout - fast fallback
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                    
+                    # Try to parse JSON from the response
+                    try:
+                        # Extract JSON if it's wrapped in markdown or extra text
+                        if content.startswith("```json"):
+                            content = content.split("```json")[1].split("```")[0].strip()
+                        elif content.startswith("```"):
+                            content = content.split("```")[1].split("```")[0].strip()
+                        
+                        parsed = json.loads(content)
+                        action_name = parsed.get("action")
+                        
+                        if action_name and isinstance(action_name, str) and action_name in available_actions:
+                            # Valid action detected - extract parameters if any
+                            params = parsed.get("param", "")
+                            
+                            # Check if action is blocked by Supercérebro
+                            blocked = not self.pc_control_allowed and action_name not in _LOCAL_DETERMINISTIC_ACTIONS
+                            
+                            # Auto-Aprendizado: Se a ação não está bloqueada, aprender o mapeamento
+                            # para que da próxima vez seja tratada no Fast Path local.
+                            if not blocked:
+                                try:
+                                    aprendizado = Aprendizado()
+                                    aprendizado.reforjar_intencao(text, action_name, sucesso=True)
+                                except Exception:
+                                    pass  # Falha silenciosa para não atrapalhar o fluxo
+                            
+                            return PcVoiceResult(
+                                is_pc_intent=True,
+                                action=action_name,
+                                param=str(params) if params else "",
+                                blocked=blocked,
+                                physical_effect=0,  # Will be set correctly during execution
+                                reply="" if not blocked else "Para controlar o computador, ative o Supercérebro."
+                            )
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        # Invalid JSON response - fall through to return None
+                        pass
+            except Exception:
+                # Any error in free reasoning - fail silently and fall back to deterministic
+                pass
+        
         return PcVoiceResult(is_pc_intent=False)
 
     def _blocked_by_superbrain(self, action: str) -> bool:
@@ -882,11 +1122,21 @@ class PcVoiceIntentDetector:
     def _system_processes(self, m):
         return "top"
 
+    def _intensity_param(self, direction: str, m) -> str:
+        """Le o grupo nomeado 'intensity' quando o regex que casou o tem;
+        padroes sem esse grupo (ex. idioma fixo) simplesmente nao o carregam,
+        e groupdict() nao levanta excecao por isso -- so nao acha a chave."""
+        intensity_text = m.groupdict().get("intensity")
+        return _encode_intensity(direction, intensity_text)
+
     def _volume_up(self, m):
-        return "up"
+        return self._intensity_param("up", m)
 
     def _volume_down(self, m):
-        return "down"
+        return self._intensity_param("down", m)
+
+    def _volume_down_forte(self, m):
+        return "down_muito"
 
     def _volume_level(self, m):
         return m.group(1)
@@ -937,10 +1187,10 @@ class PcVoiceIntentDetector:
         return m.group(1)
 
     def _brightness_up(self, m):
-        return "up"
+        return self._intensity_param("up", m)
 
     def _brightness_down(self, m):
-        return "down"
+        return self._intensity_param("down", m)
 
     def _night_light_on(self, m):
         return "on"

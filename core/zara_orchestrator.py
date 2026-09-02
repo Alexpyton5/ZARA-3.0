@@ -149,7 +149,7 @@ class ZaraOrchestrator:
         normalized_engine = normalize_auto_engine(engine)
 
         # Manual means manual: never silently leave the selected engine.
-        if normalized_engine not in {"auto_smart", "auto_economy"}:
+        if normalized_engine not in {"auto_smart", "auto_economy", "auto_fast"}:
             self.last_route_policy = "manual"
             self.last_engine_used = normalized_engine
             response = await self._call_model_direct(
@@ -167,7 +167,12 @@ class ZaraOrchestrator:
         if require_tools:
             route_context["require_tools"] = True
 
-        policy = "economy" if normalized_engine == "auto_economy" else "smart"
+        if normalized_engine == "auto_economy":
+            policy = "economy"
+        elif normalized_engine == "auto_smart":
+            policy = "smart"
+        else:
+            policy = "fast"
         self.last_route_policy = policy
         primary_model, fallback_chain = route_message(
             message=message,

@@ -31,6 +31,51 @@ def test_brightness_and_night_light_phrases(phrase, action, param):
     assert result.param == param
 
 
+# ZARA-INTENSIDADE-VOLUME-001 (Alex, 2026-08-28): a mesma correção de
+# magnitude do volume vale pro brilho -- "aplique para todos".
+@pytest.mark.parametrize(
+    ("phrase", "action", "param"),
+    [
+        ("aumente muito o brilho", "os_brightness_up", "up_muito"),
+        ("diminua muito o brilho", "os_brightness_down", "down_muito"),
+        ("abaixa bastante o brilho", "os_brightness_down", "down_muito"),
+        ("diminua um pouquinho o brilho", "os_brightness_down", "down_pouco"),
+    ],
+)
+def test_brightness_intensity_recognition(phrase, action, param):
+    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+
+    assert result.is_pc_intent is True
+    assert result.action == action
+    assert result.param == param
+
+
+@pytest.mark.asyncio
+async def test_brightness_muito_applies_larger_step_immediately(monkeypatch):
+    observed_levels = []
+    read_calls = {"n": 0}
+
+    async def fake_execute_action(action, **params):
+        observed_levels.append((action, params["level"]))
+        return type("Result", (), {"success": True, "error": ""})()
+
+    def fake_read_brightness():
+        read_calls["n"] += 1
+        return 60 if read_calls["n"] == 1 else 30
+
+    handler = IPCHandler(AsyncMock())
+    handler._set_supercerebro_state(True)
+    monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
+    monkeypatch.setattr("core.ipc_handlers._read_windows_brightness_level", fake_read_brightness)
+
+    reply = await handler._try_pc_intent("diminua muito o brilho")
+
+    # Passo intenso ("muito") reusa o mesmo executor absoluto de sempre --
+    # não existe uma segunda action "brilho relativo grande".
+    assert observed_levels == [("os_brightness_absolute", 30)]
+    assert reply == "Brilho alterado e verificado."
+
+
 def test_absolute_brightness_clamps_and_verifies(monkeypatch):
     states = iter((40, 100))
     writes = []

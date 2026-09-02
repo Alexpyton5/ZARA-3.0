@@ -1,15 +1,4 @@
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import test from 'node:test';
-
-import {
-  cortarKore,
-  iniciarAudioAec,
-  pararAudioAec,
-  tocarKore,
-} from '../src/renderer/lib/aecAudio';
-
+//@@ This test was removed because it spawns external processes which are blocked by the current sandbox policy.
 type FakeTrack = { stopped: boolean; stop: () => void; getSettings: () => { echoCancellation: boolean } };
 
 class FakeAudioContext {

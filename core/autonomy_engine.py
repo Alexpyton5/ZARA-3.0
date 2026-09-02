@@ -44,6 +44,25 @@ class TaskState(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class AutonomyPermission(StrEnum):
+    """Product-level permission; action risk gates remain independent."""
+
+    FAZ_SOZINHA = "FAZ_SOZINHA"
+    FAZ_E_AVISA = "FAZ_E_AVISA"
+    PERGUNTA_ANTES = "PERGUNTA_ANTES"
+
+    @property
+    def requires_approval(self) -> bool:
+        return self is AutonomyPermission.PERGUNTA_ANTES
+
+    @property
+    def notify_after(self) -> bool:
+        return self is AutonomyPermission.FAZ_E_AVISA
+
+
+PermissionLevel = AutonomyPermission
+
+
 TERMINAL_STATES = {
     TaskState.FAILED,
     TaskState.COMPLETED,
@@ -218,9 +237,16 @@ class AutonomyEngine:
         requires_approval: bool = True,
         approved: bool = False,
         task_id: str | None = None,
+        permission_level: AutonomyPermission | str | None = None,
     ) -> TaskRecord:
         now = time.time()
         task_id = task_id or f"TASK-{uuid.uuid4().hex[:10].upper()}"
+        payload = dict(payload or {})
+        if permission_level is not None:
+            permission = AutonomyPermission(str(permission_level))
+            requires_approval = permission.requires_approval
+            payload["_autonomy_permission"] = permission.value
+            payload["_notify_after"] = permission.notify_after
         approved = bool(approved) or not requires_approval
         state = TaskState.QUEUED if approved else TaskState.WAITING_APPROVAL
         caps = sorted({str(x).strip() for x in required_capabilities if str(x).strip()})
@@ -236,7 +262,7 @@ class AutonomyEngine:
                 """,
                 (
                     task_id, title.strip(), kind.strip(), state.value, int(priority),
-                    self._json(payload or {}), self._json(caps),
+                    self._json(payload), self._json(caps),
                     int(bool(requires_approval)), int(approved), 0, max(1, int(max_attempts)),
                     None, None, now, now, now,
                 ),

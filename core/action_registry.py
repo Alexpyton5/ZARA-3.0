@@ -691,3 +691,21 @@ async def execute_confirmed_action(
             **params,
         ),
     )
+
+
+ADVANCED_ACTION_MODULES = (
+    "core.actions.system_advanced",
+    "core.actions.macro_actions",
+    "core.actions.vision_actions",
+)
+
+
+def load_advanced_action_exports() -> tuple[str, ...]:
+    """Import advanced modules explicitly; decorators populate this registry."""
+    import importlib
+
+    loaded = []
+    for module_name in ADVANCED_ACTION_MODULES:
+        importlib.import_module(module_name)
+        loaded.append(module_name)
+    return tuple(loaded)

@@ -73,6 +73,16 @@ class ModelConfig:
     priority: int
     smart_bias: int = 0
     economy_bias: int = 0
+    # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): "qualquer coisa que ela
+    # ouvir, tem que responder no menor tempo possivel". Escala de bias
+    # igual a smart_bias/economy_bias, so que pra latencia -- usado quando
+    # policy="fast" no _score(). Valores INFERIDOS de caracteristica publica
+    # de infraestrutura de cada provedor (Groq = LPU, documentado como o
+    # mais rapido; Gemini Flash/Flash-Lite = otimizado pra latencia pelo
+    # proprio Google; Nemotron grande via NIM = MEDIDO lento em outro
+    # contexto hoje, 2-16s) -- NAO e medicao real desta app ainda. Ver
+    # skill medir-latencia-da-zara antes de declarar "ficou mais rapido".
+    speed_bias: int = 0
     supports_streaming: bool = True
     supports_tools: bool = False
     auto_eligible: bool = True
@@ -94,6 +104,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=30,
         economy_bias=30,
+        speed_bias=12,
         supports_tools=True,
         zero_cost_eligible=True,
     ),
@@ -110,6 +121,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=25,
         economy_bias=25,
+        speed_bias=16,
         supports_tools=True,
         zero_cost_eligible=True,
     ),
@@ -127,6 +139,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=22,
         economy_bias=1,
+        speed_bias=2,
         supports_tools=True,
     ),
     ModelConfig(
@@ -142,6 +155,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=20,
         economy_bias=2,
+        speed_bias=3,
         supports_tools=True,
     ),
     ModelConfig(
@@ -157,6 +171,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=15,
         economy_bias=6,
+        speed_bias=4,
         supports_tools=True,
     ),
     ModelConfig(
@@ -172,6 +187,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=16,
         economy_bias=3,
+        speed_bias=6,
         supports_tools=True,
     ),
 
@@ -189,6 +205,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=18,
         economy_bias=10,
+        speed_bias=26,
         supports_tools=True,
     ),
     ModelConfig(
@@ -204,6 +221,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=10,
         economy_bias=24,
+        speed_bias=30,
         supports_tools=True,
     ),
 
@@ -221,6 +239,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=21,
         economy_bias=13,
+        speed_bias=20,
         supports_tools=True,
     ),
     ModelConfig(
@@ -236,6 +255,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=10,
         economy_bias=27,
+        speed_bias=24,
         supports_tools=True,
     ),
     ModelConfig(
@@ -251,6 +271,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=17,
         economy_bias=1,
+        speed_bias=5,
         supports_tools=True,
     ),
     ModelConfig(
@@ -266,6 +287,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=3,
         smart_bias=8,
         economy_bias=18,
+        speed_bias=18,
         supports_tools=True,
     ),
 
@@ -283,6 +305,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=4,
         smart_bias=5,
         economy_bias=7,
+        speed_bias=15,
         supports_tools=True,
     ),
 
@@ -300,6 +323,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=9,
         smart_bias=0,
         economy_bias=0,
+        speed_bias=8,
         supports_tools=True,
         auto_eligible=False,
         zero_cost_eligible=False,
@@ -583,7 +607,12 @@ class ModelRouter:
         if score <= 0:
             return -10_000
         score -= model.priority * 3
-        score += model.economy_bias if policy == "economy" else model.smart_bias
+        if policy == "economy":
+            score += model.economy_bias
+        elif policy == "fast":
+            score += model.speed_bias
+        else:
+            score += model.smart_bias
         return score
 
     def rank_models(
@@ -698,7 +727,13 @@ router = ModelRouter()
 
 def normalize_auto_engine(engine: str | None) -> str:
     raw = str(engine or "").strip().lower()
-    if raw in {"", "auto", "auto_router", "auto_smart"}:
+    if raw in {"", "auto", "auto_router", "auto_fast"}:
+        # ZARA-VELOCIDADE-001: "auto_fast" é o padrão agora -- resposta por
+        # voz tem que ser rápida por padrão, sem precisar pedir. "auto"/""
+        # (o que já existia antes) também cai aqui, não em auto_smart, pra
+        # não regredir quem já tinha o engine salvo como vazio/"auto".
+        return "auto_fast"
+    if raw == "auto_smart":
         return "auto_smart"
     if raw == "auto_economy":
         return "auto_economy"

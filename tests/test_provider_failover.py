@@ -172,9 +172,14 @@ def test_intent_context_flags_take_precedence(router):
     assert types[0] == TaskType.TOOL_USE
 
 
-def test_normalize_auto_engine_defaults_to_smart():
-    assert normalize_auto_engine(None) == "auto_smart"
-    assert normalize_auto_engine("") == "auto_smart"
-    assert normalize_auto_engine("auto") == "auto_smart"
+def test_normalize_auto_engine_defaults_to_fast():
+    # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): resposta por voz tem que
+    # ser rápida por padrão, sem precisar escolher -- "auto"/""/None caem em
+    # auto_fast agora, não mais auto_smart.
+    assert normalize_auto_engine(None) == "auto_fast"
+    assert normalize_auto_engine("") == "auto_fast"
+    assert normalize_auto_engine("auto") == "auto_fast"
+    assert normalize_auto_engine("auto_fast") == "auto_fast"
+    assert normalize_auto_engine("auto_smart") == "auto_smart"
     assert normalize_auto_engine("auto_economy") == "auto_economy"
     assert normalize_auto_engine("groq_llama") == "groq_llama"

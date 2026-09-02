@@ -548,9 +548,10 @@ def os_open_action(folder: str) -> ActionResult:
 
     before = _running_app_pids({"explorer.exe"})
     try:
-        os.startfile(str(path))  # type: ignore[attr-defined]
+        # Use subprocess.Popen as required by ZARA-PC-CONTROL-ALEX-004
+        subprocess.Popen(["explorer.exe", str(path)])
     except OSError as exc:
-        return ActionResult(success=False, error=f"Falha ao solicitar abertura da pasta: {exc}")
+        return ActionResult(success=False, error=f"Falha ao abrir a pasta: {exc}")
     time.sleep(0.25)
     after = _running_app_pids({"explorer.exe"})
     verification = "EXPLORER_PROCESS_PRESENT" if after else "DISPATCH_ONLY"
@@ -1191,7 +1192,7 @@ def _brightness_action(level: int) -> ActionResult:
         success=True,
         output=f"Brilho definido para {after}%.",
         data={"supported": True, "original": before, "target": target,
-              "observed": after, "backend": backend},
+              "observed": after, "backend": backend, "tolerance": 2},
     )
 
 

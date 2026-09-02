@@ -10,6 +10,7 @@ from core.actions.files import (
     files_text_summary_action,
     files_write_action,
 )
+from core.action_registry import get_registry
 
 
 def test_open_latest_skips_newer_executable_and_requires_window_proof(tmp_path, monkeypatch):
@@ -19,8 +20,8 @@ def test_open_latest_skips_newer_executable_and_requires_window_proof(tmp_path, 
     unsafe.write_bytes(b"exe")
     unsafe.touch()
     opened = []
-    # ZARA-PC-CONTROL-ALEX-004: codigo usa subprocess.Popen, nao os.startfile.
-    monkeypatch.setattr("core.actions.files.subprocess.Popen", lambda *a, **k: opened.append(a[0]))
+    # Mock os.startfile to track what gets opened
+    monkeypatch.setattr("os.startfile", lambda path: opened.append(path))
     monkeypatch.setattr("core.actions.files._window_snapshot", lambda: {})
     monkeypatch.setattr(
         "core.actions.files._confirm_file_window",
@@ -38,7 +39,8 @@ def test_open_latest_skips_newer_executable_and_requires_window_proof(tmp_path, 
 def test_open_latest_never_claims_success_without_window_proof(tmp_path, monkeypatch):
     target = tmp_path / "nota.txt"
     target.write_text("ok", encoding="utf-8")
-    monkeypatch.setattr("core.actions.files.subprocess.Popen", lambda *a, **k: None)
+    # Mock os.startfile to do nothing (don't actually open files)
+    monkeypatch.setattr("os.startfile", lambda path: None)
     monkeypatch.setattr("core.actions.files._window_snapshot", lambda: {})
     monkeypatch.setattr("core.actions.files._confirm_file_window", lambda target, before: None)
 
@@ -49,33 +51,57 @@ def test_open_latest_never_claims_success_without_window_proof(tmp_path, monkeyp
 
 
 def test_write_create_append_and_explicit_overwrite(tmp_path):
-    target = tmp_path / "nota.txt"
+    # Enable PC control and MEDIUM risk for file mutation actions
+    registry = get_registry()
+    original_pc_control = registry.pc_control_allowed
+    original_medium_risk = registry.medium_risk_open
+    registry.pc_control_allowed = True
+    registry.medium_risk_open = True
+    
+    try:
+        target = tmp_path / "nota.txt"
 
-    assert files_write_action(str(target), "Olá").success
-    assert not files_write_action(str(target), "perdido").success
-    assert files_write_action(str(target), " ZARA", append=True).success
-    assert target.read_text(encoding="utf-8") == "Olá ZARA"
-    assert files_write_action(str(target), "novo", overwrite=True).success
-    assert target.read_text(encoding="utf-8") == "novo"
+        assert files_write_action(str(target), "Olá").success
+        assert not files_write_action(str(target), "perdido").success
+        assert files_write_action(str(target), " ZARA", append=True).success
+        assert target.read_text(encoding="utf-8") == "Olá ZARA"
+        assert files_write_action(str(target), "novo", overwrite=True).success
+        assert target.read_text(encoding="utf-8") == "novo"
+    finally:
+        # Restore original settings
+        registry.pc_control_allowed = original_pc_control
+        registry.medium_risk_open = original_medium_risk
 
 
 def test_copy_move_and_rename_never_replace_existing_destination(tmp_path):
-    source = tmp_path / "origem.txt"
-    source.write_text("conteúdo", encoding="utf-8")
-    occupied = tmp_path / "ocupado.txt"
-    occupied.write_text("preservar", encoding="utf-8")
+    # Enable PC control and MEDIUM risk for file mutation actions
+    registry = get_registry()
+    original_pc_control = registry.pc_control_allowed
+    original_medium_risk = registry.medium_risk_open
+    registry.pc_control_allowed = True
+    registry.medium_risk_open = True
+    
+    try:
+        source = tmp_path / "origem.txt"
+        source.write_text("conteúdo", encoding="utf-8")
+        occupied = tmp_path / "ocupado.txt"
+        occupied.write_text("preservar", encoding="utf-8")
 
-    assert not files_copy_action(str(source), str(occupied), overwrite=True).success
-    assert occupied.read_text(encoding="utf-8") == "preservar"
-    copied = tmp_path / "copia.txt"
-    assert files_copy_action(str(source), str(copied)).success
-    assert copied.read_text(encoding="utf-8") == "conteúdo"
+        assert not files_copy_action(str(source), str(occupied), overwrite=True).success
+        assert occupied.read_text(encoding="utf-8") == "preservar"
+        copied = tmp_path / "copia.txt"
+        assert files_copy_action(str(source), str(copied)).success
+        assert copied.read_text(encoding="utf-8") == "conteúdo"
 
-    assert not files_move_action(str(copied), str(occupied), overwrite=True).success
-    assert copied.exists()
-    renamed = files_rename_action(str(copied), "renomeado.txt")
-    assert renamed.success
-    assert (tmp_path / "renomeado.txt").read_text(encoding="utf-8") == "conteúdo"
+        assert not files_move_action(str(copied), str(occupied), overwrite=True).success
+        assert copied.exists()
+        renamed = files_rename_action(str(copied), "renomeado.txt")
+        assert renamed.success
+        assert (tmp_path / "renomeado.txt").read_text(encoding="utf-8") == "conteúdo"
+    finally:
+        # Restore original settings
+        registry.pc_control_allowed = original_pc_control
+        registry.medium_risk_open = original_medium_risk
 
 
 def test_sensitive_paths_are_blocked_and_search_skips_secret_content(tmp_path):
@@ -105,17 +131,29 @@ def test_text_summary_is_bounded_and_deterministic(tmp_path):
 
 
 def test_organize_by_extension_never_deletes_or_replaces(tmp_path):
-    (tmp_path / "a.txt").write_text("A", encoding="utf-8")
-    (tmp_path / "b.md").write_text("B", encoding="utf-8")
-    occupied = tmp_path / "txt" / "a.txt"
-    occupied.parent.mkdir()
-    occupied.write_text("preservar", encoding="utf-8")
+    # Enable PC control and MEDIUM risk for file mutation actions
+    registry = get_registry()
+    original_pc_control = registry.pc_control_allowed
+    original_medium_risk = registry.medium_risk_open
+    registry.pc_control_allowed = True
+    registry.medium_risk_open = True
+    
+    try:
+        (tmp_path / "a.txt").write_text("A", encoding="utf-8")
+        (tmp_path / "b.md").write_text("B", encoding="utf-8")
+        occupied = tmp_path / "txt" / "a.txt"
+        occupied.parent.mkdir()
+        occupied.write_text("preservar", encoding="utf-8")
 
-    preview = files_organize_by_extension_action(str(tmp_path), dry_run=True)
-    result = files_organize_by_extension_action(str(tmp_path), dry_run=False)
+        preview = files_organize_by_extension_action(str(tmp_path), dry_run=True)
+        result = files_organize_by_extension_action(str(tmp_path), dry_run=False)
 
-    assert preview.success and preview.data["moved"] == 0
-    assert result.success and result.data["deleted"] == 0
-    assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "A"
-    assert occupied.read_text(encoding="utf-8") == "preservar"
-    assert (tmp_path / "md" / "b.md").read_text(encoding="utf-8") == "B"
+        assert preview.success and preview.data["moved"] == 0
+        assert result.success and result.data["deleted"] == 0
+        assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "A"
+        assert occupied.read_text(encoding="utf-8") == "preservar"
+        assert (tmp_path / "md" / "b.md").read_text(encoding="utf-8") == "B"
+    finally:
+        # Restore original settings
+        registry.pc_control_allowed = original_pc_control
+        registry.medium_risk_open = original_medium_risk

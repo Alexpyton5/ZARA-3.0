@@ -231,17 +231,20 @@ class AudioInput:
                 except queue.Full:
                     pass  # Drop frame if queue full
 
-        self.stream = sd.RawInputStream(
-            samplerate=self.config.vosk_sample_rate,
-            blocksize=self.config.chunk_size,
-            device=self.config.input_device,
-            channels=self.config.channels,
-            dtype="int16",
-            callback=callback,
-        )
-        self.stream.start()
-        self._running = True
-        print(f"[Audio] Started: {self.config.vosk_sample_rate}Hz, {self.config.channels}ch")
+        try:
+            self.stream = sd.RawInputStream(
+                samplerate=self.config.vosk_sample_rate,
+                blocksize=self.config.chunk_size,
+                device=self.config.input_device,
+                channels=self.config.channels,
+                dtype="int16",
+                callback=callback,
+            )
+            self.stream.start()
+            self._running = True
+            print(f"[Audio] Started: {self.config.vosk_sample_rate}Hz, {self.config.channels}ch")
+        except sd.PortAudioError as exc:
+            raise VoiceNotConfiguredError(f"AUDIO_INPUT_FAILED: {exc} permanent=True") from exc
 
     def stop(self):
         """Stop audio capture."""
@@ -347,7 +350,25 @@ class VoicePipeline:
         self._speech_buffer = []
         self._silence_chunks = 0
         self._running = True
-        self.audio.start()
+        try:
+            self.audio.start()
+        except VoiceNotConfiguredError as e:
+            self._state = "ERROR"
+            if hasattr(self, 'on_error') and self.on_error:
+                try:
+                    self.on_error(e)
+                except Exception:
+                    pass  # Ignore errors in error callback
+            return
+        except Exception as e:
+            # Handle other unexpected errors during audio start
+            self._state = "ERROR"
+            if hasattr(self, 'on_error') and self.on_error:
+                try:
+                    self.on_error(e)
+                except Exception:
+                    pass  # Ignore errors in error callback
+            return
         self._thread = threading.Thread(target=self._run_loop, daemon=True, name="VoicePipeline")
         self._thread.start()
         print(f"[Voice] Pipeline started ({self._state})")

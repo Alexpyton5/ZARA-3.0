@@ -1,1 +1,1 @@
-afde06248696afd033e9519dc632d19ba84192058c6ea56d06542d89558c6a81  dist-sidecar/zara-backend.exe
+67b2eb6db91fded04c0ffa65a3ae018b5c318e5fd5a578022851203d59e5a12c  dist-sidecar/zara-backend.exe

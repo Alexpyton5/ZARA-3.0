@@ -2,7 +2,13 @@
 from __future__ import annotations
 
 # Re-export registry
-from core.action_registry import ActionResult, action, get_registry, registry
+from core.action_registry import (
+    ActionResult,
+    action,
+    get_registry,
+    load_advanced_action_exports,
+    registry,
+)
 
 # Import all action modules to register them (trigger @action decorators)
 from core.actions import (  # noqa: F401
@@ -20,6 +26,10 @@ from core.actions import (  # noqa: F401
     web,
     windows_radios,
 )
+
+# Advanced modules are exported by the central registry so callers do not
+# need to know which files contain the decorators.
+load_advanced_action_exports()
 
 def _load_plugins(plugins_dir=None) -> None:
     """ZARA-PLUGINS-2026-08-27: capacidade nova vira um arquivo solto em

@@ -25,6 +25,23 @@ tendência e o que os concorrentes fazem; eu implemento.
 **Ordem:** depois da latência. Interface bonita numa ZARA lenta não vende — e
 mexer nas duas ao mesmo tempo quebra a regra de um delta por vez.
 
+**Referência concreta trazida em 28/08/29 (madrugada):** dashboard smart
+home estilo Apple Vision Pro (Behance, designer Azna Ijaz, Figma) — Alex
+mandou o print, gostei e é tecnicamente viável:
+- Visual glassmorphism escuro (cards translúcidos com blur sobre fundo
+  desfocado) — é a estética nativa do visionOS. Em Electron/React é
+  `backdrop-filter: blur()` puro, nada exótico de implementar de verdade.
+- Layout "bento grid": cards de tamanho variado, assimétricos, sidebar de
+  ícones à esquerda, barra de busca/perfil no topo.
+- Cards observados: câmera CCTV (feed ao vivo), player de música com capa,
+  toggles simples (WiFi, robô aspirador, TV), slider de luz, painel de
+  ar-condicionado com modo/temperatura/agendamento, gráfico de consumo de
+  energia com tooltip, previsão do tempo em tira.
+- **Mapeamento direto pro que a ZARA já faz hoje:** card de temperatura/AC →
+  brilho ou volume (slider), card de luz → night light (`os_night_light_on`),
+  toggles → `os_wifi_*`/apps, gráfico de energia → algo tipo `system_metrics`.
+  Não é decoração vazia — dá pra ligar em ação real quando a vez chegar.
+
 ---
 
 ## Os 6 vídeos do Instagram — carimbado em 15/08

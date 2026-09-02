@@ -851,6 +851,11 @@ class GeminiLiveVoice:
             print("[VOICE_TRACE] stage=MIC_DEVICE_ENUMERATION result=START", flush=True)
             opened = await asyncio.to_thread(self._open_streams, sd, generation)
             if not opened:
+                # Check for permanent microphone failure
+                if getattr(self, '_mic_permanent_failure', False):
+                    self._ready_error = RuntimeError("VOICE_MIC_PERMANENT_FAILURE")
+                    self._ready.set()
+                    return
                 return
             print("[VOICE_TRACE] stage=MIC_OPEN_RESULT result=PASS", flush=True)
             if self.config.wake_word_enabled:
@@ -1457,6 +1462,68 @@ class GeminiLiveVoice:
             stream.close()
         except Exception:
             pass
+
+    def detect_emotion_from_text(self, text: str) -> str:
+        """Detect emotion from text content.
+        
+        Returns:
+            "frustrated", "happy", or "neutral"
+        """
+        if not text or not isinstance(text, str):
+            return "neutral"
+        
+        text_lower = text.lower().strip()
+        
+        # Frustrated emotions
+        frustrated_indicators = [
+            "frustrado", "irritado", "chateado", "merda", "puta", "droga",
+            "noxento", "putz", "nossa", "arin", "arz", "desanimado",
+            "triste", "decepcionado", "decepcionada", "putz", "que droga"
+        ]
+        
+        # Happy emotions
+        happy_indicators = [
+            "feliz", "contente", "alegre", "ótimo", "otimo", "excelente",
+            "maravilhoso", "fantástico", "que ótimo", "que bom",
+            "adorei", "amei", "gostei", "perfeito", "show", "legal",
+            "bom", "bom demais"
+        ]
+        
+        # Check for frustrated indicators
+        for indicator in frustrated_indicators:
+            if indicator in text_lower:
+                return "frustrated"
+        
+        # Check for happy indicators
+        for indicator in happy_indicators:
+            if indicator in text_lower:
+                return "happy"
+        
+        # Default to neutral
+        return "neutral"
+
+    def _adjust_response_for_emotion(self, response: str, emotion: str) -> str:
+        """Adjust response based on detected emotion.
+        
+        Args:
+            response: The original response text
+            emotion: The detected emotion ("frustrated", "happy", "neutral", etc.)
+            
+        Returns:
+            Adjusted response text
+        """
+        if not response:
+            return response
+            
+        if not emotion or emotion == "neutral":
+            return response
+        elif emotion == "frustrated":
+            return f"Entendo sua frustração. {response}"
+        elif emotion == "happy":
+            return f"Que ótimo que você está feliz! {response}"
+        else:
+            # For unknown emotions, return response unchanged
+            return response
 
     @staticmethod
     def _merge_fragment(current: str, fragment: str) -> str:

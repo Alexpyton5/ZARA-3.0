@@ -431,18 +431,18 @@
 
 .zh-core-shaft {
   width: 2px;
-  height: 90px;
+  height: 143px;
   margin-top: -4px;
   background: linear-gradient(#0000, #3be6a8 38%, #d8f7e8 72%, #14ca88, #0000);
   box-shadow: 0 0 10px 2px #00d99355;
-  opacity: 0.65;
+  opacity: 0.58;
 }
 
 .zh-core-mark {
   position: relative;
   z-index: 1;
-  width: 64px;
-  height: 47px;
+  width: 130px;
+  height: 96px;
   object-fit: contain;
   filter: drop-shadow(0 1px 2px #002b1daa) drop-shadow(0 0 6px #00ba7b55) brightness(1.05);
   opacity: 0.95;

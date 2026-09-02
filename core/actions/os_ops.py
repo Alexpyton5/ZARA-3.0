@@ -945,6 +945,18 @@ def _mostrar_barrinha_de_volume(nivel_atual: int | None = None) -> bool:
 @action(name="os_volume", category="os", description="Get or set system volume", capability="LOCAL_PC_CONTROL")
 def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
     """Get or set system volume."""
+    # AUDITORIA_SEGURANCA_2026-09-02: level/mute eram interpolados direto em
+    # string de shell (pactl) e AppleScript (osascript) sem validar tipo.
+    # Um valor nao-numerico em level, ou algo alem de bool em mute, podia virar
+    # injecao de comando/AppleScript. Forcar tipo e faixa antes de qualquer
+    # subprocess. SAFE_TO_FIX: validacao pura, sem mudar comportamento normal.
+    if level is not None:
+        try:
+            level = max(0, min(100, int(level)))
+        except (TypeError, ValueError):
+            return ActionResult(success=False, error="Nível de volume inválido.")
+    if mute is not None:
+        mute = bool(mute)
     try:
         system = platform.system()
 
@@ -1010,6 +1022,38 @@ def os_volume_action(level: int = None, mute: bool = None) -> ActionResult:
         # Windows já desenha o ícone.
         if level is not None and mute is None:
             _mostrar_barrinha_de_volume(level)
+
+        # SAFE_TO_FIX (windows_fs audit #7): dispatch não é prova de que o Windows
+        # mudou (evidence.md). Quando possível, ler o nível de volta e só declarar
+        # sucesso se bater; melhor esforço — nunca falha a ação por não conseguir ler.
+        if system == "Windows" and level is not None:
+            try:
+                from comtypes import CoInitialize, CoUninitialize
+                from pycaw.pycaw import AudioUtilities
+
+                from core.windows_audio import get_endpoint_volume
+                CoInitialize()
+                try:
+                    devices = AudioUtilities.GetSpeakers()
+                    volume = get_endpoint_volume(devices)
+                    actual = round(volume.GetMasterVolumeLevelScalar() * 100)
+                    if abs(actual - level) > 2:
+                        return ActionResult(
+                            success=False,
+                            error=f"Volume não confirmado: pedido {level}, lido {actual}.",
+                            data={"requested": level, "actual": actual, "verificado": False},
+                        )
+                    return ActionResult(
+                        success=True,
+                        output="Volume adjusted",
+                        data={"requested": level, "actual": actual, "verificado": True},
+                    )
+                finally:
+                    CoUninitialize()
+            except Exception:
+                # Leitura indisponível (sem pycaw/comtypes) — mantém sucesso por
+                # dispatch, mas sem afirmar verificação.
+                pass
 
         return ActionResult(success=True, output="Volume adjusted")
     except Exception as e:

@@ -84,17 +84,22 @@ def files_list_action(path: str = ".", pattern: str = "*", recursive: bool = Fal
 
         result = []
         for f in sorted(files):
-            stat = f.stat()
-            result.append({
-                "name": f.name,
-                "path": str(f.relative_to(base)),
-                "absolute": str(f),
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-                "is_dir": f.is_dir(),
-                "is_file": f.is_file(),
-                "extension": f.suffix if f.is_file() else "",
-            })
+            try:
+                stat = f.stat()
+                result.append({
+                    "name": f.name,
+                    "path": str(f.relative_to(base)),
+                    "absolute": str(f),
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                    "is_dir": f.is_dir(),
+                    "is_file": f.is_file(),
+                    "extension": f.suffix if f.is_file() else "",
+                })
+            except (ValueError, OSError):
+                # Entry outside `base` (junction/symlink) or vanished mid-listing; skip it
+                # instead of failing the whole listing.
+                continue
 
         return ActionResult(success=True, output=json.dumps(result, indent=2), data={"files": result, "count": len(result)})
 
@@ -291,13 +296,18 @@ def files_delete_action(path: str, recursive: bool = False) -> ActionResult:
         if not file_path.exists():
             return ActionResult(success=False, error=f"Path not found: {path}")
 
-        if file_path.is_dir():
-            if recursive:
-                shutil.rmtree(file_path)
+        try:
+            if file_path.is_dir():
+                if recursive:
+                    shutil.rmtree(file_path)
+                else:
+                    file_path.rmdir()  # Only empty dirs
             else:
-                file_path.rmdir()  # Only empty dirs
-        else:
-            file_path.unlink()
+                file_path.unlink()
+        except FileNotFoundError:
+            # Removed by another process between the exists() check and the
+            # actual delete (TOCTOU race) — treat as already-gone, not a crash.
+            return ActionResult(success=False, error=f"Path not found: {path}")
 
         return ActionResult(success=True, output=f"Deleted: {file_path}")
     except Exception as e:
@@ -336,11 +346,16 @@ def files_copy_action(src: str, dst: str, overwrite: bool = False) -> ActionResu
             suffix = "; delete it through the confirmed delete action first" if overwrite else ""
             return ActionResult(success=False, error=f"Destination exists: {dst}{suffix}")
 
-        if src_path.is_dir():
-            shutil.copytree(src_path, dst_path)
-        else:
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_path, dst_path)
+        try:
+            if src_path.is_dir():
+                shutil.copytree(src_path, dst_path)
+            else:
+                dst_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_path, dst_path)
+        except FileExistsError:
+            # Destination appeared between the exists() check and the actual copy
+            # (TOCTOU race) — report the race instead of silently overwriting.
+            return ActionResult(success=False, error=f"Destination exists: {dst}")
 
         return ActionResult(success=True, output=f"Copied {src_path} -> {dst_path}")
     except Exception as e:
@@ -380,6 +395,12 @@ def files_move_action(src: str, dst: str, overwrite: bool = False) -> ActionResu
             return ActionResult(success=False, error=f"Destination exists: {dst}{suffix}")
 
         dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if dst_path.exists():
+            # Destination appeared between the exists() check above and this point
+            # (TOCTOU race). shutil.move's rename/copy fallback can otherwise
+            # silently replace it on Windows.
+            return ActionResult(success=False, error=f"Destination exists: {dst}")
 
         shutil.move(str(src_path), str(dst_path))
 

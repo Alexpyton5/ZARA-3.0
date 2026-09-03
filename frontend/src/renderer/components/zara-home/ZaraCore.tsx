@@ -42,7 +42,10 @@ export function ZaraCore({ state }: ZaraCoreProps) {
         <img className="zh-core-mark" src={zaraLogo} alt="" aria-hidden="true" />
       </div>
       <div className="zh-core-shaft" aria-hidden="true" />
-      <div className="zh-core-label">{LABELS[state]}</div>
+      {/* MASTER não mostra rótulo em repouso — só em estados ativos */}
+      {state !== 'idle' && state !== 'offline' && (
+        <div className="zh-core-label">{LABELS[state]}</div>
+      )}
     </div>
   );
 }

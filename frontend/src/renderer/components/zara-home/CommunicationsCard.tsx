@@ -5,7 +5,7 @@ import telegram from '../../../assets/zara-home/brands/telegram.svg';
 function InstagramGlyph() {
   // Glifo oficial do Instagram: câmera arredondada sobre o gradiente oficial
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
       <defs>
         <radialGradient id="zh-ig-bg" cx="30%" cy="107%" r="150%">
           <stop offset="0%" stopColor="#fdf497" />
@@ -26,7 +26,7 @@ function InstagramGlyph() {
 function GmailGlyph() {
   // Glifo oficial do Gmail: envelope com "M" nas cores da marca
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
       <path fill="#4285F4" d="M22 6.5v11a1.5 1.5 0 0 1-1.5 1.5H19V9.7l-7 5.05-7-5.05V19H3.5A1.5 1.5 0 0 1 2 17.5v-11c0-1.2 1.37-1.88 2.33-1.16L12 10.7l7.67-5.36C20.63 4.62 22 5.3 22 6.5z" />
       <path fill="#EA4335" d="M2 6.5c0-1.2 1.37-1.88 2.33-1.16L5 5.83V19H3.5A1.5 1.5 0 0 1 2 17.5v-11z" />
       <path fill="#34A853" d="M22 6.5v11a1.5 1.5 0 0 1-1.5 1.5H19V5.83l.67-.49C20.63 4.62 22 5.3 22 6.5z" />
@@ -36,10 +36,10 @@ function GmailGlyph() {
 }
 
 const CHANNELS = [
-  { name: 'WhatsApp', icon: whatsapp, color: '#25d366', value: '12' },
-  { name: 'Telegram', icon: telegram, color: '#26a5e4', value: '3' },
-  { name: 'Instagram', Glyph: InstagramGlyph, color: '#d6249f', value: '5' },
-  { name: 'Gmail', Glyph: GmailGlyph, color: '#ea4335', value: '7' },
+  { name: 'WhatsApp', icon: whatsapp, value: '12', badgeClass: 'zh-comm-badge--wa', tint: '#25d366' },
+  { name: 'Telegram', icon: telegram, value: '3', badgeClass: 'zh-comm-badge--tg', tint: null },
+  { name: 'Instagram', Glyph: InstagramGlyph, value: '5', badgeClass: 'zh-comm-badge--ig', tint: null },
+  { name: 'Gmail', Glyph: GmailGlyph, value: '7', badgeClass: 'zh-comm-badge--gmail', tint: null },
 ];
 
 /**
@@ -52,9 +52,13 @@ export function CommunicationsCard() {
     <section className="zh-section zh-glass-panel" aria-label="Comunicações">
       <h2>Comunicações</h2>
       <div className="zh-comm-row">
-        {CHANNELS.map(({ name, icon, Glyph, color, value }) => (
+        {CHANNELS.map(({ name, icon, Glyph, tint, value, badgeClass }) => (
           <div className="zh-comm-item" key={name}>
-            <div className="zh-comm-badge" style={{ background: color }} aria-label={name}>
+            <div
+              className={`zh-comm-badge${badgeClass ? ` ${badgeClass}` : ''}`}
+              style={tint ? { background: tint } : undefined}
+              aria-label={name}
+            >
               {icon ? (
                 <img src={icon} alt="" />
               ) : (

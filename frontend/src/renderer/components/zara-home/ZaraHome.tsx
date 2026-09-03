@@ -31,7 +31,7 @@ import auroraBackground from '../../../assets/zara-home/aurora-master-refined.pn
  * cor/asset veio e o que ainda está NOT_CONNECTED_YET.
  */
 export function ZaraHome() {
-  const [activeNav, setActiveNav] = useState('Início');
+  const [activeNav, setActiveNav] = useState('Hoje');
   const coreState = useZaraCoreState();
   const metrics = useSystemMetrics();
   const battery = useBattery();
@@ -81,7 +81,10 @@ export function ZaraHome() {
             {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </span>
           <span className="zh-clock-date">
-            {now.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
+            {now
+              .toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
+              .replace('.', '')
+              .replace(',', ' ·')}
           </span>
         </span>
         <WindowControls />

@@ -32,6 +32,11 @@
   --zh-secondary: #a7b0ad;
   --zh-muted: #87918c;
   --zh-line: #cad6d130;
+  /* Identidade da marca: MESMO filtro em TODAS as logos ZA (sidebar, Core,
+   * projeto) — emerald escuro com gradiente metálico e bordas mais claras,
+   * igual à referência. */
+  --zh-logo-filter: sepia(0.9) hue-rotate(112deg) saturate(1.9) brightness(0.62) contrast(1.28)
+    drop-shadow(0 0 4px #00e6a540);
   --zh-glass: #08110ec2;
   --zh-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --zh-card: #101915cc;
@@ -270,6 +275,9 @@
 .zh-sidebar {
   display: flex;
   flex-direction: column;
+  /* MASTER: sidebar ~193px em 1456 → ~198px em 1500 */
+  width: 198px;
+  flex-shrink: 0;
   padding: 20px 14px;
   border-right: 1px solid var(--zh-line);
   gap: 18px;
@@ -287,9 +295,8 @@
   width: 34px;
   height: 34px;
   object-fit: contain;
-  /* Mesma identidade black-titanium do MASTER (glifo escuro, rim emerald) */
-  filter: sepia(0.9) hue-rotate(112deg) saturate(2.2) brightness(0.55) contrast(1.3)
-    drop-shadow(0 0 4px #10b98155);
+  /* Identidade única da marca (igual em todas as ZA) */
+  filter: var(--zh-logo-filter);
 }
 
 .zh-sidebar-brand span {
@@ -414,12 +421,14 @@
 
 .zh-top-bar-center .zh-command-form {
   width: 100%;
-  max-width: 360px;
+  /* MASTER: input ~432px em 1456 → ~445px em 1500 */
+  max-width: 445px;
 }
 
 .zh-header h1 {
-  font-size: 32px;
-  font-weight: 600;
+  /* MASTER: greeting ~25px em 1456 → ~26px em 1500 */
+  font-size: 26px;
+  font-weight: 700;
   margin: 0 0 4px;
   letter-spacing: -0.02em;
 }
@@ -499,12 +508,26 @@
 }
 
 .zh-system-row {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 8px 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.zh-system-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--zh-text);
+  margin: 0 0 12px;
+  padding: 0 16px;
+}
+
+.zh-system-grid {
   display: grid;
   grid-template-columns: 1.05fr 1.45fr 0.9fr 0.75fr 1.05fr;
   gap: 0;
-  padding: 14px 8px;
-  max-width: 1280px;
-  margin: 0 auto;
   width: 100%;
 }
 
@@ -515,13 +538,74 @@
   border-left: 1px solid #cad6d312;
 }
 
-.zh-system-col:first-child {
+.zh-system-grid .zh-system-col:first-child {
   border-left: none;
   padding-left: 16px;
 }
 
-.zh-system-col:last-child {
+.zh-system-grid .zh-system-col:last-child {
   padding-right: 16px;
+}
+
+/* Mini-card com borda em volta do "Estado do dispositivo" — como no MASTER */
+.zh-device-card {
+  border: 1px solid #cad6d31c;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+/* Cards de Energia — linhas com borda, título + descritor + dot de seleção */
+.zh-energy-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border: 1px solid #ffffff10;
+  background: #ffffff05;
+  color: var(--zh-muted);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s var(--zh-ease);
+}
+
+.zh-energy-card:hover {
+  background: #ffffff0d;
+}
+
+.zh-energy-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.3;
+}
+
+.zh-energy-text strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--zh-text);
+}
+
+.zh-energy-text span {
+  font-size: 10px;
+  color: var(--zh-muted);
+  white-space: nowrap;
+}
+
+.zh-energy-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff22;
+  flex-shrink: 0;
+}
+
+.zh-energy-dot[data-active='true'] {
+  background: var(--zh-emerald);
+  box-shadow: 0 0 6px #00d69988;
 }
 
 /* Linha de ação compacta — ícone + rótulo + estado, no formato do MASTER
@@ -726,29 +810,25 @@
 .zh-foryou-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 7px 6px;
   border-radius: 10px;
-  background: #ffffff05;
-  border: 1px solid #ffffff06;
 }
 
 .zh-foryou-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
-  background: #0d1411;
-  border: 1px solid #ffffff10;
+  background: #0c1410;
+  border: 1px solid #ffffff0f;
   flex-shrink: 0;
 }
 
 .zh-foryou-icon img {
-  width: 16px;
-  height: 16px;
-  /* Glifo branco do asset → verde WhatsApp como no MASTER */
-  filter: invert(62%) sepia(60%) saturate(1200%) hue-rotate(88deg) brightness(96%);
+  width: 20px;
+  height: 20px;
 }
 
 .zh-foryou-text {
@@ -759,13 +839,13 @@
 }
 
 .zh-foryou-text strong {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--zh-text);
 }
 
 .zh-foryou-text span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--zh-muted);
 }
 
@@ -799,9 +879,48 @@
 }
 
 .zh-comm-value {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--zh-text);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--zh-secondary);
+}
+
+/* WhatsApp no MASTER: squircle verde com glifo branco */
+.zh-comm-badge--wa {
+  border-radius: 13px !important;
+}
+
+/* Telegram no MASTER: glifo azul puro, sem círculo de fundo */
+.zh-comm-badge--tg {
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.zh-comm-badge--tg img {
+  width: 38px;
+  height: 38px;
+  filter: none;
+}
+
+/* Instagram no MASTER: glifo quadrado-gradiente grande, sem círculo de fundo */
+.zh-comm-badge--ig {
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.zh-comm-badge--ig svg {
+  width: 42px;
+  height: 42px;
+}
+
+/* Gmail no MASTER: glifo M multicolor, sem círculo de fundo */
+.zh-comm-badge--gmail {
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.zh-comm-badge--gmail svg {
+  width: 38px;
+  height: 38px;
 }
 
 .zh-comm-more {
@@ -825,23 +944,28 @@
 }
 
 .zh-project-badge {
-  width: 40px;
-  height: 40px;
+  /* MASTER: mini core ~64px em 1456 → ~62px em 1500, anel de vidro emerald */
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #0b100e;
-  border: 1px solid #ffffff12;
+  background: radial-gradient(circle at 40% 30%, #12241d 0%, #081310 55%, #050b09 100%);
+  border: 1.5px solid #3f9d78;
+  box-shadow:
+    0 0 14px #14ca8845,
+    0 0 4px #14ca8830,
+    inset 0 2px 6px #ffffff1a,
+    inset 0 -6px 12px -6px #000000d0;
   flex-shrink: 0;
 }
 
 .zh-project-badge img {
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
-  /* Black titanium do MASTER: glifo escuro com rim emerald */
-  filter: sepia(0.9) hue-rotate(112deg) saturate(2.2) brightness(0.55) contrast(1.3)
-    drop-shadow(0 0 4px #10b98155);
+  /* Identidade única da marca (igual em todas as ZA) */
+  filter: var(--zh-logo-filter);
 }
 
 .zh-project-meta {
@@ -851,55 +975,73 @@
 }
 
 .zh-project-meta strong {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
   color: var(--zh-text);
 }
 
 .zh-project-meta span {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--zh-muted);
 }
 
+.zh-project-percent {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--zh-emerald);
+  margin-top: 2px;
+}
+
 .zh-project-last-session {
-  font-size: 11px;
-  color: var(--zh-muted);
-  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--zh-secondary);
+  margin: 0;
 }
 
 .zh-project-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 12px;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .zh-project-dots {
   display: flex;
-  gap: 5px;
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .zh-project-dots span {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ffffff20;
+  background: #ffffff22;
 }
 
 .zh-project-dots span[data-active='true'] {
   background: var(--zh-emerald);
 }
 
+/* Linha "última sessão + Continuar" do MASTER */
+.zh-project-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .zh-project-continue {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid var(--zh-line);
   background: #ffffff08;
   color: var(--zh-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -920,28 +1062,30 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 12px 6px;
+  gap: 6px;
+  padding: 10px 4px;
   border-radius: 12px;
-  border: 1px solid #ffffff10;
-  background: #ffffff06;
+  border: none;
+  background: transparent;
   color: var(--zh-text);
   cursor: pointer;
   transition: background-color 0.2s var(--zh-ease);
 }
 
 .zh-tool-tile:hover {
-  background: #ffffff10;
+  background: #ffffff0a;
 }
 
 .zh-tool-tile img {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .zh-tool-name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+  margin-top: 2px;
 }
 
 .zh-tool-tile .zh-tool-open {
@@ -971,7 +1115,7 @@
 .zh-core-platform {
   position: absolute;
   left: 50%;
-  top: 254px;
+  top: 236px;
   width: 1px;
   height: 1px;
   z-index: 0;
@@ -989,29 +1133,28 @@
 
 .zh-platform-seat {
   top: 0;
-  width: 240px;
-  height: 52px;
-  /* Titanium smoked escurecido — base quase preta com reflexo metálico MUITO sutil */
-  background: radial-gradient(ellipse at 50% 18%, #22262c 0%, #0a0c0e 48%, #020303 82%, transparent 100%);
+  width: 192px;
+  height: 36px;
+  /* Titanium smoked escurecido — base fina, menos massa preta */
+  background: radial-gradient(ellipse at 50% 18%, #1d2126 0%, #0a0c0e 48%, #020303 82%, transparent 100%);
   box-shadow:
-    0 18px 34px -10px #000000ff,
-    0 8px 18px -4px #000000e0,
-    inset 0 2px 4px #ffffff22,
-    inset 0 -12px 20px -8px #000000f5,
-    0 2px 12px 2px #14ca8825;
+    0 12px 24px -8px #000000f0,
+    inset 0 2px 3px #ffffff1c,
+    inset 0 -10px 16px -8px #000000f0,
+    0 2px 10px 2px #14ca8820;
 }
 
 /* Contato físico com o chão — sem isso a plataforma inteira "flutuava"
  * mesmo com os anéis. Uma sombra de contato ancora o objeto. */
 .zh-platform-contact {
   position: absolute;
-  top: 90px;
+  top: 84px;
   left: 50%;
   transform: translateX(-50%);
-  width: 444px;
-  height: 26px;
+  width: 390px;
+  height: 20px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, #000000dd 0%, transparent 75%);
+  background: radial-gradient(ellipse at 50% 50%, #000000c8 0%, transparent 72%);
   z-index: -1;
 }
 
@@ -1027,9 +1170,9 @@
 }
 
 .zh-platform-ring--1 {
-  top: 23px;
-  width: 294px;
-  height: 52px;
+  top: 19px;
+  width: 272px;
+  height: 44px;
   border-width: 1.5px;
   /* Anel fino com hint emerald — o aro de energia sob a esfera do MASTER */
   border-color: #2e5a48;
@@ -1047,21 +1190,22 @@
 }
 
 .zh-platform-ring--4 {
-  top: 46px;
-  width: 396px;
-  height: 68px;
+  top: 38px;
+  width: 344px;
+  height: 54px;
   border-width: 1px;
   border-color: #1c2230;
-  opacity: 0.55;
+  opacity: 0.45;
   box-shadow:
     inset 0 1px 2px -1px #ffffff0e,
     inset 0 -2px 5px -2px #000000e8,
-    0 12px 24px -8px #000000d8;
+    0 10px 20px -8px #000000d0;
 }
 
 .zh-core {
-  width: 290px;
-  height: 290px;
+  /* MASTER: esfera ~250px em 1456 → ~258px em 1500 */
+  width: 264px;
+  height: 264px;
   border-radius: 50%;
   position: relative;
   z-index: 1;
@@ -1098,15 +1242,12 @@
 .zh-core-mark {
   position: relative;
   z-index: 1;
-  width: 148px;
-  height: 108px;
+  width: 136px;
+  height: 100px;
   object-fit: contain;
-  /* Black titanium do MASTER: glifo escurecido com tint emerald nas
-   * bordas + halo emerald atrás da silhueta (drop-shadow segue o alpha). */
-  filter: sepia(0.9) hue-rotate(112deg) saturate(2.2) brightness(0.5) contrast(1.3)
-    drop-shadow(0 0 6px #00e6a5aa)
-    drop-shadow(0 0 16px #00bd8255);
-  opacity: 0.98;
+  /* Identidade única da marca (igual em todas as ZA) */
+  filter: var(--zh-logo-filter);
+  opacity: 0.96;
 }
 
 .zh-core[data-state='listening'] { animation-duration: 1.1s; }
@@ -1217,15 +1358,15 @@
 }
 
 .zh-dock-voice {
-  width: 52px;
-  height: 52px;
+  width: 62px;
+  height: 62px;
   border-radius: 999px;
   border: none;
-  margin: 0 6px;
+  margin: -14px 8px -4px;
   background:
     radial-gradient(circle at 34% 24%, #ffffffa0, transparent 46%),
     linear-gradient(135deg, #14ca8860, #0ea57048);
-  color: var(--zh-obsidian);
+  color: #eafff5;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1234,7 +1375,7 @@
     0 3px 13px #00000065,
     inset 0 2px 4px #ffffff8a,
     inset 0 -3px 6px #0a0c0e92;
-  transition: 
+  transition:
     transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1302,18 +1443,12 @@
   gap: 8px;
 }
 
-.zh-progress-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--zh-emerald);
-  flex-shrink: 0;
-}
-
 .zh-progress-track {
   flex: 1;
-  height: 5px;
+  height: 4px;
   border-radius: 999px;
-  background: #ffffff14;
+  /* Track com tint esmeralda — como no MASTER */
+  background: #14ca8826;
   overflow: hidden;
 }
 

@@ -66,7 +66,8 @@
 }
 
 /* Faixa de status (Wi-Fi/bateria/hora) no canto superior direito — mesma
- * posição relativa do site de referência, fora da coluna de conteúdo. */
+ * posição relativa do site de referência, fora da coluna de conteúdo.
+ * A faixa também funciona como drag region da janela frameless. */
 .zh-status-row {
   position: absolute;
   top: 18px;
@@ -77,6 +78,46 @@
   font-size: 12px;
   color: var(--zh-muted);
   z-index: 2;
+  -webkit-app-region: drag;
+}
+
+.zh-status-row button,
+.zh-window-controls {
+  -webkit-app-region: no-drag;
+}
+
+/* Controles de janela (frameless Electron): discretos, alinhados à direita,
+ * aparência de produto — não de browser. */
+.zh-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--zh-line);
+}
+
+.zh-window-btn {
+  width: 26px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--zh-muted);
+  cursor: pointer;
+  transition: background-color 150ms var(--zh-ease), color 150ms var(--zh-ease);
+}
+
+.zh-window-btn:hover {
+  background: #ffffff12;
+  color: var(--zh-text);
+}
+
+.zh-window-btn--close:hover {
+  background: #e0505030;
+  color: #e88;
 }
 
 /* Widgets ainda não ligados a um canal real (segurança/nuvem/Wi-Fi) ficam
@@ -170,9 +211,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 8px;
-  gap: 24px;
-  min-height: 420px;
+  padding-top: 6px;
+  gap: 18px;
+  min-height: 340px;
   position: relative;
   margin: 0;
   z-index: 2;
@@ -221,14 +262,15 @@
 }
 
 .zh-sidebar-brand img {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
+  filter: brightness(1.15) contrast(1.04);
 }
 
 .zh-sidebar-brand span {
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  font-size: 18px;
 }
 
 .zh-nav {
@@ -433,7 +475,7 @@
   display: grid;
   grid-template-columns: 1.05fr 1.45fr 0.9fr 0.75fr 1.05fr;
   gap: 0;
-  padding: 18px 8px;
+  padding: 14px 8px;
   max-width: 1280px;
   margin: 0 auto;
   width: 100%;
@@ -882,7 +924,7 @@
 .zh-core-platform {
   position: absolute;
   left: 50%;
-  top: 300px;
+  top: 254px;
   width: 1px;
   height: 1px;
   z-index: 0;
@@ -929,24 +971,27 @@
 }
 
 .zh-platform-ring {
-  /* Reflexo especular mais concentrado no topo — simula superfície metálica polida */
-  background: radial-gradient(ellipse at 50% 24%, #ffffff14, transparent 58%);
+  /* Discos PREENCHIDOS (não wireframe): cada anel é uma placa de titânio
+   * sólida vista em perspectiva — topo iluminado, corpo escuro. */
+  background:
+    radial-gradient(ellipse at 50% 20%, #ffffff10, transparent 55%),
+    radial-gradient(ellipse at 50% 45%, #14171c 0%, #0a0c10 55%, #050608 100%);
   border-style: solid;
   /* Drop-shadow emerald mais sutil — emerge apenas como reflexo da energia acima */
-  filter: drop-shadow(0 3px 8px rgba(20, 202, 136, 0.22));
+  filter: drop-shadow(0 3px 8px rgba(20, 202, 136, 0.16));
 }
 
 .zh-platform-ring--1 {
   top: 23px;
   width: 294px;
   height: 68px;
-  border-width: 2.5px;
+  border-width: 1.5px;
   /* Titanium smoked — escuro gunmetal como na referência */
   border-color: #3a4456;
-  opacity: 0.88;
-  box-shadow: 
+  opacity: 0.92;
+  box-shadow:
     /* Reflexo especular superior SUTIL */
-    inset 0 1.5px 3px -1px #ffffff28, 
+    inset 0 1.5px 3px -1px #ffffff28,
     inset 0 -3px 6px -2px #000000d0,
     /* Sombra projetada profunda */
     0 4px 12px -2px #000000b0;
@@ -956,12 +1001,12 @@
   top: 42px;
   width: 357px;
   height: 82px;
-  border-width: 2.25px;
+  border-width: 1.25px;
   /* Titanium smoked médio — mais escuro que o primeiro ring */
   border-color: #2a2f3e;
-  opacity: 0.72;
-  box-shadow: 
-    inset 0 1.5px 3px -1px #ffffff18, 
+  opacity: 0.8;
+  box-shadow:
+    inset 0 1.5px 3px -1px #ffffff18,
     inset 0 -3px 6px -2px #000000d8,
     0 8px 16px -4px #000000c0;
 }
@@ -970,12 +1015,12 @@
   top: 61px;
   width: 420px;
   height: 96px;
-  border-width: 2px;
+  border-width: 1px;
   /* Titanium smoked escuro — quase fundido com o background */
   border-color: #1a1f2e;
-  opacity: 0.58;
-  box-shadow: 
-    inset 0 1px 2px -1px #ffffff10, 
+  opacity: 0.66;
+  box-shadow:
+    inset 0 1px 2px -1px #ffffff10,
     inset 0 -3px 6px -2px #000000e8,
     0 12px 24px -6px #000000d8;
 }
@@ -984,19 +1029,19 @@
   top: 79px;
   width: 483px;
   height: 110px;
-  border-width: 1.75px;
+  border-width: 1px;
   /* Titanium smoked muito escuro — apenas contorno sutil */
   border-color: #0f141d;
-  opacity: 0.42;
-  box-shadow: 
-    inset 0 1px 2px -1px #ffffff08, 
+  opacity: 0.5;
+  box-shadow:
+    inset 0 1px 2px -1px #ffffff08,
     inset 0 -3px 6px -2px #000000f0,
     0 16px 32px -8px #000000e8;
 }
 
 .zh-core {
-  width: 340px;
-  height: 340px;
+  width: 290px;
+  height: 290px;
   border-radius: 50%;
   position: relative;
   z-index: 1;
@@ -1023,7 +1068,7 @@
 
 .zh-core-shaft {
   width: 2px;
-  height: 160px;
+  height: 110px;
   margin-top: -4px;
   background: linear-gradient(#0000, #3be6a8 38%, #d8f7e8 72%, #14ca88, #0000);
   box-shadow: 0 0 10px 2px #00d99355;
@@ -1033,11 +1078,14 @@
 .zh-core-mark {
   position: relative;
   z-index: 1;
-  width: 160px;
-  height: 118px;
+  width: 166px;
+  height: 121px;
   object-fit: contain;
-  filter: drop-shadow(0 1px 2px #002b1daa) drop-shadow(0 0 6px #00ba7b55) brightness(1.05);
-  opacity: 0.95;
+  /* Leitura metálica: clareia o glifo e aumenta microcontraste — mesmo
+   * material "titanium escovado" do MASTER. */
+  filter: brightness(1.22) contrast(1.06)
+    drop-shadow(0 1px 2px #002b1daa) drop-shadow(0 0 10px #00ba7b44);
+  opacity: 0.96;
 }
 
 .zh-core[data-state='listening'] { animation-duration: 1.1s; }
@@ -1070,13 +1118,21 @@
 }
 
 .zh-core-label {
-  margin-top: 6px;
+  /* Estado real do Core, discreto: ancorado NO centro da plataforma (como
+   * um painel de status do objeto), sem empurrar o dock para baixo. */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 348px;
+  margin: 0;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--zh-muted);
   text-align: center;
   white-space: nowrap;
+  z-index: 3;
+  pointer-events: none;
 }
 
 /* ---------- Dock ---------- */

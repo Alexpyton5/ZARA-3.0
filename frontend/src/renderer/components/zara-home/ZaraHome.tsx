@@ -9,6 +9,7 @@ import { CommunicationsCard } from './CommunicationsCard';
 import { ActiveProjectCard } from './ActiveProjectCard';
 import { ToolsCard } from './ToolsCard';
 import { SystemPanel } from './SystemPanel';
+import { WindowControls } from './WindowControls';
 import { ZaraCore } from './ZaraCore';
 import { VoiceDock } from './VoiceDock';
 import { useZaraCoreState } from './useZaraCoreState';
@@ -76,6 +77,7 @@ export function ZaraHome() {
           <span className="zh-battery-capsule" data-unavailable="true" aria-label="Bateria não conectada" />
         )}
         <span>{now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+        <WindowControls />
       </div>
 
       <div className="zh-content">

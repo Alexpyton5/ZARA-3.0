@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 200" role="img" aria-label="ZA">
+  <defs>
+    <!-- Gradiente vertical do MASTER: topo esmeralda médio, base quase preta -->
+    <linearGradient id="za-face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3da381"/>
+      <stop offset="0.3" stop-color="#237059"/>
+      <stop offset="0.6" stop-color="#124234"/>
+      <stop offset="0.85" stop-color="#0a2c22"/>
+      <stop offset="1" stop-color="#071d17"/>
+    </linearGradient>
+    <!-- Brilho de borda (topo) -->
+    <linearGradient id="za-edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8defc8" stop-opacity="0.85"/>
+      <stop offset="0.4" stop-color="#4fbd99" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#081f19" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="url(#za-face)" stroke="url(#za-edge)" stroke-width="2">
+    <!-- Z: barra superior -->
+    <path d="M8 18 H128 V44 H8 Z"/>
+    <!-- Z: diagonal -->
+    <path d="M128 44 H96 L8 156 H40 Z"/>
+    <!-- Z: barra inferior -->
+    <path d="M8 156 H128 V182 H8 Z"/>
+    <!-- A: triângulo externo menos o contra interno (evenodd) -->
+    <path fill-rule="evenodd" d="M210 10 L302 186 H118 Z M210 78 L262 172 H158 Z"/>
+    <!-- A: barra transversal — preenche exatamente o vão entre as pernas -->
+    <path d="M153 120 H267 L281 146 H139 Z"/>
+    <!-- A: triângulo sólido abaixo da barra -->
+    <path d="M210 152 L248 186 H172 Z"/>
+  </g>
+</svg>

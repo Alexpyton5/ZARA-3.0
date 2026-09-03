@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react';
-import zaraLogo from '../../../assets/zara-home/zara-mark.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
 
 /**
  * "Projeto ativo" — estrutura 1:1 com o MASTER: título, mini core à esquerda,

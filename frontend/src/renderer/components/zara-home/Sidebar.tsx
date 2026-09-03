@@ -3,7 +3,7 @@ import {
   House, MessageCircle, Folder, File, LayoutGrid, Workflow,
   BrainCircuit, FlaskConical, Monitor, Cpu, Settings,
 } from 'lucide-react';
-import zaraLogo from '../../../assets/zara-home/zara-mark.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
 
 // Itens 1:1 com o MASTER (ordem exata, incluindo "Dispositivos").
 const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [

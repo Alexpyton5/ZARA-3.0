@@ -1,5 +1,5 @@
 import type { CoreState } from './types';
-import zaraLogo from '../../../assets/zara-home/zara-mark.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
 import coreGlass from '../../../assets/zara-home/core-glass.png';
 
 const LABELS: Record<CoreState, string> = {

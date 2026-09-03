@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Send } from 'lucide-react';
-import zaraLogo from '../../../assets/zara-home/zara-mark.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
 
 interface TextCommandInputProps {
   engine?: string;

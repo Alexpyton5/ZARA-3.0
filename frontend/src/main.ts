@@ -40,6 +40,16 @@ function getPythonExecutable(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'backend', 'zara-backend.exe')
   }
+  // BUGFIX_2026-09-03: bare "python.exe" resolves via PATH, which has
+  // pointed at a DIFFERENT project's venv before (documented incident,
+  // see .claude/rules/path-rules/backend-core.md) and did again here —
+  // the sidecar exited immediately with "Missing essential dependencies:
+  // pydantic_settings" because PATH python isn't this project's venv.
+  // Always use the project's own venv by explicit path in dev.
+  const devVenvPython = join(app.getAppPath(), '..', '..', '.venv', 'Scripts', 'python.exe')
+  if (process.platform === 'win32' && existsSync(devVenvPython)) {
+    return devVenvPython
+  }
   return process.platform === 'win32' ? 'python.exe' : 'python3'
 }
 

@@ -469,11 +469,9 @@ export const Chat: React.FC<ChatProps> = ({
     );
   }, [groupedMessages, messages.length, showTimestamps, onCopy]);
 
-  // Renderizador padrão de input
-  const defaultRenderInput: (props: ChatInputProps) => React.ReactNode = ChatInput;
-
-  const RenderMessage = useMemo(() => renderMessage || defaultRenderMessage, [renderMessage, defaultRenderMessage]);
-  const RenderInput = useMemo(() => renderInput || defaultRenderInput, [renderInput, defaultRenderInput]);
+  // Renderizadores: usar props ou fallback direto (sem useMemo desnecessário)
+  const RenderMessage = renderMessage || defaultRenderMessage;
+  const RenderInput = renderInput || ChatInput;
   
   // Virtualização simples: só renderiza últimas N mensagens
   const visibleMessages = messages.slice(-maxMessages);

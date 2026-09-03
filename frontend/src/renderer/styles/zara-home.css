@@ -845,25 +845,25 @@
   align-self: center;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 13px 18px;
+  gap: 4px;
+  padding: 16px 22px;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, #ffffff0e, transparent 52%),
-    linear-gradient(180deg, #22262cfa, #08090bfc);
-  border: 1px solid #3a445620;
+    linear-gradient(180deg, #ffffff12, transparent 55%),
+    linear-gradient(180deg, #2a2f36fc, #06070afd);
+  border: 1px solid #3a445628;
   box-shadow:
-    0 30px 64px -18px #000000ff,
-    0 8px 18px -4px #000000e5,
-    inset 0 2.5px 0 #ffffff22,
-    inset 0 -3px 3px #000000a5;
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    0 38px 80px -20px #000000ff,
+    0 10px 22px -4px #000000ea,
+    inset 0 3px 0 #ffffff28,
+    inset 0 -4px 4px #000000b0;
+  backdrop-filter: blur(26px) saturate(1.25);
+  -webkit-backdrop-filter: blur(26px) saturate(1.25);
 }
 
 .zh-dock-btn {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
   border: none;
   background: transparent;
@@ -897,11 +897,11 @@
 }
 
 .zh-dock-voice {
-  width: 54px;
-  height: 54px;
+  width: 66px;
+  height: 66px;
   border-radius: 999px;
   border: none;
-  margin: 0 6px;
+  margin: 0 8px;
   background:
     radial-gradient(circle at 34% 24%, #ffffffb2, transparent 46%),
     linear-gradient(135deg, #14ca8858, #0ea57048);

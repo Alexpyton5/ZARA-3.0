@@ -48,7 +48,7 @@
   z-index: 0;
   background-size: cover;
   background-position: center 68%;
-  opacity: 0.9;
+  opacity: 0.28;
   pointer-events: none;
 }
 
@@ -547,57 +547,82 @@
   top: 0;
   width: 206px;
   height: 48px;
-  background: radial-gradient(ellipse at 50% 20%, #6b756e 0%, #262b26 48%, #070c09 82%, transparent 100%);
+  /* Titanium fumê escurecido — base quase preta com reflexo metálico sutil no topo */
+  background: radial-gradient(ellipse at 50% 18%, #2a2e2c 0%, #0f110f 48%, #030403 82%, transparent 100%);
   box-shadow:
-    0 16px 26px -8px #000000d8,
-    inset 0 2px 3px #ffffff33,
-    inset 0 -10px 16px -6px #000000d0,
-    0 2px 16px 2px #14ca8840;
+    0 18px 32px -10px #000000f5,
+    0 8px 18px -4px #000000bb,
+    /* Reflexo especular mais pronunciado no topo */
+    inset 0 2px 4px #ffffff38,
+    inset 0 -12px 20px -8px #000000e8,
+    /* Emerald refletido da energia acima */
+    0 2px 16px 2px #14ca8848;
 }
 
 .zh-platform-ring {
-  background: radial-gradient(ellipse at 50% 28%, #ffffff10, transparent 62%);
+  /* Reflexo especular mais concentrado no topo — simula superfície metálica polida */
+  background: radial-gradient(ellipse at 50% 24%, #ffffff14, transparent 58%);
   border-style: solid;
-  filter: drop-shadow(0 3px 8px rgba(20, 202, 136, 0.3));
+  /* Drop-shadow emerald mais sutil — emerge apenas como reflexo da energia acima */
+  filter: drop-shadow(0 3px 8px rgba(20, 202, 136, 0.22));
 }
 
 .zh-platform-ring--1 {
   top: 20px;
   width: 252px;
   height: 58px;
-  border-width: 2px;
-  border-color: #c3ccc7;
-  opacity: 0.88;
-  box-shadow: inset 0 2px 3px -1px #ffffff50, inset 0 -3px 5px -2px #00000090;
+  border-width: 2.5px;
+  /* Titanium polido — mais escuro e metálico */
+  border-color: #8a9490;
+  opacity: 0.96;
+  box-shadow: 
+    /* Reflexo especular superior mais forte */
+    inset 0 2px 4px -1px #ffffff68, 
+    inset 0 -3px 6px -2px #000000a8,
+    /* Sombra projetada mais pronunciada */
+    0 4px 12px -2px #00000088;
 }
 
 .zh-platform-ring--2 {
   top: 36px;
   width: 306px;
   height: 70px;
-  border-width: 1.75px;
-  border-color: #8f9c95;
-  opacity: 0.62;
-  box-shadow: inset 0 2px 3px -1px #ffffff3a, inset 0 -3px 5px -2px #00000090;
+  border-width: 2.25px;
+  /* Titanium fumê médio */
+  border-color: #5d6863;
+  opacity: 0.78;
+  box-shadow: 
+    inset 0 2px 4px -1px #ffffff48, 
+    inset 0 -3px 6px -2px #000000a8,
+    0 8px 16px -4px #000000a0;
 }
 
 .zh-platform-ring--3 {
   top: 52px;
   width: 360px;
   height: 82px;
-  border-width: 1.5px;
-  border-color: #6e7b73;
-  opacity: 0.42;
-  box-shadow: inset 0 2px 3px -1px #ffffff24, inset 0 -3px 5px -2px #00000090;
+  border-width: 2px;
+  /* Titanium fumê escuro */
+  border-color: #444b47;
+  opacity: 0.64;
+  box-shadow: 
+    inset 0 2px 4px -1px #ffffff30, 
+    inset 0 -3px 6px -2px #000000b0,
+    0 12px 24px -6px #000000b8;
 }
 
 .zh-platform-ring--4 {
   top: 68px;
   width: 414px;
   height: 94px;
-  border-width: 1.25px;
-  border-color: #4c584f;
-  opacity: 0.3;
+  border-width: 1.75px;
+  /* Titanium fumê muito escuro */
+  border-color: #2d332f;
+  opacity: 0.52;
+  box-shadow: 
+    inset 0 2px 4px -1px #ffffff20, 
+    inset 0 -3px 6px -2px #000000b8,
+    0 16px 32px -8px #000000d0;
 }
 
 .zh-core {
@@ -623,6 +648,8 @@
   height: 100%;
   object-fit: contain;
   pointer-events: none;
+  /* Sutil specular highlight direcional no topo da esfera */
+  filter: drop-shadow(0 -8px 12px #ffffff08);
 }
 
 .zh-core-shaft {

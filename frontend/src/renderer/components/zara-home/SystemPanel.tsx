@@ -1,10 +1,4 @@
-import type { ReactNode } from 'react';
-import {
-  Cpu, MemoryStick, HardDrive, BatteryFull, Thermometer, Wifi as WifiIcon,
-  Database, Trash2, Power, ListChecks, RotateCw, Activity,
-  Search, ShieldCheck, Shield, KeyRound, Bug,
-  Gauge, SlidersHorizontal, Leaf,
-} from 'lucide-react';
+import { Cpu, MemoryStick, HardDrive, BatteryFull, Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf } from 'lucide-react';
 import type { BatteryData, SystemMetricsData } from './types';
 
 interface SystemPanelProps {
@@ -16,30 +10,26 @@ function pct(value: number | null): string {
   return value === null ? '—' : `${Math.round(value)}%`;
 }
 
-// Cor semântica do projeto (ver .claude/rules): branco/titânio = neutro,
-// esmeralda = ativo/saudável, âmbar = alerta, cinza = indisponível. Nenhum
-// dado real de saúde (limiar de "alerta") existe ainda para CPU/RAM/Disco —
-// então tudo fica neutro (titânio) até essa lógica existir de verdade, em
-// vez de inventar limiares arbitrários de cor.
 function metricColorClass(value: number | null): string {
   return value === null ? 'zh-metric-unknown' : 'zh-metric-neutral';
 }
 
 /**
- * Linha genérica de item "ainda não conectado" — mesmo padrão visual das
- * métricas reais (`.zh-metric-row`), só que o valor da direita é sempre
- * "Indisponível" em vez de inventar um número/estado que o backend não
- * expõe. Usada em Manutenção/Segurança/Energia: os ícones abaixo mapeiam
- * 1:1 com a ação real que ELES REPRESENTAM (ver `core/actions/*.py`), mas
- * nenhuma dessas ações tem hoje uma superfície nesta tela para mostrar o
- * resultado — então preferimos "honesto e sem função" a "botão morto que
- * parece fazer algo".
+ * Linha de ação por item, no formato do MASTER (ícone + rótulo), mas SEM
+ * inventar a subtitulo/status que o backend não tem ("2,1 GB disponível",
+ * "128 ativos" etc. no site são dados de demonstração). O ícone e o rótulo
+ * já vêm do MASTER; o texto secundário mostra honestamente "Indisponível"
+ * em vez de fabricar um número. Isso preserva a densidade/estrutura visual
+ * real do site sem inventar dado.
  */
-function UnconnectedRow({ icon, label }: { icon: ReactNode; label: string }) {
+function ActionRow({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="zh-metric-row">
-      <span>{icon} {label}</span>
-      <span className="zh-metric-unknown">Indisponível</span>
+    <div className="zh-action-row">
+      <span className="zh-action-icon">{icon}</span>
+      <span className="zh-action-text">
+        <span className="zh-action-label">{label}</span>
+        <span className="zh-action-sub">Indisponível</span>
+      </span>
     </div>
   );
 }
@@ -69,46 +59,31 @@ export function SystemPanel({ metrics, battery }: SystemPanelProps) {
               : 'Indisponível'}
           </span>
         </div>
-        <div className="zh-metric-row">
-          <span><Thermometer size={13} strokeWidth={1.8} /> Temperatura</span>
-          <span className="zh-metric-unknown">—</span>
-        </div>
-        <div className="zh-metric-row">
-          <span><WifiIcon size={13} strokeWidth={1.8} /> Rede</span>
-          <span className="zh-metric-unknown">—</span>
-        </div>
       </div>
 
       <div className="zh-system-col">
         <h2><Database size={14} strokeWidth={1.8} /> Manutenção</h2>
-        <UnconnectedRow icon={<Database size={13} strokeWidth={1.8} />} label="Liberar espaço" />
-        <UnconnectedRow icon={<Trash2 size={13} strokeWidth={1.8} />} label="Limpar temporários" />
-        <UnconnectedRow icon={<Power size={13} strokeWidth={1.8} />} label="Gerenciar inicialização" />
-        <UnconnectedRow icon={<ListChecks size={13} strokeWidth={1.8} />} label="Ver processos" />
-        <UnconnectedRow icon={<RotateCw size={13} strokeWidth={1.8} />} label="Atualizar sistema" />
-        <UnconnectedRow icon={<Activity size={13} strokeWidth={1.8} />} label="Diagnóstico ZARA" />
+        <ActionRow icon={<Database size={14} strokeWidth={1.7} />} label="Liberar espaço" />
+        <ActionRow icon={<Trash2 size={14} strokeWidth={1.7} />} label="Limpar temporários" />
+        <ActionRow icon={<Power size={14} strokeWidth={1.7} />} label="Gerenciar inicialização" />
+        <ActionRow icon={<ListChecks size={14} strokeWidth={1.7} />} label="Ver processos" />
+        <ActionRow icon={<RotateCw size={14} strokeWidth={1.7} />} label="Atualizar sistema" />
+        <ActionRow icon={<Activity size={14} strokeWidth={1.7} />} label="Diagnóstico ZARA" />
       </div>
 
       <div className="zh-system-col">
         <h2><Shield size={14} strokeWidth={1.8} /> Segurança</h2>
-        <UnconnectedRow icon={<Search size={13} strokeWidth={1.8} />} label="Verificação rápida" />
-        <UnconnectedRow icon={<ShieldCheck size={13} strokeWidth={1.8} />} label="Verificação completa" />
-        <UnconnectedRow icon={<Shield size={13} strokeWidth={1.8} />} label="Firewall" />
-        <UnconnectedRow icon={<KeyRound size={13} strokeWidth={1.8} />} label="Permissões" />
-        <div className="zh-metric-row">
-          <span><Bug size={13} strokeWidth={1.8} /> Ameaças</span>
-          <span className="zh-metric-unknown">Sem leitura real</span>
-        </div>
+        <ActionRow icon={<Search size={14} strokeWidth={1.7} />} label="Verificação rápida" />
+        <ActionRow icon={<ShieldCheck size={14} strokeWidth={1.7} />} label="Verificação completa" />
+        <ActionRow icon={<Shield size={14} strokeWidth={1.7} />} label="Firewall" />
+        <ActionRow icon={<KeyRound size={14} strokeWidth={1.7} />} label="Permissões" />
       </div>
 
       <div className="zh-system-col">
         <h2><Gauge size={14} strokeWidth={1.8} /> Energia</h2>
-        <UnconnectedRow icon={<Gauge size={13} strokeWidth={1.8} />} label="Performance" />
-        <UnconnectedRow icon={<SlidersHorizontal size={13} strokeWidth={1.8} />} label="Equilibrado" />
-        <UnconnectedRow icon={<Leaf size={13} strokeWidth={1.8} />} label="Economia" />
-        <p className="zh-not-connected" style={{ marginTop: 4 }}>
-          Ação real existe (os_power_plan_list/set), não conectada nesta tela ainda.
-        </p>
+        <ActionRow icon={<Gauge size={14} strokeWidth={1.7} />} label="Performance" />
+        <ActionRow icon={<SlidersHorizontal size={14} strokeWidth={1.7} />} label="Equilibrado" />
+        <ActionRow icon={<Leaf size={14} strokeWidth={1.7} />} label="Economia" />
       </div>
 
       <div className="zh-system-col zh-diagnostic-col">
@@ -128,11 +103,8 @@ export function SystemPanel({ metrics, battery }: SystemPanelProps) {
         </svg>
         <p style={{ fontSize: 13, fontWeight: 600, margin: '2px 0 4px' }}>Por que meu PC está lento?</p>
         <p className="zh-not-connected">
-          ZARA pode analisar e sugerir melhorias quando o diagnóstico real estiver conectado.
+          ZARA pode analisar quando o diagnóstico real estiver conectado.
         </p>
-        <button className="zh-tool-open" type="button" disabled style={{ marginTop: 8, opacity: 0.5, cursor: 'default' }}>
-          Analisar agora — indisponível
-        </button>
       </div>
     </section>
   );

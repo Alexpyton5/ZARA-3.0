@@ -30,6 +30,7 @@ export function ZaraCore({ state }: ZaraCoreProps) {
   return (
     <div className="zh-core-wrap" role="region" aria-label={`ZARA Core: ${state}`}>
       <div className="zh-core-platform" aria-hidden="true">
+        <span className="zh-platform-contact" />
         <span className="zh-platform-ring zh-platform-ring--4" />
         <span className="zh-platform-ring zh-platform-ring--3" />
         <span className="zh-platform-ring zh-platform-ring--2" />

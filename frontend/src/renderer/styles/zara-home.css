@@ -141,16 +141,23 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 20px 24px;
-  gap: 16px;
+  padding: 28px 40px 32px;
+  gap: 20px;
   min-width: 0;
 }
 
+/* Teto de largura + centralização: sem isso a composição esticava para
+ * preencher qualquer viewport, o que lia como "painel distribuído" em vez
+ * de "página desenhada" — a referência tem uma composição fixa (canvas
+ * lógico 1648x928), não um layout que estica infinitamente. */
 .zh-content-top {
   display: grid;
-  grid-template-columns: 1fr 200px 280px;
-  gap: 16px;
+  grid-template-columns: 1fr 260px 300px;
+  gap: 32px;
   align-items: start;
+  max-width: 1360px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .zh-core-column {
@@ -158,9 +165,26 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 8px;
-  gap: 40px;
-  min-height: 320px;
+  padding-top: 12px;
+  gap: 36px;
+  min-height: 340px;
+  position: relative;
+}
+
+/* Zona intencional atrás do Core — sem isso a coluna central era só
+ * "espaço vazio com uma esfera", não uma área com peso visual próprio. */
+.zh-core-column::before {
+  content: '';
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #0a2a1f55 0%, transparent 70%);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .zh-glass-panel {
@@ -376,12 +400,62 @@
 .zh-system-row {
   display: grid;
   grid-template-columns: 1.15fr 1fr 1fr 0.85fr 1.05fr;
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 0;
+  padding: 20px 8px;
+  max-width: 1360px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .zh-system-col {
   min-width: 0;
+  padding: 0 24px;
+  border-left: 1px solid var(--zh-line);
+}
+
+.zh-system-col:first-child {
+  border-left: none;
+  padding-left: 16px;
+}
+
+.zh-system-col:last-child {
+  padding-right: 16px;
+}
+
+/* Linha de ação compacta — ícone + rótulo + estado, no formato do MASTER
+ * (uma linha por sub-ação), só que discreta o bastante para não competir
+ * com dado real (ver ActionRow em SystemPanel.tsx). */
+.zh-action-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 0;
+}
+
+.zh-action-icon {
+  color: var(--zh-muted);
+  opacity: 0.7;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.zh-action-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.zh-action-label {
+  font-size: 12px;
+  color: #c7d2ce;
+}
+
+.zh-action-sub {
+  font-size: 10px;
+  color: var(--zh-muted);
+  opacity: 0.65;
 }
 
 .zh-diagnostic-col {
@@ -546,17 +620,31 @@
 .zh-platform-seat {
   top: 0;
   width: 206px;
-  height: 48px;
+  height: 60px;
   /* Titanium smoked escurecido — base quase preta com reflexo metálico MUITO sutil */
-  background: radial-gradient(ellipse at 50% 18%, #1a1e22 0%, #0a0c0e 48%, #020303 82%, transparent 100%);
+  background: radial-gradient(ellipse at 50% 18%, #22262c 0%, #0a0c0e 48%, #020303 82%, transparent 100%);
   box-shadow:
-    0 18px 32px -10px #000000f8,
-    0 8px 18px -4px #000000d0,
+    0 22px 40px -10px #000000ff,
+    0 10px 22px -4px #000000e0,
     /* Reflexo especular reduzido — metal brushed não espelhado */
-    inset 0 1.5px 3px #ffffff18,
-    inset 0 -12px 20px -8px #000000f0,
+    inset 0 2px 4px #ffffff22,
+    inset 0 -16px 26px -8px #000000f5,
     /* Emerald refletido — MUITO sutil, apenas hint de energia */
-    0 2px 12px 1px #14ca8820;
+    0 2px 14px 2px #14ca8828;
+}
+
+/* Contato físico com o chão — sem isso a plataforma inteira "flutuava"
+ * mesmo com os anéis. Uma sombra de contato ancora o objeto. */
+.zh-platform-contact {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 380px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, #000000dd 0%, transparent 75%);
+  z-index: -1;
 }
 
 .zh-platform-ring {
@@ -717,24 +805,24 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 10px 14px;
+  padding: 13px 18px;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, #ffffff0a, transparent 52%),
-    linear-gradient(180deg, #1a1e22f8, #0a0c0ef9);
-  border: 1px solid #3a445614;
+    linear-gradient(180deg, #ffffff0e, transparent 52%),
+    linear-gradient(180deg, #22262cfa, #08090bfc);
+  border: 1px solid #3a445620;
   box-shadow:
-    0 24px 52px -18px #000000f5,
-    0 6px 14px -4px #000000d8,
-    inset 0 2px 0 #ffffff1a,
-    inset 0 -2.5px 2px #00000095;
-  backdrop-filter: blur(22px) saturate(1.15);
-  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+    0 30px 64px -18px #000000ff,
+    0 8px 18px -4px #000000e5,
+    inset 0 2.5px 0 #ffffff22,
+    inset 0 -3px 3px #000000a5;
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
 }
 
 .zh-dock-btn {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: 999px;
   border: none;
   background: transparent;

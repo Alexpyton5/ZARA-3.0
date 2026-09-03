@@ -176,11 +176,12 @@
   gap: 30px;
   min-height: 380px;
   position: relative;
-  /* Sobrepõe as colunas vizinhas de propósito — sem isso o Core lia como
-   * um bloco isolado ao lado dos cards, não o centro físico de uma única
-   * composição. Z-index alto garante que a esfera/plataforma renderizem
-   * por cima da borda dos cards adjacentes. */
-  margin: 0 -70px;
+  /* BUGFIX: -70px cortava texto real do card "Projeto ativo"
+   * (NOT_CONNECTED_YET virava "OT_CONNECTED_YET" — confirmado no
+   * screenshot real da janela Electron do Alex, não no pane interno).
+   * Legibilidade > efeito visual. Reduzido para uma sobreposição sutil
+   * que aproxima as colunas sem cortar conteúdo real. */
+  margin: 0 -20px;
   z-index: 2;
 }
 

@@ -158,12 +158,13 @@
  * lógico 1648x928), não um layout que estica infinitamente. */
 .zh-content-top {
   display: grid;
-  grid-template-columns: 1fr 260px 300px;
-  gap: 32px;
+  grid-template-columns: 1fr 220px 280px;
+  gap: 8px;
   align-items: start;
   max-width: 1360px;
   margin: 0 auto;
   width: 100%;
+  position: relative;
 }
 
 .zh-core-column {
@@ -175,6 +176,12 @@
   gap: 30px;
   min-height: 380px;
   position: relative;
+  /* Sobrepõe as colunas vizinhas de propósito — sem isso o Core lia como
+   * um bloco isolado ao lado dos cards, não o centro físico de uma única
+   * composição. Z-index alto garante que a esfera/plataforma renderizem
+   * por cima da borda dos cards adjacentes. */
+  margin: 0 -70px;
+  z-index: 2;
 }
 
 /* Zona intencional atrás do Core — sem isso a coluna central era só

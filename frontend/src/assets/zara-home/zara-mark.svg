@@ -1,32 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 200" role="img" aria-label="ZA">
   <defs>
-    <!-- Gradiente da referência: topo esmeralda médio, base quase preta -->
-    <linearGradient id="za-face" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4dbd9b"/>
-      <stop offset="0.3" stop-color="#2a8f70"/>
-      <stop offset="0.6" stop-color="#16513f"/>
-      <stop offset="0.85" stop-color="#0c352a"/>
-      <stop offset="1" stop-color="#08231b"/>
+    <!-- Gradiente sobre a marca INTEIRA (userSpaceOnUse): topo esmeralda,
+         base quase preta — uma peça única de metal, não faixas listradas -->
+    <linearGradient id="za-face" gradientUnits="userSpaceOnUse" x1="165" y1="0" x2="165" y2="200">
+      <stop offset="0" stop-color="#46c49c"/>
+      <stop offset="0.35" stop-color="#258362"/>
+      <stop offset="0.65" stop-color="#134634"/>
+      <stop offset="1" stop-color="#081f16"/>
     </linearGradient>
-    <!-- Borda iluminada no topo -->
-    <linearGradient id="za-edge" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#9df2d0" stop-opacity="0.85"/>
-      <stop offset="0.4" stop-color="#55c2a0" stop-opacity="0.3"/>
-      <stop offset="1" stop-color="#08231b" stop-opacity="0.1"/>
+    <!-- Brilho de aresta superior, também global -->
+    <linearGradient id="za-edge" gradientUnits="userSpaceOnUse" x1="165" y1="0" x2="165" y2="200">
+      <stop offset="0" stop-color="#8df0cb" stop-opacity="0.9"/>
+      <stop offset="0.45" stop-color="#4fbd99" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#081f16" stop-opacity="0.08"/>
     </linearGradient>
   </defs>
 
   <g fill="url(#za-face)" stroke="url(#za-edge)" stroke-width="2" stroke-linejoin="miter">
-    <!-- Z: barra superior -->
-    <path d="M8 14 H140 V46 H8 Z"/>
-    <!-- Z: diagonal (desce à esquerda até a banda) -->
-    <path d="M140 46 H104 L8 132 H44 Z"/>
-    <!-- MONOGRAMA: banda única contínua = base do Z + barra do A fundidas -->
-    <path d="M8 132 H275 L295 168 H8 Z"/>
-    <!-- A: triângulo externo com 2 recortes (evenodd): contra acima da banda e
-         vão abaixo da banda (o triângulo sólido é desenhado por cima depois) -->
-    <path fill-rule="evenodd" d="M208 8 L318 192 H98 Z M208 60 L248 132 H168 Z M148 168 H268 L288 192 H128 Z"/>
-    <!-- A: triângulo sólido abaixo da banda -->
-    <path d="M208 172 L250 192 H166 Z"/>
+    <!-- Z: barra superior espessa -->
+    <path d="M8 10 H136 V48 H8 Z"/>
+    <!-- Z: diagonal espessa -->
+    <path d="M136 48 H100 L8 128 H44 Z"/>
+    <!-- MONOGRAMA: banda contínua = base do Z + barra do A -->
+    <path d="M8 128 H274 L298 170 H8 Z"/>
+    <!-- A: pernas grossas, contra pequeno escuro, vão abaixo da banda -->
+    <path fill-rule="evenodd" d="M204 6 L312 194 H96 Z M204 52 L246 128 H162 Z M138 170 H270 L284 194 H124 Z"/>
+    <!-- A: triângulo sólido largo e achatado abaixo da banda -->
+    <path d="M204 176 L252 194 H156 Z"/>
   </g>
 </svg>

@@ -20,17 +20,23 @@
 }
 
 .zh-root {
-  --zh-obsidian: #030706;
+  /* Valores exatos de `.te-viewport{...}` no CSS real do site (não o
+   * :root genérico de shadcn que eu tinha usado antes — aquele é de um
+   * componente diferente, não o que realmente estiliza a Home). */
+  --zh-obsidian: #030b08;
   --zh-obsidian-2: #07100d;
-  --zh-emerald: #20f4ae;
-  --zh-emerald-2: #00bd82;
-  --zh-text: #eef5f2;
-  --zh-muted: #9fb3ac;
-  --zh-line: #dbefe729;
+  --zh-emerald: #00d699;
+  --zh-emerald-2: #008f61;
+  --zh-emerald-bright: #98f4ce;
+  --zh-text: #f0f4f2;
+  --zh-secondary: #a7b0ad;
+  --zh-muted: #87918c;
+  --zh-line: #cad6d130;
   --zh-glass: #08110ec2;
   --zh-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --zh-card: #101915cc;
-  --zh-danger: #ff6467;
+  --zh-danger: #d87878;
+  --zh-amber: #c7a868;
 
   font-family: 'Titanium Sans', Roboto, Arial, Helvetica, sans-serif;
   color: var(--zh-text);

@@ -1,5 +1,5 @@
 import type { CoreState } from './types';
-import zaraLogo from '../../../assets/zara-home/zara-logo.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.png';
 import coreGlass from '../../../assets/zara-home/core-glass.png';
 
 const LABELS: Record<CoreState, string> = {
@@ -29,6 +29,13 @@ interface ZaraCoreProps {
 export function ZaraCore({ state }: ZaraCoreProps) {
   return (
     <div className="zh-core-wrap" role="region" aria-label={`ZARA Core: ${state}`}>
+      <div className="zh-core-platform" aria-hidden="true">
+        <span className="zh-platform-ring zh-platform-ring--4" />
+        <span className="zh-platform-ring zh-platform-ring--3" />
+        <span className="zh-platform-ring zh-platform-ring--2" />
+        <span className="zh-platform-ring zh-platform-ring--1" />
+        <span className="zh-platform-seat" />
+      </div>
       <div className="zh-core" data-state={state}>
         <img className="zh-core-glass" src={coreGlass} alt="" aria-hidden="true" />
         <img className="zh-core-mark" src={zaraLogo} alt="" aria-hidden="true" />

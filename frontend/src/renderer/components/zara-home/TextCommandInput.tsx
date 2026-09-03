@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import zaraLogo from '../../../assets/zara-home/zara-logo.png';
+import { Send } from 'lucide-react';
+import zaraLogo from '../../../assets/zara-home/zara-mark.png';
 
 interface TextCommandInputProps {
   engine?: string;
@@ -45,7 +46,7 @@ export function TextCommandInput({ engine = 'auto', onSent }: TextCommandInputPr
         aria-label="Como posso ajudar?"
       />
       <button className="zh-command-submit" type="submit" disabled={!canSend} aria-label="Enviar mensagem">
-        →
+        <Send size={15} strokeWidth={2.2} />
       </button>
     </form>
   );

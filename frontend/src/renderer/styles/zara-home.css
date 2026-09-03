@@ -66,11 +66,71 @@
   top: 18px;
   right: 24px;
   display: flex;
-  gap: 12px;
+  gap: 13px;
   align-items: center;
   font-size: 12px;
   color: var(--zh-muted);
   z-index: 2;
+}
+
+/* Widgets ainda não ligados a um canal real (segurança/nuvem/Wi-Fi) ficam
+ * visivelmente "disponível mas não conectado" — opacidade reduzida, não
+ * escondidos e nunca com estado falso de "conectado". */
+.zh-status-row svg[data-unavailable='true'] {
+  opacity: 0.55;
+}
+
+/* Bateria em formato capsula (iPhone-like), preenchimento real baseado em
+ * `battery.level` (Battery API do Chromium, não é dado inventado). */
+.zh-battery-capsule {
+  position: relative;
+  width: 22px;
+  height: 11px;
+  border: 1.3px solid var(--zh-muted);
+  border-radius: 3px;
+  opacity: 0.85;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.zh-battery-capsule::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 4px;
+  border-radius: 0 1px 1px 0;
+  background: var(--zh-muted);
+  opacity: 0.85;
+}
+
+.zh-battery-capsule[data-unavailable='true'] {
+  opacity: 0.45;
+}
+
+.zh-battery-fill {
+  position: absolute;
+  inset: 1.5px;
+  left: 1.5px;
+  border-radius: 1.5px;
+  background: var(--zh-emerald);
+  transition: width 0.4s var(--zh-ease);
+}
+
+.zh-battery-fill[data-low='true'] {
+  background: #f4c520;
+}
+
+.zh-battery-bolt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--zh-obsidian);
+  filter: drop-shadow(0 0 1px #ffffffaa);
 }
 
 /* Coluna de conteúdo: linha superior (main | core | right) + dock + Sistema
@@ -158,12 +218,17 @@
   border: none;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.15s var(--zh-ease), color 0.15s var(--zh-ease);
+  transition: background-color 0.2s var(--zh-ease), color 0.2s var(--zh-ease), transform 0.2s var(--zh-ease);
 }
 
 .zh-nav-item:hover {
   background: #ffffff0d;
   color: var(--zh-text);
+  transform: translateX(1px);
+}
+
+.zh-nav-item:active {
+  transform: scale(0.98);
 }
 
 .zh-nav-item[data-active='true'] {
@@ -278,6 +343,16 @@
   display: grid;
   place-items: center;
   cursor: pointer;
+  transition: transform 0.2s var(--zh-ease), box-shadow 0.2s var(--zh-ease);
+}
+
+.zh-command-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px -2px #00bd8266;
+}
+
+.zh-command-submit:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .zh-command-submit:disabled {
@@ -300,9 +375,47 @@
 
 .zh-system-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  grid-template-columns: 1.15fr 1fr 1fr 0.85fr 1.05fr;
+  gap: 16px;
   padding: 18px 20px;
+}
+
+.zh-system-col {
+  min-width: 0;
+}
+
+.zh-diagnostic-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.zh-diagnostic-wave {
+  width: 100%;
+  height: 34px;
+  margin-bottom: 6px;
+}
+
+.zh-diagnostic-wave-ghost,
+.zh-diagnostic-wave-line {
+  fill: none;
+  stroke: var(--zh-emerald);
+}
+
+.zh-diagnostic-wave-ghost {
+  stroke-width: 5;
+  opacity: 0.12;
+  filter: blur(1px);
+}
+
+.zh-diagnostic-wave-line {
+  stroke-width: 1.5;
+  opacity: 0.85;
+  stroke-dasharray: 6 5;
+  animation: zh-diagnostic-flow 5s linear infinite;
+}
+
+@keyframes zh-diagnostic-flow {
+  to { stroke-dashoffset: -220; }
 }
 
 .zh-system-col h2 {
@@ -404,6 +517,89 @@
   position: relative;
 }
 
+/* Plataforma física sob o Core — anéis concêntricos de titânio/metal fumê
+ * (não neon), cada anel um pouco mais escuro/afastado que o anterior, com
+ * um leve realce metálico no topo e uma sutil borda de energia esmeralda
+ * na base (a cor representa energia/estado; o material é o metal).
+ * Substitui o `.zh-core-platform` circular chapado das passadas 1-2 (perdido
+ * na pass 3) por uma composição elíptica que sugere profundidade/perspectiva
+ * real, como na referência (anéis que se abrem sob a esfera). */
+.zh-core-platform {
+  position: absolute;
+  left: 50%;
+  top: 198px;
+  width: 1px;
+  height: 1px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.zh-platform-seat,
+.zh-platform-ring {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 0);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.zh-platform-seat {
+  top: 0;
+  width: 206px;
+  height: 48px;
+  background: radial-gradient(ellipse at 50% 20%, #6b756e 0%, #262b26 48%, #070c09 82%, transparent 100%);
+  box-shadow:
+    0 16px 26px -8px #000000d8,
+    inset 0 2px 3px #ffffff33,
+    inset 0 -10px 16px -6px #000000d0,
+    0 2px 16px 2px #14ca8840;
+}
+
+.zh-platform-ring {
+  background: radial-gradient(ellipse at 50% 28%, #ffffff10, transparent 62%);
+  border-style: solid;
+  filter: drop-shadow(0 3px 8px rgba(20, 202, 136, 0.3));
+}
+
+.zh-platform-ring--1 {
+  top: 20px;
+  width: 252px;
+  height: 58px;
+  border-width: 2px;
+  border-color: #c3ccc7;
+  opacity: 0.88;
+  box-shadow: inset 0 2px 3px -1px #ffffff50, inset 0 -3px 5px -2px #00000090;
+}
+
+.zh-platform-ring--2 {
+  top: 36px;
+  width: 306px;
+  height: 70px;
+  border-width: 1.75px;
+  border-color: #8f9c95;
+  opacity: 0.62;
+  box-shadow: inset 0 2px 3px -1px #ffffff3a, inset 0 -3px 5px -2px #00000090;
+}
+
+.zh-platform-ring--3 {
+  top: 52px;
+  width: 360px;
+  height: 82px;
+  border-width: 1.5px;
+  border-color: #6e7b73;
+  opacity: 0.42;
+  box-shadow: inset 0 2px 3px -1px #ffffff24, inset 0 -3px 5px -2px #00000090;
+}
+
+.zh-platform-ring--4 {
+  top: 68px;
+  width: 414px;
+  height: 94px;
+  border-width: 1.25px;
+  border-color: #4c584f;
+  opacity: 0.3;
+}
+
 .zh-core {
   width: 240px;
   height: 240px;
@@ -494,12 +690,17 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 6px;
+  padding: 8px;
   border-radius: 999px;
+  background:
+    linear-gradient(180deg, #ffffff0a, transparent 40%),
+    linear-gradient(180deg, #0f1c17f2, #05100cf7);
+  border: 1px solid #dbefe722;
   box-shadow:
-    0 14px 34px -12px #000000e0,
-    inset 0 1px 0 #ffffff20,
-    inset 0 -1px 0 #00000060;
+    0 18px 40px -14px #000000f0,
+    0 2px 8px -2px #000000c0,
+    inset 0 1.5px 0 #ffffff26,
+    inset 0 -1.5px 0 #00000070;
 }
 
 .zh-dock-btn {
@@ -512,16 +713,17 @@
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background-color 0.18s var(--zh-ease), color 0.18s var(--zh-ease), transform 0.18s var(--zh-ease);
+  transition: background-color 0.2s var(--zh-ease), color 0.2s var(--zh-ease), transform 0.2s var(--zh-ease);
 }
 
 .zh-dock-btn:hover {
   background: #ffffff10;
   color: var(--zh-text);
+  transform: translateY(-1px);
 }
 
 .zh-dock-btn:active {
-  transform: scale(0.94);
+  transform: scale(0.97);
 }
 
 .zh-dock-separator {
@@ -551,8 +753,12 @@
   transition: transform 0.2s var(--zh-ease);
 }
 
+.zh-dock-voice:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
 .zh-dock-voice:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
 .zh-dock-voice[data-listening='true'] {

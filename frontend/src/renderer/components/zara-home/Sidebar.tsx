@@ -3,7 +3,7 @@ import {
   House, MessageCircle, Folder, File, LayoutGrid, Workflow,
   BrainCircuit, FlaskConical, Monitor, Cpu, Settings,
 } from 'lucide-react';
-import zaraLogo from '../../../assets/zara-home/zara-logo.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.png';
 
 // Ícones confirmados 1:1 com o site de referência (lucide-react, mesma lib
 // já usada no resto da ZARA) — inspecionados via classList dos <svg> reais.

@@ -1,5 +1,5 @@
 
-import zaraLogo from '../../../assets/zara-home/zara-logo.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.png';
 
 /**
  * "Projeto ativo" — sem noção de "projeto" persistente exposta ao renderer

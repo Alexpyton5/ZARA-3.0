@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Wifi, BatteryCharging, Battery, BatteryWarning } from 'lucide-react';
+import { Wifi, Shield, Cloud, Zap } from 'lucide-react';
 import '../../styles/zara-home.css';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -55,13 +55,23 @@ export function ZaraHome() {
       <Sidebar active={activeNav} onSelect={setActiveNav} userName={userName} />
 
       <div className="zh-status-row" aria-label="Status">
-        <Wifi size={15} strokeWidth={1.8} aria-label="Wi-Fi" />
+        <Shield size={15} strokeWidth={1.8} aria-label="Segurança — não conectada" data-unavailable="true" />
+        <Wifi size={15} strokeWidth={1.8} aria-label="Wi-Fi" data-unavailable="true" />
+        <Cloud size={15} strokeWidth={1.8} aria-label="Nuvem — não conectada" data-unavailable="true" />
         {battery.supported ? (
-          battery.charging
-            ? <BatteryCharging size={15} strokeWidth={1.8} aria-label={`Bateria ${Math.round((battery.level ?? 0) * 100)}%, carregando`} />
-            : <Battery size={15} strokeWidth={1.8} aria-label={`Bateria ${Math.round((battery.level ?? 0) * 100)}%`} />
+          <span
+            className="zh-battery-capsule"
+            aria-label={`Bateria ${Math.round((battery.level ?? 0) * 100)}%${battery.charging ? ', carregando' : ''}`}
+          >
+            <span
+              className="zh-battery-fill"
+              data-low={battery.level !== null && battery.level <= 0.2 && !battery.charging ? 'true' : undefined}
+              style={{ width: `${Math.max(6, Math.round((battery.level ?? 0) * 100))}%` }}
+            />
+            {battery.charging ? <Zap size={9} strokeWidth={3} className="zh-battery-bolt" /> : null}
+          </span>
         ) : (
-          <BatteryWarning size={15} strokeWidth={1.8} aria-label="Bateria não conectada" />
+          <span className="zh-battery-capsule" data-unavailable="true" aria-label="Bateria não conectada" />
         )}
         <span>{now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
       </div>

@@ -53,8 +53,8 @@
   inset: 0;
   z-index: 0;
   background-size: cover;
-  background-position: center 68%;
-  opacity: 0.28;
+  background-position: center 60%;
+  opacity: 0.42;
   pointer-events: none;
 }
 
@@ -147,21 +147,19 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 20px 28px 24px;
-  gap: 16px;
+  padding: 16px 24px 20px;
+  gap: 14px;
   min-width: 0;
 }
 
-/* Teto de largura + centralização: sem isso a composição esticava para
- * preencher qualquer viewport, o que lia como "painel distribuído" em vez
- * de "página desenhada" — a referência tem uma composição fixa (canvas
- * lógico 1648x928), não um layout que estica infinitamente. */
+/* Teto de largura + centralização: proporções fixas para aproximar o
+ * canvas do MASTER (main estreita | Core grande | right moderada). */
 .zh-content-top {
   display: grid;
-  grid-template-columns: 1fr 220px 280px;
-  gap: 8px;
+  grid-template-columns: 300px 580px 320px;
+  gap: 16px;
   align-items: start;
-  max-width: 1360px;
+  max-width: 1280px;
   margin: 0 auto;
   width: 100%;
   position: relative;
@@ -172,16 +170,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 4px;
-  gap: 30px;
-  min-height: 380px;
+  padding-top: 8px;
+  gap: 24px;
+  min-height: 420px;
   position: relative;
-  /* BUGFIX: -70px cortava texto real do card "Projeto ativo"
-   * (NOT_CONNECTED_YET virava "OT_CONNECTED_YET" — confirmado no
-   * screenshot real da janela Electron do Alex, não no pane interno).
-   * Legibilidade > efeito visual. Reduzido para uma sobreposição sutil
-   * que aproxima as colunas sem cortar conteúdo real. */
-  margin: 0 -20px;
+  margin: 0;
   z-index: 2;
 }
 
@@ -331,14 +324,39 @@
   min-width: 0;
 }
 
+/* Top bar: saudação à esquerda + comando centralizado sobre a coluna do
+ * Core — mesma composição do MASTER. Usa o MESMO grid do .zh-content-top
+ * para as colunas ficarem alinhadas verticalmente. */
+.zh-top-bar {
+  display: grid;
+  grid-template-columns: 300px 580px 320px;
+  gap: 16px;
+  align-items: start;
+  max-width: 1280px;
+  margin: 0 auto 14px;
+  width: 100%;
+}
+
+.zh-top-bar-center {
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
+}
+
+.zh-top-bar-center .zh-command-form {
+  width: 100%;
+  max-width: 440px;
+}
+
 .zh-header h1 {
-  font-size: 26px;
+  font-size: 32px;
   font-weight: 600;
   margin: 0 0 4px;
+  letter-spacing: -0.02em;
 }
 
 .zh-header p {
-  margin: 0 0 18px;
+  margin: 0 0 14px;
   color: var(--zh-muted);
   font-size: 14px;
 }
@@ -413,10 +431,10 @@
 
 .zh-system-row {
   display: grid;
-  grid-template-columns: 1.15fr 1fr 1fr 0.85fr 1.05fr;
+  grid-template-columns: 1.05fr 1.45fr 0.9fr 0.75fr 1.05fr;
   gap: 0;
-  padding: 20px 8px;
-  max-width: 1360px;
+  padding: 18px 8px;
+  max-width: 1280px;
   margin: 0 auto;
   width: 100%;
 }
@@ -438,7 +456,7 @@
 
 /* Linha de ação compacta — ícone + rótulo + estado, no formato do MASTER
  * (uma linha por sub-ação), só que discreta o bastante para não competir
- * com dado real (ver ActionRow em SystemPanel.tsx). */
+ * com dado real. */
 .zh-action-row {
   display: flex;
   align-items: center;
@@ -472,9 +490,101 @@
   opacity: 0.65;
 }
 
+/* Grade de mini-cards para Manutenção (2 colunas). */
+.zh-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.zh-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #ffffff08;
+  border: 1px solid #ffffff10;
+  cursor: pointer;
+  text-align: left;
+  color: var(--zh-text);
+  transition: background-color 0.2s var(--zh-ease);
+}
+
+.zh-action-card:hover {
+  background: #ffffff10;
+}
+
+.zh-action-card-icon {
+  color: var(--zh-muted);
+  opacity: 0.85;
+  display: grid;
+  place-items: center start;
+}
+
+.zh-action-card-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.zh-action-card-text strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.zh-action-card-text span {
+  font-size: 10px;
+  color: var(--zh-muted);
+}
+
+.zh-status-summary {
+  margin: -2px 0 10px;
+}
+
+.zh-status-summary strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--zh-emerald);
+}
+
+.zh-status-summary span {
+  font-size: 11px;
+  color: var(--zh-muted);
+}
+
 .zh-diagnostic-col {
   display: flex;
   flex-direction: column;
+}
+
+.zh-diagnostic-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 2px 0 4px;
+}
+
+.zh-diagnostic-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--zh-line);
+  background: #ffffff08;
+  color: var(--zh-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.zh-diagnostic-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .zh-diagnostic-wave {
@@ -512,8 +622,8 @@
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0.02em;
   color: var(--zh-muted);
   margin: 0 0 10px;
 }
@@ -531,75 +641,95 @@
 .zh-section h2 {
   font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0.02em;
   color: var(--zh-muted);
   margin: 0 0 12px;
 }
 
-.zh-card-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+.zh-foryou-list {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.zh-mini-card {
+.zh-foryou-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #ffffff06;
+  border: 1px solid #ffffff08;
+}
+
+.zh-foryou-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--zh-emerald);
+  background: #00d69915;
+  flex-shrink: 0;
+}
+
+.zh-foryou-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
-  border-radius: 12px;
-  background: #ffffff08;
-  border: 1px solid var(--zh-line);
-  cursor: pointer;
-  text-align: left;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.zh-foryou-text strong {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--zh-text);
 }
 
-.zh-mini-card strong {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.zh-mini-card span {
+.zh-foryou-text span {
   font-size: 11px;
   color: var(--zh-muted);
 }
 
 .zh-comm-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  align-items: flex-start;
 }
 
-.zh-comm-pill {
+.zh-comm-item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: #ffffff08;
-  border: 1px solid var(--zh-line);
-  font-size: 12px;
+  gap: 6px;
 }
 
 .zh-comm-badge {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   box-shadow: 0 4px 10px -2px #00000080;
+  color: #fff;
 }
 
 .zh-comm-badge img {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   filter: brightness(0) invert(1);
 }
 
+.zh-comm-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--zh-text);
+}
+
 .zh-comm-more {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1px solid var(--zh-line);
   background: #ffffff08;
@@ -610,18 +740,127 @@
   align-self: center;
 }
 
-.zh-comm-pill img {
-  width: 16px;
-  height: 16px;
+.zh-project-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-.zh-badge {
+.zh-project-header img {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: #ffffff08;
+  padding: 4px;
+}
+
+.zh-project-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.zh-project-meta strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--zh-text);
+}
+
+.zh-project-meta span {
+  font-size: 11px;
+  color: var(--zh-muted);
+}
+
+.zh-project-last-session {
+  font-size: 11px;
+  color: var(--zh-muted);
+  margin: 8px 0 0;
+}
+
+.zh-project-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.zh-project-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.zh-project-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff20;
+}
+
+.zh-project-dots span[data-active='true'] {
   background: var(--zh-emerald);
-  color: var(--zh-obsidian);
+}
+
+.zh-project-continue {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
   border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
+  border: 1px solid var(--zh-line);
+  background: #ffffff08;
+  color: var(--zh-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.zh-project-continue:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.zh-tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.zh-tool-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: 12px;
+  border: 1px solid #ffffff10;
+  background: #ffffff06;
+  color: var(--zh-text);
+  cursor: pointer;
+  transition: background-color 0.2s var(--zh-ease);
+}
+
+.zh-tool-tile:hover {
+  background: #ffffff10;
+}
+
+.zh-tool-tile img {
+  width: 28px;
+  height: 28px;
+}
+
+.zh-tool-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.zh-tool-tile .zh-tool-open {
+  font-size: 11px;
+  color: var(--zh-emerald);
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 /* ---------- Core ---------- */
@@ -643,7 +882,7 @@
 .zh-core-platform {
   position: absolute;
   left: 50%;
-  top: 232px;
+  top: 300px;
   width: 1px;
   height: 1px;
   z-index: 0;
@@ -756,8 +995,8 @@
 }
 
 .zh-core {
-  width: 280px;
-  height: 280px;
+  width: 340px;
+  height: 340px;
   border-radius: 50%;
   position: relative;
   z-index: 1;
@@ -784,7 +1023,7 @@
 
 .zh-core-shaft {
   width: 2px;
-  height: 143px;
+  height: 160px;
   margin-top: -4px;
   background: linear-gradient(#0000, #3be6a8 38%, #d8f7e8 72%, #14ca88, #0000);
   box-shadow: 0 0 10px 2px #00d99355;
@@ -794,8 +1033,8 @@
 .zh-core-mark {
   position: relative;
   z-index: 1;
-  width: 130px;
-  height: 96px;
+  width: 160px;
+  height: 118px;
   object-fit: contain;
   filter: drop-shadow(0 1px 2px #002b1daa) drop-shadow(0 0 6px #00ba7b55) brightness(1.05);
   opacity: 0.95;
@@ -846,8 +1085,8 @@
   align-self: center;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 16px 22px;
+  gap: 3px;
+  padding: 12px 18px;
   border-radius: 999px;
   background:
     linear-gradient(180deg, #ffffff12, transparent 55%),
@@ -863,8 +1102,8 @@
 }
 
 .zh-dock-btn {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 999px;
   border: none;
   background: transparent;
@@ -891,18 +1130,18 @@
 
 .zh-dock-separator {
   width: 1px;
-  height: 22px;
+  height: 18px;
   background: linear-gradient(180deg, transparent, #3a445625 18%, #3a445625 82%, transparent);
-  margin: 0 5px;
+  margin: 0 4px;
   opacity: 0.38;
 }
 
 .zh-dock-voice {
-  width: 66px;
-  height: 66px;
+  width: 56px;
+  height: 56px;
   border-radius: 999px;
   border: none;
-  margin: 0 8px;
+  margin: 0 6px;
   background:
     radial-gradient(circle at 34% 24%, #ffffffb2, transparent 46%),
     linear-gradient(135deg, #14ca8858, #0ea57048);
@@ -973,6 +1212,8 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+  position: relative;
+  z-index: 3;
 }
 
 .zh-progress-track {

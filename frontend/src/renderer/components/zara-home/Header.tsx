@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { TextCommandInput } from './TextCommandInput';
 
 function greeting(hour: number): string {
   if (hour < 6) return 'Boa madrugada';
@@ -12,6 +11,10 @@ interface HeaderProps {
   userFirstName: string;
 }
 
+/**
+ * Apenas a saudação (título + subtítulo + data). O campo de comando vive
+ * fora dela, centralizado na top bar — igual ao MASTER.
+ */
 export function Header({ userFirstName }: HeaderProps) {
   const [now, setNow] = useState(() => new Date());
 
@@ -26,7 +29,6 @@ export function Header({ userFirstName }: HeaderProps) {
     <header className="zh-header">
       <h1>{greeting(now.getHours())}, {userFirstName}.</h1>
       <p>Produtividade com inteligência.</p>
-      <TextCommandInput />
       <div className="zh-clock-row">
         <span>{date}</span>
       </div>

@@ -3,6 +3,7 @@ import { Wifi, Shield, Cloud, Zap, Link2 } from 'lucide-react';
 import '../../styles/zara-home.css';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { TextCommandInput } from './TextCommandInput';
 import { ForYouCard } from './ForYouCard';
 import { CommunicationsCard } from './CommunicationsCard';
 import { ActiveProjectCard } from './ActiveProjectCard';
@@ -78,9 +79,16 @@ export function ZaraHome() {
       </div>
 
       <div className="zh-content">
+        <div className="zh-top-bar">
+          <Header userFirstName={userName.split(' ')[0] ?? userName} />
+          <div className="zh-top-bar-center">
+            <TextCommandInput />
+          </div>
+          <div />
+        </div>
+
         <div className="zh-content-top">
           <main className="zh-main">
-            <Header userFirstName={userName.split(' ')[0] ?? userName} />
             <ForYouCard />
             <CommunicationsCard />
           </main>

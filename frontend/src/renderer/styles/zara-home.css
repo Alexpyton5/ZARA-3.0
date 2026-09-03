@@ -236,8 +236,12 @@
 }
 
 .zh-glass-panel {
-  background: var(--zh-glass);
-  border: 1px solid var(--zh-line);
+  /* Glass mais transparente (aurora atravessa), borda quase imperceptível,
+   * leve tint especular no topo — material do MASTER, não dashboard. */
+  background:
+    linear-gradient(180deg, #ffffff08, transparent 30%),
+    var(--zh-glass);
+  border: 1px solid #cad6d31c;
   border-radius: 16px;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -264,7 +268,8 @@
 .zh-sidebar-brand img {
   width: 34px;
   height: 34px;
-  filter: brightness(1.15) contrast(1.04);
+  /* Mesma identidade emerald-titanium do Core (tint mais suave) */
+  filter: sepia(0.4) hue-rotate(105deg) saturate(1.3) brightness(1.02);
 }
 
 .zh-sidebar-brand span {
@@ -282,11 +287,12 @@
 .zh-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: 11px;
+  padding: 9px 11px;
   border-radius: 10px;
   color: var(--zh-muted);
   font-size: 13px;
+  letter-spacing: 0.01em;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -484,7 +490,8 @@
 .zh-system-col {
   min-width: 0;
   padding: 0 24px;
-  border-left: 1px solid var(--zh-line);
+  /* Dividers mais discretos — hierarquia vem do conteúdo, não das linhas */
+  border-left: 1px solid #cad6d312;
 }
 
 .zh-system-col:first-child {
@@ -529,7 +536,7 @@
 .zh-action-sub {
   font-size: 10px;
   color: var(--zh-muted);
-  opacity: 0.65;
+  opacity: 0.5;
 }
 
 /* Grade de mini-cards para Manutenção (2 colunas). */
@@ -545,8 +552,8 @@
   gap: 5px;
   padding: 10px;
   border-radius: 10px;
-  background: #ffffff08;
-  border: 1px solid #ffffff10;
+  background: #ffffff06;
+  border: 1px solid #ffffff0a;
   cursor: pointer;
   text-align: left;
   color: var(--zh-text);
@@ -554,7 +561,7 @@
 }
 
 .zh-action-card:hover {
-  background: #ffffff10;
+  background: #ffffff0e;
 }
 
 .zh-action-card-icon {
@@ -701,8 +708,8 @@
   gap: 10px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: #ffffff06;
-  border: 1px solid #ffffff08;
+  background: #ffffff05;
+  border: 1px solid #ffffff06;
 }
 
 .zh-foryou-icon {
@@ -796,6 +803,7 @@
   object-fit: contain;
   background: #ffffff08;
   padding: 4px;
+  filter: sepia(0.4) hue-rotate(105deg) saturate(1.3) brightness(1.02);
 }
 
 .zh-project-meta {
@@ -943,100 +951,92 @@
 .zh-platform-seat {
   top: 0;
   width: 240px;
-  height: 66px;
+  height: 52px;
   /* Titanium smoked escurecido — base quase preta com reflexo metálico MUITO sutil */
   background: radial-gradient(ellipse at 50% 18%, #22262c 0%, #0a0c0e 48%, #020303 82%, transparent 100%);
   box-shadow:
-    0 22px 40px -10px #000000ff,
-    0 10px 22px -4px #000000e0,
-    /* Reflexo especular reduzido — metal brushed não espelhado */
+    0 18px 34px -10px #000000ff,
+    0 8px 18px -4px #000000e0,
     inset 0 2px 4px #ffffff22,
-    inset 0 -16px 26px -8px #000000f5,
-    /* Emerald refletido — MUITO sutil, apenas hint de energia */
-    0 2px 14px 2px #14ca8828;
+    inset 0 -12px 20px -8px #000000f5,
+    0 2px 12px 2px #14ca8825;
 }
 
 /* Contato físico com o chão — sem isso a plataforma inteira "flutuava"
  * mesmo com os anéis. Uma sombra de contato ancora o objeto. */
 .zh-platform-contact {
   position: absolute;
-  top: 112px;
+  top: 90px;
   left: 50%;
   transform: translateX(-50%);
   width: 444px;
-  height: 30px;
+  height: 26px;
   border-radius: 50%;
   background: radial-gradient(ellipse at 50% 50%, #000000dd 0%, transparent 75%);
   z-index: -1;
 }
 
 .zh-platform-ring {
-  /* Discos PREENCHIDOS (não wireframe): cada anel é uma placa de titânio
-   * sólida vista em perspectiva — topo iluminado, corpo escuro. */
+  /* Placa fina de titânio (não pilha de discos): corpo semi-translúcido,
+   * topo especular, aurora atravessando sutilmente (backdrop blur). */
   background:
-    radial-gradient(ellipse at 50% 20%, #ffffff10, transparent 55%),
-    radial-gradient(ellipse at 50% 45%, #14171c 0%, #0a0c10 55%, #050608 100%);
+    linear-gradient(180deg, #ffffff16 0%, transparent 24%),
+    linear-gradient(180deg, #1b2026 0%, #10141a 45%, #0a0d12 100%);
+  backdrop-filter: blur(2px);
   border-style: solid;
-  /* Drop-shadow emerald mais sutil — emerge apenas como reflexo da energia acima */
-  filter: drop-shadow(0 3px 8px rgba(20, 202, 136, 0.16));
+  filter: drop-shadow(0 2px 6px rgba(20, 202, 136, 0.14));
 }
 
 .zh-platform-ring--1 {
   top: 23px;
   width: 294px;
-  height: 68px;
+  height: 52px;
   border-width: 1.5px;
-  /* Titanium smoked — escuro gunmetal como na referência */
-  border-color: #3a4456;
-  opacity: 0.92;
+  border-color: #414b5e;
+  opacity: 0.9;
   box-shadow:
-    /* Reflexo especular superior SUTIL */
-    inset 0 1.5px 3px -1px #ffffff28,
-    inset 0 -3px 6px -2px #000000d0,
-    /* Sombra projetada profunda */
-    0 4px 12px -2px #000000b0;
+    inset 0 2px 3px -1px #ffffff30,
+    inset 0 -2px 5px -2px #000000c0,
+    0 3px 10px -2px #000000a0;
 }
 
 .zh-platform-ring--2 {
-  top: 42px;
+  top: 39px;
   width: 357px;
-  height: 82px;
+  height: 62px;
   border-width: 1.25px;
-  /* Titanium smoked médio — mais escuro que o primeiro ring */
-  border-color: #2a2f3e;
-  opacity: 0.8;
+  border-color: #313848;
+  opacity: 0.78;
   box-shadow:
-    inset 0 1.5px 3px -1px #ffffff18,
-    inset 0 -3px 6px -2px #000000d8,
-    0 8px 16px -4px #000000c0;
+    inset 0 2px 3px -1px #ffffff20,
+    inset 0 -2px 5px -2px #000000d0,
+    0 6px 14px -4px #000000b0;
 }
 
 .zh-platform-ring--3 {
-  top: 61px;
+  top: 55px;
   width: 420px;
-  height: 96px;
+  height: 70px;
   border-width: 1px;
-  /* Titanium smoked escuro — quase fundido com o background */
-  border-color: #1a1f2e;
-  opacity: 0.66;
+  border-color: #232936;
+  opacity: 0.64;
   box-shadow:
-    inset 0 1px 2px -1px #ffffff10,
-    inset 0 -3px 6px -2px #000000e8,
-    0 12px 24px -6px #000000d8;
+    inset 0 1px 2px -1px #ffffff14,
+    inset 0 -2px 5px -2px #000000e0,
+    0 10px 20px -6px #000000c8;
 }
 
 .zh-platform-ring--4 {
-  top: 79px;
+  top: 70px;
   width: 483px;
-  height: 110px;
+  height: 78px;
   border-width: 1px;
-  /* Titanium smoked muito escuro — apenas contorno sutil */
-  border-color: #0f141d;
-  opacity: 0.5;
+  border-color: #161b26;
+  opacity: 0.48;
   box-shadow:
-    inset 0 1px 2px -1px #ffffff08,
-    inset 0 -3px 6px -2px #000000f0,
-    0 16px 32px -8px #000000e8;
+    inset 0 1px 2px -1px #ffffff0c,
+    inset 0 -2px 5px -2px #000000e8,
+    0 14px 28px -8px #000000d8;
 }
 
 .zh-core {
@@ -1047,11 +1047,11 @@
   z-index: 1;
   display: grid;
   place-items: center;
-  /* Glow emerald MUITO sutil — energia/estado apenas, não estrutura.
-   * Background quase preto com hint de emerald no núcleo profundo. */
-  background: radial-gradient(circle at 50% 52%, #0a1a14 0%, #04120c 35%, #020806 65%, transparent 88%);
-  /* Drop-shadow emerald reduzido — apenas energia residual */
-  filter: drop-shadow(0 0 32px #00bd8228);
+  /* Dark crystal (não caixa preta): vidro fumê com profundidade emerald
+   * controlada — reflexo especular no topo, núcleo translúcido. */
+  background: radial-gradient(circle at 42% 30%,
+    #12241d 0%, #0a1712 30%, #050d0a 58%, #020705 82%, transparent 95%);
+  filter: drop-shadow(0 0 26px #00bd8230) drop-shadow(0 18px 40px #000000c0);
   animation: zh-core-breath 2.6s ease-in-out infinite;
 }
 
@@ -1062,8 +1062,8 @@
   height: 100%;
   object-fit: contain;
   pointer-events: none;
-  /* Sutil specular highlight direcional no topo da esfera */
-  filter: drop-shadow(0 -8px 12px #ffffff08);
+  /* Reflexos mais realistas: specular direcional + rim emerald discreto */
+  filter: drop-shadow(0 -10px 16px #ffffff0a) drop-shadow(0 4px 10px #00e6a522);
 }
 
 .zh-core-shaft {
@@ -1078,14 +1078,14 @@
 .zh-core-mark {
   position: relative;
   z-index: 1;
-  width: 166px;
-  height: 121px;
+  width: 148px;
+  height: 108px;
   object-fit: contain;
-  /* Leitura metálica: clareia o glifo e aumenta microcontraste — mesmo
-   * material "titanium escovado" do MASTER. */
-  filter: brightness(1.22) contrast(1.06)
-    drop-shadow(0 1px 2px #002b1daa) drop-shadow(0 0 10px #00ba7b44);
-  opacity: 0.96;
+  /* Titanium-emerald do MASTER: o glifo prateado ganha tint emerald via
+   * sepia+hue-rotate — mesma leitura metálica esverdeada da referência. */
+  filter: sepia(0.55) hue-rotate(105deg) saturate(1.5) brightness(0.95) contrast(1.04)
+    drop-shadow(0 1px 2px #002b1daa) drop-shadow(0 0 10px #00ba7b45);
+  opacity: 0.95;
 }
 
 .zh-core[data-state='listening'] { animation-duration: 1.1s; }
@@ -1142,19 +1142,22 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-radius: 999px;
+  /* Smoked titanium glass: semi-translúcido, aurora atravessa; reflexo de
+   * energia discreto vindo do Core acima integra o conjunto. */
   background:
     linear-gradient(180deg, #ffffff12, transparent 55%),
-    linear-gradient(180deg, #2a2f36fc, #06070afd);
-  border: 1px solid #3a445628;
+    linear-gradient(180deg, #262b31cc, #08090cd8);
+  border: 1px solid #414b5e30;
   box-shadow:
-    0 38px 80px -20px #000000ff,
-    0 10px 22px -4px #000000ea,
-    inset 0 3px 0 #ffffff28,
-    inset 0 -4px 4px #000000b0;
-  backdrop-filter: blur(26px) saturate(1.25);
-  -webkit-backdrop-filter: blur(26px) saturate(1.25);
+    0 30px 60px -18px #000000f0,
+    0 8px 18px -4px #000000d8,
+    0 1px 10px 0 #14ca8818,
+    inset 0 2px 0 #ffffff22,
+    inset 0 -3px 4px #000000a0;
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
 }
 
 .zh-dock-btn {
@@ -1193,14 +1196,14 @@
 }
 
 .zh-dock-voice {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 999px;
   border: none;
   margin: 0 6px;
   background:
-    radial-gradient(circle at 34% 24%, #ffffffb2, transparent 46%),
-    linear-gradient(135deg, #14ca8858, #0ea57048);
+    radial-gradient(circle at 34% 24%, #ffffffa0, transparent 46%),
+    linear-gradient(135deg, #14ca8860, #0ea57048);
   color: var(--zh-obsidian);
   display: grid;
   place-items: center;

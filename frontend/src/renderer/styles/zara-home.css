@@ -35,8 +35,8 @@
   /* Identidade da marca: MESMO filtro em TODAS as logos ZA (sidebar, Core,
    * projeto) — emerald escuro com gradiente metálico e bordas mais claras,
    * igual à referência. */
-  --zh-logo-filter: sepia(0.9) hue-rotate(112deg) saturate(1.85) brightness(0.6) contrast(1.4)
-    drop-shadow(0 0 4px #00e6a540);
+  --zh-logo-filter: sepia(0.9) hue-rotate(114deg) saturate(2) brightness(0.62) contrast(1.55)
+    drop-shadow(0 0 4px #00e6a545);
   --zh-glass: #08110ec2;
   --zh-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --zh-card: #101915cc;

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 200" role="img" aria-label="ZA">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 200" role="img" aria-label="ZA">
   <defs>
-    <!-- Gradiente vertical da referência: topo esmeralda médio-claro, base escura -->
+    <!-- Gradiente da referência: topo esmeralda médio, base quase preta -->
     <linearGradient id="za-face" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#4dbd9b"/>
       <stop offset="0.3" stop-color="#2a8f70"/>
@@ -8,7 +8,7 @@
       <stop offset="0.85" stop-color="#0c352a"/>
       <stop offset="1" stop-color="#08231b"/>
     </linearGradient>
-    <!-- Brilho de borda (topo iluminado) -->
+    <!-- Borda iluminada no topo -->
     <linearGradient id="za-edge" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#9df2d0" stop-opacity="0.85"/>
       <stop offset="0.4" stop-color="#55c2a0" stop-opacity="0.3"/>
@@ -16,18 +16,17 @@
     </linearGradient>
   </defs>
 
-  <g fill="url(#za-face)" stroke="url(#za-edge)" stroke-width="2">
-    <!-- Z: barra superior (espessa) -->
-    <path d="M8 16 H132 V52 H8 Z"/>
-    <!-- Z: diagonal espessa -->
-    <path d="M132 52 H88 L8 148 H52 Z"/>
-    <!-- Z: barra inferior — avança para dentro da perna do A (interlock) -->
-    <path d="M8 148 H146 V184 H8 Z"/>
-    <!-- A: triângulo externo menos o contra interno (evenodd) -->
-    <path fill-rule="evenodd" d="M212 8 L306 192 H118 Z M212 74 L262 168 H162 Z"/>
-    <!-- A: barra transversal espessa — ultrapassa a perna esquerda como na referência -->
-    <path d="M126 112 H265 L284 148 H114 Z"/>
-    <!-- A: triângulo sólido abaixo da barra -->
-    <path d="M212 154 L246 192 H178 Z"/>
+  <g fill="url(#za-face)" stroke="url(#za-edge)" stroke-width="2" stroke-linejoin="miter">
+    <!-- Z: barra superior -->
+    <path d="M8 14 H140 V46 H8 Z"/>
+    <!-- Z: diagonal (desce à esquerda até a banda) -->
+    <path d="M140 46 H104 L8 132 H44 Z"/>
+    <!-- MONOGRAMA: banda única contínua = base do Z + barra do A fundidas -->
+    <path d="M8 132 H275 L295 168 H8 Z"/>
+    <!-- A: triângulo externo com 2 recortes (evenodd): contra acima da banda e
+         vão abaixo da banda (o triângulo sólido é desenhado por cima depois) -->
+    <path fill-rule="evenodd" d="M208 8 L318 192 H98 Z M208 60 L248 132 H168 Z M148 168 H268 L288 192 H128 Z"/>
+    <!-- A: triângulo sólido abaixo da banda -->
+    <path d="M208 172 L250 192 H166 Z"/>
   </g>
 </svg>

@@ -884,9 +884,16 @@
   color: var(--zh-secondary);
 }
 
-/* WhatsApp no MASTER: squircle verde com glifo branco */
+/* WhatsApp no MASTER: logo verde nativa (glifo), sem chip de fundo */
 .zh-comm-badge--wa {
-  border-radius: 13px !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.zh-comm-badge--wa img {
+  width: 40px;
+  height: 40px;
+  filter: none;
 }
 
 /* Telegram no MASTER: glifo azul puro, sem círculo de fundo */
@@ -924,11 +931,10 @@
 }
 
 .zh-comm-more {
-  width: 44px;
+  width: 28px;
   height: 44px;
-  border-radius: 50%;
-  border: 1px solid var(--zh-line);
-  background: #ffffff08;
+  border: none;
+  background: transparent;
   color: var(--zh-muted);
   display: grid;
   place-items: center;

@@ -36,7 +36,7 @@ function GmailGlyph() {
 }
 
 const CHANNELS = [
-  { name: 'WhatsApp', icon: whatsapp, value: '12', badgeClass: 'zh-comm-badge--wa', tint: '#25d366' },
+  { name: 'WhatsApp', icon: whatsapp, value: '12', badgeClass: 'zh-comm-badge--wa', tint: null },
   { name: 'Telegram', icon: telegram, value: '3', badgeClass: 'zh-comm-badge--tg', tint: null },
   { name: 'Instagram', Glyph: InstagramGlyph, value: '5', badgeClass: 'zh-comm-badge--ig', tint: null },
   { name: 'Gmail', Glyph: GmailGlyph, value: '7', badgeClass: 'zh-comm-badge--gmail', tint: null },

@@ -1,4 +1,4 @@
-import { Cpu, MemoryStick, HardDrive, BatteryFull, Thermometer, Wifi, Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf } from 'lucide-react';
+import { Cpu, MemoryStick, HardDrive, MonitorCog, BatteryFull, Thermometer, Wifi, Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf } from 'lucide-react';
 import type { BatteryData, SystemMetricsData } from './types';
 
 interface SystemPanelProps {
@@ -46,6 +46,10 @@ export function SystemPanel({ metrics, battery }: SystemPanelProps) {
         <div className="zh-metric-row">
           <span><MemoryStick size={13} strokeWidth={1.8} /> RAM</span>
           <span className={metricColorClass(metrics.ram)}>{pct(metrics.ram)}</span>
+        </div>
+        <div className="zh-metric-row">
+          <span><MonitorCog size={13} strokeWidth={1.8} /> GPU</span>
+          <span className="zh-metric-unknown">—</span>
         </div>
         <div className="zh-metric-row">
           <span><HardDrive size={13} strokeWidth={1.8} /> Disco</span>

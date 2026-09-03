@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Wifi, Shield, Cloud, Zap } from 'lucide-react';
+import { Wifi, Shield, Cloud, Zap, Link2 } from 'lucide-react';
 import '../../styles/zara-home.css';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -58,6 +58,7 @@ export function ZaraHome() {
         <Shield size={15} strokeWidth={1.8} aria-label="Segurança — não conectada" data-unavailable="true" />
         <Wifi size={15} strokeWidth={1.8} aria-label="Wi-Fi" data-unavailable="true" />
         <Cloud size={15} strokeWidth={1.8} aria-label="Nuvem — não conectada" data-unavailable="true" />
+        <Link2 size={15} strokeWidth={1.8} aria-label="Conectividade — não conectada" data-unavailable="true" />
         {battery.supported ? (
           <span
             className="zh-battery-capsule"

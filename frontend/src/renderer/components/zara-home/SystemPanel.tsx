@@ -1,4 +1,4 @@
-import { Cpu, MemoryStick, HardDrive, BatteryFull, Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf } from 'lucide-react';
+import { Cpu, MemoryStick, HardDrive, BatteryFull, Thermometer, Wifi, Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf } from 'lucide-react';
 import type { BatteryData, SystemMetricsData } from './types';
 
 interface SystemPanelProps {
@@ -58,6 +58,14 @@ export function SystemPanel({ metrics, battery }: SystemPanelProps) {
               ? `${Math.round(battery.level * 100)}%${battery.charging ? ' ⚡' : ''}`
               : 'Indisponível'}
           </span>
+        </div>
+        <div className="zh-metric-row">
+          <span><Thermometer size={13} strokeWidth={1.8} /> Temperatura</span>
+          <span className="zh-metric-unknown">—</span>
+        </div>
+        <div className="zh-metric-row">
+          <span><Wifi size={13} strokeWidth={1.8} /> Rede</span>
+          <span className="zh-metric-unknown">—</span>
         </div>
       </div>
 

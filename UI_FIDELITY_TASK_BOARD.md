@@ -16,17 +16,25 @@
 | T12 | 7 | Ligar Wi-Fi (`os_wifi_status`) e Energia (`os_power_plan_list/set`) ao SystemPanel | — | SKIPPED_REQUIRES_OWNER | canais reais existem, documentado em GOAL 7 | próxima sessão, escopo pequeno e aditivo |
 | T13 | 4 | Textura metálica realista na plataforma do Core | — | SKIPPED_REQUIRES_OWNER | hoje é gradiente CSS, não asset com detalhe físico | avaliar se vale um asset dedicado ou permanece CSS |
 | T14 | 1/6/7 | Comparação pixel-a-pixel fina (spacing/tipografia item a item) | — | SKIPPED_REQUIRES_OWNER | fora do escopo desta missão por instrução explícita | missão dedicada de pixel-perfect, quando solicitada |
+| T15 | 4 | **[Pass 4]** Restaurar plataforma do Core (regressão do pass 3 — `.zh-core-platform` tinha sido removida inteira) e reconstruir como anéis elípticos concêntricos + disco metálico, não gradiente chapado | Sonnet 5 | DONE | commit `a162fbe`; screenshot dev server | — |
+| T16 | 6 | **[Pass 4]** Corrigir "caixa dentro de caixa" real do glifo ZA — `zara-logo.png` tinha card+wordmark embutidos e era usado como ícone em 4 lugares | Sonnet 5 | DONE | `zara-mark.png` isolado via edição de imagem; trocado em Sidebar/TextCommandInput/ActiveProjectCard/ZaraCore | — |
+| T17 | 5 | **[Pass 4]** Ícone de voz do dock: `Mic`→`AudioLines` (símbolo de voice mode); vidro do dock mais espesso; microinterações hover/active | Sonnet 5 | DONE | `VoiceDock.tsx`, `zara-home.css` | — |
+| T18 | 6 | **[Pass 4]** Header: "→" → ícone `Send` emerald; status row: `Shield`/`Cloud` honestamente desconectados + bateria em cápsula com preenchimento real da Battery API | Sonnet 5 | DONE | `TextCommandInput.tsx`, `ZaraHome.tsx` | — |
+| T19 | 7 | **[Pass 4]** System panel reconstruído para as 5 colunas da referência com ícone semântico por item da missão; itens sem backend real mostram "Indisponível" explícito | Sonnet 5 | DONE | `SystemPanel.tsx` reescrito; `tsc`/`vite build` limpos | — |
+| T20 | 4 | Textura da plataforma ainda é CSS (elipses+box-shadow), não asset 3D/fotorrealista | — | SKIPPED_REQUIRES_OWNER | resultado atual já é "presença física convincente", ganho marginal de um asset dedicado é incerto | avaliar 1 geração Stitch dedicada só para essa peça, se o owner considerar necessário |
 
-## Estado final
+## Estado final (pass 4)
 
 TODO = 0 (nenhuma task executável restante sem decisão do owner)
 IN_PROGRESS = 0
-DONE = 10
-SKIPPED_REQUIRES_OWNER = 4
+DONE = 16
+SKIPPED_REQUIRES_OWNER = 5 (T11, T12, T13→superada por T15, T14, T20)
 FAILED_AFTER_RETRIES = 0
 
-Antes de marcar a missão encerrada, foi feita nova comparação Sites × Electron
-(não apenas "board vazio = fim") — ver a screenshot final desta sessão e a
-segunda revisão Opus, que confirmou PASS sem blocker novo. Isso satisfaz a
-condição de parada (A) do addendum: "fidelidade visual atingiu nível alto
-e Opus final não encontra blockers grandes".
+Pass 4 fechou a maior lacuna encontrada na auditoria desta sessão: a
+plataforma do Core tinha sido perdida por completo no pass 3 (ficou só o
+Core flutuando com um feixe de luz, sem nenhuma estrutura física sob ele).
+Reconstruída, além de 4 correções menores (glifo com "caixa dentro de
+caixa", ícone de voz genérico, System panel raso demais vs. a referência,
+status row incompleta). Ver `UI_FIDELITY_GOALS.md` para o detalhe por goal
+e o que fica documentado como pendência de owner.

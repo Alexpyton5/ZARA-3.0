@@ -1,26 +1,31 @@
-import { MessageCircle, Calendar, CheckSquare, RefreshCw } from 'lucide-react';
+import { Calendar, CheckSquare, Settings } from 'lucide-react';
+import whatsapp from '../../../assets/zara-home/brands/whatsapp.svg';
 
 const ITEMS = [
-  { icon: MessageCircle, label: 'Mensagens', sub: 'Aguardando conexão', color: '#25d366' },
-  { icon: Calendar, label: 'Agenda', sub: 'Aguardando conexão', color: '#7c9cff' },
-  { icon: CheckSquare, label: 'Tarefas', sub: 'Aguardando conexão', color: '#00d699' },
-  { icon: RefreshCw, label: 'Atualizações', sub: 'Aguardando conexão', color: '#c7a868' },
+  { img: whatsapp, Icon: null, label: 'João espera sua resposta', sub: 'WhatsApp • 10 min', color: '#25d366' },
+  { img: null, Icon: Calendar, label: 'Reunião às 14:00', sub: 'Projeto ZARA', color: '#38bdf8' },
+  { img: null, Icon: CheckSquare, label: '3 tarefas pendentes', sub: 'Ver todas', color: '#22c55e' },
+  { img: null, Icon: Settings, label: 'Atualização disponível', sub: '1 biblioteca', color: '#eab308' },
 ];
 
 /**
- * "Para você" — estrutura visual copiada do MASTER (4 itens com ícone
- * colorido, título e subtítulo). Como não existe fonte real de sugestões,
- * mantemos o subtítulo honesto "Aguardando conexão" em vez de inventar dados.
+ * "Para você" — conteúdo 1:1 com o MASTER (valores de demonstração estáticos
+ * até que uma fonte real de sugestões seja exposta ao renderer).
+ * Chips: círculos escuros com glifo outline colorido, como no MASTER.
  */
 export function ForYouCard() {
   return (
     <section className="zh-section zh-glass-panel" aria-label="Para você">
       <h2>Para você</h2>
       <div className="zh-foryou-list">
-        {ITEMS.map(({ icon: Icon, label, sub, color }) => (
+        {ITEMS.map(({ img, Icon, label, sub, color }) => (
           <div className="zh-foryou-item" key={label}>
-            <span className="zh-foryou-icon" style={{ color, background: `${color}1c` }}>
-              <Icon size={16} strokeWidth={1.8} />
+            <span className="zh-foryou-icon" style={{ color }}>
+              {img ? (
+                <img src={img} alt="" />
+              ) : (
+                Icon && <Icon size={15} strokeWidth={2} />
+              )}
             </span>
             <span className="zh-foryou-text">
               <strong>{label}</strong>

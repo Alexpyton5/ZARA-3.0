@@ -1,14 +1,13 @@
 
 import {
   House, MessageCircle, Folder, File, LayoutGrid, Workflow,
-  BrainCircuit, FlaskConical, Monitor, Cpu, Settings,
+  BrainCircuit, FlaskConical, Cpu, Settings,
 } from 'lucide-react';
 import zaraLogo from '../../../assets/zara-home/zara-mark.png';
 
-// Ícones confirmados 1:1 com o site de referência (lucide-react, mesma lib
-// já usada no resto da ZARA) — inspecionados via classList dos <svg> reais.
+// Itens 1:1 com o MASTER ("Início" em vez de "Hoje"; sem "Dispositivos").
 const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [
-  { label: 'Hoje', Icon: House },
+  { label: 'Início', Icon: House },
   { label: 'Conversas', Icon: MessageCircle },
   { label: 'Projetos', Icon: Folder },
   { label: 'Arquivos', Icon: File },
@@ -16,7 +15,6 @@ const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [
   { label: 'Automações', Icon: Workflow },
   { label: 'Memórias', Icon: BrainCircuit },
   { label: 'ZARA Lab', Icon: FlaskConical },
-  { label: 'Dispositivos', Icon: Monitor },
   { label: 'Sistema', Icon: Cpu },
   { label: 'Configurações', Icon: Settings },
 ];

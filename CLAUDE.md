@@ -1,5 +1,27 @@
 # ZARA OWNER COMMUNICATION MODE
 
+## BOOT ORDER — every new session, before any work
+
+This project uses a persistent Chief of Staff working model for Claude. It is
+a working mode for Claude only — it is not a ZARA runtime feature, it ships
+no code, and it lives entirely under `.claude/`.
+
+At the start of every new session in this repository, before doing any work,
+read in this order:
+
+1. `.claude/ORG.md`
+2. `.claude/WORKING_MODEL.md`
+3. `.claude/CURRENT_MISSION.md`
+4. `.claude/TASK_BOARD.md`
+5. `.claude/DECISIONS.md`
+
+Then resume as Chief of Staff using what those files say. Do not ask the
+owner "where did we stop?" if the answer is already in those files.
+
+`.claude/` = how Claude works. `.zara-tests/` = how ZARA actually is (see
+`.claude/rules/test-run-policy.md` for when to also read
+`.zara-tests/latest/ZARA_STATE.md` before auditing anything).
+
 ## Purpose
 
 The project owner is not a programmer and should not need to read long technical reports during normal conversation.

@@ -52,3 +52,42 @@ ZARA-P0-01 e ZARA-P0-02 do `.ceo/BOARD.md`: de `BLOCKED_REQUIRES_OWNER`/`TODO` p
 
 **Próximo passo:** T2 — comando de texto real ponta-a-ponta (Electron → IPC → sidecar → resposta),
 usando este mesmo candidato.
+
+### T2 — comando de texto real (mesma madrugada)
+
+Testei o handler real (`handle_send_message`, o mesmo que o Electron chama) mandando um frame
+IPC de verdade pelo stdin do sidecar corrigido, sem simulação:
+
+```
+IN:  {"type":"send-message","request_id":"test-1","payload":{"text":"que horas sao?"}}
+OUT: {"type":"response","request_id":"test-1","response":{"response":"Agora são 01:16.","engine":"pc_control","selo":"verificado"}}
+```
+
+Resposta bate com o relógio real no momento do teste, `selo: verificado` (veio do executor, não
+é string fixa). **T2 provado no nível RUNTIME_AUTOMATED** para o backend; a metade
+Electron→renderer (o campo de texto de verdade na UI) ainda não foi clicada por ninguém — isso
+some com computer-use exigiria aprovação na tela do Alex, então fica pendente de teste físico.
+
+**Achado colateral, não bloqueante:** no boot aparecem avisos `"... ilegivel, usando padrao:
+Expecting value: line 1 column 1 (char 0)"` para `wake_word_mode`, `audio_transport`, 3 chaves
+de `vad_*` e Telegram — parece um arquivo de preferências ausente/vazio, cai pro padrão sem
+quebrar nada. Não investiguei a fundo (fora do escopo de T1/T2 desta madrugada); registrado
+como item pequeno pra revisar depois, não é `KNOWN_BROKEN` até alguém confirmar que importa.
+
+**Próximo passo real:** antes de avançar pro resto da lista T3-T18 do dono, realinhar com a
+ordem que o próprio Alex travou em `time-zara.md` (Fase 1: voz Kore na saída → latência →
+microfone sem eco → voz→ação real). Checando o estado atual de voz Kore agora.
+
+### Achado colateral sério: disco C quase cheio (não é tarefa desta madrugada, só registro)
+
+Ao investigar por que ainda há risco de repetir o incidente antigo
+(`ZARA-BACKEND-PYINSTALLER-RECOVERY-002`, %TEMP% cheio → extração PyInstaller falha), medi o
+disco: **C: com 5,2 GB livres de 237 GB (98% usado)**, mesmo depois de eu limpar 5 pastas
+`_MEI*` órfãs (~2,8 GB) que os meus próprios testes desta madrugada deixaram para trás. Limpei
+só o que eu mesmo sujei — não fiz faxina geral no disco (isso é tarefa própria, com inventário
+e backup, não efeito colateral de T1/T2).
+
+**Isso é o mesmo tipo de risco que já derrubou o backend antes.** Não bloqueou nada hoje, mas
+está perto o suficiente pra merecer atenção logo — cada rebuild completo (sidecar + Electron)
+usa uns GBs de temp/build. Não vou fazer limpeza ampla de disco sem autorização específica;
+só sinalizando pra manhã.

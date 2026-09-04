@@ -82,6 +82,72 @@ _CONTEXT_PRIORITY = {
 }
 
 
+class ContextDatum:
+    """Um item candidato ao envelope de contexto do projeto.
+
+    ZARA-CONTEXT-BUDGET-001: `build_project_context` referenciava esta
+    classe e `build_context_envelope` sem nenhuma das duas existir em
+    lugar nenhum do projeto -- `NameError` garantido em qualquer chamada
+    real. Reconstruído a partir do contrato exato definido pelos testes em
+    tests/test_project_context_control.py (nenhuma suposição além do que
+    os testes já provam).
+    """
+
+    __slots__ = ("key", "value", "priority", "required")
+
+    def __init__(self, key: str, value, *, priority: int = 0, required: bool = False):
+        self.key = key
+        self.value = value
+        self.priority = priority
+        self.required = required
+
+    def _encoded_size(self) -> int:
+        return len(json.dumps({"key": self.key, "value": self.value}, ensure_ascii=False).encode("utf-8"))
+
+
+class ContextEnvelope:
+    """Resultado de `build_context_envelope`: o que coube no orçamento de bytes."""
+
+    __slots__ = ("items", "omitted", "used_bytes", "degraded")
+
+    def __init__(self, items: list[ContextDatum], omitted: list[ContextDatum], used_bytes: int, degraded: bool):
+        self.items = items
+        self.omitted = omitted
+        self.used_bytes = used_bytes
+        self.degraded = degraded
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "items": [{"key": item.key, "value": item.value} for item in self.items],
+                "omitted": [{"key": item.key} for item in self.omitted],
+                "used_bytes": self.used_bytes,
+                "degraded": self.degraded,
+            },
+            ensure_ascii=False,
+        )
+
+
+def build_context_envelope(*, memory: tuple[ContextDatum, ...], budget_bytes: int) -> ContextEnvelope:
+    """Ordena por (obrigatório primeiro, depois prioridade decrescente) e
+    inclui greedily até o orçamento. Itens `required=True` sempre entram,
+    mesmo que estourem o orçamento sozinhos -- omitir o project_id, por
+    exemplo, tornaria o envelope inútil independente do tamanho.
+    """
+    ordered = sorted(memory, key=lambda datum: (not datum.required, -datum.priority))
+    items: list[ContextDatum] = []
+    omitted: list[ContextDatum] = []
+    used_bytes = 0
+    for datum in ordered:
+        size = datum._encoded_size()
+        if datum.required or used_bytes + size <= budget_bytes:
+            items.append(datum)
+            used_bytes += size
+        else:
+            omitted.append(datum)
+    return ContextEnvelope(items=items, omitted=omitted, used_bytes=used_bytes, degraded=bool(omitted))
+
+
 class ProjectContextError(ValueError):
     """Selecao ou identificador de projeto invalido ou incompleto."""
 

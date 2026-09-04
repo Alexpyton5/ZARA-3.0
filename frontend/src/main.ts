@@ -4,7 +4,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, session, shell, Tray, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
 import { join } from 'path'
 import { spawn, execFileSync, ChildProcess } from 'child_process'
-import { existsSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
 
 let pythonProcess: ChildProcess | null = null
@@ -79,6 +79,43 @@ function getWindowIconPath(): string {
     return join(process.resourcesPath, 'assets', 'zara.ico')
   }
   return join(app.getAppPath(), 'public', 'zara.ico')
+}
+
+// UI-001: utilitário de diagnóstico só-leitura para a comparação pixel-perfect
+// contra o MASTER — não altera nada visual, só registra o viewport real da
+// janela em disco pra parar de chutar largura/altura na hora de calibrar CSS.
+// Ver .claude/TASK_BOARD.md (UI-001) / .claude/WORKING_MODEL.md.
+function getViewportDiagnosticsPath(): string {
+  // Mesmo padrão de getMainScript(): em dev, app.getAppPath() resolve para
+  // frontend/dist-electron, então a raiz do repo fica dois níveis acima.
+  return join(app.getAppPath(), '..', '..', '.zara-tests', 'ui', 'current_viewport.json')
+}
+
+async function writeViewportDiagnostics(win: BrowserWindow): Promise<void> {
+  try {
+    if (win.isDestroyed()) return
+    const bounds = win.getBounds()
+    const contentBounds = win.getContentBounds()
+    const zoom = win.webContents.getZoomFactor()
+    const devicePixelRatio = await win.webContents.executeJavaScript('window.devicePixelRatio').catch(() => null)
+
+    const payload = {
+      window_width: bounds.width,
+      window_height: bounds.height,
+      content_width: contentBounds.width,
+      content_height: contentBounds.height,
+      device_pixel_ratio: devicePixelRatio,
+      zoom,
+    }
+
+    const outPath = getViewportDiagnosticsPath()
+    mkdirSync(join(outPath, '..'), { recursive: true })
+    writeFileSync(outPath, JSON.stringify(payload, null, 2), 'utf-8')
+  } catch (error) {
+    // Diagnóstico best-effort: nunca deve derrubar a janela real (ex.: em
+    // build empacotado, o caminho ../../.zara-tests não existe).
+    console.warn('[UI-001] falha ao gravar current_viewport.json:', error)
+  }
 }
 
 function rejectPendingRequests(reason: string): void {
@@ -655,6 +692,22 @@ function createWindow(): void {
   windowRef.once('ready-to-show', showWindow)
   windowRef.webContents.once('did-finish-load', showWindow)
   setTimeout(showWindow, 3000)
+
+  // UI-001: mantém .zara-tests/ui/current_viewport.json alinhado com o
+  // tamanho real da janela — captura inicial + a cada resize (debounced),
+  // pra registrar o viewport de verdade no instante em que o Alex tira o
+  // print, sem precisar de nenhum gatilho manual novo.
+  let viewportDiagnosticsTimer: ReturnType<typeof setTimeout> | null = null
+  const scheduleViewportDiagnostics = () => {
+    if (viewportDiagnosticsTimer) clearTimeout(viewportDiagnosticsTimer)
+    viewportDiagnosticsTimer = setTimeout(() => {
+      void writeViewportDiagnostics(windowRef)
+    }, 400)
+  }
+  windowRef.webContents.once('did-finish-load', scheduleViewportDiagnostics)
+  windowRef.on('resize', scheduleViewportDiagnostics)
+  windowRef.on('maximize', scheduleViewportDiagnostics)
+  windowRef.on('unmaximize', scheduleViewportDiagnostics)
 
   // ZARA-BANDEJA-001: o X esconde; sair de verdade é pelo menu da bandeja.
   windowRef.on('close', (evento) => {

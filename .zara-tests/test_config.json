@@ -1,0 +1,20 @@
+{
+  "youtube_test_query": "hans zimmer",
+  "chrome_test_profile": "trabalho",
+  "spotify_test_playlist": null,
+  "disk_min_free_gb": 5.0,
+  "latency_thresholds_ms": {
+    "simple": {
+      "excellent": 1000,
+      "good": 2000,
+      "slow": 5000
+    },
+    "browser": {
+      "excellent": 3000,
+      "good": 6000,
+      "slow": 12000
+    }
+  },
+  "report_retention": 10,
+  "interactive_tests_enabled": true
+}

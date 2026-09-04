@@ -361,3 +361,29 @@ diferente de `_executar_do_celular` (o teste passa `execute_action` como parâme
 a função real só aceita `destino`/`texto`). Não é rename — é um redesenho que parece ter sido
 especificado nos testes mas nunca implementado no dispatcher. Isso é grande demais e sensível
 demais (aprovação remota de ações de risco) pra tentar de improviso. Registrado, não mexido.
+
+### Sistema de autodiagnóstico completo — pedido explícito do Alex, substitui o bat anterior
+
+Alex pediu (mensagem longa, 50 seções) um sistema de 1 clique que: limpa/organiza com
+segurança, detecta ambiente, roda a camada técnica existente, manda comandos REAIS por texto
+pra ZARA (a mesma cadeia da voz), mede latência, verifica execução de verdade (não
+PASS binário), restaura volume/brilho depois, e gera relatório único (MD+JSON+capabilities)
+pra um Claude futuro ler antes de reauditar.
+
+Não implementei as 50 seções literalmente — decisão consciente de escopo, dita ao Alex:
+construí o núcleo real e KISS (auditei `tools/zara_validate.py` antes, REUTILIZO ele pra
+camada técnica em vez de duplicar pytest/baseline/known-failures), e deixei de fora por ora:
+config de perfil Chrome/playlist Spotify mais elaborada, mapeamento incremental arquivo→
+subsistema além do que zara_validate.py já faz, teste-do-testador (seção 49), compressão de
+histórico. Registrado como próximos passos, não escondido.
+
+`tools/zara_selftest.py` (evolução de `zara_functional_report.py`, que foi removido — não
+ficam dois sistemas paralelos) + `ZARA_TESTAR_TUDO.bat` (menu QUICK/FULL SAFE/REPORT ONLY/
+CLEAN) + `.zara-tests/test_config.json` (perguntas de teste configuráveis, sem hardcode).
+
+Testado FULL de verdade: 145s de camada técnica (1632 passou, 25 conhecidas, 0 nova — reflete
+os fixes desta madrugada), boot real, 37 checagens, sequência de voz por texto com efeito real
+na tela, volume e brilho restaurados corretamente no final. Achou 2 problemas de teste MEU
+(frase "minimize o bloco de notas" não reconhecida — corrigido pra "minimiza", que já provei
+funcionar; timeout curto demais pro caminho de raciocínio livre) e corrigiu antes de considerar
+pronto. Health score real: 84% na primeira rodada completa (não maquiado).

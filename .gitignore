@@ -82,3 +82,9 @@ zara-interface-codigo-completo.zip
 .zara-tests/latest.json
 .zara-tests/history.json
 .zara-tests/test-run.lock
+
+# ZARA-SELFTEST-001 local report output — ephemeral, one folder per run.
+# test_config.json IS tracked (reviewed, intentional); everything else here is not.
+.zara-tests/latest/
+.zara-tests/history/
+.zara-tests/sandbox/

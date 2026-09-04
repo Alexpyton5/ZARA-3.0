@@ -51,7 +51,7 @@ Git proibido sem autorização nomeada: `reset --hard`, `clean -fd`, `checkout -
   `__pycache__/`, `.pytest_cache/`. Regeneráveis; garantir que estão no `.gitignore`
   em vez de ficar apagando à mão.
 - **Arquivos soltos na raiz** — `.txt`/`.json` de diagnóstico de sessões passadas
-  (`ZARA-CONSERTO.txt`, `ULTIMO_CANDIDATO.json`). Não apagar sem perguntar: podem ser a
+  (`ZARA-CONSERTO.txt`, `ZARA_ACTIVE_BUILD.json`). Não apagar sem perguntar: podem ser a
   única memória de um incidente.
 
 ## Nunca

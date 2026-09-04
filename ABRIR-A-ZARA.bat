@@ -24,8 +24,8 @@ taskkill /F /IM "zara-backend.exe" >nul 2>&1
 timeout /t 3 /nobreak >nul
 
 set "EXEPATH="
-if exist "ULTIMO_CANDIDATO.txt" (
-  set /p EXEPATH=<ULTIMO_CANDIDATO.txt
+if exist "ZARA_ACTIVE_BUILD.txt" (
+  set /p EXEPATH=<ZARA_ACTIVE_BUILD.txt
 )
 
 if not defined EXEPATH (

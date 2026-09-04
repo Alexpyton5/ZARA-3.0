@@ -9,12 +9,6 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-# Import nightly_regression from scripts/debug
-import importlib.util
-spec = importlib.util.spec_from_file_location("nightly_regression", "scripts/debug/nightly_regression.py")
-nightly_regression = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(nightly_regression)
-
 from core import ipc_handlers
 from core.gemini_live_voice import (
     GeminiLiveVoice,
@@ -577,20 +571,3 @@ async def test_live_interrupt_callback_updates_barge_in_state():
 
     assert handler._voice_speaking is False
     handler.send_event.assert_any_await('state-change', 'LISTENING')
-
-
-@pytest.mark.parametrize("failed_tests", [[], ["tests/test_voice.py::test_failed"]])
-def test_regression_wrapper_fails_for_every_pytest_failure(monkeypatch, tmp_path, failed_tests):
-    baseline = tmp_path / ".known_failures.json"
-    baseline.write_text(
-        '{"failed_tests": ["tests/test_voice.py::test_failed"]}',
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(nightly_regression, "KNOWN_FAILURES_FILE", baseline)
-    monkeypatch.setattr(
-        nightly_regression,
-        "run_tests",
-        lambda: (failed_tests, 1, 1, "", "1 failed"),
-    )
-
-    assert nightly_regression.main() == 1

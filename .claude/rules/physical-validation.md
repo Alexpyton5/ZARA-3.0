@@ -72,10 +72,10 @@ Toda investigação de voz precisa rodar a **mesma frase** por texto e por voz n
 
 ## Antes de pedir qualquer teste ao Alex
 
-1. o candidato foi executado diretamente e sobreviveu ao boot
-2. o backend empacotado dentro do candidato corresponde ao source testado
+1. o build foi executado diretamente e sobreviveu ao boot
+2. o backend empacotado dentro do build corresponde ao source testado
 3. o hash foi capturado
-4. o candidato anterior foi preservado
+4. o build anterior foi preservado
 5. nenhuma dependência não relacionada foi mutada
 
 Se qualquer item falhar, não pedir teste. Alex não é o ambiente de CI.

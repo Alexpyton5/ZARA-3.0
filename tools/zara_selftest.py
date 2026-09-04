@@ -5,8 +5,8 @@ Junta em UM runner:
 
   - camada técnica (reutiliza tools/zara_validate.py -- NÃO duplica pytest,
     NÃO reimplementa baseline/known-failures, só invoca e lê o resultado);
-  - camada real: comandos de TEXTO enviados para o candidato empacotado de
-    verdade, pela mesma cadeia que a voz usa (handle_send_message);
+  - camada real: comandos de TEXTO enviados para o build empacotado ativo,
+    pela mesma cadeia que a voz usa (handle_send_message);
   - latência medida por comando;
   - estados de verificação honestos (não é PASS/FAIL binário -- ver
     ResultState);
@@ -211,8 +211,8 @@ def safe_cleanup(report: SelfTestReport | None = None) -> int:
     return freed_items
 
 
-def _candidate_backend_path() -> Path | None:
-    pointer = ROOT / "ULTIMO_CANDIDATO.json"
+def _active_build_backend_path() -> Path | None:
+    pointer = ROOT / "ZARA_ACTIVE_BUILD.json"
     if not pointer.exists():
         return None
     try:
@@ -801,15 +801,15 @@ def run(mode: str) -> int:
         print_final_summary(report, report_path)
         return 0 if not any(r.state == ResultState.FAIL for r in report.results) else 1
 
-    backend = _candidate_backend_path()
+    backend = _active_build_backend_path()
     if backend is None:
         report.add(TestResult("SYS-BOOT", "Boot do backend", ResultState.BLOCKED,
-                               "ULTIMO_CANDIDATO.json ausente/inválido ou EXE não existe"))
+                               "ZARA_ACTIVE_BUILD.json ausente/inválido ou EXE não existe"))
         report_path = write_reports(report, cfg)
         print_final_summary(report, report_path)
         return 1
 
-    print(f"Candidato: {backend}")
+    print(f"Build ativo: {backend}")
     print("Ligando o backend real (pode levar até 90s no boot a frio)...")
     zara = ZaraProcess(backend)
     started, detail = zara.start()
@@ -866,7 +866,7 @@ def show_latest_report() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--quick", action="store_true", help="Só camada técnica (rápido, sem candidato)")
+    group.add_argument("--quick", action="store_true", help="Só camada técnica (rápido, sem abrir a ZARA)")
     group.add_argument("--full", action="store_true", help="Camada técnica + camada real completa (default)")
     group.add_argument("--report", action="store_true", help="Só mostra o último relatório, sem rodar nada")
     group.add_argument("--clean", action="store_true", help="Só limpeza segura, sem rodar testes")

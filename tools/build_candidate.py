@@ -214,7 +214,7 @@ def main() -> int:
     info = {
         "BUILD_ID": build_id,
         "BUILD_TIMESTAMP": datetime.now().astimezone().isoformat(),
-        "BASE_CANDIDATE": args.base,
+        "BASE_BUILD": args.base,
         "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
         "GIT_BRANCH": git("rev-parse", "--abbrev-ref", "HEAD"),
         "GIT_COMMIT": git("rev-parse", "HEAD"),
@@ -229,14 +229,14 @@ def main() -> int:
     (dest_dir / "win-unpacked" / "BUILD_INFO.json").write_text(
         json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    (ROOT / "ULTIMO_CANDIDATO.json").write_text(
+    (ROOT / "ZARA_ACTIVE_BUILD.json").write_text(
         json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     # ZARA-ABRIR-SEM-PYTHON-001: caminho puro, sem JSON e sem interpretador.
     # O ABRIR-A-ZARA.bat lia este caminho rodando Python; como a pasta do
     # projeto tem espacos no nome, a linha do cmd quebrava e o atalho morria em
     # silencio na cara do Alex. Texto simples nao tem esse problema.
-    (ROOT / "ULTIMO_CANDIDATO.txt").write_text(str(dest_exe), encoding="utf-8")
+    (ROOT / "ZARA_ACTIVE_BUILD.txt").write_text(str(dest_exe), encoding="utf-8")
 
     # ZARA-UM-CANDIDATO-SO-001 (Alex, 2026-08-13)
     # "toda vez que voce criar um novo apague o velho para nao confundir".

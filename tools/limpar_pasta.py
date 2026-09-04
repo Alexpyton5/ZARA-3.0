@@ -42,7 +42,7 @@ SUFIXOS_DE_SAIDA = (".txt", ".log")
 INTOCAVEIS = {
     "requirements.txt", "LICENSE.txt", "INSTALL_HERMES.txt",
     "SHA256_MANIFEST.txt", "PATCH_SHA256_MANIFEST.txt", "CLEAN_BUILD_ID.txt",
-    "ULTIMO_CANDIDATO.json",
+    "ZARA_ACTIVE_BUILD.json", "ZARA_ACTIVE_BUILD.txt",
 }
 
 # ZARA-UM-CANDIDATO-SO-001 (Alex, 2026-08-13): so o atual sobrevive.

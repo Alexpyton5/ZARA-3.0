@@ -1,7 +1,7 @@
 {
   "BUILD_ID": "release-candidate-20260904-0747",
   "BUILD_TIMESTAMP": "2026-09-04T07:47:00-03:00",
-  "BASE_CANDIDATE": "release",
+  "BASE_BUILD": "release",
   "BUILD_METHOD": "npm run electron:build (tsc + vite build + tsc electron + electron-builder), sidecar via dist-sidecar/zara-backend.exe (extraResources)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
   "GIT_COMMIT": "058bd92",

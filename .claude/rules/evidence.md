@@ -7,7 +7,7 @@
 | `SOURCE` | o código existe e parece logicamente conectado | que executa |
 | `TEST` | teste unitário/integração passou | que o runtime de produção funciona |
 | `RUNTIME_AUTOMATED` | ação real executada automaticamente com postcondição observada | que o EXE que Alex usa funciona |
-| `PACKAGED_RUNTIME` | o candidato empacotado executou a ação e a postcondição foi observada | validação humana |
+| `PACKAGED_RUNTIME` | o build empacotado executou a ação e a postcondição foi observada | validação humana |
 | `PHYSICAL_BY_ALEX` | Alex viu a feature funcionar no app | que funciona por voz |
 | `VOICE_PHYSICAL` | Alex falou o comando e viu a execução real | — |
 

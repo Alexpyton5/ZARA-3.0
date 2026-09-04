@@ -36,7 +36,7 @@ cobra prova, e rejeita relatório que promova evidência.
 | 4. ENGENHEIRO_EXECUCAO | `zara-engenheiro-execucao` | `core/ipc_handlers.py`, `core/pc_voice_intent.py`, `core/file_voice_intent.py`, `core/reminder_intent.py`, `core/action_registry.py`, `core/action_confirmation.py`, `core/actions/*.py` |
 | 5. ENGENHEIRO_LATENCIA | `zara-engenheiro-latencia` | `core/model_router.py` + instrumentação de tempo |
 | 6. ENGENHEIRO_INTERFACE | `zara-engenheiro-interface` | `frontend/src/**` exceto `renderer/lib/aecAudio.ts` |
-| 7. ENGENHEIRO_BUILD | `zara-engenheiro-build` | `build_exe.py`, `*.spec`, `build-sidecar/`, `dist-sidecar/`, `ULTIMO_CANDIDATO.*`, manifestos SHA |
+| 7. ENGENHEIRO_BUILD | `zara-engenheiro-build` | `build_exe.py`, `*.spec`, `build-sidecar/`, `dist-sidecar/`, `ZARA_ACTIVE_BUILD.*`, manifestos SHA |
 | 8. QA_EVIDENCIA | `zara-qa-evidencia` | `.zara-dev/reports/` |
 | 9. REVISOR_HOSTIL | `zara-revisor-hostil` | nada |
 

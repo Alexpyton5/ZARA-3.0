@@ -32,7 +32,7 @@ JANELA_SEGUNDOS = 45
 
 
 def backend_path() -> Path:
-    info = json.loads((ROOT / "ULTIMO_CANDIDATO.json").read_text(encoding="utf-8"))
+    info = json.loads((ROOT / "ZARA_ACTIVE_BUILD.json").read_text(encoding="utf-8"))
     return Path(info["EXE_PATH"]).parent / "resources" / "backend" / "zara-backend.exe"
 
 

@@ -60,7 +60,7 @@ def agora() -> str:
 
 def caminho_do_exe() -> str | None:
     try:
-        return json.loads((ROOT / "ULTIMO_CANDIDATO.json").read_text(encoding="utf-8"))["EXE_PATH"]
+        return json.loads((ROOT / "ZARA_ACTIVE_BUILD.json").read_text(encoding="utf-8"))["EXE_PATH"]
     except Exception:
         return None
 

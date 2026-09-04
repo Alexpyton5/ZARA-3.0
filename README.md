@@ -17,7 +17,9 @@ e 27 foram pulados. Nos dias anteriores, Alex identificou e removeu um sistema n
 ("Corujão", um processo Codex que vinha reescrevendo arquitetura da Zara por conta própria havia
 dias, sem permissão) — sua remoção reduziu a suíte de 153 falhas para a baseline atual, ou seja, o
 código dele estava piorando o projeto, não ajudando. Lista exata das falhas conhecidas mantida em
-`.known_failures.json` pelo gate `scripts/debug/nightly_regression.py`. O número "62 testes" que
+`.zara-tests/baseline.json` pelo gate `tools/zara_validate.py` (2026-09-04: consolidado — havia um
+sistema duplicado, `.known_failures.json` + `scripts/debug/nightly_regression.py`, agora em
+`_quarentena/regressao-duplicada-20260904/`). O número "62 testes" que
 aparecia aqui e em OPERATIONS.md era histórico de uma raiz muito mais antiga do projeto (poucas
 dezenas de arquivos de teste) — hoje a suíte tem mais de 150 arquivos. compileall/Ruff passaram;
 `npm ci`, `npm ls`, lint, typecheck, Vite, Electron TypeScript, sidecar e `electron-builder`

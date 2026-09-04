@@ -6,12 +6,19 @@ para o Alex rodar sozinho quando quiser confirmar se a ZARA esta funcionando,
 sem gastar tokens de uma sessao para isso.
 
 O QUE ESTE SCRIPT PROVA: que o candidato empacotado liga, responde ao IPC
-real, e que um conjunto de capacidades (texto, sistema, memoria, wifi,
-energia, apps) devolve dado real e verificado.
+real, que um conjunto de capacidades (texto, sistema, memoria, wifi,
+energia, apps) devolve dado real e verificado, E que uma sequência de
+comandos de voz (navegador, YouTube, Spotify, volume, brilho, janelas)
+enviados por TEXTO -- mesma cadeia que a voz usa de verdade
+(handle_send_message) -- executa e responde, com o tempo real de cada
+resposta medido.
 
 O QUE ESTE SCRIPT NAO PROVA: voz (microfone, fala) e a tela (UI do
 Electron). Isso so o Alex confirma, ouvindo e olhando -- ver
 .claude/rules/physical-validation.md.
+
+AVISO: a sequência de comandos de voz tem efeito REAL na tela (abre
+navegador, toca áudio, muda volume/brilho de verdade).
 
 Uso:
     .venv\\Scripts\\python.exe tools\\zara_functional_report.py
@@ -139,6 +146,16 @@ class ZaraProcess:
             self._out_queue.put(item)
         return None
 
+    def say(self, texto: str, timeout: float = REQUEST_TIMEOUT_S) -> tuple[dict | None, float]:
+        """Manda um comando de TEXTO como se fosse falado -- mesma cadeia que
+        a voz usa de verdade (handle_send_message), não action-execute
+        direto. Devolve (resposta, latência em ms) para o relatório medir
+        tempo real de resposta, não só se funcionou."""
+        inicio = time.perf_counter()
+        resp = self.call("send-message", {"text": texto}, timeout=timeout)
+        latencia_ms = (time.perf_counter() - inicio) * 1000
+        return resp, latencia_ms
+
     def stop(self) -> None:
         if self.proc is None:
             return
@@ -165,11 +182,49 @@ class ZaraProcess:
 class Report:
     def __init__(self):
         self.results: list[tuple[str, bool, str]] = []
+        self.voice_steps: list[tuple[str, str, str, float]] = []  # comando, engine, resposta, latencia_ms
 
     def add(self, name: str, ok: bool, detail: str) -> None:
         self.results.append((name, ok, detail))
         marca = "OK  " if ok else "FALHOU"
         print(f"  [{marca}] {name} -- {detail}")
+
+    def add_voice_step(self, comando: str, engine: str, resposta: str, latencia_ms: float) -> None:
+        self.voice_steps.append((comando, engine, resposta, latencia_ms))
+        reconhecido = "reconhecido como comando" if engine == "pc_control" else f"caiu em '{engine}'"
+        print(f'  "{comando}"')
+        print(f"    -> {reconhecido}, {latencia_ms:.0f}ms")
+        print(f'    -> resposta: "{resposta}"')
+
+    def voice_summary(self) -> None:
+        if not self.voice_steps:
+            return
+        print()
+        print("-" * 70)
+        print("LATÊNCIA DOS COMANDOS DE VOZ (enviados por texto, mesma cadeia da voz)")
+        print("-" * 70)
+        tempos = [latencia for _, _, _, latencia in self.voice_steps]
+        media = sum(tempos) / len(tempos)
+        pior_comando, pior_engine, _, pior_tempo = max(self.voice_steps, key=lambda s: s[3])
+        reconhecidos = sum(1 for _, engine, _, _ in self.voice_steps if engine == "pc_control")
+        falhou_execucao = sum(1 for _, _, resposta, _ in self.voice_steps if "Não consegui executar" in resposta)
+        print(f"  {reconhecidos}/{len(self.voice_steps)} comandos reconhecidos como ação direta (engine=pc_control)")
+        print(f"  {falhou_execucao}/{len(self.voice_steps)} reconhecidos MAS a execução falhou (ver \"Não consegui")
+        print("  executar\" em cada resposta acima -- a ação real não aconteceu, mesmo com o")
+        print("  comando entendido).")
+        print(f"  Latência média: {media:.0f}ms | Mais lento: \"{pior_comando}\" ({pior_tempo:.0f}ms, engine={pior_engine})")
+        if pior_tempo > 5000:
+            print(f"  ATENÇÃO: \"{pior_comando}\" levou mais de 5s -- vale investigar por que.")
+        print()
+        print("  Nota: comandos NÃO reconhecidos como pc_control (ex.: caíram em raciocínio")
+        print("  livre/LLM) tendem a ser mais lentos por natureza -- isso sozinho não é bug,")
+        print("  mas se um comando que deveria ser direto (ex. \"diminui o volume\") aparecer")
+        print("  aqui, é sinal de regressão no reconhecimento de intenção.")
+        print()
+        print("  Nota 2: falhas em comandos ligados ao YouTube (tocar, pular anúncio, pausar,")
+        print("  continuar) podem ser o navegador não ter tido tempo real de carregar a")
+        print("  página entre um comando e o outro, não necessariamente um bug -- reveja as")
+        print("  respostas com atenção antes de assumir regressão.")
 
     def summary(self) -> bool:
         total = len(self.results)
@@ -195,6 +250,9 @@ def run() -> int:
     print("=" * 70)
     print("ZARA — RELATORIO FUNCIONAL REAL")
     print("=" * 70)
+    print()
+    print("Este relatório tem efeito REAL na tela: abre navegador, toca áudio,")
+    print("muda volume e brilho de verdade. Não é simulação.")
 
     backend = _candidate_backend_path()
     if backend is None:
@@ -327,6 +385,47 @@ def run() -> int:
         report.add("Lembretes (cancelar, limpa o teste)", bool(cancelled), f"resposta: {cancel_resp}")
     else:
         report.add("Lembretes (criar)", False, f"resposta inesperada: {resp}")
+
+    # --- Sequencia de comandos de voz, enviados por TEXTO (mesma cadeia que
+    # a voz usa de verdade: handle_send_message -> _try_pc_intent -> action).
+    # Pedido do Alex: testar o que a ZARA fazia por voz -- navegador, YouTube,
+    # Spotify, volume, brilho, janelas -- sem precisar falar, e medir o tempo
+    # de resposta de cada um. ISSO TEM EFEITO REAL NA TELA: abre navegador,
+    # toca audio, muda volume/brilho de verdade.
+    print()
+    print("=" * 70)
+    print("SEQUÊNCIA DE COMANDOS DE VOZ (por texto) — efeito real na tela")
+    print("=" * 70)
+    print()
+    # (comando, segundos de espera DEPOIS dele antes do proximo -- YouTube
+    # precisa de tempo de carregamento de pagina de verdade; sem isso, o
+    # proximo comando (ex. "toca hans zimmer") roda antes da pagina existir
+    # e falha por timing, nao por bug real. Comandos instantaneos (volume,
+    # brilho, minimizar) nao precisam de espera longa.
+    comandos = [
+        ("abre o youtube", 4.0),
+        ("pesquisa hans zimmer no youtube", 4.0),
+        ("toca hans zimmer", 3.0),
+        ("pula o anuncio", 1.0),
+        ("diminui o volume", 0.5),
+        ("diminui o brilho", 0.5),
+        ("pula essa", 2.0),
+        ("pausa", 1.0),
+        ("continua", 1.0),
+        ("abre o spotify", 2.0),
+        ("minimiza", 0.5),
+        ("foca no chrome", 0.5),
+        ("abre o chrome no perfil trabalho", 0.5),
+    ]
+    for comando, espera_depois in comandos:
+        resp, latencia_ms = zara.say(comando, timeout=25.0)
+        response_obj = (resp or {}).get("response") if resp else None
+        engine = response_obj.get("engine", "sem resposta") if isinstance(response_obj, dict) else "sem resposta"
+        texto_resposta = response_obj.get("response", "") if isinstance(response_obj, dict) else str(resp)
+        report.add_voice_step(comando, engine, texto_resposta, latencia_ms)
+        time.sleep(espera_depois)
+
+    report.voice_summary()
 
     # --- Inventario real de actions -- contexto de escala, nao pass/fail ---
     resp = zara.call("action-list")

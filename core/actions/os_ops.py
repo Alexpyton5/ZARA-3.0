@@ -1905,7 +1905,15 @@ def window_close_action(hwnd: int | None = None) -> ActionResult:
     title = _window_text(hwnd).strip()
     process = _window_process_name(hwnd)
     protected = f"{title} {process}".casefold()
-    if any(token in protected for token in ("chatgpt", "zara room", "zara.exe")):
+    # ZARA-JANELA-AUTOPROTECAO-001: a janela real da ZARA tem titulo "ZARA
+    # 3.0" (confirmado testando o candidato empacotado nesta madrugada) e
+    # processo "ZARA 3.0.exe" empacotado ou "python.exe"/"electron.exe" em
+    # contexto de dev -- nenhum dos tokens antigos ("zara room", "zara.exe")
+    # batia com o titulo real, entao a ZARA nunca era reconhecida como
+    # protegida contra o proprio fechamento. Chave pelo titulo (especifico),
+    # nao pelo nome de processo generico (python.exe fecharia qualquer
+    # janela Python, proteção larga demais).
+    if any(token in protected for token in ("chatgpt", "zara room", "zara.exe", "zara 3.0")):
         return ActionResult(success=False, error="Essa janela está protegida e não será fechada.", data={"hwnd": hwnd, "status": "PROTECTED"})
     pid = _window_pid(hwnd)
     if not ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0):

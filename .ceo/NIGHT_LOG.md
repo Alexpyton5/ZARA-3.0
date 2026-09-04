@@ -212,3 +212,68 @@ estava sendo descartado no tree-shaking). Handshake real do candidato confirmado
 
 **Não posso verificar som.** Isso é fisicamente só o Alex — microfone captando e voz saindo da
 caixa de som. É o teste mais importante pra pedir amanhã.
+
+### Alex pediu loop contínuo, silêncio total, até a cota acabar
+
+Daqui pra frente, log terso (commits têm o detalhe). Feito depois disso, todo testado e
+empacotado: Core reage a texto/ação de verdade (`c3a28d4`, exigiu corrigir 3 testes que
+assumiam sequência exata de IPC — corrigido de verdade, não revertido desta vez). Relógio/
+saudação reais. Confirmado que abrir apps já funciona (Notepad testado). Barge-in real no
+botão de voz (`7fad5a0`). ForYouCard/CommunicationsCard/ActiveProjectCard/nav da Sidebar:
+sem backend real por trás (precisam de integração nova tipo WhatsApp/Gmail ou conceito de
+"projeto" que não existe) — não fabriquei dado falso, fica como está. Continuando a
+procurar canal real sem uso.
+
+### Checkpoint (log terso daqui pra frente)
+
+Commits desde o último: memória IPC bridge (`b7824ac`), timeout de boot 45s→75s medido
+(`e933820`), candidato consolidado (`7dc74f6`). 8 handshakes reais confirmados na madrugada,
+zero regressão. Continuando a procurar conexão real sem uso.
+
+### Suite completa (`--full`): 45 falhos, 1612 passou, 28 skip — confirmadas pré-existentes
+
+Zero novas. Investiguei 1 delas a fundo (`test_os_power_gate_207.py::test_destructive_power_denied_by_default`)
+antes de decidir se valia mexer: **não é regressão de segurança.** O decorator `@action` (comment
+próprio em `action_registry.py:566`: "Wrap the function so direct calls still go through registry
+gates") faz chamada direta a `os_power_action(...)` passar pelo gate de capability/Supercérebro
+ANTES de chegar no check interno de `ZARA_ALLOW_OS_POWER` que o teste espera (`POWER_ACTION_DENIED`).
+Ou seja: hoje há DUAS camadas de proteção contra shutdown/restart/hibernate, o teste só conhece a
+mais antiga (interna), e a mais nova (capability, mais forte) intercepta primeiro. A trava real
+funciona — é o teste que ficou desatualizado depois de um hardening.
+
+Os outros 44 (remote approval, router integrity, project context, system_env, voice usability
+etc.) eu não abri. Corrigir teste de segurança errado, sem entender o motivo de cada um, é
+exatamente o tipo de coisa que pode mascarar regressão de verdade. Isso é tarefa própria — não
+cabe dentro de "conectar a interface" de uma madrugada, mesmo com "menos auditoria" pedido.
+Registrado para o Alex decidir se quer abrir essa frente formalmente.
+
+### 6 smoke tests corrigidos (test-debt, não bug de produto)
+
+`intent_classifier.classify`→`classify_intent_with_llm`, `pc_voice_intent._resolve_pc_intent`→
+`PcVoiceIntentDetector.detect`, `_LOCAL_DETERMINISTIC_ACTIONS` set→frozenset,
+`GeminiLive`→`GeminiLiveVoice`, `voice_tts.speak`→`TTSManager.speak`, encoding UTF-8 faltando
+em `test_main_ipc_registration`. 45→39 falhos, zero regressão (`644386f`). Não toquei nos
+outros 39 (gates de segurança/energia/aprovação remota) — continuam registrados, não escondidos.
+
+### ACHADO QUE MERECE ATENÇÃO — "formatar C" pode não estar bloqueado
+
+Ao investigar `test_050_blocked_drive_format_is_not_an_executable_route` (falha pré-existente,
+não mexi no gate): não existe NENHUM padrão de "formatar" em `core/pc_voice_intent.py` hoje —
+`grep -n "formatar" core/pc_voice_intent.py` não acha nada. O teste espera que a frase seja
+reconhecida como PC-intent E bloqueada (`action=""`, `blocked=True`), especificamente para
+travar a cadeia ali e NUNCA cair no caminho de raciocínio livre / LLM, que poderia (em teoria)
+decidir chamar a action `terminal` (existe, roda comando de shell arbitrário sob gate de risco)
+com um comando de formatação de verdade.
+
+**Atualização, mesma investigação:** conferi o gate da action `terminal` (`capability=
+"CODE_EXECUTION"`, `risk="HIGH"`) — CODE_EXECUTION não está na lista {"READ_ONLY",
+"LOCAL_PC_CONTROL"} que dispensa Supercérebro, e Supercérebro vem OFF por padrão (confirmado
+via `self-status` real mais cedo nesta madrugada). Ou seja: mesmo sem o padrão de "formatar" no
+blocklist do PC-intent, um comando destrutivo que caísse no caminho de raciocínio livre e
+tentasse chamar `terminal` ainda esbarraria no gate de capability, e ações HIGH risk também
+passam pelo fluxo de confirmação explícita (`action-confirm`). **Não é porta aberta para
+execução real** — o pior efeito prático da lacuna é a ZARA não dar a mensagem clara e honesta
+de "isso está bloqueado" para essa frase específica, ela provavelmente cai no "não sei fazer
+isso" genérico. Ainda vale registrar e considerar devolver o padrão (é barato, é só regex), mas
+não é o incêndio que a primeira leitura sugeria. Não mexi — mesmo sendo baixo risco, é
+`core/pc_voice_intent.py`, e prefiro deixar pra alguém decidir com calma.

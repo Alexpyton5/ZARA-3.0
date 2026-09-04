@@ -17,6 +17,7 @@ import { useSystemMetrics } from './useSystemMetrics';
 import { useBattery } from './useBattery';
 import { useWifiStatus } from './useWifiStatus';
 import { usePowerPlans } from './usePowerPlans';
+import { useClock } from './useClock';
 import auroraBackground from '../../../assets/zara-home/aurora-master-refined.png';
 
 /**
@@ -39,6 +40,7 @@ export function ZaraHome() {
   const battery = useBattery();
   const wifi = useWifiStatus();
   const power = usePowerPlans();
+  const clock = useClock();
 
   // TODO: nome/foto reais dependem de uma integração de conta ainda não
   // construída (Google/Microsoft) — fora do escopo desta missão, per
@@ -82,10 +84,10 @@ export function ZaraHome() {
         )}
         <span className="zh-clock">
           <span className="zh-clock-time">
-            15:30
+            {clock.time}
           </span>
           <span className="zh-clock-date">
-            Dom · 19 Mai
+            {clock.date}
           </span>
         </span>
         <WindowControls />

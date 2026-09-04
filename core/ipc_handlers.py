@@ -3479,6 +3479,11 @@ class IPCHandler:
             await self.send_error(msg, "No text provided")
             return
 
+        # ZARA-CORE-STATE-TEXTO-001: o Core (bola central da Home) so reagia a
+        # eventos de voz. Comando de texto nunca movia o estado -- ficava
+        # "idle" o tempo todo, mesmo processando. Cada saida abaixo devolve
+        # para STANDBY, entao nunca fica travado em THINKING.
+        await self.send_event('state-change', 'THINKING')
         print(f"[IPC] Processing message ({len(text)} chars, engine: {engine})")
         # ZARA-ONDE-ELE-ESTA-001: digitou no app, entao esta na frente do PC.
         self._marcar_canal("computador")
@@ -3491,6 +3496,7 @@ class IPCHandler:
                 'response': jarvis_reply,
                 'engine': 'jarvis_plan',
             })
+            await self.send_event('state-change', 'STANDBY')
             return
 
         # ZARA-REMINDER-VOICE-BINDING-001: texto e voz usam o MESMO intent handler.
@@ -3501,6 +3507,7 @@ class IPCHandler:
                 'response': reminder_reply,
                 'engine': 'reminder',
             })
+            await self.send_event('state-change', 'STANDBY')
             return
 
         memory_reply = await self._try_operational_memory_intent(text)
@@ -3510,6 +3517,7 @@ class IPCHandler:
                 'response': memory_reply,
                 'engine': 'operational_memory',
             })
+            await self.send_event('state-change', 'STANDBY')
             return
 
         # Autoconhecimento usa estado real e o mesmo caminho em texto e voz.
@@ -3520,6 +3528,7 @@ class IPCHandler:
                 'response': self_reply,
                 'engine': 'self_knowledge',
             })
+            await self.send_event('state-change', 'STANDBY')
             return
 
         file_reply = await self._try_file_intent(text)
@@ -3529,6 +3538,7 @@ class IPCHandler:
                 'response': file_reply,
                 'engine': 'file_control',
             })
+            await self.send_event('state-change', 'STANDBY')
             return
 
         # ZARA-COMPUTER-CONTROL-VOLUME-001: texto e voz usam o MESMO intent handler.
@@ -3555,6 +3565,7 @@ class IPCHandler:
                 'engine': 'pc_control',
                 'selo': selo,
             })
+            await self.send_event('state-change', 'STANDBY')
             return
 
         if _looks_like_unhandled_local_action(text):
@@ -3571,6 +3582,7 @@ class IPCHandler:
                 'response': reply,
                 'engine': engine_usado,
             })
+            await self.send_event('state-change', 'STANDBY')
             return
 
         # ETAPA 1 (raciocinio livre): guarda a frase original, antes do
@@ -3612,6 +3624,7 @@ class IPCHandler:
                 'response': response,
                 'engine': engine_used
             })
+            await self.send_event('state-change', 'STANDBY')
 
             # Text chat already returns this response to the invoking renderer.
             # Voice turns still use the asynchronous 'message' event path.
@@ -3623,6 +3636,7 @@ class IPCHandler:
                 "system", "Backend indisponível para esta solicitação.", engine
             )
             await self.send_error(msg, str(e))
+            await self.send_event('state-change', 'ERROR')
 
     async def handle_interrupt(self, msg: IPCMessage):
         print("[IPC] Interrupt requested")
@@ -3671,13 +3685,21 @@ class IPCHandler:
         # Parameters may contain credentials or private content; never log them.
         print(f"[IPC] Executing action: {action}")
 
+        # ZARA-CORE-STATE-ACAO-001: mesmo gap do handle_send_message -- o Core
+        # nunca mostrava EXECUTANDO/ERRO durante uma acao real (clique de
+        # botao na Home, ex. os_wifi_status, os_power_plan_set). Result.success
+        # False sem excecao (ex. _failure()) tambem conta como erro visual.
+        await self.send_event('state-change', 'EXECUTING')
         try:
             result = await execute_action(action, **params)
             await self.send_response(msg.request_id, {'success': True, 'result': result})
+            result_ok = getattr(result, 'success', True)
+            await self.send_event('state-change', 'SUCCESS' if result_ok else 'ERROR')
         except Exception as e:
             print(f"[IPC] Action error: {e}")
             traceback.print_exc()
             await self.send_error(msg, str(e))
+            await self.send_event('state-change', 'ERROR')
 
     async def handle_action_confirm(self, msg: IPCMessage):
         """Consume a private one-shot confirmation and execute the bound action."""

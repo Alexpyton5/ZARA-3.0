@@ -188,7 +188,10 @@ def test_ipc_cannot_bypass_supercerebro_off_with_confirm_true(capsys):
     finally:
         registry.unregister(action_name)
 
-    result = sent[-1].response["result"]
+    # ZARA-CORE-STATE-ACAO-001: handle_action_execute agora tambem manda
+    # state-change (EXECUTING/ERROR) em volta da resposta -- sent[-1] deixou
+    # de ser garantidamente a resposta. Filtra pelo tipo em vez de posicao.
+    result = next(m for m in sent if m.type == "response").response["result"]
     assert not result.success
     assert calls == []
     assert "must-not-be-logged" not in capsys.readouterr().out

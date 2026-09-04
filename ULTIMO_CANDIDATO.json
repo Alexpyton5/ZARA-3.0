@@ -1,14 +1,14 @@
 {
-  "BUILD_ID": "release-candidate-20260904-0258",
-  "BUILD_TIMESTAMP": "2026-09-04T02:58:00-03:00",
+  "BUILD_ID": "release-candidate-20260904-0708",
+  "BUILD_TIMESTAMP": "2026-09-04T07:08:00-03:00",
   "BASE_CANDIDATE": "release",
   "BUILD_METHOD": "npm run electron:build (tsc + vite build + tsc electron + electron-builder), sidecar via dist-sidecar/zara-backend.exe (extraResources)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "d6057ba",
+  "GIT_COMMIT": "79db830",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\win-unpacked\\ZARA 3.0.exe",
   "EXE_SHA256": "67dc2a7036860a68e5312c212c31b8772ac463ed0289fcc44897867f55075e89",
-  "BACKEND_SHA256": "1139689a74f6dbd28f6953488ca7803cb4002f9ce595f9b6e3dda792150d4597",
-  "ASAR_SHA256": "37596198f965a9a76cdbac3090c281c451b82250f588da8ee67d4af051312a0e",
-  "DELTA": "T1 + Home real + Rede/Energia/Processos/Diagnostico conectados + agora o mais importante: PONTE DE AUDIO DE VOZ. A Home nova nunca chamava aecAudio.ts (captura de microfone com AEC) nem tocava a fala da Kore -- o botao de voz parecia ligado mas nao ouvia nem falava de verdade. Corrigido em VoiceDock.tsx reusando as funcoes que ja existiam prontas. Handshake real confirmado 4x nesta madrugada. PRECISA DE TESTE FISICO DE AUDIO -- eu nao consigo ouvir. Fale 'Zara, que horas sao?' e confira se ela ouve e responde por voz."
+  "BACKEND_SHA256": "dcf98235b00f1550ac5906aef69d459785efb42a896f8da23774e8d5409909d0",
+  "ASAR_SHA256": "e1a30ef5f4cbc0796f61174f1f7c2d882f610d967f0cfdd82feaaa8ce1af86a5",
+  "DELTA": "Tudo dos candidatos anteriores + Core reage de verdade a texto/acao (THINKING/EXECUTING/SUCCESS/ERROR/STANDBY) + relogio/saudacao reais + confirmado que abrir apps ja funciona (Notepad testado via IPC bruto). Handshake real confirmado 5x nesta madrugada. Continua faltando confirmacao fisica de audio (microfone/fala) e visual da tela."
 }

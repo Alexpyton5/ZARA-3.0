@@ -148,7 +148,10 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
         )
     )
 
-    assert sent[-1].response["response"] == "Tudo certo, Alex."
+    # ZARA-CORE-STATE-TEXTO-001: handle_send_message agora manda state-change
+    # (STANDBY) depois da resposta -- sent[-1] deixou de ser garantidamente a
+    # resposta. Filtra pelo tipo em vez de posicao.
+    assert next(m for m in sent if m.type == "response").response["response"] == "Tudo certo, Alex."
     restarted = ConversationHistory(path)
     assert [(item["role"], item["content"]) for item in restarted.list_recent()] == [
         ("user", "Como está o projeto?"),

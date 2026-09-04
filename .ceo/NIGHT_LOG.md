@@ -91,3 +91,37 @@ e backup, não efeito colateral de T1/T2).
 está perto o suficiente pra merecer atenção logo — cada rebuild completo (sidecar + Electron)
 usa uns GBs de temp/build. Não vou fazer limpeza ampla de disco sem autorização específica;
 só sinalizando pra manhã.
+
+### Alex mandou mensagem ao vivo: "continue trabalhando em melhorias e conexões da interface"
+
+Isso quebrou o silêncio da madrugada (é uma mensagem real, não notificação de tarefa). Respondi
+curto e continuei.
+
+Achei `ZARA_HOME_UI_INTEGRATION.md` — outra sessão já tinha trocado o iframe antigo da Home por
+componentes React reais, com texto/voz/Core/CPU-RAM-disco/bateria já conectados de verdade, mas
+**nunca commitado**. Documento próprio já apontava 2 conexões triviais pendentes: Wi-Fi e planos
+de energia, ambos com action real no backend, só faltando o fio até o componente.
+
+Liguei os dois: `useWifiStatus.ts` (os_wifi_status) e `usePowerPlans.ts` (os_power_plan_list/
+os_power_plan_set, com reverificação após trocar) — ambos em
+`core/actions/system_advanced.py`, o MESMO módulo que só passou a carregar no pacote depois do
+fix de hiddenimports desta madrugada (commit ada233c). Sem os dois fixes juntos, essas duas
+conexões não teriam onde pousar.
+
+`npm run typecheck` limpo. `npm run lint`: 3 erros pré-existentes (`'React' is not defined` em
+SystemPanel.tsx x2 e TextCommandInput.tsx, de antes desta sessão) — não mexi, fora do meu
+escopo. `npm run build` e `npm run electron:build` (pipeline completo, gera o EXE + instalador)
+passaram limpo.
+
+Rebuild completo virou candidato novo em `frontend/release/win-unpacked` (sidecar corrigido +
+UI nova juntos). Testei de novo o mesmo jeito do T1: `zara-backend.exe` sobreviveu ao timeout de
+45s do Electron — handshake real confirmado outra vez. Fechei limpo (`taskkill /F /T`), sem
+órfão. Limpei o `_MEI` que esse teste deixou.
+
+Commitei tudo (`9fb7404`) — o trabalho da outra sessão junto com as duas conexões de hoje, já
+que é um delta coerente (a própria Home + suas conexões) e Alex pediu para continuar
+exatamente essa frente.
+
+**O que não está provado:** ninguém viu a tela. Nível de evidência continua PACKAGED_RUNTIME
+(processo real, sem crash, handshake real), não PHYSICAL_BY_ALEX. Isso só fecha com o Alex
+abrindo o candidato e olhando.

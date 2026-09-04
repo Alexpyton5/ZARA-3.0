@@ -20,7 +20,7 @@ declare global {
       };
       memoryGalaxy?: { list?: () => Promise<any> };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
-      system?: { metrics?: () => Promise<any>; info?: () => Promise<any> };
+      system?: { metrics?: () => Promise<any>; info?: () => Promise<any>; selfStatus?: () => Promise<any> };
       voice?: {
         start?: () => Promise<any>;
         stop?: () => Promise<any>;

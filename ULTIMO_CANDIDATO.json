@@ -1,14 +1,14 @@
 {
-  "BUILD_ID": "release-candidate-20260904-0140",
-  "BUILD_TIMESTAMP": "2026-09-04T01:40:00-03:00",
+  "BUILD_ID": "release-candidate-20260904-0226",
+  "BUILD_TIMESTAMP": "2026-09-04T02:26:00-03:00",
   "BASE_CANDIDATE": "release",
   "BUILD_METHOD": "npm run electron:build (tsc + vite build + tsc electron + electron-builder), sidecar via dist-sidecar/zara-backend.exe (extraResources)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "1dc782c",
+  "GIT_COMMIT": "9fb7404",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\win-unpacked\\ZARA 3.0.exe",
   "EXE_SHA256": "67dc2a7036860a68e5312c212c31b8772ac463ed0289fcc44897867f55075e89",
   "BACKEND_SHA256": "1139689a74f6dbd28f6953488ca7803cb4002f9ce595f9b6e3dda792150d4597",
-  "ASAR_SHA256": "248597cea34a3dcf15961a1ef0218222b1c1a11562dfd11dae49dea0f77eb677",
-  "DELTA": "T1 (sidecar hiddenimports) + Home Titanium Emerald (componentes React reais, ja em progresso de outra sessao) + T2 madrugada: Sistema > Rede e Sistema > Energia agora usam actions reais (os_wifi_status, os_power_plan_list/set). Handshake real (backend sobrevive ao timeout de 45s do Electron) confirmado 2x nesta madrugada. Confirmacao visual PENDENTE (PHYSICAL_BY_ALEX)."
+  "ASAR_SHA256": "32f0c8884f951bee7713d492e940bdadbf74015e70123f48217032e7970a7629",
+  "DELTA": "T1 (sidecar hiddenimports) + Home Titanium Emerald real + Rede/Energia conectados + agora tambem: Manutencao > Ver processos (system_processes) e Diagnostico inteligente > Analisar agora (canal novo self-status, ponte de 4 pontos ate o backend que ja existia pronto). Handshake real confirmado 3x nesta madrugada em candidatos sucessivos. Confirmacao visual PENDENTE (PHYSICAL_BY_ALEX) - nenhuma tela foi vista ainda."
 }

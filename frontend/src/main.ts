@@ -716,6 +716,7 @@ function setupIPC(): void {
   ipcMain.handle('action-execute', executeActionWithConfirmation)
   ipcMain.handle('action-list', () => sendToPython('action-list'))
   ipcMain.handle('system-metrics', () => sendToPython('system-metrics'))
+  ipcMain.handle('self-status', () => sendToPython('self-status'))
   ipcMain.handle('system-info', () => sendToPython('system-info'))
   ipcMain.handle('voice-start', () => sendToPython('voice-start'))
   ipcMain.handle('voice-stop', () => sendToPython('voice-stop'))

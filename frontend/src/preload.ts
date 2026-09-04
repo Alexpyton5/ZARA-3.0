@@ -45,6 +45,9 @@ const zaraAPI = {
   system: {
     metrics: () => ipcRenderer.invoke('system-metrics'),
     info: () => ipcRenderer.invoke('system-info'),
+    // ZARA-DIAGNOSTICO-CARD-001: canal 'self-status' já existia no backend
+    // (handle_self_status), sem ponte até o renderer. Só isso faltava.
+    selfStatus: () => ipcRenderer.invoke('self-status'),
   },
 
   // Voice

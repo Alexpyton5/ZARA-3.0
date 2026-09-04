@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from 'react';
 import {
   Cpu, MemoryStick, HardDrive, MonitorCog, BatteryFull, Thermometer, Wifi,
   Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf, ChevronRight,
@@ -21,9 +22,11 @@ function metricColorClass(value: number | null): string {
   return value === null ? 'zh-metric-unknown' : 'zh-metric-neutral';
 }
 
-function ActionCard({ icon, label, sub }: { icon: React.ReactNode; label: string; sub: string }) {
+function ActionCard({
+  icon, label, sub, onClick, disabled,
+}: { icon: ReactNode; label: string; sub: string; onClick?: () => void; disabled?: boolean }) {
   return (
-    <button className="zh-action-card" type="button">
+    <button className="zh-action-card" type="button" onClick={onClick} disabled={disabled}>
       <span className="zh-action-card-icon">{icon}</span>
       <span className="zh-action-card-text">
         <strong>{label}</strong>
@@ -33,7 +36,7 @@ function ActionCard({ icon, label, sub }: { icon: React.ReactNode; label: string
   );
 }
 
-function ActionRow({ icon, label, sub }: { icon: React.ReactNode; label: string; sub: string }) {
+function ActionRow({ icon, label, sub }: { icon: ReactNode; label: string; sub: string }) {
   return (
     <div className="zh-action-row">
       <span className="zh-action-icon">{icon}</span>
@@ -46,6 +49,43 @@ function ActionRow({ icon, label, sub }: { icon: React.ReactNode; label: string;
 }
 
 export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps) {
+  const [processSub, setProcessSub] = useState('Indisponível');
+  const [processLoading, setProcessLoading] = useState(false);
+  const [diagnosticSummary, setDiagnosticSummary] = useState<string | null>(null);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+
+  function handleAnalisarAgora() {
+    const selfStatus = window.zaraIPC?.system?.selfStatus;
+    if (!selfStatus || diagnosticLoading) return;
+    setDiagnosticLoading(true);
+    selfStatus()
+      .then((snapshot: { capabilities?: Array<{ status?: string }> } | null) => {
+        const capabilities = snapshot?.capabilities;
+        if (!Array.isArray(capabilities) || capabilities.length === 0) {
+          setDiagnosticSummary('Diagnóstico indisponível agora.');
+          return;
+        }
+        const available = capabilities.filter((c) => c.status === 'AVAILABLE').length;
+        setDiagnosticSummary(`${available}/${capabilities.length} capacidades disponíveis agora.`);
+      })
+      .catch(() => setDiagnosticSummary('Diagnóstico indisponível agora.'))
+      .finally(() => setDiagnosticLoading(false));
+  }
+
+  function handleVerProcessos() {
+    const execute = window.zaraIPC?.action?.execute;
+    if (!execute || processLoading) return;
+    setProcessLoading(true);
+    execute('system_processes', { limit: 500 })
+      .then((response: { result?: { success?: boolean; data?: { count?: number } } }) => {
+        const result = response?.result;
+        const count = result?.data?.count;
+        setProcessSub(result?.success && typeof count === 'number' ? `${count} processos` : 'Indisponível');
+      })
+      .catch(() => setProcessSub('Indisponível'))
+      .finally(() => setProcessLoading(false));
+  }
+
   return (
     <section className="zh-system-row zh-glass-panel" aria-label="Sistema">
       <h1 className="zh-system-title">Sistema</h1>
@@ -100,7 +140,13 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
             <ActionCard icon={<Database size={16} strokeWidth={1.7} />} label="Liberar espaço" sub="Indisponível" />
             <ActionCard icon={<Trash2 size={16} strokeWidth={1.7} />} label="Limpar temporários" sub="Indisponível" />
             <ActionCard icon={<Power size={16} strokeWidth={1.7} />} label="Gerenciar inicialização" sub="Indisponível" />
-            <ActionCard icon={<ListChecks size={16} strokeWidth={1.7} />} label="Ver processos" sub="Indisponível" />
+            <ActionCard
+              icon={<ListChecks size={16} strokeWidth={1.7} />}
+              label="Ver processos"
+              sub={processLoading ? 'Consultando…' : processSub}
+              onClick={handleVerProcessos}
+              disabled={processLoading}
+            />
             <ActionCard icon={<RotateCw size={16} strokeWidth={1.7} />} label="Atualizar sistema" sub="Indisponível" />
             <ActionCard icon={<Activity size={16} strokeWidth={1.7} />} label="Diagnóstico ZARA" sub="Indisponível" />
           </div>
@@ -156,10 +202,17 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
             />
           </svg>
           <p className="zh-diagnostic-title">Por que meu PC está lento?</p>
-          <p className="zh-not-connected">
-            ZARA pode analisar quando o diagnóstico real estiver conectado.
+          <p className={diagnosticSummary ? undefined : 'zh-not-connected'}>
+            {diagnosticLoading
+              ? 'Analisando…'
+              : diagnosticSummary ?? 'ZARA pode analisar as próprias capacidades agora.'}
           </p>
-          <button className="zh-diagnostic-btn" type="button" disabled>
+          <button
+            className="zh-diagnostic-btn"
+            type="button"
+            onClick={handleAnalisarAgora}
+            disabled={diagnosticLoading || !window.zaraIPC?.system?.selfStatus}
+          >
             Analisar agora
             <ChevronRight size={14} strokeWidth={2} />
           </button>

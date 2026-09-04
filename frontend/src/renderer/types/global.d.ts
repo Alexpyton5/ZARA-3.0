@@ -19,6 +19,16 @@ declare global {
         clear?: () => Promise<any>;
       };
       memoryGalaxy?: { list?: () => Promise<any> };
+      userMemory?: {
+        add?: (payload: { fact: string; category?: string; confidence?: number; source?: string }) => Promise<any>;
+        search?: (payload: { query: string; since?: number; until?: number; limit?: number }) => Promise<any>;
+        list?: (payload?: { category?: string; status?: string }) => Promise<any>;
+        forget?: (id: string) => Promise<any>;
+      };
+      projectMemory?: {
+        get?: (key: string) => Promise<any>;
+        list?: () => Promise<any>;
+      };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
       system?: { metrics?: () => Promise<any>; info?: () => Promise<any>; selfStatus?: () => Promise<any> };
       voice?: {

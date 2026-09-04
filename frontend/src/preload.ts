@@ -35,6 +35,24 @@ const zaraAPI = {
     list: () => ipcRenderer.invoke('memory-galaxy-list'),
   },
 
+  // ZARA-MEMORIA-BRIDGE-001: handlers ja existiam prontos no backend
+  // (handle_memory_user_*, handle_project_memory_*), sem nenhuma ponte ate
+  // o renderer -- nem preload, nem main.ts. So a Home ainda nao tem uma
+  // tela que consuma isto (fica para uma missao de UI de memoria).
+  userMemory: {
+    add: (payload: { fact: string; category?: string; confidence?: number; source?: string }) =>
+      ipcRenderer.invoke('memory-user-add', payload),
+    search: (payload: { query: string; since?: number; until?: number; limit?: number }) =>
+      ipcRenderer.invoke('memory-user-search', payload),
+    list: (payload?: { category?: string; status?: string }) =>
+      ipcRenderer.invoke('memory-user-list', payload),
+    forget: (id: string) => ipcRenderer.invoke('memory-user-forget', { id }),
+  },
+  projectMemory: {
+    get: (key: string) => ipcRenderer.invoke('project-memory-get', { key }),
+    list: () => ipcRenderer.invoke('project-memory-list'),
+  },
+
   // Actions
   action: {
     execute: (action: string, params: Record<string, any>) => ipcRenderer.invoke('action-execute', action, params),

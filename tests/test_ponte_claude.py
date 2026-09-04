@@ -334,7 +334,11 @@ def test_confirma_quando_a_mensagem_aparece_na_conversa_certa(monkeypatch):
 
     r = claude_enviar_action("funcionou")
     assert r.success is True
-    assert r.output == "Mensagem enviada e confirmada no histórico do Claude."
+    # ZARA-TEST-DEBT-001: copy mudou pra tom mais natural (ver
+    # claude_enviar_action, aviso_ok="Mandei para o Claude."); a verificacao
+    # continua real -- este teste ainda mocka _mensagem_chegou_ao_claude=True,
+    # so o texto do rotulo pos-confirmacao mudou.
+    assert r.output == "Mandei para o Claude."
 
 
 def test_nao_envia_mensagem_vazia():

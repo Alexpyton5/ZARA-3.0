@@ -324,3 +324,14 @@ um dia configurar isso, precisa ser através da própria ZARA (que grava em
 
 **Não é bug — é o comportamento padrão esperado de "nunca configurado pelo app ainda".** Fechando
 sem mexer em código.
+
+### Bug real encontrado e corrigido: `build_project_context` nunca funcionou
+
+`memory/project_memory.py::build_project_context` referenciava `ContextDatum` e
+`build_context_envelope` — nenhum dos dois existia em lugar nenhum do projeto. NameError
+garantido em qualquer chamada real. Não é test-debt, é código que nunca rodou. Não é chamado por
+produção hoje (grep confirma) — dead code agora, mas quebrado, e algo pode vir a chamar.
+Implementado do zero a partir do contrato exato dos 3 testes (budget/prioridade/required).
+7/7 passou na primeira tentativa. `c9b9753`.
+
+Continuando a varredura dos ~33 restantes.

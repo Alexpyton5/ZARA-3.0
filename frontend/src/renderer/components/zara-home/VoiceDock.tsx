@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Grid3x3, Folder, AudioLines, HelpCircle, History, MoreHorizontal } from 'lucide-react';
 import type { CoreState } from './types';
+import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
 
 interface VoiceDockProps {
   coreState: CoreState;
@@ -11,22 +12,61 @@ interface VoiceDockProps {
  * `.stop()` — os MESMOS canais que o resto da ZARA (HUD, Orb) já usa para
  * ligar o pipeline de voz real (Gemini Live). Não substitui nem duplica
  * nada da voz; só oferece outro botão para o canal existente.
+ *
+ * ZARA-HOME-AUDIO-BRIDGE-001: a Home nova (React) nunca chamava
+ * `aecAudio.ts` nem assinava `on.voiceOutputAudio` — o botão dizia "ouvindo"
+ * mas nenhum áudio de microfone saía do renderer, e a fala da Kore não tinha
+ * onde tocar. `iniciarAudioAec`/`pararAudioAec`/`tocarKore`/`cortarKore` já
+ * existiam prontos (mesma técnica usada pelo HUD antigo), só não estavam
+ * plugados nesta árvore de componentes.
  */
 export function VoiceDock({ coreState }: VoiceDockProps) {
   const [listening, setListening] = useState(false);
   const voiceAvailable = Boolean(window.zaraIPC?.voice?.start && window.zaraIPC?.voice?.stop);
+
+  // A saída de voz (Kore) precisa estar pronta para tocar mesmo antes do
+  // Alex clicar em "ouvir" — barge-in e respostas de texto também falam.
+  useEffect(() => {
+    const subscribe = window.zaraIPC?.on?.voiceOutputAudio;
+    if (!subscribe) return;
+    const unsubscribe = subscribe((data) => {
+      if (data?.stop) {
+        cortarKore();
+        return;
+      }
+      if (data?.pcm) {
+        tocarKore(data.pcm, data.sampleRate || 24000);
+      }
+    });
+    return () => {
+      unsubscribe?.();
+      cortarKore();
+    };
+  }, []);
 
   async function toggleVoice() {
     if (!voiceAvailable) return;
     try {
       if (listening) {
         await window.zaraIPC!.voice!.stop!();
+        pararAudioAec();
         setListening(false);
       } else {
         await window.zaraIPC!.voice!.start!();
+        const resultado = await iniciarAudioAec((pcmBase64) => {
+          window.zaraIPC?.voice?.sendMicChunk?.(pcmBase64);
+        });
+        if (!resultado.ok) {
+          // Backend ligou o pipeline mas o navegador negou o microfone --
+          // desliga dos dois lados em vez de fingir que está ouvindo.
+          await window.zaraIPC!.voice!.stop!();
+          setListening(false);
+          return;
+        }
         setListening(true);
       }
     } catch {
+      pararAudioAec();
       setListening(false);
     }
   }

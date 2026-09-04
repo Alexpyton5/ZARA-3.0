@@ -1,14 +1,14 @@
 {
-  "BUILD_ID": "release-candidate-20260904-0226",
-  "BUILD_TIMESTAMP": "2026-09-04T02:26:00-03:00",
+  "BUILD_ID": "release-candidate-20260904-0258",
+  "BUILD_TIMESTAMP": "2026-09-04T02:58:00-03:00",
   "BASE_CANDIDATE": "release",
   "BUILD_METHOD": "npm run electron:build (tsc + vite build + tsc electron + electron-builder), sidecar via dist-sidecar/zara-backend.exe (extraResources)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "9fb7404",
+  "GIT_COMMIT": "d6057ba",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\win-unpacked\\ZARA 3.0.exe",
   "EXE_SHA256": "67dc2a7036860a68e5312c212c31b8772ac463ed0289fcc44897867f55075e89",
   "BACKEND_SHA256": "1139689a74f6dbd28f6953488ca7803cb4002f9ce595f9b6e3dda792150d4597",
-  "ASAR_SHA256": "32f0c8884f951bee7713d492e940bdadbf74015e70123f48217032e7970a7629",
-  "DELTA": "T1 (sidecar hiddenimports) + Home Titanium Emerald real + Rede/Energia conectados + agora tambem: Manutencao > Ver processos (system_processes) e Diagnostico inteligente > Analisar agora (canal novo self-status, ponte de 4 pontos ate o backend que ja existia pronto). Handshake real confirmado 3x nesta madrugada em candidatos sucessivos. Confirmacao visual PENDENTE (PHYSICAL_BY_ALEX) - nenhuma tela foi vista ainda."
+  "ASAR_SHA256": "37596198f965a9a76cdbac3090c281c451b82250f588da8ee67d4af051312a0e",
+  "DELTA": "T1 + Home real + Rede/Energia/Processos/Diagnostico conectados + agora o mais importante: PONTE DE AUDIO DE VOZ. A Home nova nunca chamava aecAudio.ts (captura de microfone com AEC) nem tocava a fala da Kore -- o botao de voz parecia ligado mas nao ouvia nem falava de verdade. Corrigido em VoiceDock.tsx reusando as funcoes que ja existiam prontas. Handshake real confirmado 4x nesta madrugada. PRECISA DE TESTE FISICO DE AUDIO -- eu nao consigo ouvir. Fale 'Zara, que horas sao?' e confira se ela ouve e responde por voz."
 }

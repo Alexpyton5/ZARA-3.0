@@ -13,11 +13,11 @@ ALEX (Owner)
         │    ├── Voice Lead
         │    ├── Automation Lead
         │    └── Memory/Intelligence Lead
-        ├── PRODUCT/UI LEAD
-        │    ├── Pixel Perfect Lead
-        │    ├── Motion Lead
-        │    ├── Widget Lead
-        │    └── Visual QA Lead
+        ├── PRODUCT/UI LEAD — "UI Director" (Opus 5)
+        │    ├── Pixel-Perfect Analyst (Opus 5)
+        │    ├── Frontend Executor (Sonnet)
+        │    ├── Motion/Widget Executor (Sonnet)
+        │    └── Visual QA / Final Judge (Opus 5)
         └── QA LEAD
              ├── Functional QA
              ├── Regression QA
@@ -55,6 +55,24 @@ MASTER (fonte visual absoluta, declarada pelo Alex):
 Fluxo: MASTER → Electron real → mesma viewport → screenshot → diferença →
 correção → screenshot → validação. Não redesenhar, não "melhorar" — copiar.
 
+**2026-09-04 (correção do Alex) — refinamento pixel-perfect usa cadeia
+separada dentro do PRODUCT/UI LEAD**, papel batizado "UI Director": análise
+visual, execução e julgamento nunca são o mesmo passo. Ver
+`.claude/WORKING_MODEL.md` (seção "Refinamento visual pixel-perfect") para o
+loop completo e `.claude/DECISIONS.md` para a decisão registrada.
+
+- **UI Director** (Opus 5) — não escreve CSS; olha, mede, prioriza, escreve
+  o brief e decide quando escalar/desescalar.
+- **Pixel-Perfect Analyst** (Opus 5) — compara MASTER vs. Electron região por
+  região, entrega brief objetivo, não edita arquivo.
+- **Frontend Executor** (Sonnet) — executa o brief em React/CSS/Electron.
+  Não reinterpreta o design.
+- **Motion/Widget Executor** (Sonnet) — anima o que o Opus descreveu
+  (Core, dock, hover, waveform, transições, microinterações).
+- **Visual QA / Final Judge** (Opus 5) — compara MASTER vs. novo Electron e
+  responde só `APPROVED` ou `REWORK` com as diferenças de maior impacto.
+  Sonnet nunca aprova o próprio trabalho.
+
 ## QA — prova que funciona
 
 Functional QA (comandos/IPC/PC), Regression QA (impacto/known failures),
@@ -88,10 +106,13 @@ não sobre-delegar). Criados até agora:
 |---------------------|------------------------------|---------------------------------------------------------------------|
 | Voice Lead          | `voice-lead` (`.claude/agents/voice-lead.md`) | `core/voice_stt.py`, `core/voice_tts.py`, `core/gemini_live_voice.py`, `frontend/src/renderer/lib/aecAudio.ts`, `core/windows_audio.py` |
 
-Os demais (Backend, Frontend, Automation, Memory/Intelligence Leads; Pixel
-Perfect, Motion, Widget, Visual QA Leads; Functional/Regression/Performance/
-Release QA) ainda não têm agente próprio — são criados no momento em que uma
-tarefa real cair naquela área, seguindo o mesmo padrão do `voice-lead.md`.
+Os demais (Backend, Frontend, Automation, Memory/Intelligence Leads; UI
+Director, Pixel-Perfect Analyst, Frontend Executor, Motion/Widget Executor,
+Visual QA; Functional/Regression/Performance/Release QA) ainda não têm
+agente próprio — são criados no momento em que uma tarefa real cair naquela
+área, seguindo o mesmo padrão do `voice-lead.md`. Para a cadeia pixel-perfect
+isso é a task UI-001 (ver `.claude/TASK_BOARD.md`), não a instalação da
+política em si.
 
 `core/ipc_handlers.py` e `frontend/src/main.ts` continuam como arquivos
 disputados: trava por tarefa do Chief of Staff, nunca duas travas

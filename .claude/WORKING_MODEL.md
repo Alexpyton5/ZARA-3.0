@@ -70,6 +70,75 @@ Tarefa visual grande vira várias tarefas pequenas, uma região por vez
 (ex.: Core, depois Platform, depois Dock, depois Header). Nunca um prompt
 gigante para um worker visual de uma vez.
 
+## Refinamento visual pixel-perfect (UI Director)
+
+**2026-09-04 (correção do Alex).** Para toda missão de interface, análise,
+execução e aprovação são três passos separados — nunca o mesmo agente fazendo
+os três. Ver papéis em `ORG.md`.
+
+**Modelo:**
+- Opus 5 (ou o mais próximo disponível de raciocínio forte) → análise visual,
+  brief, revisão/aprovação final, decisão de escalar.
+- Sonnet (ou o mais próximo disponível de execução rápida) → implementação
+  React/CSS/animação a partir do brief.
+- Nunca usar Opus para padding, rename, import, tsc, build — isso é Sonnet.
+- Escalar Sonnet → Opus quando: falhar 2x na mesma região, geometria/
+  perspectiva/material complexo, ou o problema exigir julgamento e não só CSS.
+  Desescalar de volta para Sonnet assim que Opus definir causa/estratégia.
+
+**Loop por região:**
+```
+Pixel-Perfect Analyst (Opus) → brief
+  → Frontend/Motion Executor (Sonnet) → implementa
+  → screenshot Electron
+  → Visual QA (Opus) → APPROVED ou REWORK
+  → se REWORK: no máximo 2 ciclos parecidos, depois o UI Director muda estratégia
+```
+
+**Brief obrigatório do Analyst** (formato, entregue ao Executor):
+```
+UI BRIEF
+REGION:
+MASTER:
+CURRENT:
+TOP DIFFERENCES: (até 5)
+CHANGE:
+DO NOT TOUCH:
+FILES:
+VALIDATION:
+DONE WHEN:
+```
+
+**Output do Executor:** `IMPLEMENTED / FILES / VALIDATION / SCREENSHOT` —
+sem narrar raciocínio.
+
+**Output do Visual QA:** `RESULT: APPROVED|REWORK / MAJOR DIFFERENCES (até 3) / NEXT` —
+nunca relatório longo.
+
+**Regras de execução:**
+- Uma task toca preferencialmente uma região (ver ordem em `TASK_BOARD.md`,
+  série UI-00x). Não mexer em duas regiões não relacionadas na mesma task.
+- Global composition (proporção, eixo central, colunas) é avaliada **antes**
+  de refinar detalhe fino de qualquer região.
+- Viewport fixo entre MASTER e Electron (mesma resolução, mesmo aspect
+  ratio, zoom 100%) — registrar o viewport usado. Verdade é sempre o
+  **Electron real**, nunca a viewport do browser do MASTER redimensionada.
+- Screenshots de QA vão em `.zara-tests/ui/` (ou equivalente já existente) —
+  nunca na raiz do repo.
+- Pixel-perfect não pode regredir funcionalidade (voz, Core states, battery,
+  telemetry, botões, IPC). Depois de mudança relevante, rodar só o teste
+  impactado — nunca suíte completa por causa de CSS/padding.
+- Não afirmar "100% pixel-perfect" sem prova. Usar `PIXEL-PERFECT PASS
+  COMPLETE` + diferenças residuais, se houver.
+- One file → one owner: Opus normalmente não edita arquivo; Sonnet é dono da
+  implementação.
+
+**Silêncio e continuidade:** aplica-se o "Silêncio operacional" e "Owner Rest
+Mode" já definidos acima — região aprovada e próxima região segura seguem
+automaticamente, sem perguntar "quer que eu continue?". Alex só recebe
+`CHECKPOINT`/`BLOCKED`/`FINAL`, nunca a conversa interna entre Analyst,
+Executor e QA.
+
 ## Testes — ordem de leitura antes de auditar
 
 Antes de qualquer auditoria grande, ler primeiro (nessa ordem):

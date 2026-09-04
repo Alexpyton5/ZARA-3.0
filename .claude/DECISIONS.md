@@ -57,6 +57,21 @@ Só decisão estável/importante. Não é log de rotina — isso fica no git.
   reescrita — são nomes reais de arquivo/pasta e relato de um incidente
   passado, não o conceito de trabalho atual.
 
+- **2026-09-04 (correção do Alex) — pixel-perfect UI usa análise, execução e
+  QA visual separados.** Nunca um único agente analisando, editando e
+  julgando o próprio trabalho de interface. UI Director/Pixel-Perfect
+  Analyst/Visual QA rodam em Opus 5 (ou o mais próximo disponível de
+  raciocínio forte); Frontend Executor/Motion-Widget Executor rodam em
+  Sonnet (ou o mais próximo disponível de execução rápida). Sonnet nunca
+  aprova pixel-perfect do próprio trabalho — aprovação final é sempre do
+  Visual QA. Detalhe do loop, brief e formatos de saída em
+  `.claude/WORKING_MODEL.md` ("Refinamento visual pixel-perfect"); papéis em
+  `.claude/ORG.md`. Isto substitui a divisão plana anterior (Pixel Perfect
+  Lead / Motion Lead / Widget Lead / Visual QA Lead como quatro leads
+  paralelos) por uma cadeia liderada pelo UI Director. Missão associada:
+  **ZARA MASTER PIXEL-PERFECT FINALIZATION** (`.claude/CURRENT_MISSION.md`),
+  tasks UI-001 a UI-018 (`.claude/TASK_BOARD.md`).
+
 - **2026-09-04 (correção do Alex) — backlog não trava por teste manual
   pendente.** Uma tarefa aguardando validação física do Alex (ex.: F1.1 voz
   Kore) não bloqueia o restante do backlog (F1.2 em diante). Se existir

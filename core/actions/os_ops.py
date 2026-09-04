@@ -1599,8 +1599,13 @@ def _night_light_set(desired: bool) -> ActionResult:
         return _night_light_not_supported("Luz noturna disponível somente no Windows.")
 
     # Caminho rápido e invisível primeiro.
+    # ZARA-NIGHTLIGHT-CLOUDSTORE-001: um "sucesso" sem dado nenhum (ex.:
+    # escreveu no registro/cloudstore mas não confirmou nada de verdade)
+    # não pode ser devolvido como se fosse o resultado completo -- cai no
+    # caminho lento com verificação real do toggle em vez de confiar cego.
+    # Falha do caminho rápido continua confiável e é devolvida direto.
     rapido = _luz_noturna_por_registro(desired)
-    if rapido is not None:
+    if rapido is not None and (not rapido.success or rapido.data):
         return rapido
 
     _open_night_light_settings()

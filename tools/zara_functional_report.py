@@ -176,7 +176,7 @@ class Report:
         ok = sum(1 for _, passed, _ in self.results if passed)
         print()
         print("=" * 70)
-        print(f"RESULTADO: {ok}/{total} capacidades confirmadas de verdade")
+        print(f"RESULTADO: {ok}/{total} checagens da amostra confirmadas de verdade")
         print("=" * 70)
         if ok < total:
             print()
@@ -292,8 +292,54 @@ def run() -> int:
     else:
         report.add("Memória de projeto (leitura real)", False, f"resposta inesperada: {resp}")
 
+    # --- Volume/audio (leitura real, sem mudar nada) ---
+    resp = zara.call("action-execute", {"action": "audio_status", "params": {}})
+    result = (resp or {}).get("response", {}).get("result") if resp else None
+    if isinstance(result, dict) and result.get("success"):
+        report.add("Áudio (leitura real do volume)", True, f"{result.get('output', '')}")
+    else:
+        report.add("Áudio (leitura real do volume)", False, f"resposta inesperada: {resp}")
+
+    # --- Abrir app real (Bloco de Notas) e fechar de novo, verificando os dois lados ---
+    resp = zara.call("action-execute", {"action": "os_app", "params": {"app": "notepad"}})
+    result = (resp or {}).get("response", {}).get("result") if resp else None
+    data = (result or {}).get("data") if isinstance(result, dict) else None
+    if isinstance(result, dict) and result.get("success") and data and data.get("verified"):
+        pid = data.get("window_pid")
+        report.add("Abrir app real (Bloco de Notas)", True, f"PID {pid}, janela verificada")
+        if pid:
+            try:
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=10)
+            except Exception:
+                pass
+    else:
+        report.add("Abrir app real (Bloco de Notas)", False, f"resposta inesperada: {resp}")
+
+    # --- Lembrete real: cria, confere que existe, cancela (nao deixa lixo) ---
+    due_at = time.time() + 3600
+    resp = zara.call("reminder-create", {"text": "teste automatico do relatorio", "due_at": due_at, "timezone": "local"})
+    create_resp = resp.get("response") if resp else None
+    reminder_id = create_resp.get("id") if isinstance(create_resp, dict) else None
+    if isinstance(create_resp, dict) and create_resp.get("success") and reminder_id:
+        report.add("Lembretes (criar)", True, f"id {reminder_id}")
+        cancel_resp = zara.call("reminder-cancel", {"id": reminder_id})
+        cancelled = (cancel_resp or {}).get("response", {}).get("success") if cancel_resp else False
+        report.add("Lembretes (cancelar, limpa o teste)", bool(cancelled), f"resposta: {cancel_resp}")
+    else:
+        report.add("Lembretes (criar)", False, f"resposta inesperada: {resp}")
+
+    # --- Inventario real de actions -- contexto de escala, nao pass/fail ---
+    resp = zara.call("action-list")
+    actions_resp = resp.get("response") if resp else None
+    total_actions = len(actions_resp) if isinstance(actions_resp, dict) else None
+
     print()
     zara.stop()
+    if total_actions:
+        print(f"Nota: a ZARA tem {total_actions} ações registradas no total.")
+        print(f"Este relatório testa uma AMOSTRA representativa ({len(report.results)} checagens),")
+        print("não é a lista completa do que ela sabe fazer.")
+        print()
     tudo_ok = report.summary()
     return 0 if tudo_ok else 1
 

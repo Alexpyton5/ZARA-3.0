@@ -308,3 +308,19 @@ momento. Candidato em disco reflete tudo até `f8faeb7`. Working tree limpo (só
 outra sessão, intocados). Continuando em ritmo mais leve — a varredura ampla de conexões e
 test-debt seguro já rendeu o que dava render sem abrir escopo novo (gates de segurança, UI
 nova, integrações externas ficam fora, como já registrado).
+
+### Fechando o item da preferência "ilegível" (não é bug)
+
+Investiguei os avisos `wake_word_mode/audio_transport/vad_* ilegivel` que tinha deixado em
+aberto no começo da madrugada. Causa: `%LOCALAPPDATA%\ZARA3\config\api_keys.json` (onde o build
+empacotado lê essas preferências, por design — `core/paths.py::config_dir()` separa dev/frozen
+de propósito) está vazio (0 bytes, desde 24/08) nesta máquina. O real, populado, é
+`config/api_keys.json` na árvore do projeto — só lido em modo dev/source.
+
+A Gemini funciona mesmo assim porque `GEMINI_API_KEY` chega por variável de ambiente do
+Windows, não por esse JSON. Já `wake_word_mode`/VAD não têm esse caminho alternativo: se o Alex
+um dia configurar isso, precisa ser através da própria ZARA (que grava em
+`api_keys_path()`/LOCALAPPDATA), não editando o config do projeto.
+
+**Não é bug — é o comportamento padrão esperado de "nunca configurado pelo app ainda".** Fechando
+sem mexer em código.

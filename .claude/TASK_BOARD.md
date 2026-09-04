@@ -60,6 +60,12 @@ Formato simples. Não virar burocracia.
   scope: GLOBAL COMPOSITION — viewport, colunas principais, eixo central, proporção, composição vertical, espaçamento geral
   files: a definir no brief (Opus compara MASTER vs. Electron atual primeiro, antes de qualquer CSS)
   DoD: brief `UI BRIEF` entregue ao Frontend Executor; screenshot Electron no mesmo viewport do MASTER
+  status: BLOQUEADO em `master.png`/`electron-real.png` reais (Alex vai commitar).
+  Instrumentação sem alteração visual já entregue: `frontend/src/main.ts` grava
+  `.zara-tests/ui/current_viewport.json` (largura/altura da janela, content
+  bounds, devicePixelRatio, zoom) a cada load/resize — commit `d326675`.
+  Não validado por typecheck real nesta sessão (node_modules não instalado
+  aqui); revisão manual do diff contra o padrão existente do arquivo.
 
 - ID: UI-002
   owner: UI Director (time novo — agente ainda não criado)

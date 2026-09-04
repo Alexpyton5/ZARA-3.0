@@ -1252,11 +1252,24 @@ def _brightness_action(level: int) -> ActionResult:
             error="A alteração foi enviada, mas o brilho não pôde ser confirmado.",
             data={"original": before, "target": target, "observed": None, "backend": backend},
         )
+    # ZARA-BRIGHTNESS-TOLERANCIA-001: "tolerance" ficava so nos dados de
+    # resposta, nunca comparado contra o desvio real -- qualquer leitura
+    # nao-None virava sucesso, mesmo bem longe do alvo pedido. Falso
+    # sucesso, o defeito que este projeto mais combate.
+    tolerance = 2
+    within_tolerance = abs(after - target) <= tolerance
+    data = {"supported": True, "original": before, "target": target,
+            "observed": after, "backend": backend, "tolerance": tolerance}
+    if not within_tolerance:
+        return ActionResult(
+            success=False,
+            error=f"Pedi {target}%, o monitor confirmou {after}% (fora da tolerância de {tolerance}%).",
+            data=data,
+        )
     return ActionResult(
         success=True,
         output=f"Brilho definido para {after}%.",
-        data={"supported": True, "original": before, "target": target,
-              "observed": after, "backend": backend, "tolerance": 2},
+        data=data,
     )
 
 

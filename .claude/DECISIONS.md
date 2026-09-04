@@ -3,10 +3,29 @@
 Só decisão estável/importante. Não é log de rotina — isso fica no git.
 
 - **2026-08-20** — Existe uma hierarquia fechada de 9 papéis, um escritor por
-  área (`.claude/rules/time-zara.md`). Continua valendo. O modelo Chief of
-  Staff (2026-09-04) organiza *como o Alex pede o trabalho*; ele roteia para
-  esses papéis já existentes, não cria uma segunda hierarquia paralela de
-  agentes reais (ver tabela de mapeamento em `ORG.md`).
+  área (`.claude/rules/time-zara.md`).
+
+- **2026-09-04 (correção do Alex, mesmo dia da instalação)** — O modelo Chief
+  of Staff **não** reaproveita os 9 agentes de `time-zara.md`. Alex pediu
+  explicitamente um time novo, "tudo novo para não conflitar". Decisão:
+  - Os 9 agentes antigos (`zara-engenheiro-*`, `zara-qa-evidencia`,
+    `zara-build-auditor`, `zara-evidence-reviewer`, `zara-readonly-architect`,
+    `zara-regression-investigator`, `zara-revisor-hostil`) ficam **retirados**
+    — não deletados (evita ação destrutiva sem necessidade), só não recebem
+    mais tarefa nova a partir de agora.
+  - Motivo de não deletar/renomear os arquivos antigos agora: outras
+    12 skills do projeto (`.claude/skills/*`) e `.claude/rules/time-zara.md`
+    citam esses nomes por texto. Apagar ou renomear quebraria essas
+    referências sem ganho real — a retirada funcional (não despachar mais
+    tarefa) já resolve o conflito de dois agentes escrevendo o mesmo arquivo,
+    que era o risco real por trás do pedido do Alex.
+  - Agentes novos são criados **um por vez, sob demanda**, no arquivo do Lead
+    correspondente em `.claude/agents/`, com área de escrita própria — não
+    necessariamente igual à área do agente antigo equivalente (ex.: o
+    `voice-lead` novo junta voz de saída + microfone, que antes eram dois
+    donos separados).
+  - Primeiro agente novo criado: `voice-lead` (`.claude/agents/voice-lead.md`),
+    para tocar F1.1 (voz Kore).
 
 - **2026-09-04** — Instalado o modelo de operação permanente Chief of Staff +
   CTO/Product/QA (`ORG.md`, `WORKING_MODEL.md`). Alex não escolhe mais

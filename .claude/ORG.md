@@ -66,35 +66,36 @@ Executores especializados (React, CSS, Python, IPC, Voice, Browser, Windows,
 Memory, Testing, Pixel Perfect, Motion, Widget). Workers não falam com o Alex:
 `Worker → Lead → Chief of Staff → Alex`.
 
-## Como isto se liga aos agentes que já existem no projeto
+## Time novo — não é o time antigo com etiqueta trocada
 
-O projeto já tem uma hierarquia de agentes nomeados e configurados, definida em
-`.claude/rules/time-zara.md` ("Time ZARA — 9 papéis"), com dono fechado por
-arquivo. Essa estrutura **não é substituída** — os Leads deste modelo roteiam
-trabalho para esses agentes já existentes em vez de inventar agente novo:
+**Correção do Alex (2026-09-04):** este é um time novo. Os Leads deste modelo
+**não** são um apelido para os agentes antigos de `.claude/rules/time-zara.md`
+("Time ZARA — 9 papéis"). Esses 9 agentes ficam **retirados** para trabalho
+novo (motivo e detalhe em `.claude/DECISIONS.md`) — continuam existindo em
+disco como histórico/leitura, mas o Chief of Staff não despacha mais tarefa
+para eles.
 
-| Lead (este modelo)        | Agente real no projeto                                    |
-|----------------------------|-------------------------------------------------------------|
-| Backend Lead / Frontend Lead / Automation Lead | `zara-engenheiro-execucao` (`core/ipc_handlers.py`, `core/action_registry.py`, `core/actions/*`) |
-| Voice Lead                 | `zara-engenheiro-voz` (`core/voice_stt.py`, `core/voice_tts.py`, `core/gemini_live_voice.py`) |
-| Automation Lead (áudio/mic) | `zara-engenheiro-audio` (`aecAudio.ts`, `core/windows_audio.py`) |
-| Memory/Intelligence Lead / performance | `zara-engenheiro-latencia` (`core/model_router.py`, `[VOICE_TRACE]`) |
-| Product/UI (todos os sub-leads) | `zara-engenheiro-interface` (`frontend/src/**`) |
-| Release QA / Build         | `zara-engenheiro-build` (`build_exe.py`, `dist-sidecar/`, `ZARA_ACTIVE_BUILD.*`) |
-| Functional/Regression QA   | `zara-qa-evidencia` (roda suíte, número exato) |
-| Release QA (auditoria final) | `zara-build-auditor`, `zara-evidence-reviewer` |
-| Chief of Staff (revisão hostil final) | `zara-revisor-hostil` |
-| Diagnóstico read-only (antes de escrever) | `zara-readonly-architect`, `zara-regression-investigator` |
+Os limites de área do time novo também não são os mesmos do time antigo — por
+exemplo o **Voice Lead** junta o que antes eram dois donos separados
+(voz de saída/wake + microfone/eco), porque é assim que o Alex descreveu o
+papel. Ver arquivo do agente para a área exata de cada Lead.
 
-Não existem hoje agentes dedicados a "Pixel Perfect", "Motion" e "Widget" como
-papéis isolados — esse trabalho cai em `zara-engenheiro-interface`, dividido em
-tarefas pequenas por região (ver `WORKING_MODEL.md`, regra de UI). Se o volume
-de trabalho visual justificar, o Chief pode propor esses papéis como agentes
-novos — mas isso é decisão de escopo separada, não automática.
+Agentes do time novo são criados **sob demanda**, um por vez, conforme o
+trabalho chega naquela área — não os 13 de uma vez (regra 16 do modelo:
+não sobre-delegar). Criados até agora:
+
+| Lead (este modelo) | Agente novo                | Área de escrita                                                    |
+|---------------------|------------------------------|---------------------------------------------------------------------|
+| Voice Lead          | `voice-lead` (`.claude/agents/voice-lead.md`) | `core/voice_stt.py`, `core/voice_tts.py`, `core/gemini_live_voice.py`, `frontend/src/renderer/lib/aecAudio.ts`, `core/windows_audio.py` |
+
+Os demais (Backend, Frontend, Automation, Memory/Intelligence Leads; Pixel
+Perfect, Motion, Widget, Visual QA Leads; Functional/Regression/Performance/
+Release QA) ainda não têm agente próprio — são criados no momento em que uma
+tarefa real cair naquela área, seguindo o mesmo padrão do `voice-lead.md`.
 
 `core/ipc_handlers.py` e `frontend/src/main.ts` continuam como arquivos
-disputados: trava por tarefa, nunca duas travas simultâneas (regra já vigente
-em `time-zara.md`).
+disputados: trava por tarefa do Chief of Staff, nunca duas travas
+simultâneas — regra que vale para o time novo inteiro, não só para o antigo.
 
 ## Regras de comunicação
 

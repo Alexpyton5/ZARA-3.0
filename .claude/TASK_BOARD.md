@@ -27,30 +27,28 @@ Formato simples. Não virar burocracia.
 
 ## IN PROGRESS
 
-—
+- ID: T-BACKLOG-F1.1
+  owner: Voice Lead → `voice-lead` (time novo)
+  scope: voz Kore funcionando na saída (Fase 1, prioridade 1)
+  files: `core/gemini_live_voice.py`, `core/voice_tts.py`, `core/ipc_handlers.py` (_speak_response, trava)
+  DoD: teste físico — Alex ouve a voz Kore, sem fallback silencioso pra SAPI
 
 ## TODO
 
-- ID: T-BACKLOG-F1.1
-  owner: Voice Lead → `zara-engenheiro-voz`
-  scope: voz Kore funcionando na saída (Fase 1, prioridade 1)
-  files: `core/voice_tts.py`
-  DoD: teste físico — Alex ouve a voz Kore, sem fallback silencioso pra SAPI
-
 - ID: T-BACKLOG-F1.2
-  owner: Memory/Intelligence Lead → `zara-engenheiro-latencia`
+  owner: Memory/Intelligence Lead (time novo — agente ainda não criado)
   scope: latência mínima de resposta medida e reduzida
   files: `core/model_router.py`
   DoD: número em ms, antes/depois, medido por `[VOICE_TRACE]` + SQLite
 
 - ID: T-BACKLOG-F1.3
-  owner: Automation Lead → `zara-engenheiro-audio`
+  owner: Voice Lead → `voice-lead` (time novo)
   scope: microfone sem loop com a própria voz da ZARA
   files: `frontend/src/renderer/lib/aecAudio.ts`, `core/windows_audio.py`
   DoD: teste físico — ZARA não se ouve, barge-in corta áudio de verdade
 
 - ID: T-BACKLOG-F1.4
-  owner: Backend/Frontend Lead → `zara-engenheiro-execucao`
+  owner: Backend Lead (time novo — agente ainda não criado)
   scope: comando falado executa ação real no PC (voz = texto)
   files: `core/ipc_handlers.py`, `core/pc_voice_intent.py`, `core/action_registry.py`
   DoD: mesma frase por voz e por texto, mesmo resultado físico no Windows

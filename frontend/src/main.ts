@@ -4,7 +4,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, session, shell, Tray, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
 import { join } from 'path'
 import { spawn, execFileSync, ChildProcess } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, renameSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
 
 let pythonProcess: ChildProcess | null = null
@@ -85,10 +85,42 @@ function getWindowIconPath(): string {
 // contra o MASTER — não altera nada visual, só registra o viewport real da
 // janela em disco pra parar de chutar largura/altura na hora de calibrar CSS.
 // Ver .claude/TASK_BOARD.md (UI-001) / .claude/WORKING_MODEL.md.
-function getViewportDiagnosticsPath(): string {
+function getUiTestDir(): string {
   // Mesmo padrão de getMainScript(): em dev, app.getAppPath() resolve para
   // frontend/dist-electron, então a raiz do repo fica dois níveis acima.
-  return join(app.getAppPath(), '..', '..', '.zara-tests', 'ui', 'current_viewport.json')
+  return join(app.getAppPath(), '..', '..', '.zara-tests', 'ui')
+}
+
+function getViewportDiagnosticsPath(): string {
+  return join(getUiTestDir(), 'current_viewport.json')
+}
+
+// UI-001 / ZERO OWNER MANUAL OPERATIONS (.claude/WORKING_MODEL.md): captura o
+// Electron real de verdade — nunca pede pro Alex tirar print. Roda sozinha
+// quando a janela aparece em primeiro plano (nunca no boot silencioso pra
+// bandeja) e de novo, com debounce, a cada resize — sem flag, sem
+// configuração, sem gatilho manual.
+async function captureElectronScreenshot(win: BrowserWindow): Promise<void> {
+  try {
+    if (win.isDestroyed() || !win.isVisible()) return
+    const uiDir = getUiTestDir()
+    const historyDir = join(uiDir, 'history')
+    mkdirSync(historyDir, { recursive: true })
+
+    const targetPath = join(uiDir, 'electron-real.png')
+    if (existsSync(targetPath)) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      renameSync(targetPath, join(historyDir, `electron-real-${stamp}.png`))
+    }
+
+    const image = await win.webContents.capturePage()
+    writeFileSync(targetPath, image.toPNG())
+    console.log('[UI-001] electron-real.png atualizado:', targetPath)
+  } catch (error) {
+    // Best-effort: nunca deve afetar o uso normal da ZARA (ex.: build
+    // empacotado rodando fora de um checkout do repo).
+    console.warn('[UI-001] falha ao capturar electron-real.png:', error)
+  }
 }
 
 async function writeViewportDiagnostics(win: BrowserWindow): Promise<void> {
@@ -693,21 +725,36 @@ function createWindow(): void {
   windowRef.webContents.once('did-finish-load', showWindow)
   setTimeout(showWindow, 3000)
 
-  // UI-001: mantém .zara-tests/ui/current_viewport.json alinhado com o
-  // tamanho real da janela — captura inicial + a cada resize (debounced),
-  // pra registrar o viewport de verdade no instante em que o Alex tira o
-  // print, sem precisar de nenhum gatilho manual novo.
+  // UI-001 / ZERO OWNER MANUAL OPERATIONS: mantém current_viewport.json E
+  // electron-real.png alinhados com a janela real — sem flag, sem BAT, sem
+  // gatilho manual. Só roda em primeiro plano (abriuMinimizada = boot
+  // silencioso pra bandeja, nunca captura aí).
   let viewportDiagnosticsTimer: ReturnType<typeof setTimeout> | null = null
   const scheduleViewportDiagnostics = () => {
+    if (abriuMinimizada) return
     if (viewportDiagnosticsTimer) clearTimeout(viewportDiagnosticsTimer)
     viewportDiagnosticsTimer = setTimeout(() => {
       void writeViewportDiagnostics(windowRef)
     }, 400)
   }
+  let screenshotTimer: ReturnType<typeof setTimeout> | null = null
+  const scheduleScreenshot = () => {
+    if (abriuMinimizada) return
+    if (screenshotTimer) clearTimeout(screenshotTimer)
+    // Delay maior que o do viewport: dá tempo da UI assentar (fontes,
+    // animação de entrada, dados carregados) antes de capturar o pixel.
+    screenshotTimer = setTimeout(() => {
+      void captureElectronScreenshot(windowRef)
+    }, 2500)
+  }
   windowRef.webContents.once('did-finish-load', scheduleViewportDiagnostics)
+  windowRef.webContents.once('did-finish-load', scheduleScreenshot)
   windowRef.on('resize', scheduleViewportDiagnostics)
+  windowRef.on('resize', scheduleScreenshot)
   windowRef.on('maximize', scheduleViewportDiagnostics)
+  windowRef.on('maximize', scheduleScreenshot)
   windowRef.on('unmaximize', scheduleViewportDiagnostics)
+  windowRef.on('unmaximize', scheduleScreenshot)
 
   // ZARA-BANDEJA-001: o X esconde; sair de verdade é pelo menu da bandeja.
   windowRef.on('close', (evento) => {

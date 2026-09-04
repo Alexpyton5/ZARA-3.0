@@ -92,4 +92,22 @@ if errorlevel 1 (
   echo ================================================================
 )
 echo.
+
+rem UI-001 / ZERO OWNER MANUAL OPERATIONS (.claude/WORKING_MODEL.md): a ZARA
+rem ja capturou sozinha .zara-tests\ui\electron-real.png e
+rem current_viewport.json (~2,5s depois de abrir). So registra em commit
+rem local -- nunca pede pro Alex salvar/commitar nada na mao.
+if exist ".zara-tests\ui\electron-real.png" (
+  echo [UI-001] Registrando estado visual em .zara-tests\ui ...
+  git add ".zara-tests\ui\electron-real.png" ".zara-tests\ui\current_viewport.json" ".zara-tests\ui\master.png" >nul 2>&1
+  git diff --cached --quiet -- ".zara-tests\ui"
+  if errorlevel 1 (
+    git commit -m "ui: captura automatica electron-real + viewport (ZARA_INICIAR)" >nul 2>&1
+    echo   commit local feito.
+  ) else (
+    echo   nada novo pra registrar.
+  )
+  echo.
+)
+
 pause

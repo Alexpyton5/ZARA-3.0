@@ -229,6 +229,29 @@ Não existe "candidato"/"candidate"/"release candidate" nem "build novo vs.
 build antigo" como conceito de trabalho — já é a regra vigente em
 `.claude/rules/build-release.md`.
 
+## Zero owner manual operations
+
+**2026-09-04 (correção do Alex).** Regra permanente:
+
+> ZERO OWNER MANUAL OPERATIONS:
+> Never ask Alex to locate repositories, paths, files, screenshots, logs,
+> commands or technical artifacts when the system can obtain them itself.
+
+Antes de pedir qualquer coisa técnica ao Alex, o Chief tenta descobrir/gerar
+sozinho: repo ativo, pasta, arquivo, screenshot, log, comando, path. Isso
+inclui construir mecanismo permanente no runtime da ZARA (ex.: captura de
+tela automática do Electron real, registro de viewport) em vez de pedir print
+manual — ver `frontend/src/main.ts` (`captureElectronScreenshot`,
+`writeViewportDiagnostics`) e `ZARA_INICIAR.bat` (commit automático de
+`.zara-tests/ui/`), instalados em 2026-09-04 pro pipeline pixel-perfect
+(UI-001).
+
+Isto não relaxa a política de confirmação para ações sensíveis (push,
+delete, publicação) nem os limites de escopo de `governance.md` — só remove
+fricção que o próprio sistema consegue resolver. Continua existindo
+`BLOCKED` de verdade quando algo depende de decisão de produto, autorização,
+ou informação que só o Alex tem (não que só dá trabalho descobrir).
+
 ## Backlog não trava por teste manual pendente
 
 Uma tarefa aguardando teste físico do Alex (ex.: F1.1) **não bloqueia** o

@@ -60,10 +60,21 @@ Formato simples. Não virar burocracia.
   scope: GLOBAL COMPOSITION — viewport, colunas principais, eixo central, proporção, composição vertical, espaçamento geral
   files: a definir no brief (Opus compara MASTER vs. Electron atual primeiro, antes de qualquer CSS)
   DoD: brief `UI BRIEF` entregue ao Frontend Executor; screenshot Electron no mesmo viewport do MASTER
-  status: BLOQUEADO em `master.png`/`electron-real.png` reais (Alex vai commitar).
-  Instrumentação sem alteração visual já entregue: `frontend/src/main.ts` grava
-  `.zara-tests/ui/current_viewport.json` (largura/altura da janela, content
-  bounds, devicePixelRatio, zoom) a cada load/resize — commit `d326675`.
+  status: master.png RESOLVIDO sem pedir nada ao Alex — `master.png` já
+  existia na raiz do repo (git-tracked, legenda própria "Prévia visual ·
+  dados da MASTER", commit `1322fcf`), verificado por leitura visual e
+  copiado pra `.zara-tests/ui/master.png` (1440×900).
+  electron-real.png: WAITING — automático agora, zero passo manual. Zero
+  Owner Manual Operations (`.claude/WORKING_MODEL.md`, 2026-09-04):
+  `frontend/src/main.ts` (`captureElectronScreenshot`) tira o print real da
+  janela sozinho ~2,5s depois dela aparecer em primeiro plano (e de novo a
+  cada resize/maximize), grava `.zara-tests/ui/electron-real.png` com
+  rotação de histórico, e `ZARA_INICIAR.bat` faz commit local automático do
+  resultado. Só falta o Alex abrir a ZARA normalmente uma vez — não é
+  trabalho manual novo, é o uso normal do app. Commit `d326675` +
+  commit seguinte desta mesma sessão (captura + BAT).
+  Também grava `current_viewport.json` (largura/altura da janela, content
+  bounds, devicePixelRatio, zoom) no mesmo gatilho.
   Não validado por typecheck real nesta sessão (node_modules não instalado
   aqui); revisão manual do diff contra o padrão existente do arquivo.
 

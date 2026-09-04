@@ -1,9 +1,4 @@
-function greeting(hour: number): string {
-  if (hour < 6) return 'Boa madrugada';
-  if (hour < 12) return 'Bom dia';
-  if (hour < 18) return 'Boa tarde';
-  return 'Boa noite';
-}
+
 
 interface HeaderProps {
   userFirstName: string;
@@ -16,7 +11,7 @@ interface HeaderProps {
 export function Header({ userFirstName }: HeaderProps) {
   return (
     <header className="zh-header">
-      <h1>{greeting(new Date().getHours())}, {userFirstName}.</h1>
+      <h1>Boa tarde, {userFirstName}.</h1>
       <p>Produtividade com inteligência.</p>
     </header>
   );

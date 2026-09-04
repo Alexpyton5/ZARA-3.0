@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Send } from 'lucide-react';
-import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
+import { AudioLines } from 'lucide-react';
+import zaraLogo from '../../../assets/zara-home/zara-logo-transparent.png';
 
 interface TextCommandInputProps {
   engine?: string;
@@ -46,7 +46,12 @@ export function TextCommandInput({ engine = 'auto', onSent }: TextCommandInputPr
         aria-label="Como posso ajudar?"
       />
       <button className="zh-command-submit" type="submit" disabled={!canSend} aria-label="Enviar mensagem">
-        <Send size={15} strokeWidth={2.2} />
+        <span className="zh-command-waveform" aria-hidden="true">
+          {[8, 14, 20, 11, 18, 9, 16, 7, 13].map((height, index) => (
+            <span key={index} className="zh-command-wave-bar" style={{ height }} />
+          ))}
+        </span>
+        <AudioLines size={1} aria-hidden="true" />
       </button>
     </form>
   );

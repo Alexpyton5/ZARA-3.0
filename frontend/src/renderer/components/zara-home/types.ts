@@ -28,3 +28,21 @@ export interface BatteryData {
   level: number | null;
   charging: boolean | null;
 }
+
+export interface WifiStatusData {
+  supported: boolean;
+  on: boolean | null;
+}
+
+export interface PowerPlan {
+  guid: string;
+  name: string;
+  active: boolean;
+}
+
+export interface PowerPlansData {
+  supported: boolean;
+  plans: PowerPlan[];
+  pending: boolean;
+  setPlan: (guid: string) => void;
+}

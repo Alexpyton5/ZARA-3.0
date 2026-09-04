@@ -2,12 +2,16 @@ import {
   Cpu, MemoryStick, HardDrive, MonitorCog, BatteryFull, Thermometer, Wifi,
   Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf, ChevronRight,
 } from 'lucide-react';
-import type { BatteryData, SystemMetricsData } from './types';
+import type { BatteryData, PowerPlansData, SystemMetricsData, WifiStatusData } from './types';
 
 interface SystemPanelProps {
   metrics: SystemMetricsData;
   battery: BatteryData;
+  wifi: WifiStatusData;
+  power: PowerPlansData;
 }
+
+const ENERGY_ICONS = [Gauge, SlidersHorizontal, Leaf];
 
 function pct(value: number | null): string {
   return value === null ? '—' : `${Math.round(value)}%`;
@@ -41,7 +45,7 @@ function ActionRow({ icon, label, sub }: { icon: React.ReactNode; label: string;
   );
 }
 
-export function SystemPanel({ metrics, battery }: SystemPanelProps) {
+export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps) {
   return (
     <section className="zh-system-row zh-glass-panel" aria-label="Sistema">
       <h1 className="zh-system-title">Sistema</h1>
@@ -83,7 +87,9 @@ export function SystemPanel({ metrics, battery }: SystemPanelProps) {
             </div>
             <div className="zh-metric-row">
               <span><Wifi size={13} strokeWidth={1.8} /> Rede</span>
-              <span className="zh-metric-unknown">—</span>
+              <span className={wifi.supported ? 'zh-metric-active' : 'zh-metric-unknown'}>
+                {wifi.supported ? (wifi.on ? 'Ligado' : 'Desligado') : '—'}
+              </span>
             </div>
           </div>
         </div>
@@ -111,30 +117,30 @@ export function SystemPanel({ metrics, battery }: SystemPanelProps) {
 
         <div className="zh-system-col zh-system-col--energy">
           <h2><Gauge size={14} strokeWidth={1.8} /> Energia</h2>
-          <button className="zh-energy-card" type="button">
-            <Gauge size={15} strokeWidth={1.7} />
-            <span className="zh-energy-text">
-              <strong>Performance</strong>
-              <span>Máximo desempenho</span>
-            </span>
-            <span className="zh-energy-dot" data-active="true" />
-          </button>
-          <button className="zh-energy-card" type="button">
-            <SlidersHorizontal size={15} strokeWidth={1.7} />
-            <span className="zh-energy-text">
-              <strong>Equilibrado</strong>
-              <span>Balanceado</span>
-            </span>
-            <span className="zh-energy-dot" />
-          </button>
-          <button className="zh-energy-card" type="button">
-            <Leaf size={15} strokeWidth={1.7} />
-            <span className="zh-energy-text">
-              <strong>Economia</strong>
-              <span>Economia de energia</span>
-            </span>
-            <span className="zh-energy-dot" />
-          </button>
+          {power.supported && power.plans.length > 0 ? (
+            power.plans.map((plan, index) => {
+              const Icon = ENERGY_ICONS[index % ENERGY_ICONS.length];
+              return (
+                <button
+                  key={plan.guid}
+                  className="zh-energy-card"
+                  type="button"
+                  disabled={power.pending || plan.active}
+                  onClick={() => power.setPlan(plan.guid)}
+                  aria-pressed={plan.active}
+                >
+                  <Icon size={15} strokeWidth={1.7} />
+                  <span className="zh-energy-text">
+                    <strong>{plan.name}</strong>
+                    <span>{plan.active ? 'Plano ativo' : 'Clique para ativar'}</span>
+                  </span>
+                  <span className="zh-energy-dot" data-active={plan.active ? 'true' : undefined} />
+                </button>
+              );
+            })
+          ) : (
+            <ActionRow icon={<Gauge size={14} strokeWidth={1.7} />} label="Planos de energia" sub="Indisponível" />
+          )}
         </div>
 
         <div className="zh-system-col zh-diagnostic-col">

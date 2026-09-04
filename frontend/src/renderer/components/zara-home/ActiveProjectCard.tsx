@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react';
-import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
+import zaraLogo from '../../../assets/zara-home/zara-logo-transparent.png';
+import coreGlass from '../../../assets/zara-home/core-glass.png';
 
 /**
  * "Projeto ativo" — estrutura 1:1 com o MASTER: título, mini core à esquerda,
@@ -12,7 +13,8 @@ export function ActiveProjectCard() {
       <h2>Projeto ativo</h2>
       <div className="zh-project-header">
         <span className="zh-project-badge">
-          <img src={zaraLogo} alt="" />
+          <img className="zh-project-badge-glass" src={coreGlass} alt="" aria-hidden="true" />
+          <img className="zh-project-badge-logo" src={zaraLogo} alt="" />
         </span>
         <div className="zh-project-meta">
           <strong>ZARA App</strong>

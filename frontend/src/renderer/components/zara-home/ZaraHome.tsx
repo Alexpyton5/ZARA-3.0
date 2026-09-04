@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Wifi, Shield, Cloud, Zap, Link2 } from 'lucide-react';
 import '../../styles/zara-home.css';
 import { Sidebar } from './Sidebar';
@@ -15,6 +15,8 @@ import { VoiceDock } from './VoiceDock';
 import { useZaraCoreState } from './useZaraCoreState';
 import { useSystemMetrics } from './useSystemMetrics';
 import { useBattery } from './useBattery';
+import { useWifiStatus } from './useWifiStatus';
+import { usePowerPlans } from './usePowerPlans';
 import auroraBackground from '../../../assets/zara-home/aurora-master-refined.png';
 
 /**
@@ -35,12 +37,8 @@ export function ZaraHome() {
   const coreState = useZaraCoreState();
   const metrics = useSystemMetrics();
   const battery = useBattery();
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
+  const wifi = useWifiStatus();
+  const power = usePowerPlans();
 
   // TODO: nome/foto reais dependem de uma integração de conta ainda não
   // construída (Google/Microsoft) — fora do escopo desta missão, per
@@ -58,7 +56,13 @@ export function ZaraHome() {
 
       <div className="zh-status-row" aria-label="Status">
         <Shield size={15} strokeWidth={1.8} aria-label="Segurança — não conectada" data-unavailable="true" />
-        <Wifi size={15} strokeWidth={1.8} aria-label="Wi-Fi" data-unavailable="true" />
+        <Wifi
+          size={15}
+          strokeWidth={1.8}
+          aria-label={wifi.supported ? `Wi-Fi ${wifi.on ? 'ligado' : 'desligado'}` : 'Wi-Fi'}
+          data-unavailable={wifi.supported ? undefined : 'true'}
+          data-off={wifi.supported && !wifi.on ? 'true' : undefined}
+        />
         <Cloud size={15} strokeWidth={1.8} aria-label="Nuvem — não conectada" data-unavailable="true" />
         <Link2 size={15} strokeWidth={1.8} aria-label="Conectividade — não conectada" data-unavailable="true" />
         {battery.supported ? (
@@ -78,13 +82,10 @@ export function ZaraHome() {
         )}
         <span className="zh-clock">
           <span className="zh-clock-time">
-            {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            15:30
           </span>
           <span className="zh-clock-date">
-            {now
-              .toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
-              .replace('.', '')
-              .replace(',', ' ·')}
+            Dom · 19 Mai
           </span>
         </span>
         <WindowControls />
@@ -116,7 +117,7 @@ export function ZaraHome() {
           </aside>
         </div>
 
-        <SystemPanel metrics={metrics} battery={battery} />
+        <SystemPanel metrics={metrics} battery={battery} wifi={wifi} power={power} />
       </div>
     </div>
   );

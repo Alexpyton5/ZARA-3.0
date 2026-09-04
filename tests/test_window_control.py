@@ -25,7 +25,6 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 )
 def test_window_aliases(phrase, action):
     result = PcVoiceIntentDetector(
-        pc_control_allowed=True,
         window_context_available=phrase == "agora minimize ele",
     ).detect(phrase)
     assert result.action == action
@@ -42,14 +41,14 @@ def test_window_aliases(phrase, action):
     ],
 )
 def test_named_window_alias_keeps_target_distinct_from_wake_word(phrase, target):
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
     assert result.action == "window_focus_named"
     assert result.param == target
 
 
 @pytest.mark.parametrize("phrase", ["troque de janela", "vá para a próxima janela"])
 def test_blind_window_switch_requires_named_target(phrase):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
     assert result.action == "window_switch_next"
     assert result.blocked is True
     assert "não alterno às cegas" in result.reply
@@ -125,7 +124,7 @@ def test_window_state_action_requires_verified_state(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_local_window_command_executes_without_supercerebro(monkeypatch):
+async def test_local_window_command_executes_directly(monkeypatch):
     execute = AsyncMock(return_value=type(
         "Result", (), {
             "success": True,
@@ -143,7 +142,7 @@ async def test_local_window_command_executes_without_supercerebro(monkeypatch):
 
 @pytest.mark.parametrize("phrase", ["alt+f4", "mate o processo", "minimize && powershell"])
 def test_destructive_or_arbitrary_window_text_is_not_mapped(phrase):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
     assert not result.action.startswith("window_")
 
 
@@ -157,10 +156,10 @@ def test_destructive_or_arbitrary_window_text_is_not_mapped(phrase):
     ],
 )
 def test_contextual_geometry_requires_exact_recent_window(phrase, action, param):
-    missing = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    missing = PcVoiceIntentDetector().detect(phrase)
     assert missing.action == action
     assert missing.blocked is True
-    available = PcVoiceIntentDetector(pc_control_allowed=True, window_context_available=True).detect(phrase)
+    available = PcVoiceIntentDetector(window_context_available=True).detect(phrase)
     assert available.action == action
     assert available.param == param
     assert available.blocked is False

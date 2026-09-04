@@ -205,7 +205,7 @@ class GeminiLiveVoiceConfig:
         "VOCABULÁRIO desta casa — ao transcrever a fala de Alex, prefira sempre estas "
         "grafias, mesmo que o som seja parecido com outra palavra: "
         "Claude (o assistente de programação; NUNCA escreva Cláudio, Cláudia ou Claudio), "
-        "Claude Code, Codex, ChatGPT, ZARA, Kore, Gemini, Alex, Hermes, Graphify, "
+        "Claude Code, Codex, ChatGPT, ZARA, Kore, Gemini, Alex, Graphify, "
         "Windows, YouTube, Spotify, Chrome. "
         # ZARA-VOICE-FLUIDEZ-001: agora esta voz sai direto em turno de
         # conversa, então o pedido de brevidade virou parte do produto — turno

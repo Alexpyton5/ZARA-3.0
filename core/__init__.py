@@ -1,7 +1,7 @@
 """Core package exports for the Electron/Python sidecar architecture.
 
 Keep package import lightweight: legacy Flet UI modules are intentionally not
-imported here, so importing ``core.model_router`` or Hermes does not pull a GUI
+imported here, so importing ``core.model_router`` does not pull a GUI
 framework into the sidecar.
 """
 from __future__ import annotations

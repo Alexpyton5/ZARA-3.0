@@ -97,14 +97,14 @@ async def test_lab_send_acks_queued_for_normal_chat():
 async def test_lab_send_routes_to_requested_recipient():
     lab = _FakeLab()
     h = _handler(lab)
-    for target in ("zara", "mentor", "hermes", "opencode"):
+    for target in ("zara", "mentor", "cline", "opencode"):
         await h.handle_lab_send(_msg(target))
     await _drain(h)
-    assert [c[1] for c in lab.calls] == ["zara", "mentor", "hermes", "opencode"]
+    assert [c[1] for c in lab.calls] == ["zara", "mentor", "cline", "opencode"]
     assert [r["response"]["target"] for r in h.responses] == [
         "zara",
         "mentor",
-        "hermes",
+        "cline",
         "opencode",
     ]
 
@@ -160,7 +160,7 @@ async def test_background_worker_failure_does_not_break_ack():
     """A falha do turno acontece em background; o ACK ja saiu como QUEUED."""
     lab = _FakeLab(fail=True)
     h = _handler(lab)
-    await h.handle_lab_send(_msg("hermes"))
+    await h.handle_lab_send(_msg("cline"))
     await _drain(h)
     assert h.responses[0]["response"]["state"] == "QUEUED"
     assert h.errors == []

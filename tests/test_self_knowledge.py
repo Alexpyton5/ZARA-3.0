@@ -15,10 +15,8 @@ from core.self_knowledge import detect_self_knowledge_topic
         ("Quem é você?", "identity"),
         ("Qual modelo está usando?", "model"),
         ("Quais providers estão disponíveis?", "providers"),
-        ("O que é Hermes?", "hermes"),
         ("O que é Codex?", "codex"),
         ("O que é Mentor?", "mentor"),
-        ("O que é Supercérebro?", "supercerebro"),
         ("O que é LAB?", "lab"),
         ("Onde você está instalada?", "runtime"),
         ("O que você consegue fazer?", "capabilities"),
@@ -88,7 +86,6 @@ async def test_capability_catalog_reflects_gate_and_hardware(tmp_path, monkeypat
     assert "BRILHO: UNSUPPORTED" in blocked
     assert "LEMBRETES: AVAILABLE" in blocked
 
-    handler._set_supercerebro_state(True)
     available = await handler._try_self_knowledge("O que você consegue fazer?")
     assert "VOLUME/MUTE: AVAILABLE" in available
 

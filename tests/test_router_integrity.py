@@ -29,13 +29,11 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 
 
 def _detector(**kw):
-    kw.setdefault("pc_control_allowed", True)
     return PcVoiceIntentDetector(**kw)
 
 
 def _handler():
     h = IPCHandler.__new__(IPCHandler)
-    h.supercerebro_active = True
     h._last_volume_level = 40
     h._last_window_hwnd = None
     h._last_safe_folder = None
@@ -157,15 +155,6 @@ async def test_050_nao_depende_do_navegador_da_maquina(monkeypatch):
 @pytest.mark.asyncio
 async def test_050_non_pc_message_still_falls_through_to_llm():
     assert await _handler()._try_pc_intent("me explica o que é um relay") is None
-
-
-@pytest.mark.asyncio
-async def test_050_open_ended_browser_intent_still_asks_for_supercerebro():
-    h = _handler()
-    h.supercerebro_active = False
-    reply = await h._try_pc_intent("abra o site da openai")
-    assert reply is not None
-    assert "supercérebro" in reply.lower()
 
 
 @pytest.mark.parametrize(

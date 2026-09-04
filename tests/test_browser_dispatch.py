@@ -1,13 +1,10 @@
-from unittest.mock import AsyncMock, Mock
-import pytest
-from core.actions import os_ops
-from core.ipc_handlers import IPCHandler
-from core.pc_voice_intent import PcVoiceIntentDetector
-from core.action_registry import get_registry
+from unittest.mock import Mock
 
-# Set pc_control_allowed to True for these tests
-registry = get_registry()
-registry.pc_control_allowed = True
+import pytest
+
+from core.actions import os_ops
+from core.pc_voice_intent import PcVoiceIntentDetector
+
 
 @pytest.mark.parametrize(
     ("phrase", "action", "param"),
@@ -22,7 +19,7 @@ registry.pc_control_allowed = True
     ],
 )
 def test_browser_intents(phrase, action, param):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
     assert result.action == action
     assert result.param == param
 
@@ -62,14 +59,5 @@ def test_dangerous_schemes_and_payloads_are_blocked(monkeypatch, payload):
     startfile.assert_not_called()
 
 def test_ambiguous_phrase_is_not_browser_navigation():
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect("abra uma possibilidade")
+    result = PcVoiceIntentDetector().detect("abra uma possibilidade")
     assert result.action not in {"browser_open_url", "browser_search"}
-
-@pytest.mark.asyncio
-async def test_capability_gate_blocks_browser_dispatch(monkeypatch):
-    execute = AsyncMock()
-    handler = IPCHandler(AsyncMock())
-    monkeypatch.setattr("core.action_registry.execute_action", execute)
-    reply = await handler._try_pc_intent("abra google.com")
-    assert reply == "Para controlar o computador, ative o Supercérebro."
-    execute.assert_not_awaited()

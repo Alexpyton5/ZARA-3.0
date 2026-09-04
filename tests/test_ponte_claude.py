@@ -20,9 +20,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 
 
 def _detectar(frase: str):
-    # pc_control_allowed=False de propósito: é o estado padrão no boot. A ponte
-    # tem de funcionar com o Supercérebro desligado.
-    return PcVoiceIntentDetector(pc_control_allowed=False).detect(frase)
+    return PcVoiceIntentDetector().detect(frase)
 
 
 @pytest.mark.parametrize("frase", [
@@ -44,7 +42,7 @@ def test_pedidos_de_leitura_caem_na_ponte(frase):
     r = _detectar(frase)
     assert r.is_pc_intent is True, frase
     assert r.action == "claude_ler", f"{frase} -> {r.action}"
-    assert r.blocked is False, "não pode depender do Supercérebro"
+    assert r.blocked is False, "reflexo local nunca fica bloqueado"
 
 
 @pytest.mark.parametrize("frase,esperado", [
@@ -141,7 +139,6 @@ async def test_a_resposta_e_o_recado_e_nao_um_pronto(monkeypatch, acao, texto):
     monkeypatch.setattr("core.action_registry.execute_action", AsyncMock(return_value=resultado))
 
     handler = IPCHandler.__new__(IPCHandler)
-    handler.supercerebro_active = True
     handler._last_volume_level = 40
     handler._last_window_hwnd = None
     handler._last_safe_folder = None

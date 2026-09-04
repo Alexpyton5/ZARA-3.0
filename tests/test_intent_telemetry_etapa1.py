@@ -42,14 +42,12 @@ def create_handler() -> IPCHandler:
     handler.memory = None
     handler.orchestrator = None
     handler.model_router = None
-    handler.hermes = None
     handler.conversation_history = None
     handler.reminder_engine = None
     handler.user_memory = None
     handler.project_memory = None
     handler.lab = None
     handler._event_loop = asyncio.get_event_loop()
-    handler.supercerebro_active = True
     handler._last_window_hwnd = 12345
     handler._last_volume_level = 50
     handler._operational_context_updated_at = time.monotonic()

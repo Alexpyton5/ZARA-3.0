@@ -632,25 +632,6 @@
 .pearl-lab-composer button { width: 32px; height: 32px; border: 0; border-radius: 50%; display: grid; place-items: center; color: #d7d5d0; background: transparent; cursor: pointer; }
 .pearl-lab-composer button:disabled { opacity: .35; }
 
-.pearl-hermes {
-  position: relative;
-  z-index: 3;
-  grid-row: 5;
-  align-self: end;
-  height: 28px;
-  border: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  color: #777a74;
-  background: transparent;
-  cursor: pointer;
-  font-size: 8px;
-}
-
-.pearl-hermes.active { color: #a8c69b; }
-
 .pearl-toast-stack { position: fixed; z-index: 800; top: 70px; right: calc(clamp(244px, 17.5vw, 290px) + 52px); display: flex; flex-direction: column; gap: 8px; }
 .pearl-toast { max-width: 320px; padding: 11px 13px; border: 1px solid var(--pearl-line-strong); border-radius: 12px; color: var(--pearl-ink); background: var(--pearl-window); box-shadow: var(--pearl-shadow); font-size: 11px; }
 .pearl-toast.warn { border-color: rgba(202, 163, 97, .35); }

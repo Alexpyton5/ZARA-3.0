@@ -24,7 +24,6 @@ from core.ipc_handlers import IPCHandler
 @pytest.mark.asyncio
 async def test_loose_e_splits_when_no_single_command_matches_the_whole_piece():
     handler = IPCHandler(AsyncMock())
-    handler.supercerebro_active = True
     handler._try_pc_intent = AsyncMock(
         side_effect=(
             "YouTube aberto e verificado.",
@@ -54,7 +53,6 @@ async def test_loose_e_splits_when_no_single_command_matches_the_whole_piece():
 @pytest.mark.asyncio
 async def test_loose_e_never_splits_a_piece_that_already_matches_as_one_search():
     handler = IPCHandler(AsyncMock())
-    handler.supercerebro_active = True
     handler._try_pc_intent = AsyncMock(
         side_effect=(
             "Buscando rock e blues no YouTube.",
@@ -82,7 +80,6 @@ async def test_loose_e_never_splits_a_piece_that_already_matches_as_one_search()
 @pytest.mark.asyncio
 async def test_loose_e_split_still_reports_unsupported_step_honestly():
     handler = IPCHandler(AsyncMock())
-    handler.supercerebro_active = True
     handler._try_pc_intent = AsyncMock()
 
     reply = await handler._try_compound_pc_intent(

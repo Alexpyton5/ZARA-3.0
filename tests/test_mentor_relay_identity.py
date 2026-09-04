@@ -1,8 +1,8 @@
 """Mentor/agent relay proofs (ZARA-NIGHT-SHIFT 039-044).
 
 Covers the previously untested core/mentor_relay.py contract and the identity
-propagation added to LabCoordinator._sync_mentor_replies, so a Hermes message can
-never be rendered as if the Mentor had written it.
+propagation added to LabCoordinator._sync_mentor_replies, so another agent's
+message can never be rendered as if the Mentor had written it.
 
 All tests are isolated: each one gets its own relay root under tmp_path.
 """
@@ -84,11 +84,11 @@ def test_drain_replies_defaults_agent_to_mentor(relay):
     assert reply["agent"] == "mentor"
 
 
-def test_drain_replies_preserves_hermes_identity(relay):
-    _write_inbox(relay, "MR-1-DDDD", agent="hermes", source="hermes", task_id="H-7")
+def test_drain_replies_preserves_codex_identity(relay):
+    _write_inbox(relay, "MR-1-DDDD", agent="codex", source="codex", task_id="H-7")
     reply = relay.drain_replies()[0]
-    assert reply["agent"] == "hermes"
-    assert reply["source"] == "hermes"
+    assert reply["agent"] == "codex"
+    assert reply["source"] == "codex"
     assert reply["task_id"] == "H-7"
 
 
@@ -148,15 +148,15 @@ def test_lab_insert_uses_real_agent_identity(tmp_path):
     coord._connect = lambda: sqlite3.connect(db)  # type: ignore[method-assign]
 
     now = time.time()
-    assert coord._insert_mentor_reply_sync("m-1", "MR-1", "oi", now, "hermes") is True
+    assert coord._insert_mentor_reply_sync("m-1", "MR-1", "oi", now, "codex") is True
     assert coord._insert_mentor_reply_sync("m-2", "MR-2", "oi", now, "mentor") is True
     # idempotencia por id
-    assert coord._insert_mentor_reply_sync("m-1", "MR-1", "oi de novo", now, "hermes") is False
+    assert coord._insert_mentor_reply_sync("m-1", "MR-1", "oi de novo", now, "codex") is False
 
     conn = sqlite3.connect(db)
     rows = dict(conn.execute("SELECT id, author FROM messages").fetchall())
     conn.close()
-    assert rows == {"m-1": "hermes", "m-2": "mentor"}
+    assert rows == {"m-1": "codex", "m-2": "mentor"}
 
 
 def test_lab_insert_defaults_to_mentor(tmp_path):

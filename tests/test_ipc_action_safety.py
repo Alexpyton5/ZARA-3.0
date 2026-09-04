@@ -1,4 +1,4 @@
-"""IPC safety tests using only in-memory actions and a fake Hermes session."""
+"""IPC safety tests using only in-memory actions."""
 
 import asyncio
 
@@ -11,39 +11,12 @@ from core.actions import terminal as terminal_actions
 from core.ipc_handlers import IPCHandler, IPCMessage
 
 
-class FakeHermes:
-    def __init__(self, *, connects: bool = True, disable_raises: bool = False):
-        self.connects = connects
-        self.disable_raises = disable_raises
-        self.enabled = False
-        self.is_connected = False
-        self.enable_calls = 0
-
-    async def enable_supercerebro(self) -> bool:
-        self.enable_calls += 1
-        self.enabled = self.connects
-        self.is_connected = self.connects
-        return self.connects
-
-    async def disable_supercerebro(self) -> None:
-        if self.disable_raises:
-            raise RuntimeError("fake disconnect failure")
-        self.enabled = False
-        self.is_connected = False
-
-    async def get_agent_status(self) -> dict:
-        return {"connected": self.is_connected, "enabled": self.enabled}
-
-
 @pytest.fixture(autouse=True)
 def restore_global_policy():
     registry = get_registry()
-    previous_pc_control = registry.pc_control_allowed
     previous_medium = registry.medium_risk_open
-    registry.pc_control_allowed = False
     registry.medium_risk_open = False
     yield
-    registry.pc_control_allowed = previous_pc_control
     registry.medium_risk_open = previous_medium
 
 
@@ -54,147 +27,6 @@ def _handler():
         sent.append(message)
 
     return IPCHandler(send), sent
-
-
-def test_toggle_rejects_truthy_non_boolean_input():
-    handler, sent = _handler()
-    hermes = FakeHermes()
-    handler.hermes = hermes
-
-    asyncio.run(
-        handler.handle_supercerebro_toggle(
-            IPCMessage(type="supercerebro-toggle", request_id="1", payload={"active": "false"})
-        )
-    )
-
-    assert not handler.supercerebro_active
-    assert not get_registry().pc_control_allowed
-    assert hermes.enable_calls == 0
-    assert sent[-1].error == "Active state must be a boolean"
-
-
-def test_toggle_controls_capability_but_does_not_remove_risk_gate():
-    handler, sent = _handler()
-    handler.hermes = FakeHermes()
-
-    asyncio.run(
-        handler.handle_supercerebro_toggle(
-            IPCMessage(type="supercerebro-toggle", request_id="1", payload={"active": True})
-        )
-    )
-
-    assert handler.supercerebro_active
-    assert get_registry().pc_control_allowed
-    assert not get_registry().medium_risk_open
-    assert sent[-1].response["active"] is True
-
-
-def test_failed_enable_is_fail_closed():
-    handler, sent = _handler()
-    handler.hermes = FakeHermes(connects=False)
-
-    asyncio.run(
-        handler.handle_supercerebro_toggle(
-            IPCMessage(type="supercerebro-toggle", request_id="1", payload={"active": True})
-        )
-    )
-
-    assert not handler.supercerebro_active
-    assert not get_registry().pc_control_allowed
-    assert sent[-1].error == "Hermes Gateway is offline"
-
-
-def test_enable_return_value_cannot_override_disconnected_readback():
-    class MisleadingHermes(FakeHermes):
-        async def enable_supercerebro(self) -> bool:
-            self.enable_calls += 1
-            self.enabled = False
-            self.is_connected = False
-            return True
-
-    handler, sent = _handler()
-    handler.hermes = MisleadingHermes()
-
-    asyncio.run(handler.handle_supercerebro_toggle(
-        IPCMessage(type="supercerebro-toggle", request_id="1", payload={"active": True})
-    ))
-
-    assert handler.supercerebro_active is False
-    assert get_registry().pc_control_allowed is False
-    assert sent[-1].error == "Hermes Gateway is offline"
-
-
-def test_status_revokes_gate_when_gateway_dies():
-    handler, sent = _handler()
-    hermes = FakeHermes()
-    handler.hermes = hermes
-    handler._set_supercerebro_state(True)
-    hermes.enabled = True
-    hermes.is_connected = False
-
-    asyncio.run(handler.handle_supercerebro_status(
-        IPCMessage(type="supercerebro-status", request_id="status")
-    ))
-
-    assert handler.supercerebro_active is False
-    assert get_registry().pc_control_allowed is False
-    assert sent[-1].response["active"] is False
-    assert sent[-1].response["connected"] is False
-
-
-def test_disable_revokes_permission_even_if_remote_disable_fails():
-    handler, sent = _handler()
-    handler.hermes = FakeHermes(disable_raises=True)
-    asyncio.run(
-        handler.handle_supercerebro_toggle(
-            IPCMessage(type="supercerebro-toggle", request_id="1", payload={"active": True})
-        )
-    )
-
-    asyncio.run(
-        handler.handle_supercerebro_toggle(
-            IPCMessage(type="supercerebro-toggle", request_id="2", payload={"active": False})
-        )
-    )
-
-    assert not handler.supercerebro_active
-    assert not get_registry().pc_control_allowed
-    assert sent[-1].response["active"] is False
-
-
-def test_ipc_cannot_bypass_supercerebro_off_with_confirm_true(capsys):
-    handler, sent = _handler()
-    registry = get_registry()
-    calls: list[str] = []
-    action_name = "test_ipc_pc_control"
-    registry.register(
-        action_name,
-        lambda secret="": calls.append(secret) or "done",
-        capability="PC_CONTROL",
-    )
-    try:
-        asyncio.run(
-            handler.handle_action_execute(
-                IPCMessage(
-                    type="action-execute",
-                    request_id="1",
-                    payload={
-                        "action": action_name,
-                        "params": {"confirm": True, "secret": "must-not-be-logged"},
-                    },
-                )
-            )
-        )
-    finally:
-        registry.unregister(action_name)
-
-    # ZARA-CORE-STATE-ACAO-001: handle_action_execute agora tambem manda
-    # state-change (EXECUTING/ERROR) em volta da resposta -- sent[-1] deixou
-    # de ser garantidamente a resposta. Filtra pelo tipo em vez de posicao.
-    result = next(m for m in sent if m.type == "response").response["result"]
-    assert not result.success
-    assert calls == []
-    assert "must-not-be-logged" not in capsys.readouterr().out
 
 
 def test_action_execute_rejects_non_object_params():

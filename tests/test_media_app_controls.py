@@ -19,16 +19,14 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 
 def test_youtube_open_uses_fixed_home_route(monkeypatch):
     # AUDITORIA_2026-08-27 (Alex, ao vivo): youtube_open e LOCAL_PC_CONTROL de
-    # proposito -- nao pode depender do Supercerebro. Antes este teste
-    # simulava browser_open_url via registry._actions, o que so funcionava
-    # porque youtube_open reentrava no gate de browser_open_url (o bug que
-    # bloqueava "abra o youtube" sem Supercerebro). Agora simula a funcao
-    # crua que youtube_open realmente chama.
+    # proposito. Antes este teste simulava browser_open_url via
+    # registry._actions, o que so funcionava porque youtube_open reentrava no
+    # gate de browser_open_url (o bug que bloqueava "abra o youtube" sem
+    # motivo). Agora simula a funcao crua que youtube_open realmente chama.
     open_url = Mock(return_value=ActionResult(success=True, output="sent", data={"dispatch": "DISPATCH_PROVEN"}))
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
     assert load_capability("browser_open_url")
-    monkeypatch.setattr(registry, "pc_control_allowed", False)
 
     result = registry.execute("youtube_open")
 
@@ -56,7 +54,6 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
     assert load_capability("browser_open_url")
-    monkeypatch.setattr(registry, "pc_control_allowed", False)
 
     result = registry.execute(action_name, query=query)
 
@@ -73,12 +70,11 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
         ("spotify_search", {"query": "jazz focus"}, "open.spotify.com/search/jazz%20focus"),
     ],
 )
-def test_browser_opening_media_actions_work_without_supercerebro(monkeypatch, action_name, kwargs, expected):
+def test_browser_opening_media_actions_work(monkeypatch, action_name, kwargs, expected):
     # AUDITORIA_2026-08-27 (Alex, ao vivo): "abra o youtube" parou de
-    # funcionar, exigindo Supercerebro sem motivo -- youtube_open/search e
-    # spotify_search sao LOCAL_PC_CONTROL de proposito e tem que funcionar
-    # com Supercerebro OFF (o padrao de boot). Este teste antes esperava o
-    # oposto (bloqueado sem Supercerebro), o que era o proprio bug.
+    # funcionar, bloqueado sem motivo -- youtube_open/search e spotify_search
+    # sao LOCAL_PC_CONTROL de proposito e tem que sempre funcionar. Este
+    # teste antes esperava o oposto (bloqueado), o que era o proprio bug.
     calls: list[str] = []
 
     def open_url(url):
@@ -88,7 +84,6 @@ def test_browser_opening_media_actions_work_without_supercerebro(monkeypatch, ac
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
     assert load_capability("browser_open_url")
-    monkeypatch.setattr(registry, "pc_control_allowed", False)
 
     allowed = registry.execute(action_name, **kwargs)
 
@@ -254,7 +249,7 @@ def test_youtube_semantic_control_has_no_coordinate_fallback():
     ],
 )
 def test_media_app_voice_intents_are_local(phrase, action, param):
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == action

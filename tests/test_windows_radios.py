@@ -103,15 +103,15 @@ def test_radio_mutation_never_claims_success_without_readback(monkeypatch):
     ],
 )
 def test_text_and_voice_radio_intents_use_registered_actions(phrase, action):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == action
     assert result.blocked is False
 
 
-def test_radio_intent_remains_local_when_supercerebro_is_off():
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect("ligue o bluetooth")
+def test_radio_intent_remains_local():
+    result = PcVoiceIntentDetector().detect("ligue o bluetooth")
 
     assert result.is_pc_intent is True
     assert result.action == "os_bluetooth_on"
@@ -135,7 +135,6 @@ async def test_text_and_voice_execute_the_same_wifi_action(tmp_path, monkeypatch
     handler = IPCHandler(capture)
     handler.conversation_history = None
     handler._speak_response = AsyncMock()
-    handler._set_supercerebro_state(True)
 
     await handler.handle_send_message(
         IPCMessage(type="send-message", request_id="text-wifi", payload={"text": "ligue o wi-fi"})

@@ -22,7 +22,6 @@ O que ele faz
      - "claude"  → fala com o Claude Code via subprocesso estruturado.
      - "codex"   → fala com o Codex via subprocesso (reusa
                    `core.ponte_codex_cli.falar_com_codex` se disponível).
-     - "hermes"  → repassa para o Hermes Client local, se estiver ativo.
      - "todos"   → consulta zara + codex + claude e junta as respostas.
 4. Persiste o dono e o `ultimo_update` no mesmo arquivo de sempre
    (`config/telegram_lido.json`).
@@ -173,24 +172,6 @@ def _falar_com_claude(texto: str, motor: str) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Executor para "hermes" — gateway local
-# ---------------------------------------------------------------------------
-def _falar_com_hermes(texto: str) -> tuple[str, str]:
-    try:
-        from integrations.hermes.client import HermesClient  # type: ignore
-
-        client = HermesClient()
-        result = client.send_message(texto)
-        if isinstance(result, dict):
-            if result.get("success"):
-                return str(result.get("text") or ""), ""
-            return "", str(result.get("error") or "falha desconhecida")
-        return str(result), ""
-    except Exception as exc:
-        return "", f"{type(exc).__name__}: {exc}"
-
-
-# ---------------------------------------------------------------------------
 # Despachante principal — mesmo formato da ZARA-TELEGRAM-001
 # ---------------------------------------------------------------------------
 async def _executar(destino: str, texto: str) -> str:
@@ -232,12 +213,6 @@ async def _executar(destino: str, texto: str) -> str:
         if erro:
             return f"Não consegui falar com o Claude: {erro}"
         return f"Claude:\n\n{resposta}"
-
-    if destino == "hermes":
-        resposta, erro = await asyncio.to_thread(_falar_com_hermes, texto)
-        if erro:
-            return f"Hermes não veio: {erro}"
-        return f"Hermes:\n\n{resposta}"
 
     if destino == "todos":
         partes: list[str] = []

@@ -20,22 +20,13 @@ def test_system_env_is_gated_as_medium_code_execution():
     assert (spec.risk, spec.capability) == ("MEDIUM", "CODE_EXECUTION")
 
 
-def test_system_env_requires_capability_and_medium_risk_gates(monkeypatch):
+def test_system_env_requires_medium_risk_gate(monkeypatch):
     secret = "must-never-appear-in-an-action-result"
     assert load_capability("system_env") is True
     registry = get_registry()
     monkeypatch.delenv("ZARA_TEST_GATED_ENV", raising=False)
-    monkeypatch.setattr(registry, "pc_control_allowed", False)
     monkeypatch.setattr(registry, "medium_risk_open", False)
 
-    capability_blocked = registry.execute("system_env", var_name="ZARA_TEST_GATED_ENV", value=secret)
-
-    assert capability_blocked.success is False
-    assert "Superc" in capability_blocked.error
-    assert secret not in capability_blocked.error
-    assert "ZARA_TEST_GATED_ENV" not in os.environ
-
-    monkeypatch.setattr(registry, "pc_control_allowed", True)
     medium_blocked = registry.execute("system_env", var_name="ZARA_TEST_GATED_ENV", value=secret)
 
     assert medium_blocked.success is False

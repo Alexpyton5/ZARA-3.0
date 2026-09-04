@@ -3,7 +3,6 @@
 ZARA-PC-CONTROL-VOICE-BINDING-001
 
 PC voice intent detector. Maps natural language Windows commands to existing PC control actions.
-With Supercerebro OFF, detected intents are blocked (BLOCKED_PC_CONTROL).
 """
 
 import json
@@ -53,33 +52,6 @@ _NOME_CLAUDE = (
 )
 _NOME_CODEX = r"(?:codex|códex|codes|c[óo]dice|cortex|chat\s*gpt|chatgpt|cheat\s*gpt)"
 
-_LOCAL_DETERMINISTIC_ACTIONS = frozenset({
-    "os_app", "os_open", "os_volume", "audio_mute", "audio_unmute",
-    "os_brightness_absolute", "os_brightness_up", "os_brightness_down",
-    "os_night_light_on", "os_night_light_off", "os_wifi_on", "os_wifi_off",
-    "os_bluetooth_on", "os_bluetooth_off", "media_play_pause", "youtube_pause", "youtube_resume", "youtube_seek", "youtube_now_playing", "youtube_next", "youtube_another_by_artist", "media_next",
-    "media_previous", "window_minimize", "window_maximize", "window_restore", "window_focus_named",
-    "window_move", "window_resize_larger", "window_close",
-    "window_switch", "window_switch_next", "youtube_open", "youtube_search", "youtube_play_by_name", "spotify_search",
-    "youtube_skip_ad", "browser_new_tab", "browser_back", "browser_forward", "browser_read_page", "browser_scroll", "browser_close_tab",
-    "vision_screenshot", "os_notify",
-    "os_close_safe_app",
-    "system_time", "system_info", "system_metrics", "system_processes", "os_clipboard", "os_clipboard_read",
-    "input_type_text", "input_hotkey",
-    "audio_status",
-    "os_service_list", "os_task_list", "os_power_plan_list", "os_network_adapters",
-    "os_wifi_profiles", "os_vpn_list", "os_clipboard_history", "os_recycle_bin_list",
-    "window_snap", "window_virtual_desktop_create", "window_virtual_desktop_switch",
-    "window_virtual_desktop_move", "window_minimize_all", "window_show_desktop",
-    # ZARA-PONTE-CLAUDE-001: falar com o Claude Code é reflexo local, não pode
-    # depender do Supercérebro estar ligado — que é o estado padrão no boot.
-    "claude_ler", "claude_enviar", "codex_ler", "codex_enviar", "ponte_repassar",
-    # ZARA-APRENDIZADO-001: contar o que aprendeu é reflexo local, não depende
-    # do Supercérebro nem de rede.
-    "aprendizado_resumo",
-})
-
-
 # ZARA-INTENSIDADE-VOLUME-001 (Alex, 2026-08-28)
 # "põe o som lá em baixo" virou -10% fixo; "diminua muito o volume" nem
 # reconhecia. Alex: "quando eu peça pra diminuir muito, diminua muito na
@@ -124,18 +96,16 @@ class PcVoiceIntentDetector:
 
     def __init__(
         self,
-        pc_control_allowed: bool = False,
         volume_context_level: int | None = None,
         window_context_available: bool = False,
         folder_context: str | None = None,
     ):
-        self.pc_control_allowed = pc_control_allowed
         self.volume_context_level = volume_context_level
         self.window_context_available = window_context_available
         self.folder_context = folder_context
 
         # Advanced OS commands. Each tuple is (regex, action, default_param).
-        # Mutating items still pass the Supercerebro and registry risk gates.
+        # Mutating items still pass the registry risk gates.
         self.advanced_patterns = [
             (r'^(?:zara[,.\s]+)?(?:liste|lista|mostre|quais\s+s[ãa]o)\s+(?:os\s+)?servi[cç]os(?:\s+do\s+windows)?\s*[.!?]*$', "os_service_list", ""),
             (r'^(?:zara[,.\s]+)?(?:inicie|inicia|ligue)\s+(?:o\s+)?servi[cç]o\s+(.+?)\s*[.!?]*$', "os_service_start", None),
@@ -568,14 +538,12 @@ class PcVoiceIntentDetector:
                 # Verificar se a ação ainda existe no registry
                 registry = get_registry()
                 if action_name in registry.get_all_specs():
-                    blocked = not self.pc_control_allowed and action_name not in _LOCAL_DETERMINISTIC_ACTIONS
                     return PcVoiceResult(
                         is_pc_intent=True,
                         action=action_name,
                         param="",  # Parâmetros podem ser extraídos depois pelo ipc_handlers se necessário
-                        blocked=blocked,
-                        physical_effect=0 if blocked else 1,
-                        reply="" if not blocked else "Para controlar o computador, ative o Supercérebro."
+                        physical_effect=1,
+                        reply="",
                     )
         except Exception:
             pass  # Falha silenciosa para não atrapalhar o fluxo principal
@@ -650,15 +618,12 @@ class PcVoiceIntentDetector:
                     reply="Não tenho um volume verificado recente. Diga o nível desejado.",
                     contextual=True,
                 )
-            blocked = self._blocked_by_superbrain("os_volume")
             direction = "up" if contextual_volume.group("direction") == "alto" else "down"
             return PcVoiceResult(
                 is_pc_intent=True,
                 action="os_volume",
                 param=_encode_intensity(direction, contextual_volume.groupdict().get("intensity")),
-                blocked=blocked,
-                physical_effect=0 if blocked else 1,
-                reply="Para controlar o computador, ative o Supercérebro." if blocked else "",
+                physical_effect=1,
                 contextual=True,
             )
 
@@ -681,13 +646,10 @@ class PcVoiceIntentDetector:
                     reply="Não tenho uma janela recente e inequívoca. Diga qual janela devo controlar.",
                     contextual=True,
                 )
-            blocked = self._blocked_by_superbrain(action)
             return PcVoiceResult(
                 is_pc_intent=True,
                 action=action,
-                blocked=blocked,
-                physical_effect=0 if blocked else 1,
-                reply="Para controlar o computador, ative o Supercérebro." if blocked else "",
+                physical_effect=1,
                 contextual=True,
             )
 
@@ -731,14 +693,11 @@ class PcVoiceIntentDetector:
                     reply="Qual pasta devo mostrar?",
                     contextual=True,
                 )
-            blocked = self._blocked_by_superbrain("os_open")
             return PcVoiceResult(
                 is_pc_intent=True,
                 action="os_open",
                 param=self.folder_context,
-                blocked=blocked,
-                physical_effect=0 if blocked else 1,
-                reply="Para controlar o computador, ative o Supercérebro." if blocked else "",
+                physical_effect=1,
                 contextual=True,
             )
 
@@ -765,11 +724,9 @@ class PcVoiceIntentDetector:
                 "anterior": "previous", "seguinte": "next",
             }
             param = translations.get(str(param), param)
-            blocked = self._blocked_by_superbrain(action)
             return PcVoiceResult(
-                is_pc_intent=True, action=action, param=param or "", blocked=blocked,
-                physical_effect=0 if blocked else 1,
-                reply="Para controlar o computador, ative o SupercÃ©rebro." if blocked else "",
+                is_pc_intent=True, action=action, param=param or "",
+                physical_effect=1,
             )
 
         for pattern, handler, action, default_param in self.patterns:
@@ -785,7 +742,7 @@ class PcVoiceIntentDetector:
                     "telegram", "obsidian", "winrar", "wordpad",
                 }:
                     # ZARA-APPS-REAIS-2026-08-27: antes de recusar, tenta achar
-                    # o app pelo apelido falado (ex.: "cursor", "hermes",
+                    # o app pelo apelido falado (ex.: "cursor",
                     # "geforce now") na lista real de apps instalados do Alex.
                     resolved = resolve_app_alias(param)
                     if resolved:
@@ -831,18 +788,12 @@ class PcVoiceIntentDetector:
                         reply=RESPOSTA_NAO_SEI,
                     )
 
-                blocked = self._blocked_by_superbrain(action)
-                reply = ""
-                if blocked:
-                    reply = "Para controlar o computador, ative o Supercérebro."
-
                 return PcVoiceResult(
                     is_pc_intent=True,
                     action=action,
                     param=param,
-                    blocked=blocked,
-                    physical_effect=0 if blocked else 1,
-                    reply=reply
+                    physical_effect=1,
+                    reply="",
                 )
 
         # Try free reasoning fallback as last resort
@@ -858,8 +809,7 @@ class PcVoiceIntentDetector:
                 # Use all available actions but limit prompt size if needed
                 action_list = sorted(list(available_actions))
                 
-                # If action list is too long, prioritize PC control actions
-                # (those in _LOCAL_DETERMINISTIC_ACTIONS are safe to use without Supercérebro)
+                # If action list is too long, prioritize PC control actions.
                 # But for completeness, we'll use all actions and let validation handle it
                 action_json = json.dumps(action_list, ensure_ascii=False)
                 
@@ -932,25 +882,20 @@ Respond ONLY with valid JSON, no extra text."""
                             # Valid action detected - extract parameters if any
                             params = parsed.get("param", "")
                             
-                            # Check if action is blocked by Supercérebro
-                            blocked = not self.pc_control_allowed and action_name not in _LOCAL_DETERMINISTIC_ACTIONS
-                            
-                            # Auto-Aprendizado: Se a ação não está bloqueada, aprender o mapeamento
-                            # para que da próxima vez seja tratada no Fast Path local.
-                            if not blocked:
-                                try:
-                                    aprendizado = Aprendizado()
-                                    aprendizado.reforjar_intencao(text, action_name, sucesso=True)
-                                except Exception:
-                                    pass  # Falha silenciosa para não atrapalhar o fluxo
-                            
+                            # Auto-Aprendizado: aprender o mapeamento para que da
+                            # próxima vez seja tratado no Fast Path local.
+                            try:
+                                aprendizado = Aprendizado()
+                                aprendizado.reforjar_intencao(text, action_name, sucesso=True)
+                            except Exception:
+                                pass  # Falha silenciosa para não atrapalhar o fluxo
+
                             return PcVoiceResult(
                                 is_pc_intent=True,
                                 action=action_name,
                                 param=str(params) if params else "",
-                                blocked=blocked,
                                 physical_effect=0,  # Will be set correctly during execution
-                                reply="" if not blocked else "Para controlar o computador, ative o Supercérebro."
+                                reply="",
                             )
                     except (json.JSONDecodeError, KeyError, TypeError):
                         # Invalid JSON response - fall through to return None
@@ -960,9 +905,6 @@ Respond ONLY with valid JSON, no extra text."""
                 pass
         
         return PcVoiceResult(is_pc_intent=False)
-
-    def _blocked_by_superbrain(self, action: str) -> bool:
-        return not self.pc_control_allowed and action not in _LOCAL_DETERMINISTIC_ACTIONS
 
     # Handlers
     def _browser_native(self, m):

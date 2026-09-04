@@ -4,7 +4,7 @@
 /* ============================================================================
    Acréscimos do app — tudo acima desta linha é o CSS que o Alex gerou, byte a
    byte. Aqui embaixo ficam só as peças que a prévia não tinha porque não
-   precisava: escolher motor de IA, ver a conversa, avisos e o botão do Hermes.
+   precisava: escolher motor de IA, ver a conversa e avisos.
    Todas usam as variáveis dele, para não destoar.
    ============================================================================ */
 
@@ -56,9 +56,6 @@
 .mic-button.desligado svg, .voice-button.desligado .voice-bars i { color: #fff; background: currentColor; }
 
 .lab-cheio { grid-column: 1 / -1; min-height: 0; overflow: auto; }
-
-.hermes { margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 11px; color: var(--muted); background: var(--card); cursor: pointer; font-size: 11px; }
-.hermes.ativo { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 
 .zara-toasts { position: fixed; right: 22px; bottom: 22px; display: grid; gap: 8px; z-index: 40; }
 .zara-toast { padding: 10px 15px; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: var(--window); box-shadow: 0 14px 34px rgba(0,0,0,.3); font-size: 12px; }
@@ -334,7 +331,6 @@
 .zara-preview.theme-light .lab-composer input { color: var(--ink) !important; }
 .zara-preview.theme-light .lab-composer input::placeholder { color: var(--muted) !important; }
 .zara-preview.theme-light .lab-composer button { color: var(--accent) !important; }
-.zara-preview.theme-light .hermes { color: var(--muted) !important; background: rgba(255,255,255,.5) !important; }
 
 /* baloes: mesmos tres tons do escuro, na versao clara */
 .zara-preview.theme-light .lab-messages article { color: var(--ink) !important; }
@@ -742,8 +738,6 @@
 .zara-preview.theme-light .lab-composer input { color: #EDEAE4 !important; }
 .zara-preview .lab-composer button,
 .zara-preview.theme-light .lab-composer button { color: #DCD8D1 !important; }
-.zara-preview .hermes,
-.zara-preview.theme-light .hermes { color: #9A968E !important; background: rgba(255,255,255,.05) !important; border-color: rgba(255,255,255,.12) !important; }
 .zara-preview.theme-light .lab-watermark { filter: brightness(0) invert(1) sepia(.3) saturate(.5) !important; }
 
 /* ---- o Lab volta para o grupo das barras ----
@@ -765,11 +759,6 @@
   background: rgba(255,255,255,.5) !important;
 }
 .zara-preview.theme-light .lab-composer input { color: var(--ink) !important; }
-.zara-preview.theme-light .hermes {
-  color: var(--muted) !important;
-  background: rgba(255,255,255,.45) !important;
-  border-color: var(--line) !important;
-}
 
 /* ---- o anel gira o tempo inteiro ----
    A animacao original era de 60s por volta: quase imperceptivel, e Alex leu

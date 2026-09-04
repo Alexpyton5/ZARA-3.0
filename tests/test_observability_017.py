@@ -17,7 +17,6 @@ async def test_executor_exception_logs_safe_structured_event(monkeypatch, capsys
         raise RuntimeError(r"boom C:\private\data.txt token=SECRET")
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fail)
     assert await handler._try_pc_intent("volume em 20%") is None
     logged = capsys.readouterr().err

@@ -4,7 +4,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 
 def test_type_text_preserves_original_unicode_and_case():
     text = "Zara, digite ‘Teste da ZARA com acentuação: ação, memória, coração.’"
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect(text)
+    result = PcVoiceIntentDetector().detect(text)
     assert result.action == "input_type_text"
     assert result.param == "Teste da ZARA com acentuação: ação, memória, coração."
     assert result.blocked is False

@@ -224,7 +224,6 @@ class PonteTelegram:
                     ("claude", "claude"),
                     ("codex", "codex"),
                     ("zara", "zara"),
-                    ("hermes", "hermes"),
                     ("todos", "todos"),
                     ("todo mundo", "todos"),
                     ("galera", "todos"),
@@ -349,7 +348,6 @@ class PonteTelegram:
                 "Use assim:\n"
                 "claude: <o que quer que eu faça>\n"
                 "codex: <tarefa para o Codex>\n"
-                "hermes: <tarefa para o Hermes>\n"
                 "zara: <comando para mim>"
             )
             return

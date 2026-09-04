@@ -66,26 +66,11 @@ async def test_latest_download_routes_known_downloads_path(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_file_mutation_requires_superbrain_before_executor(monkeypatch):
-    execute = AsyncMock()
-    monkeypatch.setattr("core.action_registry.execute_action", execute)
-    handler = IPCHandler(AsyncMock())
-
-    reply = await handler._try_file_intent(
-        "crie o arquivo nota.txt em Downloads com o conteúdo Olá"
-    )
-
-    assert reply == "Para alterar arquivos, ative o Supercérebro e repita o comando explícito."
-    execute.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 async def test_explicit_file_mutation_routes_confirmed_known_path(tmp_path, monkeypatch):
     execute = AsyncMock(return_value=ActionResult(success=True, output="Written"))
     monkeypatch.setattr("core.action_registry.execute_action", execute)
     monkeypatch.setattr("core.actions.os_ops._resolve_safe_folder", lambda folder: tmp_path)
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
 
     reply = await handler._try_file_intent(
         "crie o arquivo nota.txt em Downloads com o conteúdo Olá"

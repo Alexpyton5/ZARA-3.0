@@ -1,17 +1,17 @@
 """ZARA Mentor Relay 001
 
 A truthful, zero-cost bridge contract between the local ZARA LAB and the
-external Mentor conversation already used by Hermes' continuity loop.
+external Mentor conversation, carried by an external continuity process.
 
 This module does NOT embed ChatGPT, does NOT use OpenAI API keys, and does NOT
 pretend a local model is the Mentor.
 
 Protocol folders:
 %LOCALAPPDATA%/ZARA3/data/mentor-relay/
-  outbox/   ZARA -> Hermes continuity -> Mentor
-  inbox/    Hermes continuity -> ZARA
+  outbox/   ZARA -> continuity process -> Mentor
+  inbox/    continuity process -> ZARA
   archive/  consumed replies / processed outbound messages
-  status.json  heartbeat written by the external Hermes relay
+  status.json  heartbeat written by the external continuity process
 
 All writes are atomic JSON files. No secrets are required.
 """
@@ -75,7 +75,7 @@ class MentorRelay:
             if online:
                 return RelayStatus(
                     state="ONLINE VIA RELAY",
-                    detail="Conectado ao Mentor externo pela ponte Hermes/Continuity.",
+                    detail="Conectado ao Mentor externo pela ponte de continuidade.",
                     online=True,
                     updated_at=updated,
                     age_seconds=age,
@@ -135,7 +135,7 @@ class MentorRelay:
                     "content": content,
                     "created_at": float(data.get("created_at") or time.time()),
                     "source": str(data.get("source") or "mentor_external"),
-                    # Preserve the real sender identity so a Hermes/Codex message
+                    # Preserve the real sender identity so another agent's message
                     # is never rendered as if the Mentor had written it.
                     "agent": str(data.get("agent") or "mentor").strip().lower() or "mentor",
                     "task_id": data.get("task_id"),

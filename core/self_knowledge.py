@@ -23,7 +23,7 @@ def detect_self_knowledge_topic(text: str) -> str | None:
     if re.search(r"\b(por que|porque).*(falhou|nao funcionou|deu erro)\b|\bultima falha\b", value):
         return "failure"
     component_match = re.search(
-        r"\b(?:o que e|quem e) (hermes|codex|mentor|supercerebro|lab)\b", value
+        r"\b(?:o que e|quem e) (codex|mentor|lab)\b", value
     )
     if component_match:
         return component_match.group(1)
@@ -94,12 +94,10 @@ def render_self_knowledge(topic: str, snapshot: dict[str, Any]) -> str:
             f"Runtime: {runtime.get('executable')}. Dados locais: {runtime.get('data_root')}."
         )
 
-    if topic in {"hermes", "codex", "mentor", "supercerebro", "lab"}:
+    if topic in {"codex", "mentor", "lab"}:
         explanations = {
-            "hermes": "Hermes é a integração local de execução e o gateway usado pelo Supercérebro.",
             "codex": "Codex é o agente de desenvolvimento que trabalha no código da ZARA.",
             "mentor": "Mentor é o conselheiro do projeto e orienta decisões importantes.",
-            "supercerebro": "Supercérebro é o modo explícito que conecta o gateway Hermes e libera o gate de controle do PC; ele não remove confirmações de risco.",
             "lab": "LAB é o coordenador local de propostas, tarefas e workers da ZARA.",
         }
         return explanations[topic] + " " + _state_line("Estado atual", _component(snapshot, topic))
@@ -119,8 +117,5 @@ def render_self_knowledge(topic: str, snapshot: dict[str, Any]) -> str:
         return "Meu catálogo de capacidades ainda não está disponível neste runtime."
     lines = [_state_line(str(item.get("label")), item) for item in capabilities]
     counts = snapshot.get("action_counts", {})
-    header = (
-        f"Catálogo vivo: {counts.get('registered', 0)} ações registradas; "
-        f"Supercérebro {'ON' if snapshot.get('pc_control_allowed') else 'OFF'}."
-    )
+    header = f"Catálogo vivo: {counts.get('registered', 0)} ações registradas."
     return header + "\n" + "\n".join(f"- {line}" for line in lines)

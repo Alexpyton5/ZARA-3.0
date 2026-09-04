@@ -227,10 +227,6 @@ class ZaraOrchestrator:
         if not model_config:
             return f"Error: Model {model_id} not found"
 
-        # Check if Hermes (local)
-        if model_config.provider == ModelProvider.HERMES:
-            return await self._call_hermes(message, model_config, stream, history)
-
         # Check if Ollama (local)
         if model_config.api_key_env == "OLLAMA_API_KEY":
             return await self._call_ollama(message, model_config, stream, history)
@@ -259,48 +255,6 @@ class ZaraOrchestrator:
         ):
             normalized.pop()
         return normalized
-
-    async def _call_hermes(
-        self, message: str, model_config, stream: bool = False, history=None
-    ) -> str:
-        """Call Hermes Gateway"""
-        try:
-            import httpx
-
-            api_key = model_config.api_key_env
-            import os
-            key = os.environ.get(api_key, "zara-hermes-bridge-key-2026")
-
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                payload = {
-                    "model": model_config.id,
-                    "messages": [
-                        {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
-                        *self._normalized_history(history, message),
-                        {"role": "user", "content": message}
-                    ],
-                    "stream": stream,
-                }
-
-                if stream:
-                    # For streaming, we'd need to handle SSE - simplified for now
-                    pass
-
-                resp = await client.post(
-                    f"{model_config.base_url}/chat/completions",
-                    json=payload,
-                    headers={"Authorization": f"Bearer {key}"},
-                    timeout=120.0
-                )
-
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                else:
-                    return f"Error: Hermes returned {resp.status_code}"
-
-        except Exception as e:
-            return f"Error calling Hermes: {e}"
 
     async def _call_ollama(
         self, message: str, model_config, stream: bool = False, history=None
@@ -459,8 +413,7 @@ class ZaraOrchestrator:
                 "provider": m.provider.value,
                 "task_types": [t.value for t in m.task_types],
                 "free_tier": m.free_tier_limit,
-                "available": m.provider == ModelProvider.HERMES
-                or m.api_key_env == "OLLAMA_API_KEY"
+                "available": m.api_key_env == "OLLAMA_API_KEY"
                 or m.api_key_env in self.model_router.api_keys
             }
             for m in models

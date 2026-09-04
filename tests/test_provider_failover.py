@@ -21,7 +21,6 @@ import pytest
 from core.model_router import (
     MODEL_REGISTRY,
     HealthState,
-    ModelProvider,
     ModelRouter,
     TaskType,
     get_model_config,
@@ -41,7 +40,7 @@ def router(monkeypatch):
 
 
 def _free_models(router):
-    return [m for m in router.get_available_models(include_hermes=False) if m.zero_cost_eligible]
+    return [m for m in router.get_available_models() if m.zero_cost_eligible]
 
 
 # ---------- 047 discovery ----------
@@ -54,14 +53,14 @@ def test_047_discovery_lists_free_models(router):
 def test_047_model_without_key_is_unavailable(router):
     target = _free_models(router)[0]
     router.api_keys.pop(target.api_key_env, None)
-    remaining = [m.id for m in router.get_available_models(include_hermes=False)]
+    remaining = [m.id for m in router.get_available_models()]
     assert target.id not in remaining
 
 
 def test_047_paid_models_are_not_routable_by_default(router):
-    ids = [m.id for m in router.get_available_models(include_hermes=False, include_paid=False)]
+    ids = [m.id for m in router.get_available_models(include_paid=False)]
     for model in MODEL_REGISTRY:
-        if not model.zero_cost_eligible and model.provider != ModelProvider.HERMES:
+        if not model.zero_cost_eligible:
             assert model.id not in ids
 
 

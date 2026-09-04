@@ -2,6 +2,12 @@
 
 Aplica-se a: `core/**/*.py`, `memory/**/*.py`, `integrations/**/*.py`, `main.py`, `build_exe.py`
 
+**2026-09-04:** Hermes (o gateway/agente externo) e o conceito de "Supercérebro"
+(gate de `pc_control_allowed`, toggle IPC, roteamento condicional de conversa) foram
+removidos do produto por decisão do Alex — ele não usa mais nenhum dos dois. Toda ação
+roda sem gate de capability agora (o gate de risco MEDIUM/HIGH continua independente e
+intacto). Não reintroduzir nenhum dos dois conceitos.
+
 ## Mapa mínimo antes de editar
 
 - `core/ipc_handlers.py` — dispatcher central (classe `IPCHandler`, ~2700 linhas)
@@ -12,8 +18,6 @@ Aplica-se a: `core/**/*.py`, `memory/**/*.py`, `integrations/**/*.py`, `main.py`
   - `_speak_response` — saída TTS
   - `handle_interrupt` — barge-in via UI
 - `core/pc_voice_intent.py` — `PcVoiceIntentDetector`, regex → nome de action
-  - `_LOCAL_DETERMINISTIC_ACTIONS` — conjunto isento do gate do Supercérebro
-  - `_blocked_by_superbrain(action)` — gate
 - `core/action_registry.py` — registro/execução de actions
 - `core/actions/*.py` — executores reais
 - `core/voice_stt.py`, `core/voice_tts.py`, `core/gemini_live_voice.py` — camada de voz
@@ -36,14 +40,6 @@ LLM / orchestrator
 
 **Qualquer PR que adicione um intent a um lado e não ao outro é regressão.**
 Ao alterar a cadeia, alterar as duas funções e provar com a mesma frase nos dois caminhos.
-
-## Invariante: reflexo local não depende do Supercérebro
-
-Ação local determinística tem de estar em `_LOCAL_DETERMINISTIC_ACTIONS`, senão fica
-bloqueada com Supercérebro OFF — que é o estado padrão de boot.
-
-Ao adicionar uma action local nova, adicionar ao conjunto **e** cobrir com teste que rode
-com `pc_control_allowed=False`.
 
 ## Invariante: resposta vem do executor
 
@@ -83,7 +79,7 @@ Usar o Python **do projeto**, por caminho explícito. Nunca o Python do Hermes.
 ## Proibido
 
 - adicionar caminho de resposta que fale sucesso sem executor
-- gatear ação local determinística atrás do Supercérebro
+- reintroduzir Hermes ou o gate do Supercérebro
 - divergir voz e texto
 - remover `[VOICE_TRACE]` "para limpar log"
 - mexer em `core/url_security.py` e nos gates de confirmação como efeito colateral

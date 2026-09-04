@@ -33,7 +33,7 @@ def test_mention_routes_to_opencode_without_stealing_others():
     assert resolve_lab_target("mentor", "@opencode EXECUTE implementar X") == "opencode"
     assert resolve_lab_target("zara", "@MENTOR teste") == "zara"
     assert resolve_lab_target("mentor", "@MENTOR teste") == "mentor"
-    assert resolve_lab_target("hermes", "olá") == "hermes"
+    assert resolve_lab_target("cline", "olá") == "cline"
     assert resolve_lab_target("", "mensagem sem alvo") == ""
 
 

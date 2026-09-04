@@ -45,7 +45,6 @@ def test_empty_action_type_does_not_crash():
 def test_gate_holds_even_with_valid_high_risk_confirmation(monkeypatch):
     """A correct one-shot proof still cannot trigger a real power command."""
     registry = ActionRegistry()
-    registry.pc_control_allowed = True
     registry.register("os_power", os_ops.os_power_action, risk="HIGH", capability="SYSTEM_POWER")
 
     challenge = registry.execute("os_power", action_type="shutdown")
@@ -65,7 +64,6 @@ def test_gate_holds_even_with_valid_high_risk_confirmation(monkeypatch):
 
 def test_missing_confirmation_is_denied():
     registry = ActionRegistry()
-    registry.pc_control_allowed = True
     registry.register("os_power", os_ops.os_power_action, risk="HIGH", capability="SYSTEM_POWER")
     res = registry.execute("os_power", action_type="restart")
     assert res.success is False
@@ -74,7 +72,6 @@ def test_missing_confirmation_is_denied():
 
 def test_wrong_expired_and_reused_confirmation_are_denied():
     registry = ActionRegistry()
-    registry.pc_control_allowed = True
     registry.register("os_power", os_ops.os_power_action, risk="HIGH", capability="SYSTEM_POWER")
 
     challenge = registry.execute("os_power", action_type="restart")

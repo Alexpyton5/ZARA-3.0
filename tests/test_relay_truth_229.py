@@ -73,8 +73,8 @@ def test_invalid_payloads_are_quarantined_not_delivered(relay):
 
 
 def test_agent_identity_is_preserved(relay):
-    _write_reply(relay, "MR-AG-1", "oi", agent="hermes")
-    assert relay.drain_replies()[0]["agent"] == "hermes"
+    _write_reply(relay, "MR-AG-1", "oi", agent="codex")
+    assert relay.drain_replies()[0]["agent"] == "codex"
 
 
 # ------------------------------------------------------- 228 restart recovery

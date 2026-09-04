@@ -2,7 +2,7 @@ import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } f
 import {
   Activity, BadgeCheck, BrainCircuit, Check, ChevronRight, ChevronDown, CircleDot,
   Clock3, Code2, FlaskConical, GitBranch, LoaderCircle, MessageSquareText,
-  RefreshCw, Send, ShieldCheck, Sparkles, UserRound, Wrench, X
+  RefreshCw, Send, ShieldCheck, Sparkles, UserRound, X
 } from 'lucide-react';
 import {
   initialAutoScrollState,
@@ -111,7 +111,6 @@ const participantIcon = (id: string) => {
   if (id === 'alex') return UserRound;
   if (id === 'zara') return Sparkles;
   if (id === 'mentor') return BrainCircuit;
-  if (id === 'hermes') return Wrench;
   if (id === 'opencode') return Code2;
   if (id === 'openclaw') return BrainCircuit;
   if (id === 'cline') return ShieldCheck;
@@ -330,7 +329,7 @@ export const ZaraLab: React.FC = () => {
             <label>RESUMO<textarea value={proposalSummary} onChange={(e) => setProposalSummary(e.target.value)} placeholder="O que queremos melhorar e por quê?"/></label>
             <div className="lab-form-row">
               <label>RISCO<select value={proposalRisk} onChange={(e) => setProposalRisk(e.target.value)}><option>LOW</option><option>MEDIUM</option><option>HIGH</option></select></label>
-              <label>LEAD<select value={proposalOwner} onChange={(e) => setProposalOwner(e.target.value)}><option value="opencode">OpenCode</option><option value="openclaw">OpenClaw</option><option value="cline">Cline</option><option value="aider">Aider</option><option value="hermes">Hermes</option></select></label>
+              <label>LEAD<select value={proposalOwner} onChange={(e) => setProposalOwner(e.target.value)}><option value="opencode">OpenCode</option><option value="openclaw">OpenClaw</option><option value="cline">Cline</option><option value="aider">Aider</option></select></label>
             </div>
             <button className="lab-primary" type="submit" disabled={proposalBusy || !proposalTitle.trim() || !proposalSummary.trim()}>{proposalBusy ? <LoaderCircle className="spin" size={15}/> : <BadgeCheck size={15}/>} REGISTRAR PARA DISCUSSÃO</button>
           </form>

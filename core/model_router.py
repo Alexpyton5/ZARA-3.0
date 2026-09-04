@@ -4,7 +4,6 @@ ZARA Smart Router 001
 - AUTO • ECONÔMICO: fast/light/free-quota preserving first.
 - MANUAL: explicit model choice is respected; no silent fallback.
 - Provider/model health: auth, rate-limit, quota and transient failures.
-- Hermes is NEVER part of normal AUTO; Supercérebro remains explicit.
 """
 from __future__ import annotations
 
@@ -25,7 +24,6 @@ class ModelProvider(StrEnum):
     GEMINI = "gemini"
     ZAI = "zai"
     XAI = "xai"
-    HERMES = "hermes"
     OLLAMA = "ollama"
 
 
@@ -346,22 +344,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         auto_eligible=False,
     ),
 
-    # Explicit Supercérebro path only.
-    ModelConfig(
-        id="hermes_gateway",
-        name="Hermes Gateway (Supercérebro)",
-        provider=ModelProvider.HERMES,
-        api_model="hermes_gateway",
-        task_types=[TaskType.LOCAL_PRIVATE, TaskType.TOOL_USE, TaskType.CODING, TaskType.REASONING],
-        api_key_env="HERMES_API_KEY",
-        base_url="http://127.0.0.1:8642/v1",
-        max_tokens=32768,
-        free_tier_limit="Local",
-        priority=1,
-        supports_streaming=True,
-        supports_tools=True,
-        auto_eligible=False,
-    ),
 ]
 
 
@@ -424,7 +406,6 @@ class ModelRouter:
                     "nvidia_api_key": "NVIDIA_API_KEY",
                     "zai_api_key": "ZAI_API_KEY",
                     "xai_api_key": "XAI_API_KEY",
-                    "hermes_api_key": "HERMES_API_KEY",
                 }
                 for config_key, env_key in key_map.items():
                     value = str(config.get(config_key) or "").strip()
@@ -472,7 +453,7 @@ class ModelRouter:
         self._load_catalog_snapshot()
 
     def _catalog_allows(self, model: ModelConfig) -> bool:
-        if model.provider in {ModelProvider.HERMES, ModelProvider.XAI}:
+        if model.provider == ModelProvider.XAI:
             return True
         providers = self.catalog_snapshot.get("providers")
         if not isinstance(providers, dict):
@@ -584,9 +565,7 @@ class ModelRouter:
         r.last_error = text[:500]
         r.updated_at = now
 
-    def _routable(self, model: ModelConfig, include_paid: bool = False, include_hermes: bool = False) -> bool:
-        if model.provider == ModelProvider.HERMES:
-            return include_hermes
+    def _routable(self, model: ModelConfig, include_paid: bool = False) -> bool:
         if not model.auto_eligible:
             return False
         if not include_paid and not model.zero_cost_eligible:
@@ -621,11 +600,10 @@ class ModelRouter:
         policy: str = "smart",
         require_tools: bool = False,
         require_streaming: bool = True,
-        include_hermes: bool = False,
     ) -> list[ModelConfig]:
         ranked: list[tuple[int, ModelConfig]] = []
         for model in MODEL_REGISTRY:
-            if not self._routable(model, include_paid=False, include_hermes=include_hermes):
+            if not self._routable(model, include_paid=False):
                 continue
             if require_tools and not model.supports_tools:
                 continue
@@ -650,20 +628,18 @@ class ModelRouter:
         task_types: list[TaskType],
         require_tools: bool = False,
         require_streaming: bool = True,
-        include_hermes: bool = False,
         policy: str = "smart",
     ) -> ModelConfig | None:
-        ranked = self.rank_models(task_types, policy, require_tools, require_streaming, include_hermes)
+        ranked = self.rank_models(task_types, policy, require_tools, require_streaming)
         return ranked[0] if ranked else None
 
     def get_fallback_chain(
         self,
         task_types: list[TaskType],
         require_tools: bool = False,
-        include_hermes: bool = False,
         policy: str = "smart",
     ) -> list[ModelConfig]:
-        ranked = self.rank_models(task_types, policy, require_tools, True, include_hermes)
+        ranked = self.rank_models(task_types, policy, require_tools, True)
         return ranked[1:] if len(ranked) > 1 else []
 
     def record_usage(self, model_id: str, tokens: int = 0, success: bool = True) -> None:
@@ -674,21 +650,10 @@ class ModelRouter:
             item["errors"] = int(item.get("errors", 0)) + 1
         self._save_usage_stats()
 
-    def get_available_models(self, include_hermes: bool = True, include_paid: bool = False) -> list[ModelConfig]:
+    def get_available_models(self, include_paid: bool = False) -> list[ModelConfig]:
         available: list[ModelConfig] = []
         for model in MODEL_REGISTRY:
             if model.id == "gemini_live":
-                continue
-            if model.provider == ModelProvider.HERMES:
-                if not include_hermes:
-                    continue
-                import urllib.request
-                try:
-                    with urllib.request.urlopen(model.base_url.replace("/v1", "/health"), timeout=2) as resp:
-                        if resp.status == 200:
-                            available.append(model)
-                except Exception:
-                    pass
                 continue
             if not include_paid and not model.zero_cost_eligible:
                 continue
@@ -703,7 +668,7 @@ class ModelRouter:
     def configured_model_status(self, include_paid: bool = False) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for model in MODEL_REGISTRY:
-            if model.provider == ModelProvider.HERMES or model.id == "gemini_live":
+            if model.id == "gemini_live":
                 continue
             if not include_paid and not model.zero_cost_eligible:
                 continue
@@ -745,7 +710,6 @@ def route_message(
     context: dict | None = None,
     require_tools: bool = False,
     require_streaming: bool = True,
-    include_hermes: bool = False,
     policy: str = "smart",
 ) -> tuple[ModelConfig | None, list[ModelConfig]]:
     task_types = router.classify_intent(message, context)
@@ -754,7 +718,6 @@ def route_message(
         policy=policy,
         require_tools=require_tools,
         require_streaming=require_streaming,
-        include_hermes=include_hermes,
     )
     return (ranked[0], ranked[1:]) if ranked else (None, [])
 

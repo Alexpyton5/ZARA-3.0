@@ -72,7 +72,7 @@ def test_provider_em_cooldown_sai_da_roteabilidade(router):
     state = router._effective_record(model_router.get_model_config("nvidia_nemotron_ultra")).state
     assert state in {HealthState.EXHAUSTED, HealthState.COOLDOWN}
     # e o provider afetado não está mais listado como disponível
-    avail_ids = {m.id for m in router.get_available_models(include_hermes=True)}
+    avail_ids = {m.id for m in router.get_available_models()}
     assert "nvidia_nemotron_ultra" not in avail_ids
 
 
@@ -103,7 +103,7 @@ def test_recuperacao_automatica_apos_janela_vencida(router):
     state = router._effective_record(model_router.get_model_config("nvidia_nemotron_ultra")).state
     assert state is HealthState.AVAILABLE
     # e volta a aparecer como disponível
-    avail_ids = {m.id for m in router.get_available_models(include_hermes=True)}
+    avail_ids = {m.id for m in router.get_available_models()}
     assert "nvidia_nemotron_ultra" in avail_ids
 
 
@@ -177,7 +177,7 @@ def test_5xx_vira_error_provider_bloqueado(router):
     state = router._effective_record(model_router.get_model_config("nvidia_nemotron_ultra")).state
     assert state in {HealthState.ERROR, HealthState.COOLDOWN}
     # e o modelo fica fora da rota enquanto está bloqueado
-    avail = {m.id for m in router.get_available_models(include_hermes=True)}
+    avail = {m.id for m in router.get_available_models()}
     assert "nvidia_nemotron_ultra" in avail or router.health_for("nvidia_nemotron_ultra")["state"] != "AVAILABLE"
 
 

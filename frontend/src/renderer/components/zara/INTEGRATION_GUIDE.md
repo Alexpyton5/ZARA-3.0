@@ -203,8 +203,6 @@ function ZaraHUD() {
       metricsHistory={history}
       connections={[
         { id: 'backend', label: 'Backend', status: 'connected', latency: 12 },
-        { id: 'hermes', label: 'Hermes', status: 'connected', latency: 8 },
-        { id: 'supercerebro', label: 'Supercérebro', status: 'disconnected' },
       ]}
       voice={{
         status: 'listening',
@@ -218,8 +216,6 @@ function ZaraHUD() {
       onEngineChange={setEngine}
       onVoiceToggle={toggleVoice}
       onMuteToggle={toggleMute}
-      supercerebroActive={superActive}
-      onSupercerebroToggle={toggleSuper}
     />
   );
 }

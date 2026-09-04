@@ -7,7 +7,7 @@ import './HUD.css';
  * Features:
  * - Métricas CPU/RAM/Network/Storage com histórico visual
  * - Status de voz (microfone, TTS, wake word)
- * - Status de conexões (backend, Hermes, Supercérebro)
+ * - Status de conexões (backend)
  * - Engine de IA ativo
  * - Modo compacto para barra lateral / expandido para painel
  * - Atualização em tempo real via props ou callbacks
@@ -71,10 +71,6 @@ export interface HUDProps {
   onVoiceToggle?: () => void;
   /** Callback para toggle mute */
   onMuteToggle?: () => void;
-  /** Callback para toggle Supercérebro */
-  onSupercerebroToggle?: () => void;
-  /** Supercérebro ativo */
-  supercerebroActive?: boolean;
   /** Mostra timestamps */
   showTimestamps?: boolean;
   /** ClassName adicional */
@@ -289,8 +285,6 @@ export const HUD: React.FC<HUDProps> = ({
   onEngineChange,
   onVoiceToggle,
   onMuteToggle,
-  onSupercerebroToggle,
-  supercerebroActive = false,
   showTimestamps = true,
   className = '',
   style,
@@ -478,22 +472,6 @@ export const HUD: React.FC<HUDProps> = ({
             <span className="hud__engine-status">{engine.name}</span>
           </div>
         )}
-        
-        {onSupercerebroToggle && (
-          <div className="hud__section">
-            <label className="hud__supercerebro-toggle">
-              <input 
-                type="checkbox" 
-                checked={supercerebroActive} 
-                onChange={onSupercerebroToggle}
-                aria-label="Supercérebro Hermes"
-              />
-              <span className="hud__toggle-slider" />
-              <span className="hud__toggle-label">Supercérebro</span>
-              <StatusBadge status={supercerebroActive ? 'connected' : 'disconnected'} size="sm" label="" />
-            </label>
-          </div>
-        )}
       </div>
     );
   }
@@ -609,7 +587,7 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </section>
         
-        {/* Engine & Supercerebro */}
+        {/* Engine */}
         <section className="hud__panel hud__panel--engine">
           <h3 className="hud__panel-title">Motor de IA</h3>
           {engine && engines.length > 0 && (
@@ -630,22 +608,6 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="hud__engine-provider">{engine.provider}</span>
                 {engine.status && <span className="hud__engine-status">{engine.status}</span>}
               </div>
-            </div>
-          )}
-          
-          {onSupercerebroToggle && (
-            <div className="hud__supercerebro">
-              <label className="hud__supercerebro-toggle">
-                <input 
-                  type="checkbox" 
-                  checked={supercerebroActive} 
-                  onChange={onSupercerebroToggle}
-                  aria-label="Supercérebro Hermes"
-                />
-                <span className="hud__toggle-slider" />
-                <span className="hud__toggle-label">Supercérebro Hermes</span>
-              </label>
-              <StatusBadge status={supercerebroActive ? 'connected' : 'disconnected'} label={supercerebroActive ? 'Ativo' : 'Inativo'} />
             </div>
           )}
         </section>

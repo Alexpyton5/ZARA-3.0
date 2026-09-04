@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "Alex", email = "alex@zara.local"}]
-keywords = ["assistant", "ai", "jarvis", "voice", "neural", "hermes", "offline"]
+keywords = ["assistant", "ai", "jarvis", "voice", "neural", "offline"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",

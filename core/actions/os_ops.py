@@ -119,12 +119,6 @@ _SAFE_WINDOWS_APPS = {
         "executable": r"C:\Users\alexp\AppData\Local\Programs\cursor\Cursor.exe",
         "process_names": {"cursor.exe"},
     },
-    "hermes": {
-        "display_name": "Hermes",
-        "opened_reply": "Hermes aberto e verificado.",
-        "executable": r"C:\Users\alexp\AppData\Local\hermes\hermes-agent\apps\desktop\release\win-unpacked\Hermes.exe",
-        "process_names": {"hermes.exe"},
-    },
     "ik_product_manager": {
         "display_name": "IK Product Manager",
         "opened_reply": "IK Product Manager aberto e verificado.",
@@ -184,7 +178,6 @@ _APP_ALIASES = {
     "amplitube": "amplitube",
     "amplitube 5": "amplitube",
     "cursor": "cursor",
-    "hermes": "hermes",
     "ik product manager": "ik_product_manager",
     "geforce now": "geforce_now",
     "geforce": "geforce_now",
@@ -240,7 +233,7 @@ _SAFE_CLOSE_APPS = {
     "snipping_tool", "edge", "spotify",
     "telegram", "obsidian", "winrar", "wordpad",
     "ea_app", "nvidia_app", "windows_media_player",
-    "amplitube", "cursor", "hermes", "ik_product_manager",
+    "amplitube", "cursor", "ik_product_manager",
     "geforce_now", "opencode", "qwen", "wise_memory_optimizer",
 }
 _SAFE_CLOSE_TITLE_TOKENS = {
@@ -260,7 +253,6 @@ _SAFE_CLOSE_TITLE_TOKENS = {
     "windows_media_player": {"windows media player", "media player"},
     "amplitube": {"amplitube", "amplitube 5"},
     "cursor": {"cursor"},
-    "hermes": {"hermes"},
     "ik_product_manager": {"ik product manager"},
     "geforce_now": {"geforce now", "geforce"},
     "opencode": {"opencode", "open code"},
@@ -299,16 +291,13 @@ def _normalize_browser_url(raw: str) -> str | None:
 def _send_url_to_default_browser(url: str) -> ActionResult:
     """Nucleo real de browser_open_url, fora do decorator @action.
 
-    AUDITORIA_2026-08-27 (Alex): youtube_open (capability LOCAL_PC_CONTROL,
-    nao precisa de Supercerebro) chamava browser_open_url_action(...) por
-    dentro. Como toda funcao decorada com @action reentra no
+    AUDITORIA_2026-08-27 (Alex): youtube_open chamava browser_open_url_action(...)
+    por dentro. Como toda funcao decorada com @action reentra no
     ActionRegistry.execute() mesmo em chamada direta em Python, isso
-    reaplicava o gate de browser_open_url (capability PC_CONTROL, exige
-    Supercerebro) por cima de uma acao que ja tinha sido autorizada com um
-    nivel mais permissivo -- "abra o youtube" comecou a exigir Supercerebro
-    OFF sem nenhum motivo, regressao real reportada pelo Alex ao vivo.
-    Acoes que compoem outras acoes devem chamar a logica crua, nunca a
-    funcao decorada.
+    reaplicava os gates de browser_open_url por cima de uma acao que ja
+    tinha sido autorizada com um nivel mais permissivo -- regressao real
+    reportada pelo Alex ao vivo. Acoes que compoem outras acoes devem
+    chamar a logica crua, nunca a funcao decorada.
     """
     normalized = _normalize_browser_url(url)
     if normalized is None:

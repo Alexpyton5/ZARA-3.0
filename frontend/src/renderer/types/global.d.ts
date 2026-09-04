@@ -12,7 +12,6 @@ declare global {
   interface Window {
     zaraIPC: {
       engine?: { change?: (engine: string) => Promise<any>; list?: () => Promise<any> };
-      supercerebro?: { toggle?: (active: boolean) => Promise<any>; status?: () => Promise<any> };
       message?: { send?: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) => Promise<any>; interrupt?: () => Promise<any> };
       conversationHistory?: {
         list?: (limit?: number) => Promise<any>;
@@ -62,7 +61,6 @@ declare global {
         voiceOutputAudio?: (
           callback: (data: { pcm?: string; sampleRate?: number; stop?: boolean }) => void,
         ) => () => void;
-        supercerebroChange?: (callback: (active: boolean) => void) => () => void;
         reminderCreated?: (callback: (reminder: ReminderEvent) => void) => () => void;
         reminderFired?: (callback: (reminder: ReminderEvent) => void) => () => void;
         routingTelemetry?: (callback: (telemetry: { success: boolean; latency: number | null; fallback: boolean; pendingReview: number; error?: string | null }) => void) => () => void;

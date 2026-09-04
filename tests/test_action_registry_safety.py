@@ -87,41 +87,7 @@ def test_medium_risk_stays_closed_until_separately_authorized():
     assert calls == ["ran", "ran"]
 
 
-def test_supercerebro_off_blocks_non_read_only_even_with_confirmation():
-    registry = _isolated_registry()
-    calls: list[str] = []
-    registry.register(
-        "fake_pc_control",
-        lambda: calls.append("ran") or "done",
-        risk="LOW",
-        capability="PC_CONTROL",
-    )
-
-    result = registry.execute("fake_pc_control", confirm=True)
-
-    assert not result.success
-    assert "Superc" in result.error
-    assert calls == []
-
-
-def test_direct_decorated_pc_control_cannot_bypass_registry_gate(monkeypatch):
-    registry = _isolated_registry()
-    calls: list[str] = []
-    monkeypatch.setattr(action_registry, "registry", registry)
-
-    @action(name="decorated_pc_control", capability="PC_CONTROL")
-    def decorated_pc_control_action() -> str:
-        calls.append("ran")
-        return "done"
-
-    result = decorated_pc_control_action()
-
-    assert not result.success
-    assert "Superc" in result.error
-    assert calls == []
-
-
-def test_supercerebro_off_keeps_sanitized_read_only_available():
+def test_read_only_action_is_always_available():
     registry = _isolated_registry()
     registry.register("fake_read", lambda: "safe", capability="READ_ONLY")
 
@@ -131,7 +97,7 @@ def test_supercerebro_off_keeps_sanitized_read_only_available():
     assert result.output == "safe"
 
 
-def test_supercerebro_off_allows_closed_local_pc_control():
+def test_local_pc_control_is_always_available():
     registry = _isolated_registry()
     registry.register(
         "local_volume",
@@ -192,31 +158,6 @@ def test_registration_rejects_invalid_local_pc_control_without_orphan_metadata(n
     assert registry.get(name) is None
     assert registry.get_spec(name) is None
     assert name not in registry.list_actions(category)
-
-
-@pytest.mark.parametrize(
-    "capability",
-    [
-        "PC_CONTROL",
-        "REMOTE_PC_CONTROL",
-        "AGENTIC_PC_CONTROL",
-        "FILES_MUTATE",
-        "CODE_EXECUTION",
-        "SYSTEM_POWER",
-    ],
-)
-def test_supercerebro_off_blocks_remote_or_agentic_domains(capability):
-    registry = _isolated_registry()
-    calls: list[str] = []
-    registry.register("remote_action", lambda: calls.append("ran") or "done", capability=capability)
-
-    blocked = registry.execute("remote_action")
-    registry.pc_control_allowed = True
-    allowed = registry.execute("remote_action")
-
-    assert not blocked.success
-    assert allowed.success
-    assert calls == ["ran"]
 
 
 def test_registration_normalizes_known_policy_values():

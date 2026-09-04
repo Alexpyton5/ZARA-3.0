@@ -3,7 +3,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 
 
 def test_audio_status_voice_route_is_local():
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect("qual é o dispositivo de áudio")
+    result = PcVoiceIntentDetector().detect("qual é o dispositivo de áudio")
     assert result.action == "audio_status"
     assert result.blocked is False
 

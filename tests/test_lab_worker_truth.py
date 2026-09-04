@@ -13,7 +13,7 @@ async def test_lab_roster_contains_every_declared_member_without_fake_codex_onli
     by_id = {worker["id"]: worker for worker in workers}
 
     assert set(by_id) == {
-        "alex", "zara", "mentor", "codex", "hermes",
+        "alex", "zara", "mentor", "codex",
         "opencode", "openclaw", "cline", "aider", "revisor_supervisor",
     }
     assert by_id["codex"]["state"] == "NOT CONFIGURED"

@@ -11,7 +11,6 @@ from core.ipc_handlers import IPCHandler
 @pytest.mark.asyncio
 async def test_jarvis_plan_runs_existing_primitives_and_preserves_partial_failure():
     handler = IPCHandler(AsyncMock())
-    handler.supercerebro_active = True
     handler._try_pc_intent = AsyncMock(
         side_effect=(
             "Brilho definido para 45% e confirmado.",
@@ -48,23 +47,8 @@ async def test_jarvis_plan_runs_existing_primitives_and_preserves_partial_failur
 
 
 @pytest.mark.asyncio
-async def test_jarvis_plan_requires_superbrain_before_any_primitive_runs():
-    handler = IPCHandler(AsyncMock())
-    handler.supercerebro_active = False
-    handler._try_pc_intent = AsyncMock()
-
-    reply = await handler._try_jarvis_multi_action(
-        "Zara, deixa o computador confortável, abre o projeto e vê o que ficou pendente."
-    )
-
-    assert reply == "Para executar um pedido com várias etapas, ative o Supercérebro."
-    handler._try_pc_intent.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 async def test_jarvis_plan_keeps_missing_reminder_time_as_pending():
     handler = IPCHandler(AsyncMock())
-    handler.supercerebro_active = True
     handler._try_pc_intent = AsyncMock(return_value="Confirmado.")
     handler._try_operational_memory_intent = AsyncMock(return_value="Uma pendência.")
     handler._try_reminder_intent = AsyncMock(return_value="Que horas?")
@@ -81,7 +65,6 @@ async def test_jarvis_plan_keeps_missing_reminder_time_as_pending():
 @pytest.mark.asyncio
 async def test_practical_jarvis_plan_completes_five_runtime_proven_domains():
     handler = IPCHandler(AsyncMock())
-    handler.supercerebro_active = True
     handler._try_pc_intent = AsyncMock(
         side_effect=(
             "Pasta da ZARA aberta e confirmada.",

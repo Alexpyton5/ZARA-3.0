@@ -43,7 +43,7 @@ FRASES = {
            "quem foi einstein","obrigado","voce e legal"],
 }
 
-d = D(pc_control_allowed=False)
+d = D()
 res = {}
 for cat, fs in FRASES.items():
     res[cat] = []
@@ -53,7 +53,7 @@ for cat, fs in FRASES.items():
 
 tot = pega = perde = falso = 0
 print("="*94)
-print("AUDITORIA DE COMPREENSAO — fala natural  (Supercerebro OFF, nada executado)")
+print("AUDITORIA DE COMPREENSAO — fala natural  (nada executado)")
 print("="*94)
 for cat, itens in res.items():
     conversa = cat.startswith("CONVERSA")

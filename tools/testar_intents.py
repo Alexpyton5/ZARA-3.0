@@ -55,7 +55,7 @@ CASOS: list[tuple[str, str | None]] = [
 
 
 def main() -> int:
-    det = PcVoiceIntentDetector(pc_control_allowed=False)  # reflexo local nao depende do Supercerebro
+    det = PcVoiceIntentDetector()
     ok = falhas = 0
     print("=" * 72)
     print("TESTE DE INTENTS - fala natural  (NENHUMA acao e executada)")
@@ -66,8 +66,7 @@ def main() -> int:
         r = det.detect(frase)
         obtido = r.action if r.is_pc_intent else None
         bom = (obtido == esperado)
-        # bloqueado por Supercerebro OFF seria regressao da lei arquitetural
-        aviso = "  <<< BLOQUEADO com Supercerebro OFF" if (r.is_pc_intent and r.blocked) else ""
+        aviso = "  <<< BLOQUEADO" if (r.is_pc_intent and r.blocked) else ""
         print(f"{'OK ' if bom else 'FALHA':4} {frase:40} {str(esperado):26} {str(obtido)}{aviso}")
         if bom:
             ok += 1

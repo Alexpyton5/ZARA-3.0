@@ -51,13 +51,11 @@ def test_open_latest_never_claims_success_without_window_proof(tmp_path, monkeyp
 
 
 def test_write_create_append_and_explicit_overwrite(tmp_path):
-    # Enable PC control and MEDIUM risk for file mutation actions
+    # Enable MEDIUM risk for file mutation actions
     registry = get_registry()
-    original_pc_control = registry.pc_control_allowed
     original_medium_risk = registry.medium_risk_open
-    registry.pc_control_allowed = True
     registry.medium_risk_open = True
-    
+
     try:
         target = tmp_path / "nota.txt"
 
@@ -69,18 +67,15 @@ def test_write_create_append_and_explicit_overwrite(tmp_path):
         assert target.read_text(encoding="utf-8") == "novo"
     finally:
         # Restore original settings
-        registry.pc_control_allowed = original_pc_control
         registry.medium_risk_open = original_medium_risk
 
 
 def test_copy_move_and_rename_never_replace_existing_destination(tmp_path):
-    # Enable PC control and MEDIUM risk for file mutation actions
+    # Enable MEDIUM risk for file mutation actions
     registry = get_registry()
-    original_pc_control = registry.pc_control_allowed
     original_medium_risk = registry.medium_risk_open
-    registry.pc_control_allowed = True
     registry.medium_risk_open = True
-    
+
     try:
         source = tmp_path / "origem.txt"
         source.write_text("conteúdo", encoding="utf-8")
@@ -100,7 +95,6 @@ def test_copy_move_and_rename_never_replace_existing_destination(tmp_path):
         assert (tmp_path / "renomeado.txt").read_text(encoding="utf-8") == "conteúdo"
     finally:
         # Restore original settings
-        registry.pc_control_allowed = original_pc_control
         registry.medium_risk_open = original_medium_risk
 
 
@@ -131,13 +125,11 @@ def test_text_summary_is_bounded_and_deterministic(tmp_path):
 
 
 def test_organize_by_extension_never_deletes_or_replaces(tmp_path):
-    # Enable PC control and MEDIUM risk for file mutation actions
+    # Enable MEDIUM risk for file mutation actions
     registry = get_registry()
-    original_pc_control = registry.pc_control_allowed
     original_medium_risk = registry.medium_risk_open
-    registry.pc_control_allowed = True
     registry.medium_risk_open = True
-    
+
     try:
         (tmp_path / "a.txt").write_text("A", encoding="utf-8")
         (tmp_path / "b.md").write_text("B", encoding="utf-8")
@@ -155,5 +147,4 @@ def test_organize_by_extension_never_deletes_or_replaces(tmp_path):
         assert (tmp_path / "md" / "b.md").read_text(encoding="utf-8") == "B"
     finally:
         # Restore original settings
-        registry.pc_control_allowed = original_pc_control
         registry.medium_risk_open = original_medium_risk

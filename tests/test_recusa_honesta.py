@@ -23,7 +23,7 @@ from core.pc_voice_intent import RESPOSTA_NAO_SEI, PcVoiceIntentDetector
 
 
 def _detect(phrase: str):
-    return PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    return PcVoiceIntentDetector().detect(phrase)
 
 
 @pytest.mark.parametrize(
@@ -83,7 +83,6 @@ async def test_dispatcher_devolve_a_recusa_em_vez_de_none(monkeypatch):
     respondia qualquer coisa vinda do modelo."""
     execute = AsyncMock()
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", execute)
 
     reply = await handler._try_pc_intent("abra powershell")

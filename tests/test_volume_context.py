@@ -18,7 +18,6 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 )
 def test_volume_intent_recognition(phrase, context, expected_param):
     result = PcVoiceIntentDetector(
-        pc_control_allowed=True,
         volume_context_level=context,
     ).detect(phrase)
 
@@ -43,7 +42,7 @@ def test_volume_intent_recognition(phrase, context, expected_param):
     ],
 )
 def test_volume_intensity_recognition(phrase, expected_param):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == "os_volume"
@@ -67,7 +66,6 @@ async def test_volume_muito_applies_larger_step_immediately(monkeypatch):
         return 50 if read_calls["n"] == 1 else 20
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
     monkeypatch.setattr("core.ipc_handlers._read_windows_volume", fake_read_volume)
 
@@ -78,7 +76,7 @@ async def test_volume_muito_applies_larger_step_immediately(monkeypatch):
 
 
 def test_contextual_volume_without_volume_context_is_blocked_clearly():
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(
+    result = PcVoiceIntentDetector().detect(
         "deixa um pouco mais alto"
     )
 
@@ -107,7 +105,6 @@ async def test_contextual_volume_uses_verified_context_and_limits(
         return type("Result", (), {"success": True, "error": ""})()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._last_volume_level = starting_level
     handler._touch_operational_context()
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
@@ -126,7 +123,6 @@ async def test_volume_success_without_post_action_read_does_not_claim_level(monk
         return type("Result", (), {"success": True, "error": ""})()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
     monkeypatch.setattr("core.ipc_handlers._read_windows_volume", lambda: None)
 

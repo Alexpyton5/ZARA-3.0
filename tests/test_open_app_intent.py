@@ -31,7 +31,7 @@ from core.pc_voice_intent import RESPOSTA_NAO_SEI, PcVoiceIntentDetector
     ],
 )
 def test_safe_app_phrases_normalize_to_allowlisted_ids(phrase, expected_app):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == "os_app"
@@ -50,7 +50,7 @@ def test_safe_app_phrases_normalize_to_allowlisted_ids(phrase, expected_app):
     ],
 )
 def test_unknown_or_injected_app_request_is_blocked_without_execution(phrase):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == "os_app"
@@ -122,7 +122,6 @@ async def test_ipc_routes_allowlisted_app_and_returns_verified_reply(monkeypatch
         )()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
 
     reply = await handler._try_pc_intent("abra o wordpad")
@@ -135,7 +134,6 @@ async def test_ipc_routes_allowlisted_app_and_returns_verified_reply(monkeypatch
 async def test_ipc_never_executes_unknown_app(monkeypatch):
     execute = AsyncMock()
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", execute)
 
     reply = await handler._try_pc_intent("abra powershell")

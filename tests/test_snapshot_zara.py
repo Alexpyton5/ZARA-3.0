@@ -28,7 +28,7 @@ def test_redact_api_keys_file():
             "gemini_api_key": "AIzaSyRealKey123456789",
             "groq_api_key": "gsk_RealKey123456789012",
             "nvidia_api_key": "nvapi_RealKey123456789012345",
-            "hermes_api_key": "real-hermes-key",
+            "zai_api_key": "real-zai-key",
             "telegram_bot_token": "123456:ABC-DEF",
             "safe_key": "valor_seguro",
         }), encoding="utf-8")
@@ -40,7 +40,7 @@ def test_redact_api_keys_file():
         assert content["gemini_api_key"] == "«redacted»"
         assert content["groq_api_key"] == "«redacted»"
         assert content["nvidia_api_key"] == "«redacted»"
-        assert content["hermes_api_key"] == "«redacted»"
+        assert content["zai_api_key"] == "«redacted»"
         assert content["telegram_bot_token"] == "«redacted»"
         assert content["safe_key"] == "valor_seguro", "Chave nao sensivel deve ser mantida"
 

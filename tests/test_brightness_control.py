@@ -24,7 +24,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
     ],
 )
 def test_brightness_and_night_light_phrases(phrase, action, param):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == action
@@ -43,7 +43,7 @@ def test_brightness_and_night_light_phrases(phrase, action, param):
     ],
 )
 def test_brightness_intensity_recognition(phrase, action, param):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == action
@@ -64,7 +64,6 @@ async def test_brightness_muito_applies_larger_step_immediately(monkeypatch):
         return 60 if read_calls["n"] == 1 else 30
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
     monkeypatch.setattr("core.ipc_handlers._read_windows_brightness_level", fake_read_brightness)
 
@@ -348,7 +347,7 @@ def test_luz_noturna_nao_mexe_quando_ja_esta_no_estado_pedido(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_local_brightness_executes_without_supercerebro(monkeypatch):
+async def test_local_brightness_executes_directly(monkeypatch):
     execute = AsyncMock(return_value=type(
         "Result", (), {
             "success": True,
@@ -384,7 +383,6 @@ async def test_ipc_clamps_absolute_brightness_before_closed_action(monkeypatch):
         )()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
 
     reply = await handler._try_pc_intent("brilho em 150%")
@@ -396,7 +394,7 @@ async def test_ipc_clamps_absolute_brightness_before_closed_action(monkeypatch):
 
 @pytest.mark.parametrize("phrase", ["brilho && powershell", "hackeie a luz noturna", "execute os_brightness_up"])
 def test_brightness_never_maps_arbitrary_text(phrase):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
     assert result.action not in {
         "os_brightness_absolute",
         "os_brightness_up",

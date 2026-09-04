@@ -81,11 +81,6 @@ HIDDEN_IMPORTS = [
     "memory.memory_context",
     "memory.project_memory",
     "memory.user_memory",
-    # Hermes integration
-    "integrations.hermes.integration",
-    "integrations.hermes.bridge",
-    "integrations.hermes.client",
-    "integrations.hermes.ensure_gateway",
     # Actions (todas as 9 categorias)
     "core.actions.terminal",
     "core.actions.files",

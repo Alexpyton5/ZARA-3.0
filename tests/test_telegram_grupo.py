@@ -32,7 +32,7 @@ async def test_grupo_autorizado_transcreve_audio_e_nao_atende_outro_grupo(monkey
     monkeypatch.setattr(ponte, "avisar", avisar)
     monkeypatch.setattr(
         "core.telegram_audio.transcrever",
-        lambda _token, _mensagem: ("hermes: oi", ""),
+        lambda _token, _mensagem: ("codex: oi", ""),
     )
 
     await ponte._tratar(
@@ -54,8 +54,8 @@ async def test_grupo_autorizado_transcreve_audio_e_nao_atende_outro_grupo(monkey
         }
     )
 
-    assert ponte._recebidos == [("hermes", "oi")]
-    assert enviados == ['Ouvi: "hermes: oi"\n\nok']
+    assert ponte._recebidos == [("codex", "oi")]
+    assert enviados == ['Ouvi: "codex: oi"\n\nok']
 
 
 def _mensagem(texto, chat, tipo="group", date=None):
@@ -73,9 +73,9 @@ async def test_grupo_autorizado_e_atendido(monkeypatch):
     ponte = _grupo()
     monkeypatch.setattr(ponte, "avisar", lambda texto: _ok(texto))
 
-    await ponte._tratar(_mensagem("hermes: qual seu nome?", 77))
+    await ponte._tratar(_mensagem("codex: qual seu nome?", 77))
 
-    assert ponte._recebidos == [("hermes", "qual seu nome")]
+    assert ponte._recebidos == [("codex", "qual seu nome")]
 
 
 @pytest.mark.asyncio
@@ -84,7 +84,7 @@ async def test_outro_grupo_e_ignorado_sem_resposta(monkeypatch):
     enviados: list[str] = []
     monkeypatch.setattr(ponte, "avisar", lambda texto: enviados.append(texto) or _ok(texto))
 
-    await ponte._tratar(_mensagem("hermes: oi", 99))
+    await ponte._tratar(_mensagem("codex: oi", 99))
 
     assert ponte._recebidos == []
     assert enviados == []
@@ -102,7 +102,7 @@ async def test_privado_do_dono_e_atendido_quando_configurado(monkeypatch):
     monkeypatch.setattr(ponte, "avisar", lambda texto: _ok(texto))
 
     await ponte._tratar(_mensagem("codex: roda os testes", 7, tipo="private"))
-    await ponte._tratar(_mensagem("hermes: oi", 99, tipo="private"))
+    await ponte._tratar(_mensagem("zara: oi", 99, tipo="private"))
 
     assert recebidos == [("codex", "roda os testes")]
 
@@ -123,7 +123,6 @@ async def test_prefixos_reaproveitam_roteamento_no_grupo(monkeypatch):
     for texto, esperado in [
         ("claude: oi", ("claude", "oi")),
         ("codex: oi", ("codex", "oi")),
-        ("hermes: oi", ("hermes", "oi")),
         ("zara: oi", ("zara", "oi")),
         ("todos: oi", ("todos", "oi")),
         ("sem prefixo", ("zara", "sem prefixo")),
@@ -139,7 +138,7 @@ async def test_mensagem_antiga_no_grupo_avisa_sem_executar(monkeypatch):
     enviados: list[str] = []
     monkeypatch.setattr(ponte, "avisar", lambda texto: enviados.append(texto) or _ok(texto))
 
-    await ponte._tratar(_mensagem("hermes: oi", 77, date=int(time.time()) - 7200))
+    await ponte._tratar(_mensagem("codex: oi", 77, date=int(time.time()) - 7200))
 
     assert ponte._recebidos == []
     assert enviados and "não executei" in enviados[0]
@@ -164,9 +163,9 @@ async def test_grupo_autorizado_executa_texto(monkeypatch):
     ponte = _grupo(grupo_id=77, dono_privado=None)
     monkeypatch.setattr(ponte, "avisar", _ok)
 
-    await ponte._tratar(_msg("hermes: qual seu nome?", 77))
+    await ponte._tratar(_msg("codex: qual seu nome?", 77))
 
-    assert ponte._recebidos == [("hermes", "qual seu nome")]
+    assert ponte._recebidos == [("codex", "qual seu nome")]
 
 
 @pytest.mark.asyncio
@@ -210,7 +209,6 @@ async def test_prefixos_roteiam_no_grupo(monkeypatch):
     casos = [
         ("claude: oi", "claude", "oi"),
         ("codex: oi", "codex", "oi"),
-        ("hermes: oi", "hermes", "oi"),
         ("zara: oi", "zara", "oi"),
         ("todos: oi", "todos", "oi"),
         ("so texto", "zara", "so texto"),
@@ -232,7 +230,7 @@ async def test_mensagem_velha_do_grupo_nao_e_executada(monkeypatch):
         return True
 
     monkeypatch.setattr(ponte, "avisar", avisar)
-    await ponte._tratar(_msg("hermes: oi", 77, date=int(time.time()) - 7200))
+    await ponte._tratar(_msg("codex: oi", 77, date=int(time.time()) - 7200))
 
     assert ponte._recebidos == []
     assert enviados and "não executei" in enviados[0]

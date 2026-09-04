@@ -1,6 +1,6 @@
 """ZARA-CLAUDE-BRAIN-001 (Alex, 2026-08-28 à noite)
 
-Motor do Supercérebro = Claude, usando a ASSINATURA Claude Pro do Alex (sem
+Motor Claude, usando a ASSINATURA Claude Pro do Alex (sem
 API paga, por decisão explícita dele) via invocação HEADLESS do Claude Code
 (`claude -p`), diferente de `core/actions/ponte_claude.py` -- aquele
 automatiza uma JANELA VISÍVEL do Claude Code via UI Automation (pensado pra

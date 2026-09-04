@@ -24,7 +24,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
     ],
 )
 def test_folder_aliases_map_to_closed_allowlist(phrase, folder):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == "os_open"
@@ -44,7 +44,7 @@ def test_folder_aliases_map_to_closed_allowlist(phrase, folder):
     ],
 )
 def test_freeform_paths_never_map_to_folder_action(phrase):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.action != "os_open"
 
@@ -116,7 +116,6 @@ async def test_ipc_routes_only_canonical_folder_id(monkeypatch):
         return type("Result", (), {"success": True, "error": "", "output": "Solicitação enviada."})()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
 
     reply = await handler._try_pc_intent("abra a pasta da ZARA")

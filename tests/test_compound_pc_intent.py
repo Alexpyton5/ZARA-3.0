@@ -48,19 +48,6 @@ async def test_compound_request_executes_nothing_when_one_step_is_unknown():
 
 
 @pytest.mark.asyncio
-async def test_compound_request_executes_nothing_when_remote_step_is_blocked():
-    handler = IPCHandler(AsyncMock())
-    handler._try_pc_intent = AsyncMock()
-
-    reply = await handler._try_compound_pc_intent(
-        "Zara, abra o site da OpenAI, abra Downloads"
-    )
-
-    assert reply == "Para controlar o computador, ative o Supercérebro."
-    handler._try_pc_intent.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 async def test_ordinary_comma_text_is_not_treated_as_compound_pc_control():
     handler = IPCHandler(AsyncMock())
 

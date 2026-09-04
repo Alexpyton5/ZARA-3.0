@@ -24,7 +24,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
     ],
 )
 def test_visual_commands_are_local_voice_intents(phrase, action, param):
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.action == action
     assert result.param == param

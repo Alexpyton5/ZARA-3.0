@@ -2,7 +2,7 @@
 
 LAB CORE 001 intentionally separates discussion/approval from code execution.
 It provides a real local council room, persistent proposals/tasks, worker health,
-and direct ZARA/Hermes participation. Code workers are registered but are not
+and direct ZARA participation. Code workers are registered but are not
 allowed to edit production until the execution runtime is explicitly enabled in
 a later, separately validated module.
 """
@@ -50,9 +50,8 @@ class WorkerState:
 class LabCoordinator:
     """Persistent council + approval gate for ZARA's development laboratory."""
 
-    def __init__(self, orchestrator: Any = None, hermes: Any = None, worker_runtime: LabWorkerRuntime | None = None):
+    def __init__(self, orchestrator: Any = None, worker_runtime: LabWorkerRuntime | None = None):
         self.orchestrator = orchestrator
-        self.hermes = hermes
         self.worker_runtime = worker_runtime or LabWorkerRuntime()
         self.root = data_dir() / "lab"
         self.root.mkdir(parents=True, exist_ok=True)
@@ -162,13 +161,6 @@ class LabCoordinator:
         return None
 
     async def worker_states(self) -> list[dict[str, Any]]:
-        hermes_connected = False
-        if self.hermes:
-            try:
-                hermes_connected = bool(await self.hermes.health_check())
-            except Exception:
-                hermes_connected = False
-
         opencode = self._resolve_tool("opencode")
         cline = self._resolve_tool("cline")
         aider = self._resolve_tool("aider", str(Path.home() / "aider-env" / "venv" / "Scripts" / "aider.exe"))
@@ -202,7 +194,6 @@ class LabCoordinator:
                 can_chat=False,
                 can_execute=False,
             ),
-            WorkerState("hermes", "HERMES", "LOCAL OPS", "ONLINE" if hermes_connected else "OFFLINE", "Gateway local e operações Windows.", can_chat=hermes_connected),
             WorkerState("opencode", "OPENCODE", "LEAD DEVELOPER", oc_state, oc_detail, executable=opencode, can_chat=True, can_execute=False),
             WorkerState("openclaw", "OPENCLAW", "AGENT RUNTIME / R&D", str(claw.get("state") or ("INSTALLED" if openclaw else "NOT INSTALLED")), str(claw.get("detail") or "Runtime persistente de agentes e pesquisa."), executable=openclaw, can_chat=bool(claw.get("can_chat")), can_execute=False),
             WorkerState("cline", "CLINE", "QA / HEADLESS", "LIMITED" if cline else "NOT INSTALLED", "Instalado; hardware local abaixo da recomendação para executor principal.", executable=cline, can_chat=False, can_execute=False),
@@ -274,7 +265,7 @@ class LabCoordinator:
             raise ValueError("Mensagem vazia")
         # @OPENCODE mention routes to OpenCode regardless of the dropdown target.
         target = resolve_lab_target(target, content)
-        if target not in {"zara", "hermes", "mentor", "opencode", "openclaw", "cline", "aider", "revisor_supervisor"}:
+        if target not in {"zara", "mentor", "opencode", "openclaw", "cline", "aider", "revisor_supervisor"}:
             raise ValueError(f"Participante desconhecido: {target}")
 
         await self._insert_message(author, target, content, "chat")
@@ -292,14 +283,6 @@ class LabCoordinator:
                     f"Alex: {content}"
                 )
                 response = str(await self.orchestrator.process_message(prompt, engine="auto"))
-            elif target == "hermes":
-                if not self.hermes or not await self.hermes.health_check():
-                    raise RuntimeError("Hermes Gateway offline")
-                response = str(await self.hermes.send_message(
-                    content,
-                    history=[],
-                    team="general",
-                ))
             elif target == "mentor":
                 queued = self.mentor_relay.enqueue(author, content)
                 await self._activity("mentor-relay", "MENTOR_QUEUED", queued["relay_id"])
@@ -439,7 +422,7 @@ class LabCoordinator:
         title, summary = title.strip(), summary.strip()
         if not title or not summary:
             raise ValueError("Título e resumo são obrigatórios")
-        if owner not in {"opencode", "cline", "aider", "hermes"}:
+        if owner not in {"opencode", "cline", "aider"}:
             owner = "opencode"
         risk = risk.upper()
         if risk not in {"LOW", "MEDIUM", "HIGH"}:

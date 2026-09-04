@@ -474,9 +474,6 @@ function handlePythonEvent(msg: any): void {
     case 'voice-output-audio':
       mainWindow?.webContents.send('voice-output-audio', msg.data)
       break
-    case 'supercerebro-change':
-      mainWindow?.webContents.send('supercerebro-change', msg.active)
-      break
     case 'reminder-created':
       mainWindow?.webContents.send('reminder-created', msg.data)
       break
@@ -694,8 +691,6 @@ function createWindow(): void {
 function setupIPC(): void {
   ipcMain.handle('engine-change', (_event, engine: string) => sendToPython('engine-change', { engine }))
   ipcMain.handle('engine-list', () => sendToPython('engine-list'))
-  ipcMain.handle('supercerebro-toggle', (_event, active: boolean) => sendToPython('supercerebro-toggle', { active }))
-  ipcMain.handle('supercerebro-status', () => sendToPython('supercerebro-status'))
   ipcMain.handle('send-message', (_event, payload) => sendToPython('send-message', payload))
   ipcMain.handle('interrupt', () => sendToPython('interrupt'))
   // ZARA-BOTAO-MUDO-001: calar a voz sem desligar o resto dela.

@@ -100,11 +100,8 @@ class ActionRegistry:
         self._categories: dict[str, list[str]] = {}
         self._confirmation_broker = ConfirmationBroker()
         # Independent risk gate: MEDIUM actions require confirmation while
-        # false. Supercérebro changes capabilities, not this policy.
+        # false.
         self.medium_risk_open = False
-        # Remote/agentic capability gate. Local deterministic actions remain
-        # usable without Hermes; risk gates below are always independent.
-        self.pc_control_allowed = False
 
         # Register core actions
         self._register_core_actions()
@@ -275,21 +272,6 @@ class ActionRegistry:
         """Apply capability and risk gates before any action function runs."""
         if spec is None:
             return ActionResult(success=False, error="ACTION_POLICY_METADATA_MISSING")
-
-        # Capability is checked before issuing or consuming a challenge.
-        superbrain_required = spec.capability not in {"READ_ONLY", "LOCAL_PC_CONTROL"}
-        if superbrain_required and not self.pc_control_allowed:
-            if isinstance(proof, ConfirmationProof):
-                self._confirmation_broker.cancel(proof.confirmation_id)
-            return ActionResult(
-                success=False,
-                error=(
-                    f"Action '{name}' exige permissão de controle do PC "
-                    f"(capability={spec.capability}, Supercérebro OFF). "
-                    "Para controlar o computador, ative o Supercérebro."
-                ),
-                duration_ms=0.0,
-            )
 
         # Legacy confirmation remains valid only for MEDIUM actions. HIGH
         # always requires a one-shot proof from the separate confirmation IPC.

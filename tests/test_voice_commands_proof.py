@@ -18,15 +18,12 @@ def create_handler():
     handler.memory = None
     handler.orchestrator = None
     handler.model_router = None
-    handler.hermes = None
     handler.conversation_history = None
     handler.reminder_engine = None
     handler.user_memory = None
     handler.project_memory = None
     handler.lab = None
     handler._event_loop = asyncio.get_event_loop()
-    # Allow PC control (Supercerebro active) so that PC intents are not blocked
-    handler.supercerebro_active = True
     # Set a fake window handle for window actions
     handler._last_window_hwnd = 12345
     # Set a fake volume level for volume actions (if needed)

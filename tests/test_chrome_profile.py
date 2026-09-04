@@ -54,7 +54,7 @@ def test_chrome_open_profile_action_fails_honestly_for_unknown_profile(tmp_path,
 
 
 def test_voice_detects_open_chrome_with_profile():
-    detector = PcVoiceIntentDetector(pc_control_allowed=True)
+    detector = PcVoiceIntentDetector()
 
     result = detector.detect("abra o chrome no perfil trabalho")
 

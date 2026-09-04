@@ -491,7 +491,6 @@ try:
     from core.action_registry import execute_action, execute_confirmed_action
     from core.model_router import ModelRouter
     from core.zara_orchestrator import ZaraOrchestrator
-    from integrations.hermes.integration import HermesIntegration
     from memory.memory_manager import MemoryManager
 except ImportError as e:
     print(f"[IPC Handlers] Warning: Some imports failed: {e}", file=sys.stderr)
@@ -562,12 +561,9 @@ class IPCHandler:
         self.orchestrator: ZaraOrchestrator | None = None
         self.model_router: ModelRouter | None = None
         self.memory: MemoryManager | None = None
-        self.hermes: HermesIntegration | None = None
         # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): resposta por voz tem
         # que ser rápida por padrão -- não é mais preciso pedir "modo rápido".
         self.current_engine: str = "auto_fast"
-        self.supercerebro_active: bool = False
-        self._set_supercerebro_state(False)
         # ZARA-TELEGRAM-GRUPO-001: ponte do grupo, em paralelo com a privada.
         self._telegram_grupo = None
         self._telegram_adapter = None
@@ -725,7 +721,6 @@ class IPCHandler:
 
     async def _build_self_knowledge_snapshot(self, *, probe_hardware: bool = False) -> dict[str, Any]:
         """Observe current runtime state without exposing keys or inventing availability."""
-        self._revoke_stale_pc_control()
         from core.action_registry import get_registry
         from core.model_router import get_model_config
         from core.paths import project_root, user_data_dir
@@ -733,7 +728,6 @@ class IPCHandler:
         registry = get_registry()
         specs = [registry.get_spec(name) for name in registry.list_actions()]
         specs = [spec for spec in specs if spec is not None]
-        gate_open = bool(registry.pc_control_allowed and self.supercerebro_active)
 
         last_engine = self.orchestrator.last_engine_used if self.orchestrator else None
         effective_model: dict[str, Any] | None = None
@@ -744,13 +738,6 @@ class IPCHandler:
                 "name": model.name,
                 "provider": model.provider.value,
                 "api_model": model.api_model,
-            }
-        elif last_engine == "hermes_gateway":
-            effective_model = {
-                "id": "hermes_gateway",
-                "name": "Hermes Gateway",
-                "provider": "hermes",
-                "api_model": "runtime local",
             }
 
         provider_rows = self.model_router.configured_model_status(include_paid=False) if self.model_router else []
@@ -768,20 +755,11 @@ class IPCHandler:
         def component(status: str, detail: str) -> dict[str, str]:
             return {"status": status, "detail": detail}
 
-        hermes_connected = bool(self.hermes and self.hermes.enabled and self.hermes.is_connected)
         components = {
-            "hermes": component(
-                "AVAILABLE" if hermes_connected else "OFFLINE",
-                "gateway conectado" if hermes_connected else "gateway não conectado",
-            ),
             "codex": component("NOT_CONFIGURED", "sem canal direto dentro do runtime da ZARA"),
             "mentor": component(
                 "LIMITED" if getattr(self, "mentor_context", "") else "OFFLINE",
                 "Context Sync local carregado" if getattr(self, "mentor_context", "") else "sem contexto local carregado",
-            ),
-            "supercerebro": component(
-                "AVAILABLE" if gate_open and hermes_connected else "OFFLINE",
-                "ativo e conectado" if gate_open and hermes_connected else "desativado ou sem gateway",
             ),
             "lab": component("AVAILABLE" if self.lab else "OFFLINE", "coordenador inicializado" if self.lab else "coordenador não inicializado"),
             "voice": component(
@@ -796,9 +774,6 @@ class IPCHandler:
             selected = [spec_map.get(name) for name in names]
             if not selected or any(spec is None for spec in selected):
                 return "UNSUPPORTED"
-            local_domains = {"READ_ONLY", "LOCAL_PC_CONTROL"}
-            if any(spec.capability not in local_domains for spec in selected) and not gate_open:
-                return "BLOCKED_SUPERCEREBRO"
             return "AVAILABLE"
 
         brightness_status = action_state("os_brightness_absolute")
@@ -823,12 +798,9 @@ class IPCHandler:
             {"label": "MEMÓRIA", "status": "AVAILABLE" if (self.user_memory and self.project_memory) else "LIMITED", "detail": "User Memory e Project Memory separadas"},
             {"label": "VOZ", **components["voice"]},
             {"label": "LAB", **components["lab"]},
-            {"label": "HERMES", **components["hermes"]},
             {"label": "MENTOR", **components["mentor"]},
         ]
-        available_actions = sum(
-            1 for spec in specs if spec.capability in {"READ_ONLY", "LOCAL_PC_CONTROL"} or gate_open
-        )
+        available_actions = len(specs)
         return {
             "identity": "ZARA",
             "engine_policy": self.current_engine,
@@ -843,7 +815,6 @@ class IPCHandler:
             "components": components,
             "capabilities": capabilities,
             "action_counts": {"registered": len(specs), "available": available_actions},
-            "pc_control_allowed": gate_open,
             "last_failure": self._last_action_failure,
         }
 
@@ -969,25 +940,6 @@ class IPCHandler:
             "nessa conta."
         )
 
-    def _set_supercerebro_state(self, active: bool) -> None:
-        """Mirror Supercerebro state into the physical capability gate.
-
-        This controls capabilities only. Risk gates remain independent, so
-        enabling Supercerebro never opens MEDIUM or HIGH actions by itself.
-        """
-        self.supercerebro_active = active is True
-        from core.action_registry import get_registry
-
-        get_registry().pc_control_allowed = self.supercerebro_active
-
-    def _revoke_stale_pc_control(self) -> None:
-        """Fail closed if the Hermes session disappeared after enablement."""
-        if not self.supercerebro_active:
-            return
-        connected = bool(self.hermes and self.hermes.enabled and self.hermes.is_connected)
-        if not connected:
-            self._set_supercerebro_state(False)
-
     def _load_runtime_preferences(self) -> None:
         """Load non-secret runtime preferences from the existing config file."""
         try:
@@ -1024,8 +976,8 @@ class IPCHandler:
 
         The ready signal is emitted only after the essential IPC dependencies
         (orchestrator, model router, memory and action registry) are usable.
-        Hermes and voice are optional and may stay offline without preventing
-        the desktop interface from opening.
+        Voice is optional and may stay offline without preventing the desktop
+        interface from opening.
         """
         essential_errors: list[str] = []
         self._event_loop = asyncio.get_running_loop()
@@ -1081,7 +1033,7 @@ class IPCHandler:
 
         try:
             # Importing the package triggers @action decorators and populates
-            # the central action registry even when Hermes is offline.
+            # the central action registry.
             import core.actions  # noqa: F401
         except Exception as exc:
             essential_errors.append(f"actions: {exc}")
@@ -1090,17 +1042,10 @@ class IPCHandler:
         if essential_errors:
             raise RuntimeError("; ".join(essential_errors))
 
-        try:
-            self.hermes = HermesIntegration()
-            await self.hermes.initialize()
-        except Exception as exc:
-            self.hermes = None
-            print(f"[IPC] Hermes optional integration unavailable: {exc}")
-
         if LAB_AVAILABLE and LabCoordinator:
             try:
                 worker_runtime = LabWorkerRuntime() if LabWorkerRuntime else None
-                self.lab = LabCoordinator(orchestrator=self.orchestrator, hermes=self.hermes, worker_runtime=worker_runtime)
+                self.lab = LabCoordinator(orchestrator=self.orchestrator, worker_runtime=worker_runtime)
                 await self.lab.initialize()
                 print("[IPC] ZARA Lab Core initialized")
             except Exception as exc:
@@ -1504,13 +1449,7 @@ class IPCHandler:
                 return True
 
             from core.pc_voice_intent import PcVoiceIntentDetector
-            # pc_control_allowed=True DE PROPOSITO. A pergunta aqui e "isto e um
-            # comando?", nao "posso executar?". Com False o detector devolveria
-            # is_pc_intent=False para as acoes gateadas, elas cairiam em
-            # CONVERSA e o modelo ficaria livre para dizer que executou. A
-            # autorizacao real continua em _try_pc_intent, com o gate de
-            # verdade (self.supercerebro_active).
-            if PcVoiceIntentDetector(pc_control_allowed=True).detect(text).is_pc_intent:
+            if PcVoiceIntentDetector().detect(text).is_pc_intent:
                 return True
         except Exception:
             return True
@@ -1933,9 +1872,9 @@ class IPCHandler:
     async def _executar_intent_de_pc(self, text: str) -> str | None:
         """Deterministic PC intent (ZARA-COMPUTER-CONTROL-VOLUME-001).
 
-        Maps voice/text PC commands to existing os_volume action through
-        the existing capability gate (Supercérebro). Returns the ZARA reply
-        or None so the normal brain handles it. Never an LLM decision.
+        Maps voice/text PC commands to existing os_volume action. Returns
+        the ZARA reply or None so the normal brain handles it. Never an
+        LLM decision.
         """
         started = time.perf_counter()
         stage = "intent"
@@ -1967,7 +1906,6 @@ class IPCHandler:
                 return f"Posso copiar ‘{preview}’?"
             from core.pc_voice_intent import PcVoiceIntentDetector
             detector = PcVoiceIntentDetector(
-                pc_control_allowed=bool(self.supercerebro_active),
                 volume_context_level=self._last_volume_level if self._context_fresh("volume") else None,
                 window_context_available=bool(
                     (self._context_fresh("app") or self._context_fresh("window"))
@@ -1987,7 +1925,7 @@ class IPCHandler:
                 return None
             if res.blocked:
                 self._remember_action_failure(res.action, "capability_gate", res.reply)
-                return res.reply or "Para controlar o computador, ative o Supercérebro."
+                return res.reply or "Não consegui executar esse comando."
             # Keep direct/cold IPC use honest too: tests and lightweight
             # runtimes may reach this path before the async initializer has
             # imported the action package.
@@ -2267,7 +2205,6 @@ class IPCHandler:
         from core.pc_voice_intent import PcVoiceIntentDetector
 
         detector = PcVoiceIntentDetector(
-            pc_control_allowed=bool(self.supercerebro_active),
             volume_context_level=self._last_volume_level if self._context_fresh("volume") else None,
             window_context_available=bool(
                 (self._context_fresh("app") or self._context_fresh("window"))
@@ -2390,8 +2327,6 @@ class IPCHandler:
         # handlers; requiring three domains prevents accidental activation.
         if len(found) < 3:
             return None
-        if not self.supercerebro_active:
-            return "Para executar um pedido com várias etapas, ative o Supercérebro."
 
         outcomes: list[tuple[str, str, str]] = []
         for _position, kind, match in found[:5]:
@@ -2458,8 +2393,6 @@ class IPCHandler:
         intent = detect_file_intent(text)
         if intent is None:
             return None
-        if intent.mutating and not self.supercerebro_active:
-            return "Para alterar arquivos, ative o Supercérebro e repita o comando explícito."
         try:
             from core.action_registry import execute_action
             from core.actions.os_ops import _resolve_safe_folder
@@ -2672,12 +2605,7 @@ class IPCHandler:
             _telemetry_raw_text = text
             # ZARA-USER-MEMORY-CONTEXT-001: enriquece com memorias relevantes
             text = await self._enrich_with_memory(text)
-            # Supercérebro routes through the real Hermes gateway only while
-            # explicitly enabled. Otherwise use ZARA's normal model router.
-            if self.supercerebro_active and self.hermes and self.hermes.enabled and self.hermes.is_connected:
-                response = await self.hermes.send_message(text, history=[], team="general")
-                engine_used = "hermes_gateway"
-            elif self.orchestrator:
+            if self.orchestrator:
                 if _has_broad_action_language_signal(_telemetry_raw_text):
                     _log_intent_telemetry("escaped_to_orchestrator", "voice", _telemetry_raw_text)
                 response = await self.orchestrator.process_message(text, engine=self.current_engine)
@@ -3212,8 +3140,6 @@ class IPCHandler:
         handler_map = {
             'engine-change': self.handle_engine_change,
             'engine-list': self.handle_engine_list,
-            'supercerebro-toggle': self.handle_supercerebro_toggle,
-            'supercerebro-status': self.handle_supercerebro_status,
             'send-message': self.handle_send_message,
             'interrupt': self.handle_interrupt,
             # ZARA-BOTAO-MUDO-001: calar a boca dela sem desligar o resto.
@@ -3291,9 +3217,6 @@ class IPCHandler:
                 tone=float(payload.get('tone', 0.5) or 0.5),
                 speaking=bool(payload.get('speaking', False)),
             ))
-        elif event_type == 'supercerebro-change':
-            active = data.get('active') if isinstance(data, dict) else data
-            await self.send(IPCMessage(type=event_type, active=bool(active)))
         else:
             await self.send(IPCMessage(type=event_type, data=data))
 
@@ -3414,10 +3337,9 @@ class IPCHandler:
             if not self.model_router:
                 await self.send_error(msg, "Model router unavailable")
                 return
-            available_ids = {model.id for model in self.model_router.get_available_models(include_hermes=False)}
+            available_ids = {model.id for model in self.model_router.get_available_models()}
             # Native Gemini Live is a voice transport, not a text-chat engine.
             available_ids.discard('gemini_live')
-            available_ids.discard('hermes_gateway')  # controlled only by Supercérebro
             if engine not in available_ids:
                 await self.send_error(msg, f"Engine unavailable or API key missing: {engine}")
                 return
@@ -3426,49 +3348,6 @@ class IPCHandler:
         self._persist_engine_preference(engine)
         print(f"[IPC] Engine changed to: {engine}")
         await self.send_response(msg.request_id, {'success': True, 'engine': engine})
-
-    async def handle_supercerebro_toggle(self, msg: IPCMessage):
-        requested = msg.payload.get('active') if msg.payload else None
-        if requested is None:
-            await self.send_error(msg, "Active state not specified")
-            return
-
-        if type(requested) is not bool:
-            await self.send_error(msg, "Active state must be a boolean")
-            return
-
-        if requested:
-            if not self.hermes:
-                self._set_supercerebro_state(False)
-                await self.send_error(msg, "Hermes integration is unavailable")
-                return
-            connected = await self.hermes.enable_supercerebro()
-            connection_proven = bool(
-                connected and self.hermes.enabled and self.hermes.is_connected
-            )
-            if not connection_proven:
-                self._set_supercerebro_state(False)
-                await self.send_event('supercerebro-change', False)
-                await self.send_error(msg, "Hermes Gateway is offline")
-                return
-            self._set_supercerebro_state(True)
-        else:
-            # Revoke local permission before touching the remote integration.
-            # A disconnect error must never leave PC control enabled.
-            self._set_supercerebro_state(False)
-            if self.hermes:
-                try:
-                    await self.hermes.disable_supercerebro()
-                except Exception as exc:
-                    print(f"[IPC] Hermes disable warning: {exc}")
-
-        print(f"[IPC] Supercerebro {'enabled' if self.supercerebro_active else 'disabled'}")
-        await self.send_event('supercerebro-change', self.supercerebro_active)
-        await self.send_response(msg.request_id, {
-            'success': True,
-            'active': self.supercerebro_active,
-            'connected': bool(self.hermes and self.hermes.is_connected),
-        })
 
     async def handle_send_message(self, msg: IPCMessage):
         payload = msg.payload or {}
@@ -3599,10 +3478,7 @@ class IPCHandler:
 
         try:
             history = payload.get('history', [])
-            if self.supercerebro_active and self.hermes and self.hermes.enabled and self.hermes.is_connected:
-                response = await self.hermes.send_message(text, history=history, team="general")
-                engine_used = "hermes_gateway"
-            elif self.orchestrator:
+            if self.orchestrator:
                 if _has_broad_action_language_signal(_telemetry_raw_text):
                     _log_intent_telemetry("escaped_to_orchestrator", "text", _telemetry_raw_text)
                 response = await self.orchestrator.process_message(
@@ -3680,8 +3556,6 @@ class IPCHandler:
             await self.send_error(msg, "Confirmation proof is only accepted by action-confirm")
             return
 
-        # The remote capability session may disappear between toggle and use.
-        self._revoke_stale_pc_control()
         # Parameters may contain credentials or private content; never log them.
         print(f"[IPC] Executing action: {action}")
 
@@ -3728,7 +3602,6 @@ class IPCHandler:
             await self.send_error(msg, "Reserved action parameter")
             return
 
-        self._revoke_stale_pc_control()
         print(f"[IPC] Confirming HIGH-risk action: {action}")
         try:
             result = await execute_confirmed_action(
@@ -4124,25 +3997,6 @@ class IPCHandler:
                 return "Entreguei ao Claude. Te aviso quando responder."
             return f"Não consegui: {getattr(resultado, 'error', 'motivo desconhecido')}"
 
-        # ZARA-TELEGRAM-HERMES-001
-        #
-        # O prefixo "hermes:" já existia no roteamento da ponte, mas o
-        # despachante não tinha branch para ele — a mensagem caía na própria
-        # ZARA. O Supercérebro (Hermes Agent via gateway local) é um destino
-        # de verdade, então aqui ele é tratado direto, tanto pelo celular
-        # privado quanto pelo grupo.
-        if destino == "hermes":
-            try:
-                from integrations.hermes.client import HermesClient
-
-                client = HermesClient()
-                result = await asyncio.to_thread(client.send_message, texto)
-                if result["success"]:
-                    return f"Hermes:\n\n{result['text']}"
-                return f"Hermes não veio: {result['error']}"
-            except Exception as exc:
-                return f"Hermes não veio: {type(exc).__name__}"
-
         # ZARA-TELEGRAM-TODOS-001
         #
         # Alex escreveu "todos- se voces 3 estao vendo esta mensagem responda
@@ -4165,15 +4019,6 @@ class IPCHandler:
                 partes.append(f"Codex: {do_codex}" if not erro else f"Codex não veio: {erro}")
             except Exception as exc:
                 partes.append(f"Codex não veio: {type(exc).__name__}")
-
-            try:
-                from integrations.hermes.client import HermesClient
-
-                client = HermesClient()
-                result = await asyncio.to_thread(client.send_message, texto)
-                partes.append(f"Hermes: {result['text']}" if result["success"] else f"Hermes não veio: {result['error']}")
-            except Exception as exc:
-                partes.append(f"Hermes não veio: {type(exc).__name__}")
 
             resultado = await execute_action("claude_enviar", texto=texto)
             if getattr(resultado, "success", False):
@@ -4588,7 +4433,6 @@ class IPCHandler:
     async def handle_config_get(self, msg: IPCMessage):
         config = {
             'current_engine': self.current_engine,
-            'supercerebro_active': self.supercerebro_active,
             'voice_active': self.voice_active,
         }
         await self.send_response(msg.request_id, config)
@@ -4604,9 +4448,6 @@ class IPCHandler:
         value = payload.get('value')
         if key == 'engine':
             self.current_engine = value
-        elif key == 'supercerebro':
-            await self.send_error(msg, "Use supercerebro-toggle so Hermes Gateway connectivity is verified")
-            return
         elif key and str(key).endswith('_api_key'):
             try:
                 from core.paths import api_keys_path
@@ -4659,7 +4500,7 @@ class IPCHandler:
         health: list[dict[str, Any]] = []
         if self.model_router:
             health = self.model_router.configured_model_status(include_paid=False)
-            for model in self.model_router.get_available_models(include_hermes=False, include_paid=False):
+            for model in self.model_router.get_available_models(include_paid=False):
                 engines.append({
                     'id': model.id,
                     'name': model.name,
@@ -4686,31 +4527,6 @@ class IPCHandler:
                 'available': bool(os.environ.get('GEMINI_API_KEY')),
             },
         })
-
-    async def handle_supercerebro_status(self, msg: IPCMessage):
-        """Return supercerebro status"""
-        self._revoke_stale_pc_control()
-        status = {
-            'active': self.supercerebro_active,
-            'url': 'http://127.0.0.1:8642',
-            'connected': bool(self.hermes and self.hermes.is_connected),
-            'enabled': bool(self.hermes and self.hermes.enabled),
-        }
-        if self.hermes:
-            try:
-                agent_status = await self.hermes.get_agent_status()
-                status.update(agent_status)
-            except Exception as e:
-                status['error'] = str(e)
-        # Agent status is descriptive only. Reassert the fail-closed local gate
-        # after the health read so stale remote fields cannot claim SC is ON.
-        self._revoke_stale_pc_control()
-        status.update({
-            'active': self.supercerebro_active,
-            'connected': bool(self.hermes and self.hermes.is_connected),
-            'enabled': bool(self.hermes and self.hermes.enabled),
-        })
-        await self.send_response(msg.request_id, status)
 
     async def handle_action_list(self, msg: IPCMessage):
         """Return all registered actions with specs"""

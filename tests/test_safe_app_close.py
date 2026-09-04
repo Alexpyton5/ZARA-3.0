@@ -20,8 +20,8 @@ from core.pc_voice_intent import PcVoiceIntentDetector
         ("feche o spotify", "spotify"),
     ],
 )
-def test_safe_close_intents_are_local_without_supercerebro(phrase, app):
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect(phrase)
+def test_safe_close_intents_are_local(phrase, app):
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == "os_close_safe_app"

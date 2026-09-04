@@ -593,14 +593,26 @@ def run_voice_command_sequence(zara: ZaraProcess, report: SelfTestReport, cfg: d
         ("PC-003", f"toca {query}", 3.0, "browser"),
         ("PC-004", "pula o anuncio", 1.0, "browser"),
         ("PC-005", "diminui o volume", 0.5, "simple"),
-        ("PC-006", "diminui o brilho", 0.5, "simple"),
-        ("PC-007", "pula essa", 2.0, "browser"),
-        ("PC-008", "pausa", 1.0, "browser"),
-        ("PC-009", "continua", 1.0, "browser"),
-        ("PC-010", "abre o spotify", 2.0, "browser"),
-        ("PC-011", "minimiza", 0.5, "simple"),
-        ("PC-012", "foca no chrome", 0.5, "simple"),
-        ("PC-013", f"abre o chrome no perfil {perfil}", 0.5, "simple"),
+        ("PC-006", "aumenta o volume", 0.5, "simple"),
+        ("PC-007", "diminui o brilho", 0.5, "simple"),
+        ("PC-008", "aumenta o brilho", 0.5, "simple"),
+        ("PC-009", "ative a luz noturna", 1.0, "simple"),
+        ("PC-010", "desative a luz noturna", 1.0, "simple"),
+        ("PC-011", "mute", 0.5, "simple"),
+        ("PC-012", "tire do mudo", 0.5, "simple"),
+        ("PC-013", "pula essa", 2.0, "browser"),
+        ("PC-014", "pausa", 1.0, "browser"),
+        ("PC-015", "continua", 1.0, "browser"),
+        ("PC-016", "abre o spotify", 2.0, "browser"),
+        ("PC-017", "minimiza", 0.5, "simple"),
+        ("PC-018", "maximize", 0.5, "simple"),
+        ("PC-019", "restaure a janela", 0.5, "simple"),
+        ("PC-020", "tire uma captura de tela", 1.0, "simple"),
+        ("PC-021", "mostre uma notificação dizendo teste concluído", 0.5, "simple"),
+        ("PC-022", "abra Downloads", 1.0, "simple"),
+        ("PC-023", "foca no chrome", 0.5, "simple"),
+        ("PC-024", f"abre o chrome no perfil {perfil}", 0.5, "simple"),
+        ("PC-025", "feche o spotify", 0.5, "simple"),
     ]
     for test_id, comando, espera_depois, categoria in comandos:
         resp, latency_ms = zara.say(comando, timeout=25.0)
@@ -612,10 +624,11 @@ def run_voice_command_sequence(zara: ZaraProcess, report: SelfTestReport, cfg: d
             state = ResultState.TIMEOUT
         elif engine != "pc_control":
             state = ResultState.EXECUTED_UNVERIFIED  # entendeu por outro caminho (LLM), nao e o que testamos aqui
-        elif "Não consegui executar" in texto or "Para controlar o computador, ative" in texto:
-            state = ResultState.EXECUTED_UNVERIFIED if "Não consegui executar" in texto else ResultState.BLOCKED
         elif "Encontrei mais de uma" in texto or "Diga qual" in texto:
-            state = ResultState.SKIP  # ambiguo, nao e falha de execucao
+            state = ResultState.SKIP  # ambiguo, nao e falha de execucao -- checar ANTES do "nao consegui",
+            # senao uma frase que contem os dois cai no bucket errado
+        elif "Não consegui executar" in texto:
+            state = ResultState.EXECUTED_UNVERIFIED
         else:
             state = ResultState.PASS
 

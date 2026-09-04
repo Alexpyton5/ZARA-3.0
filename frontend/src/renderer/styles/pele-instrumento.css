@@ -103,8 +103,6 @@ body { font-size: 13px; letter-spacing: 0; }
 .engine-picker select { font-size: 11px; color: var(--text); }
 .engine-picker select option { background: var(--bg2); }
 .engine-picker > em { font-family: var(--mono); font-size: 8px; color: var(--muted2); }
-.engine-picker.hermes-priority { border-color: var(--line2); box-shadow: none; }
-.engine-picker.hermes-priority > em { color: var(--green); }
 
 /* ---------- barra lateral ---------- */
 .side-rail {

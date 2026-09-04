@@ -3,7 +3,7 @@
 Até aqui a ponte do Telegram só obedecia ao dono (chat privado do Alex):
 qualquer mensagem de grupo era ignorada em silêncio. O Alex quer o bot
 @zara_project_group_bot dentro do grupo do projeto, onde ele e a equipe falam
-com a ZARA, o Hermes, o Codex, o Claude ou com todos de uma vez.
+com a ZARA, o Codex, o Claude ou com todos de uma vez.
 
 O risco da ponte continua sendo o mesmo da ponte privada: um bot de Telegram
 tem nome público, e quem descobrir o nome consegue mandar mensagem. Por isso
@@ -18,9 +18,8 @@ executa sozinha, e a mesma resposta não é enviada duas vezes seguidas.
 Roteamento (idêntico ao privado, reutilizado):
     claude: ...  -> Claude Code
     codex: ...   -> Codex
-    hermes: ...  -> Supercérebro / Hermes Agent (GATEWAY)
     zara: ...    -> própria ZARA
-    todos: ...   -> os quatro acima, um por um
+    todos: ...   -> os três acima, um por um
     sem prefixo -> própria ZARA
 """
 from __future__ import annotations

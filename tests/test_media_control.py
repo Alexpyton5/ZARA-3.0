@@ -29,7 +29,7 @@ from core.pc_voice_intent import PcVoiceIntentDetector
     ],
 )
 def test_media_phrases_map_to_closed_actions(phrase, expected_action):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == expected_action
@@ -47,7 +47,7 @@ def test_media_phrases_map_to_closed_actions(phrase, expected_action):
     ],
 )
 def test_media_patterns_do_not_trigger_media_for_common_or_arbitrary_text(phrase):
-    result = PcVoiceIntentDetector(pc_control_allowed=True).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.action not in {
         "media_play_pause",
@@ -137,7 +137,6 @@ async def test_ipc_routes_media_action_when_capability_is_on(monkeypatch):
         return type("Result", (), {"success": True, "error": "", "output": "Comando play/pause enviado."})()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", fake_execute_action)
 
     reply = await handler._try_pc_intent("pause a música")

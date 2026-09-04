@@ -47,7 +47,7 @@ def split_into_clauses(text: str) -> list[str]:
     return parts
 
 
-def parse_multi_intent(text: str, *, pc_control_allowed: bool = True) -> list[dict]:
+def parse_multi_intent(text: str) -> list[dict]:
     """Converte uma frase composta numa lista ordenada de acoes reconhecidas.
 
     Cada item e {"action": str|None, "param": str|None, "raw": str}.
@@ -56,7 +56,7 @@ def parse_multi_intent(text: str, *, pc_control_allowed: bool = True) -> list[di
     (como o caminho de producao ja faz hoje) ou executa so o que reconheceu.
     Essa decisao NAO e tomada aqui de proposito: esta funcao so classifica.
     """
-    detector = PcVoiceIntentDetector(pc_control_allowed=pc_control_allowed)
+    detector = PcVoiceIntentDetector()
     parts = split_into_clauses(text)
     if len(parts) < 2:
         # Frase unica: ainda assim tenta reconhecer, pra funcao ser util
@@ -81,10 +81,7 @@ def parse_multi_intent(text: str, *, pc_control_allowed: bool = True) -> list[di
     return actions
 
 
-def parse_multi_intent_json(text: str, *, pc_control_allowed: bool = True) -> str:
+def parse_multi_intent_json(text: str) -> str:
     """Mesma coisa que parse_multi_intent, mas ja serializada -- e o formato
     que Alex pediu explicitamente ("lista/array JSON")."""
-    return json.dumps(
-        parse_multi_intent(text, pc_control_allowed=pc_control_allowed),
-        ensure_ascii=False,
-    )
+    return json.dumps(parse_multi_intent(text), ensure_ascii=False)

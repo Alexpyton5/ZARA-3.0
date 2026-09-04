@@ -203,25 +203,6 @@ async def test_jarvis_plan_has_highest_priority(harness: Harness) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hermes_is_used_only_when_enabled_and_connected(harness: Harness) -> None:
-    class Hermes:
-        enabled = True
-        is_connected = True
-
-        async def send_message(self, text: str, history: list, team: str) -> str:
-            assert team == "general"
-            return "Resposta Hermes"
-
-    harness.handler.hermes = Hermes()
-    harness.handler.supercerebro_active = True
-    with _neutral_routes(harness.handler):
-        await harness.handler.handle_send_message(
-            IPCMessage(type="send-message", request_id="hermes", payload={"message": "analise"})
-        )
-    assert harness.response().response == {"response": "Resposta Hermes", "engine": "hermes_gateway"}
-
-
-@pytest.mark.asyncio
 async def test_interrupt_stops_all_active_audio_paths(harness: Harness) -> None:
     class TTS:
         interrupted = False

@@ -12,12 +12,6 @@ const zaraAPI = {
     list: () => ipcRenderer.invoke('engine-list'),
   },
 
-  // Supercerebro
-  supercerebro: {
-    toggle: (active: boolean) => ipcRenderer.invoke('supercerebro-toggle', active),
-    status: () => ipcRenderer.invoke('supercerebro-status'),
-  },
-
   // Messaging
   message: {
     send: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) =>
@@ -138,11 +132,6 @@ const zaraAPI = {
       const handler = (_event: any, data: any) => callback(data || {})
       ipcRenderer.on('voice-output-audio', handler)
       return () => ipcRenderer.off('voice-output-audio', handler)
-    },
-    supercerebroChange: (callback: (active: boolean) => void) => {
-      const handler = (_event: any, active: boolean) => callback(active)
-      ipcRenderer.on('supercerebro-change', handler)
-      return () => ipcRenderer.off('supercerebro-change', handler)
     },
     reminderCreated: (callback: (reminder: ReminderEvent) => void) => {
       const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)

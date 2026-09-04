@@ -19,8 +19,8 @@ from core.pc_voice_intent import PcVoiceIntentDetector
         ("que horas são?", "system_time"),
     ],
 )
-def test_read_only_system_commands_do_not_need_supercerebro(phrase, action):
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect(phrase)
+def test_read_only_system_commands_are_local(phrase, action):
+    result = PcVoiceIntentDetector().detect(phrase)
 
     assert result.is_pc_intent is True
     assert result.action == action
@@ -59,7 +59,7 @@ async def test_process_list_is_bounded(monkeypatch):
     ],
 )
 def test_night_light_natural_variants_are_deterministic(phrase, action):
-    result = PcVoiceIntentDetector(pc_control_allowed=False).detect(phrase)
+    result = PcVoiceIntentDetector().detect(phrase)
     assert result.is_pc_intent is True
     assert result.action == action
     assert result.blocked is False

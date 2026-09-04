@@ -61,15 +61,13 @@ def test_acao_nunca_e_respondida_direto(frase):
     assert _handler()._voice_can_answer_directly(frase) is False
 
 
-def test_acao_gateada_continua_sendo_acao_com_supercerebro_desligado():
-    """O gate de autorizacao nao pode virar gate de classificacao.
+def test_acao_nao_reconhecida_nunca_vira_conversa_livre():
+    """Comando nao reconhecido nunca cai em CONVERSA livre.
 
-    Com pc_control_allowed=False o detector devolve is_pc_intent=False para
-    acoes bloqueadas. Se a classificacao usasse esse gate, "abra o powershell"
-    cairia em CONVERSA e o modelo ficaria livre para dizer que abriu.
+    Se a classificacao tratasse "abra o powershell" como conversa, o modelo
+    ficaria livre para dizer que abriu sem executar nada.
     """
     handler = _handler()
-    handler.supercerebro_active = False
     assert handler._voice_can_answer_directly("Zara, abra o powershell") is False
     assert handler._voice_can_answer_directly("Zara, abra o regedit") is False
 

@@ -1,4 +1,4 @@
-"""232/233/234 — Supercerebro: failover, verdade de erro e limites de contexto.
+"""232/233/234 — Model router: failover, verdade de erro e limites de contexto.
 
 Sem provider pago, sem rede: todas as chamadas de modelo sao mockadas.
 """

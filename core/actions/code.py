@@ -231,19 +231,9 @@ def code_test_action(path: str = "tests", pattern: str = "", verbose: bool = Tru
     },
 )
 def code_generate_action(description: str, language: str = "python", template: str = "") -> ActionResult:
-    """Generate code using LLM (via Hermes if available)."""
+    """Generate code from a basic language template."""
     try:
-        # Try to use Hermes for code generation
-        from integrations.hermes.bridge import HermesBridge
-
-        bridge = HermesBridge()
-        if bridge.is_active:
-            prompt = f"Generate {language} code for: {description}\n\nReturn only the code, no explanation."
-            result = bridge.route_message(prompt)
-            if result:
-                return ActionResult(success=True, output=result, data={"source": "hermes"})
-
-        # Fallback: basic template
+        # Basic template
         if language == "python":
             template_code = f'''"""
 {description}

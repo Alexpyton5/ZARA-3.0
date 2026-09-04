@@ -11,7 +11,6 @@ from core.ipc_handlers import IPCHandler
 async def test_missing_window_context_asks_for_explicit_target(monkeypatch):
     execute = AsyncMock()
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     monkeypatch.setattr("core.action_registry.execute_action", execute)
     assert "janela recente e inequívoca" in await handler._try_pc_intent("agora minimize ele")
     execute.assert_not_awaited()
@@ -24,7 +23,6 @@ async def test_folder_context_reuses_only_canonical_id(monkeypatch):
         calls.append((action, params))
         return type("Result", (), {"success": True, "output": "Solicitação enviada.", "data": {}})()
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._last_safe_folder = "downloads"
     handler._touch_operational_context()
     monkeypatch.setattr("core.action_registry.execute_action", execute)
@@ -35,7 +33,6 @@ async def test_folder_context_reuses_only_canonical_id(monkeypatch):
 @pytest.mark.asyncio
 async def test_expired_context_is_not_reused(monkeypatch):
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._last_safe_folder = "downloads"
     handler._touch_operational_context()
     monkeypatch.setattr(ipc_handlers.time, "monotonic", lambda: handler._operational_context_updated_at + 121)
@@ -49,7 +46,6 @@ async def test_relative_volume_context_clamps(monkeypatch):
         calls.append(params["level"])
         return type("Result", (), {"success": True, "output": "", "data": {}})()
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._last_volume_level = 95
     handler._touch_operational_context()
     monkeypatch.setattr("core.action_registry.execute_action", execute)
@@ -72,7 +68,6 @@ async def test_contextual_window_minimize_then_restore_reuses_one_hwnd(monkeypat
         })()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._set_operational_context(
         "app", canonical_target="notepad", pid=987, hwnd=4321,
         verified_value="opened", created_by_zara=True,
@@ -127,7 +122,6 @@ async def test_dead_contextual_window_is_invalidated(monkeypatch):
         })()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._set_operational_context("app", canonical_target="notepad", pid=7, hwnd=8)
     monkeypatch.setattr("core.action_registry.execute_action", execute)
 
@@ -146,7 +140,6 @@ async def test_domain_switch_drops_previous_folder_context(monkeypatch):
         })()
 
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._set_operational_context("folder", canonical_target="downloads")
     monkeypatch.setattr("core.action_registry.execute_action", execute)
 
@@ -171,7 +164,7 @@ def test_context_record_contains_only_canonical_metadata():
 def test_unsafe_contextual_close_is_blocked_without_action():
     from core.pc_voice_intent import PcVoiceIntentDetector
 
-    result = PcVoiceIntentDetector(pc_control_allowed=True, window_context_available=True).detect("feche ele")
+    result = PcVoiceIntentDetector(window_context_available=True).detect("feche ele")
     assert result.is_pc_intent is True
     assert result.blocked is True
     assert result.action == ""
@@ -181,7 +174,6 @@ def test_unsafe_contextual_close_is_blocked_without_action():
 async def test_ambiguous_context_is_not_reused(monkeypatch):
     execute = AsyncMock()
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._last_window_hwnd = 123
     handler._last_safe_folder = "downloads"
     handler._touch_operational_context()
@@ -195,7 +187,6 @@ async def test_ambiguous_context_is_not_reused(monkeypatch):
 async def test_non_allowlisted_folder_context_is_never_reused(monkeypatch):
     execute = AsyncMock()
     handler = IPCHandler(AsyncMock())
-    handler._set_supercerebro_state(True)
     handler._set_operational_context("folder", canonical_target=r"C:\\Users\\secret")
     monkeypatch.setattr("core.action_registry.execute_action", execute)
 

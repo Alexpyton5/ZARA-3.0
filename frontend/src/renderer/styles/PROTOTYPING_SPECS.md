@@ -407,8 +407,6 @@ interface HUDProps {
   onEngineChange?: (id) => void;
   onVoiceToggle?: () => void;
   onMuteToggle?: () => void;
-  onSupercerebroToggle?: () => void;
-  supercerebroActive?: boolean;
 }
 ```
 
@@ -467,12 +465,6 @@ interface ConnectionInfo {
 - `<select>` nativo estilizado
 - Mostra provider + status
 - Callback `onEngineChange`
-
-#### Supercérebro Toggle
-
-- Switch estilizado (slider animado)
-- Badge de status ao lado
-- Callback `onSupercerebroToggle`
 
 ---
 
@@ -580,8 +572,6 @@ import { HUD } from './components/zara/HUD';
   onEngineChange={setEngine}
   onVoiceToggle={toggleVoice}
   onMuteToggle={toggleMute}
-  supercerebroActive={superActive}
-  onSupercerebroToggle={toggleSuper}
 />
 ```
 

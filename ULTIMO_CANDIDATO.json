@@ -1,17 +1,15 @@
 {
-  "BUILD_ID": "release-fase2-full-20260822-1901",
-  "BUILD_TIMESTAMP": "2026-08-22T19:01:56.113806-03:00",
+  "BUILD_ID": "release-candidate-20260904-0106",
+  "BUILD_TIMESTAMP": "2026-09-04T01:06:21-03:00",
   "BASE_CANDIDATE": "release",
-  "BUILD_METHOD": "full Electron build (tsc + vite + electron-builder) com sidecar recem-compilado",
+  "BUILD_METHOD": "sidecar-only rebuild (build_exe.py) copiado sobre win-unpacked/resources/backend existente; Electron shell nao recompilado",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "1287f2fd258d85f8f16840db9b25ed46b3f3f599",
+  "GIT_COMMIT": "727aff33f18666b760e358daa2b7fba90e209fc5",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\win-unpacked\\ZARA 3.0.exe",
-  "EXE_SHA256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
-  "SETUP_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\ZARA 3.0 Setup 3.0.0.exe",
-  "SETUP_SHA256": "B40ECCABD40C31CB9A66C89B0C0F4F91CF0D579251AF69F1D30706D18DEF9EB0",
-  "BACKEND_SHA256": "D695806684AEED2EEECED0970205685F77CA05DBFB0F322C3A9933B72B4B937D",
-  "BACKEND_SHA256_ANTERIOR": "E9EBF57D03E8FC588299527FCAA52544E860ECBF8B6217C6ED6ACCDB1F45839E",
-  "ASAR_SHA256": "0C8379A794C8A081A0D3E88196CD53DEA2F0AAC449A7280A894CD143388AB4A8",
-  "DELTA": "Fase 2 completa (F2.1-F2.12) com frontend Electron recompilado do fonte e sidecar recem-compilado."
+  "EXE_SHA256": "67dc2a7036860a68e5312c212c31b8772ac463ed0289fcc44897867f55075e89",
+  "BACKEND_SHA256": "1139689a74f6dbd28f6953488ca7803cb4002f9ce595f9b6e3dda792150d4597",
+  "BACKEND_SHA256_ANTERIOR": "d695806684aeed2eeeced0970205685f77ca05dbfb0f322c3a9933b72b4b937d",
+  "ASAR_SHA256": "36515dc532c928bb515e509e06444cec486439bb39ecc49f9375c3fcc06a5dbc",
+  "DELTA": "T1 NIGHT_MODE: sidecar empacotado crashava com ModuleNotFoundError core.actions.system_advanced (faltavam 3 modulos em build_exe.py hiddenimports: system_advanced, macro_actions, vision_actions, carregados via importlib dinamico e invisiveis para a analise estatica do PyInstaller). Corrigido, sidecar recompilado, hash conferido byte a byte com o pacote. Boot standalone confirmado: 'SYS: Interface neural pronta' em ~35s sem traceback. Handshake real Electron<->sidecar ainda pendente de verificacao visual nesta candidata."
 }

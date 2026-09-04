@@ -96,6 +96,9 @@ HIDDEN_IMPORTS = [
     "core.actions.system",
     "core.actions.scheduler",
     "core.actions.vision",
+    "core.actions.system_advanced",
+    "core.actions.macro_actions",
+    "core.actions.vision_actions",
     # Dependencias externas
     "psutil",
     "pydantic",

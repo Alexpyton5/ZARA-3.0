@@ -335,3 +335,29 @@ Implementado do zero a partir do contrato exato dos 3 testes (budget/prioridade/
 7/7 passou na primeira tentativa. `c9b9753`.
 
 Continuando a varredura dos ~33 restantes.
+
+### Mais 3 bugs reais de segurança corrigidos em core/remote_approval_bridge.py
+
+- **Timeout infinito não era rejeitado.** Comentário dizia "catches inf, nan", só pegava nan.
+  `float("inf")` passava direto — aprovação que nunca expira.
+- **Token ficava guardado sem uso.** `record.token = token` gravava o token depois de
+  verificado, nunca era lido de novo em lugar nenhum — permanência de segredo sem função,
+  visível em `repr()`.
+- **Aprovação decidida a tempo, mas não consumida, nunca expirava.** `get_status` só
+  reconferia prazo pra "pending", não pra "approved" — uma aprovação parada podia ser
+  consumida bem depois do prazo. Também: verificador lento demorando o suficiente pra passar
+  do prazo ainda aprovava (checagem de prazo só antes do verificador, não depois); verificador
+  que lança exceção propagava em vez de falhar fechado.
+- Bônus: bug de contagem no corte do histórico terminal (`_prune_terminal_locked` só rodava em
+  `submit_action`, sempre um ciclo atrasado — 4 registros em vez de 3 configurados).
+
+18/18 testes de `test_remote_approval_bridge.py` passam agora (0 antes de hoje contando os que
+já passavam por acaso). Suite completa rodando para confirmar zero regressão antes de commitar.
+
+**Achado grande, NÃO tentado:** `test_remote_approval_e2e.py` (fluxo Telegram de aprovação
+remota para ações de risco tipo "delete all files") espera um método
+`_deve_requer_aprovacao_explicita` que não existe em `core/ipc_handlers.py`, E uma assinatura
+diferente de `_executar_do_celular` (o teste passa `execute_action` como parâmetro injetável;
+a função real só aceita `destino`/`texto`). Não é rename — é um redesenho que parece ter sido
+especificado nos testes mas nunca implementado no dispatcher. Isso é grande demais e sensível
+demais (aprovação remota de ações de risco) pra tentar de improviso. Registrado, não mexido.

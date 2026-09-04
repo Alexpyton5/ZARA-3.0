@@ -176,7 +176,9 @@ def test_terminal_history_is_bounded(clock):
         ids.append(approval_id)
         clock.advance(1)
 
-    assert sum(record["status"] in bridge._TERMINAL for record in bridge._pending.values()) == 3
+    # ZARA-TEST-DEBT-001: _pending guarda _ApprovalRecord (dataclass), nao
+    # dict -- .status, nao ["status"].
+    assert sum(record.status in bridge._TERMINAL for record in bridge._pending.values()) == 3
     assert bridge.get_status(ids[-1]) == "rejected"
     assert bridge.get_status(ids[0]) is None
 

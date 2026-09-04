@@ -18,24 +18,31 @@ echo ================================================================
 echo  ZARA - AUTODIAGNOSTICO
 echo ================================================================
 echo.
-echo  [1] QUICK        (30-90s, so camada tecnica, sem abrir a ZARA)
-echo  [2] FULL SAFE     (recomendado - tecnica + candidato real + comandos
-echo                     de voz por texto, com efeito real na tela)
-echo  [3] REPORT ONLY   (so mostra o ultimo relatorio, nao roda nada)
-echo  [4] CLEAN         (limpeza segura de cache/orfaos, nao roda teste)
-echo  [5] SAIR
+echo  [1] START ZARA    (padrao - preflight rapido e abre a ZARA)
+echo  [2] QUICK HEALTH  (30-90s, so camada tecnica, sem abrir a ZARA)
+echo  [3] FULL SAFE TEST (tecnica + build ativo real + comandos de voz
+echo                      por texto, com efeito real na tela)
+echo  [4] REPORT ONLY   (so mostra o ultimo relatorio, nao roda nada)
+echo  [5] CLEAN + ORGANIZE (limpeza segura de cache/orfaos + auditoria
+echo                      mecanica da raiz, nao roda teste funcional)
+echo  [6] OPEN STATE    (abre .zara-tests\latest\ZARA_STATE.md)
+echo  [0] SAIR
 echo.
 rem "choice" e o jeito padrao/robusto do Windows para menu numerado --
-rem define ERRORLEVEL (1-5), sem as armadilhas de "set /p" + comparacao de
+rem define ERRORLEVEL, sem as armadilhas de "set /p" + comparacao de
 rem string (espaco/CR sobrando, EOF em stdin nao-interativo, etc.).
-choice /c 12345 /n /d 2 /t 15 /m "Escolha [1-5, padrao 2 em 15s]: "
+choice /c 1234560 /n /d 1 /t 15 /m "Escolha [1-6 ou 0, padrao 1 em 15s]: "
 set RC=%ERRORLEVEL%
 
 if %RC%==1 (
+  call "ZARA_INICIAR.bat"
+  exit /b 0
+)
+if %RC%==2 (
   ".venv\Scripts\python.exe" "tools\zara_selftest.py" --quick
   goto FIM
 )
-if %RC%==2 (
+if %RC%==3 (
   echo.
   echo  ATENCAO: FULL SAFE abre navegador, toca audio e muda volume/brilho
   echo  DE VERDADE na sua tela ^(restaura volume/brilho no final^). Nao e
@@ -44,15 +51,27 @@ if %RC%==2 (
   ".venv\Scripts\python.exe" "tools\zara_selftest.py" --full
   goto FIM
 )
-if %RC%==3 (
+if %RC%==4 (
   ".venv\Scripts\python.exe" "tools\zara_selftest.py" --report
   goto FIM
 )
-if %RC%==4 (
+if %RC%==5 (
   ".venv\Scripts\python.exe" "tools\zara_selftest.py" --clean
+  echo.
+  echo Auditoria mecanica da raiz -- so leitura, nada e movido...
+  ".venv\Scripts\python.exe" "tools\zara_root_audit.py"
   goto FIM
 )
-if %RC%==5 (
+if %RC%==6 (
+  if exist ".zara-tests\latest\ZARA_STATE.md" (
+    start "" ".zara-tests\latest\ZARA_STATE.md"
+  ) else (
+    echo Nenhum ZARA_STATE.md ainda. Rode a opcao 2 ou 3 primeiro.
+    pause
+  )
+  goto MENU
+)
+if %RC%==7 (
   exit /b 0
 )
 
@@ -63,5 +82,6 @@ goto MENU
 :FIM
 echo.
 echo Relatorio: .zara-tests\latest\ZARA_TEST_REPORT.md
+echo Estado:    .zara-tests\latest\ZARA_STATE.md
 echo.
 pause

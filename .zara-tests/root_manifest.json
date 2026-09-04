@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-04T13:55:39",
-  "commit": "0e582ec",
+  "generated_at": "2026-09-04T14:04:39",
+  "commit": "2dff34e",
   "root_hygiene": "CRITICAL",
   "entries": [
     {
@@ -98,7 +98,7 @@
       "reason": "cache regeneravel",
       "git_tracked": false,
       "referenced_by": [],
-      "size_mb": 0.16,
+      "size_mb": 0.15,
       "file_count": 5
     },
     {
@@ -138,8 +138,8 @@
       "reason": "oficial, fixo na raiz",
       "git_tracked": true,
       "referenced_by": [],
-      "size_mb": 0.55,
-      "file_count": 103
+      "size_mb": 0.54,
+      "file_count": 113
     },
     {
       "name": "__pycache__",
@@ -148,8 +148,8 @@
       "reason": "cache regeneravel",
       "git_tracked": false,
       "referenced_by": [],
-      "size_mb": 0.06,
-      "file_count": 3
+      "size_mb": 0.05,
+      "file_count": 2
     },
     {
       "name": "_design",
@@ -337,8 +337,8 @@
       "reason": "codigo-fonte ativo",
       "git_tracked": true,
       "referenced_by": [],
-      "size_mb": 3.27,
-      "file_count": 222
+      "size_mb": 3.12,
+      "file_count": 207
     },
     {
       "name": "core_boundary.md",
@@ -624,8 +624,8 @@
       "reason": "codigo-fonte ativo",
       "git_tracked": true,
       "referenced_by": [],
-      "size_mb": 0.15,
-      "file_count": 14
+      "size_mb": 0.13,
+      "file_count": 11
     },
     {
       "name": "memory_system",
@@ -894,7 +894,7 @@
       "git_tracked": true,
       "referenced_by": [],
       "size_mb": 0.18,
-      "file_count": 56
+      "file_count": 55
     },
     {
       "name": "SHA256_MANIFEST.txt",
@@ -1005,8 +1005,8 @@
       "reason": "suite de testes",
       "git_tracked": true,
       "referenced_by": [],
-      "size_mb": 5.05,
-      "file_count": 410
+      "size_mb": 3.78,
+      "file_count": 274
     },
     {
       "name": "TOOL_ACTION_INVENTORY.md",
@@ -1157,11 +1157,20 @@
       "size_kb": 0.08
     },
     {
-      "name": "ZARA_ARCHITECTURE.md",
+      "name": "ZARA_AGENT_START_HERE.md",
       "type": "file",
       "category": "KEEP_ROOT",
       "reason": "oficial, fixo na raiz",
       "git_tracked": false,
+      "referenced_by": [],
+      "size_kb": 2.21
+    },
+    {
+      "name": "ZARA_ARCHITECTURE.md",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
       "referenced_by": [],
       "size_kb": 3.2
     },
@@ -1179,7 +1188,7 @@
       "type": "file",
       "category": "DOCS",
       "reason": "documento operacional oficial (secao 46)",
-      "git_tracked": false,
+      "git_tracked": true,
       "referenced_by": [],
       "size_kb": 2.62
     },
@@ -1188,7 +1197,7 @@
       "type": "file",
       "category": "KEEP_ROOT",
       "reason": "oficial, fixo na raiz",
-      "git_tracked": false,
+      "git_tracked": true,
       "referenced_by": [],
       "size_kb": 2.13
     },
@@ -1205,13 +1214,22 @@
       "size_kb": 6.18
     },
     {
+      "name": "ZARA_INICIAR.bat",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_kb": 2.51
+    },
+    {
       "name": "ZARA_TESTAR_TUDO.bat",
       "type": "file",
       "category": "KEEP_ROOT",
       "reason": "oficial, fixo na raiz",
       "git_tracked": true,
       "referenced_by": [],
-      "size_kb": 1.8
+      "size_kb": 2.43
     }
   ]
 }

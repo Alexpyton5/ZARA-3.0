@@ -727,23 +727,163 @@ def write_reports(report: SelfTestReport, cfg: dict) -> Path:
     (LATEST_DIR / "ZARA_TEST_REPORT.json").write_text(json.dumps(json_report, indent=2, ensure_ascii=False), encoding="utf-8")
 
     capabilities = {
-        r.test_id: {"label": r.label, "status": r.state, "latency_ms": round(r.latency_ms, 1)}
+        r.test_id: {
+            "label": r.label,
+            "status": r.state,
+            "last_verified": report.run_id,
+            "latency_ms": round(r.latency_ms, 1),
+            "category": r.category,
+            "error_if_any": r.detail if r.state in (ResultState.FAIL, ResultState.TIMEOUT, ResultState.BLOCKED) else None,
+        }
         for r in report.results
     }
     (LATEST_DIR / "ZARA_CAPABILITIES.json").write_text(json.dumps(capabilities, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    write_zara_state(report, cfg, counts, broken, slow, working, health_pct, duration_s)
 
     # Histórico: uma pasta por run, retenção configurável.
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     run_dir = HISTORY_DIR / report.run_id
     run_dir.mkdir(exist_ok=True)
-    for name in ("ZARA_TEST_REPORT.md", "ZARA_TEST_REPORT.json", "ZARA_CAPABILITIES.json"):
-        shutil.copy2(LATEST_DIR / name, run_dir / name)
+    for name in ("ZARA_TEST_REPORT.md", "ZARA_TEST_REPORT.json", "ZARA_CAPABILITIES.json",
+                 "ZARA_STATE.md", "ZARA_STATE.json"):
+        src = LATEST_DIR / name
+        if src.exists():
+            shutil.copy2(src, run_dir / name)
     keep = int(cfg.get("report_retention", HISTORY_RETENTION))
     old_runs = sorted(HISTORY_DIR.iterdir(), key=lambda p: p.name)
     for old in old_runs[:-keep] if len(old_runs) > keep else []:
         shutil.rmtree(old, ignore_errors=True)
 
     return LATEST_DIR / "ZARA_TEST_REPORT.md"
+
+
+# ---------------------------------------------------------------------------
+# ZARA_STATE -- a fonte da verdade que qualquer IA/agente le ANTES de auditar
+# a ZARA de novo. Gerado 100% deterministicamente a partir do que este runner
+# ja observou -- zero IA, zero tokens.
+# ---------------------------------------------------------------------------
+
+def _changed_files_since_baseline() -> list[str]:
+    try:
+        latest = json.loads((ZARA_TESTS_DIR / "latest.json").read_text(encoding="utf-8"))
+        return list(latest.get("changed_files") or [])
+    except Exception:
+        return []
+
+
+def write_zara_state(
+    report: SelfTestReport, cfg: dict, counts: dict[str, int],
+    broken: list[TestResult], slow: list[TestResult], working: list[TestResult],
+    health_pct: int, duration_s: float,
+) -> None:
+    degraded = [r for r in report.results if r.state == ResultState.BLOCKED]
+    unverified = [r for r in report.results if r.state == ResultState.EXECUTED_UNVERIFIED]
+    technical = report.technical or {}
+    known_still = (technical.get("classification") or {}).get("known_failures_still_failing", [])
+    new_failures = (technical.get("classification") or {}).get("new_failures", [])
+    changed = _changed_files_since_baseline()
+
+    root_hygiene = "UNKNOWN"
+    root_manifest_path = ZARA_TESTS_DIR / "root_manifest.json"
+    if root_manifest_path.exists():
+        try:
+            root_hygiene = json.loads(root_manifest_path.read_text(encoding="utf-8")).get("root_hygiene", "UNKNOWN")
+        except Exception:
+            pass
+
+    lines = [
+        "# ZARA CURRENT VERIFIED STATE",
+        "",
+        f"Last validation: {report.run_id}",
+        f"Commit: {report.commit} (branch `{report.branch}`)",
+        f"Health: {health_pct}%",
+        f"Root hygiene: {root_hygiene}",
+        "",
+        "## WORKING",
+        "",
+    ]
+    lines += [f"- {r.test_id} {r.label}" for r in working] or ["- (nenhum item passou nesta rodada)"]
+
+    lines += ["", "## BROKEN", ""]
+    lines += [f"- {r.test_id} {r.label} — {r.detail}" for r in broken] or ["- nenhum"]
+
+    lines += ["", "## DEGRADED", ""]
+    lines += [f"- {r.test_id} {r.label} — {r.detail}" for r in degraded] or ["- nenhum"]
+
+    lines += ["", "## UNVERIFIED", ""]
+    lines += [f"- {r.test_id} {r.label} — {r.detail}" for r in unverified] or ["- nenhum"]
+
+    lines += ["", "## KNOWN FAILURES (camada técnica, pytest)", ""]
+    if new_failures:
+        lines.append(f"- **{len(new_failures)} NOVA(s)**: {', '.join(new_failures[:10])}")
+    lines += [f"- {t}" for t in known_still[:30]] or ["- nenhuma"]
+    if len(known_still) > 30:
+        lines.append(f"- ... e mais {len(known_still) - 30}")
+
+    lines += ["", "## PERFORMANCE (>5s)", ""]
+    lines += [f"- {r.test_id} {r.label}: {r.latency_ms:.0f}ms ({r.category})" for r in slow] or ["- nada lento nesta rodada"]
+
+    lines += ["", "## CAPABILITIES", ""]
+    if report.capabilities_total is not None:
+        lines.append(f"- {report.capabilities_total} ações registradas no total; {len(report.results)} checagens nesta rodada.")
+    else:
+        lines.append(f"- {len(report.results)} checagens nesta rodada (modo sem abrir a ZARA, sem contagem total).")
+
+    lines += [
+        "",
+        "## IMPORTANT ARCHITECTURE",
+        "",
+        "- Dispatcher central: `core/ipc_handlers.py` (classe `IPCHandler`)",
+        "- Intents de voz/texto: `core/pc_voice_intent.py` (`PcVoiceIntentDetector`)",
+        "- Registro/execução de ações: `core/action_registry.py`",
+        "- Mapa completo: `.claude/rules/path-rules/backend-core.md` e `frontend-electron.md`",
+        "",
+        "## LAST CHANGES DETECTED",
+        "",
+    ]
+    lines += [f"- {f}" for f in changed[:20]] or ["- nenhum arquivo relevante alterado desde o último teste incremental"]
+
+    lines += ["", "## RECOMMENDED NEXT TESTS", ""]
+    if broken:
+        lines.append("- Reexecutar FULL SAFE após investigar os itens em BROKEN.")
+    if degraded or unverified:
+        lines.append("- Itens DEGRADED/UNVERIFIED não são falha confirmada -- reexecutar isolado antes de agir.")
+    if not broken and not degraded:
+        lines.append("- Nada crítico pendente. Rodar QUICK após qualquer mudança de código; FULL SAFE só se mudança tocar router/execução compartilhada.")
+
+    lines += [
+        "",
+        "## AGENT INSTRUCTIONS",
+        "",
+        "Antes de auditar a ZARA de novo: compare `Commit` acima com `git rev-parse HEAD`.",
+        "Se forem iguais e nada relevante mudou, NÃO rode a suíte completa de novo --",
+        "este arquivo já é a resposta. Se HEAD mudou, rode `tools/zara_validate.py`",
+        "(incremental) antes de qualquer suíte completa. Ver `ZARA_AGENT_START_HERE.md`.",
+        "",
+    ]
+
+    (LATEST_DIR / "ZARA_STATE.md").write_text("\n".join(lines), encoding="utf-8")
+
+    state_json = {
+        "run_id": report.run_id,
+        "commit": report.commit,
+        "branch": report.branch,
+        "health_pct": health_pct,
+        "root_hygiene": root_hygiene,
+        "duration_seconds": round(duration_s, 1),
+        "counts": counts,
+        "working": [r.test_id for r in working],
+        "broken": [{"id": r.test_id, "label": r.label, "detail": r.detail} for r in broken],
+        "degraded": [{"id": r.test_id, "label": r.label, "detail": r.detail} for r in degraded],
+        "unverified": [{"id": r.test_id, "label": r.label, "detail": r.detail} for r in unverified],
+        "known_failures": known_still,
+        "new_failures": new_failures,
+        "slow": [{"id": r.test_id, "label": r.label, "latency_ms": round(r.latency_ms, 1)} for r in slow],
+        "capabilities_total": report.capabilities_total,
+        "changed_files_since_baseline": changed,
+    }
+    (LATEST_DIR / "ZARA_STATE.json").write_text(json.dumps(state_json, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def print_final_summary(report: SelfTestReport, report_path: Path) -> None:

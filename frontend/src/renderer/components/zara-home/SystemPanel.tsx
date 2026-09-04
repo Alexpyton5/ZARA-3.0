@@ -63,13 +63,31 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
         const capabilities = snapshot?.capabilities;
         if (!Array.isArray(capabilities) || capabilities.length === 0) {
           setDiagnosticSummary('Diagnóstico indisponível agora.');
-          return;
+          return null;
         }
         const available = capabilities.filter((c) => c.status === 'AVAILABLE').length;
         setDiagnosticSummary(`${available}/${capabilities.length} capacidades disponíveis agora.`);
+        return null;
       })
       .catch(() => setDiagnosticSummary('Diagnóstico indisponível agora.'))
       .finally(() => setDiagnosticLoading(false));
+
+    // Lembrar: acrescenta a contagem real de fatos guardados, sem novo
+    // painel -- reusa o mesmo card de diagnóstico. Canal já testado nesta
+    // madrugada (ver .ceo/NIGHT_LOG.md); sem consumidor até este ponto.
+    const listMemory = window.zaraIPC?.userMemory?.list;
+    if (listMemory) {
+      listMemory()
+        .then((res: { success?: boolean; facts?: unknown[] }) => {
+          if (res?.success && Array.isArray(res.facts)) {
+            setDiagnosticSummary((prev) => `${prev ?? ''} ${res.facts!.length} fatos na memória.`.trim());
+          }
+        })
+        .catch(() => {
+          // Silencioso: a memoria e um extra sobre o diagnostico principal,
+          // nao pode derrubar o resumo de capacidades se falhar.
+        });
+    }
   }
 
   function handleVerProcessos() {

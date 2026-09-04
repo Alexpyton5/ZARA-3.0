@@ -187,3 +187,28 @@ Diagnóstico foram — é mudar o que MUITOS testes esperam que o IPC envie, em 
 teste, não só em `core/ipc_handlers.py`. É uma tarefa própria (atualizar os testes junto,
 deliberadamente, não como efeito colateral). Não vou fazer isso de improviso às 3h. Sigo agora
 para ouvir/falar (voz) e abrir apps, que são conexões sem esse risco.
+
+### Achado mais importante da madrugada: voz nunca esteve ligada na Home nova
+
+Fui checar `VoiceDock.tsx` (botão de voz da Home). Ele chama `window.zaraIPC.voice.start()`/
+`.stop()` — parece conectado. Mas isso só liga o pipeline NO BACKEND. Busquei
+`frontend/src/renderer/lib/aecAudio.ts` (captura de microfone com AEC do Chromium + tocar a
+voz da Kore — o módulo que resolveu o eco, medido em 2026-08-13) em todo `frontend/src`: **zero
+chamadas**, em qualquer componente, novo ou legado. O módulo existe, funciona, está pronto — e
+está morto, sem nenhum consumidor.
+
+Prático: clicar "ouvir voz" na Home ligava o backend, mas nenhum áudio de microfone saía do
+navegador (`sendMicChunk` nunca era chamado), e quando a Kore respondesse não haveria onde
+tocar (`voiceOutputAudio` sem assinante). O botão parecia funcionar; a ZARA não ouvia nem
+falava por essa tela.
+
+Corrigido em `VoiceDock.tsx`, reusando as 4 funções já prontas (nada de áudio novo escrito):
+- toggle liga `iniciarAudioAec` (manda os chunks por `sendMicChunk`) e `pararAudioAec`.
+- assina `on.voiceOutputAudio` sempre (não só enquanto "ouvindo" — barge-in e resposta de texto
+  também falam) e chama `tocarKore`/`cortarKore`.
+
+`npm run build`: `aecAudio.ts` agora entra no bundle (1831 módulos, antes 1830 — confirma que
+estava sendo descartado no tree-shaking). Handshake real do candidato confirmado.
+
+**Não posso verificar som.** Isso é fisicamente só o Alex — microfone captando e voz saindo da
+caixa de som. É o teste mais importante pra pedir amanhã.

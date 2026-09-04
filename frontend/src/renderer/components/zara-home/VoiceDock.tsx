@@ -46,6 +46,19 @@ export function VoiceDock({ coreState }: VoiceDockProps) {
 
   async function toggleVoice() {
     if (!voiceAvailable) return;
+    // ZARA-HOME-BARGE-IN-001: enquanto ela fala, o mesmo botao interrompe em
+    // vez de alternar o microfone -- corta o audio de verdade (nao so o
+    // estado visual) e avisa o backend, igual ao "Zara, pare" por voz.
+    if (coreState === 'speaking') {
+      cortarKore();
+      try {
+        await window.zaraIPC?.message?.interrupt?.();
+      } catch {
+        // Audio ja foi cortado no cliente; erro no aviso ao backend nao
+        // precisa travar o botao.
+      }
+      return;
+    }
     try {
       if (listening) {
         await window.zaraIPC!.voice!.stop!();
@@ -73,6 +86,7 @@ export function VoiceDock({ coreState }: VoiceDockProps) {
 
   const label = !voiceAvailable
     ? 'Abrir modo voz — não conectado'
+    : coreState === 'speaking' ? 'Interromper'
     : listening ? 'Parar modo voz' : 'Abrir modo voz';
 
   return (

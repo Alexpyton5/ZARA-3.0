@@ -1,14 +1,14 @@
 {
-  "BUILD_ID": "release-candidate-20260904-0708",
-  "BUILD_TIMESTAMP": "2026-09-04T07:08:00-03:00",
+  "BUILD_ID": "release-candidate-20260904-0714",
+  "BUILD_TIMESTAMP": "2026-09-04T07:14:00-03:00",
   "BASE_CANDIDATE": "release",
   "BUILD_METHOD": "npm run electron:build (tsc + vite build + tsc electron + electron-builder), sidecar via dist-sidecar/zara-backend.exe (extraResources)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "79db830",
+  "GIT_COMMIT": "c3a28d4",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\win-unpacked\\ZARA 3.0.exe",
   "EXE_SHA256": "67dc2a7036860a68e5312c212c31b8772ac463ed0289fcc44897867f55075e89",
   "BACKEND_SHA256": "dcf98235b00f1550ac5906aef69d459785efb42a896f8da23774e8d5409909d0",
-  "ASAR_SHA256": "e1a30ef5f4cbc0796f61174f1f7c2d882f610d967f0cfdd82feaaa8ce1af86a5",
-  "DELTA": "Tudo dos candidatos anteriores + Core reage de verdade a texto/acao (THINKING/EXECUTING/SUCCESS/ERROR/STANDBY) + relogio/saudacao reais + confirmado que abrir apps ja funciona (Notepad testado via IPC bruto). Handshake real confirmado 5x nesta madrugada. Continua faltando confirmacao fisica de audio (microfone/fala) e visual da tela."
+  "ASAR_SHA256": "1134717137acf42289b9c1b35037261b837f1169f4b115e264b9e1168595ec5d",
+  "DELTA": "Tudo dos candidatos anteriores + Core reage a texto/acao + relogio real + barge-in real no botao de voz. Handshake real confirmado 6x nesta madrugada. Falta confirmacao fisica de audio, visual da tela e barge-in falado."
 }

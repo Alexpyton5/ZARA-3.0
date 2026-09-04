@@ -161,3 +161,29 @@ merece ser vista antes de rodar, não descoberta quebrada de manhã.
 
 Registrando como achado pronto pra virar tarefa: escopo pequeno, arquivo único, mas exige
 cuidado de fluxo de controle, não é "conectar um fio".
+
+### Alex mandou "ligue tudo que ela já faz — ouvir, falar, pensar, lembrar, abrir apps"
+
+Isso reabriu o item do Core acima. Tentei de verdade desta vez: `state-change` no início de
+`handle_send_message` (THINKING) e antes de cada um dos 8 pontos de saída (STANDBY/ERROR), e o
+mesmo em `handle_action_execute` (EXECUTING → SUCCESS/ERROR). `py_compile` e `ruff` limpos.
+
+**Rodei `tools/zara_validate.py` antes de confiar — e ainda bem.** 4 falhas NOVAS, todas pelo
+mesmo motivo: vários testes (`test_ipc_action_safety`, `test_reminder_ipc`,
+`test_conversation_history`) fazem asserção em `sent[-1]` ou na sequência EXATA de tipos de
+mensagem enviada pelo IPC (ex.: `== ["reminder-created", "response"]`). Meus eventos de estado
+novos entram nessa mesma lista e quebram o contrato — não é sequência errada de verdade, é que
+o teste não esperava mensagens novas ali. **Revertido** (`git checkout -- core/ipc_handlers.py`)
+e confirmado: os 3 testes voltam a passar, e uma nova rodada do validator dá "nenhuma falha
+nova".
+
+Achado no caminho, sem relação com o Core: o `BUILD_INFO.json` que eu mesmo escrevi à mão pros
+candidatos desta madrugada tava faltando o campo `NODE_VERSION` (esqueci de carregar esse campo
+adiante quando reescrevi o manifesto manualmente) — `test_build_info_json_schema` pegou isso
+como a 4ª falha nova. Corrigido no arquivo atual.
+
+**Decisão:** ligar o Core direito não é "conectar um fio" como Wi-Fi/Energia/Processos/
+Diagnóstico foram — é mudar o que MUITOS testes esperam que o IPC envie, em vários arquivos de
+teste, não só em `core/ipc_handlers.py`. É uma tarefa própria (atualizar os testes junto,
+deliberadamente, não como efeito colateral). Não vou fazer isso de improviso às 3h. Sigo agora
+para ouvir/falar (voz) e abrir apps, que são conexões sem esse risco.

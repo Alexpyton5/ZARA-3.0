@@ -125,3 +125,39 @@ exatamente essa frente.
 **O que não está provado:** ninguém viu a tela. Nível de evidência continua PACKAGED_RUNTIME
 (processo real, sem crash, handshake real), não PHYSICAL_BY_ALEX. Isso só fecha com o Alex
 abrindo o candidato e olhando.
+
+### Alex mandou "siga" — mais 2 conexões, depois um achado que decidi NÃO consertar ainda
+
+Fiz o mesmo padrão (action real já existe, só falta o fio) mais duas vezes:
+
+- **Manutenção > Ver processos** → `system_processes` (psutil), mostra contagem real.
+- **Diagnóstico inteligente > Analisar agora** → canal IPC NOVO, `self-status`. O backend
+  (`handle_self_status`) já existia pronto, 100% funcional, e simplesmente não tinha ponte até
+  o renderer — clássico caso BACKEND_EXISTS_NOT_CONNECTED. Abri os 4 pontos: `preload.ts`,
+  `main.ts` (`ipcMain.handle`), `global.d.ts`, componente. Mostra quantas das ~17 capacidades
+  reais estão disponíveis agora.
+
+Testei os dois pelo mesmo stdin harness do T2/T4 antes de confiar no formato da resposta.
+Rebuild completo, handshake real confirmado de novo (3ª vez desta madrugada), commitado
+(`2be2446`).
+
+**Achado real, NÃO consertado:** fui verificar se o Core (a bola grande no meio da tela) reage
+de verdade durante uma ação — é o que Alex mais liga. `useZaraCoreState.ts` aceita 11 estados
+(idle/listening/understanding/thinking/planning/executing/awaiting_authorization/speaking/
+success/error/offline). Rastreei o backend: ele só EMITE de verdade `LISTENING`, `STANDBY`,
+`THINKING`, `SPEAKING`, e mais o que vier cru do Gemini Live. `handle_send_message` (texto) e
+`handle_action_execute` (toda ação executada pela UI) **nunca emitem `state-change`
+nenhum**. Ou seja: hoje, mandar um comando de texto ou clicar num botão de ação NÃO move a
+bola. `executing`, `awaiting_authorization`, `success`, `error` nunca acontecem na prática.
+
+Cheguei a desenhar o fix (`THINKING` no início de `handle_send_message`, reversão no fim) mas
+`handle_send_message` tem 8 pontos de saída diferentes (6 `return` cedo + try/except no fim) —
+pra garantir que a bola nunca fique travada em "pensando" pra sempre eu precisaria envolver a
+função inteira num try/finally, reindentando ~140 linhas do dispatcher mais sensível do
+projeto (`core/ipc_handlers.py`, o mesmo que `backend-core.md` marca como "voz e texto
+compartilham a cadeia"). Decidi NÃO fazer essa reestruturação grande sem supervisão, de
+madrugada, depois de já ter 3 rebuilds na conta. É exatamente o tipo de mudança estrutural que
+merece ser vista antes de rodar, não descoberta quebrada de manhã.
+
+Registrando como achado pronto pra virar tarefa: escopo pequeno, arquivo único, mas exige
+cuidado de fluxo de controle, não é "conectar um fio".

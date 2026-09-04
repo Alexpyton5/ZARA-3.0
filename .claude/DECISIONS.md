@@ -39,8 +39,30 @@ Só decisão estável/importante. Não é log de rotina — isso fica no git.
   real, mesma viewport → screenshot → diff → correção. Copiar, não redesenhar.
 
 - **Existe uma única ZARA ativa por vez.** Um build ativo
-  (`ZARA_ACTIVE_BUILD.json`/`.txt`), não "candidatos" — já formalizado em
+  (`ZARA_ACTIVE_BUILD.json`/`.txt`) — já formalizado em
   `.claude/rules/build-release.md` desde 2026-09-04.
+
+- **2026-09-04 (correção do Alex) — terminologia fixa, "candidato" abolido
+  dos documentos operacionais.** Nos documentos de estado persistente
+  (`CURRENT_MISSION.md`, `TASK_BOARD.md`, `ORG.md`, `WORKING_MODEL.md`, este
+  arquivo), não usar mais "candidate"/"candidato"/"release candidate"/
+  "build antigo vs. novo candidato". Existem só três conceitos:
+  - **ZARA CURRENT SOURCE** — código no HEAD do branch de trabalho.
+  - **ZARA CURRENT BUILD** — artefato empacotado apontado por
+    `ZARA_ACTIVE_BUILD.json`/`.txt`.
+  - **ZARA CURRENT RUNTIME** — processo em execução testado fisicamente.
+  Documentação histórica fora desse conjunto (ex.: `.claude/rules/build-release.md`,
+  nomes literais de pastas em disco como `frontend/release-candidate-*/`,
+  agentes/skills que citam o histórico do incidente de 2026-08) não foi
+  reescrita — são nomes reais de arquivo/pasta e relato de um incidente
+  passado, não o conceito de trabalho atual.
+
+- **2026-09-04 (correção do Alex) — backlog não trava por teste manual
+  pendente.** Uma tarefa aguardando validação física do Alex (ex.: F1.1 voz
+  Kore) não bloqueia o restante do backlog (F1.2 em diante). Se existir
+  tarefa `SAFE` e independente (arquivos e resultado não dependem do teste
+  pendente), ela segue em paralelo. Só trava o que depende diretamente do
+  resultado ainda não confirmado.
 
 - **`ZARA_STATE.md`/`.json` (gerado por `tools/zara_selftest.py`) é a fonte de
   estado técnico oficial.** Antes de reauditar a ZARA, comparar o commit

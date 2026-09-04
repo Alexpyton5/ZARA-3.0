@@ -40,6 +40,8 @@ Formato simples. Não virar burocracia.
   scope: latência mínima de resposta medida e reduzida
   files: `core/model_router.py`
   DoD: número em ms, antes/depois, medido por `[VOICE_TRACE]` + SQLite
+  nota: não bloqueado por teste físico pendente de F1.1 — pode iniciar
+  (`.claude/DECISIONS.md`, 2026-09-04)
 
 - ID: T-BACKLOG-F1.3
   owner: Voice Lead → `voice-lead` (time novo)

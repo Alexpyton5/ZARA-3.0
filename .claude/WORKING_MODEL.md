@@ -149,5 +149,21 @@ operações proibidas sem autorização nomeada.)
 ## Fonte única de verdade
 
 Uma interface oficial, um código ativo, um estado oficial (`ZARA_STATE.md`),
-um sistema de testes. Não trabalhar com múltiplos "candidatos" — já é a regra
-vigente em `.claude/rules/build-release.md`.
+um sistema de testes. Terminologia fixa (ver `.claude/DECISIONS.md`):
+
+- **ZARA CURRENT SOURCE** — o código no HEAD do branch de trabalho.
+- **ZARA CURRENT BUILD** — o artefato empacotado apontado por
+  `ZARA_ACTIVE_BUILD.json`/`.txt`.
+- **ZARA CURRENT RUNTIME** — o processo em execução testado fisicamente.
+
+Não existe "candidato"/"candidate"/"release candidate" nem "build novo vs.
+build antigo" como conceito de trabalho — já é a regra vigente em
+`.claude/rules/build-release.md`.
+
+## Backlog não trava por teste manual pendente
+
+Uma tarefa aguardando teste físico do Alex (ex.: F1.1) **não bloqueia** o
+resto do backlog. Se houver outra tarefa `SAFE` e independente (não mexe nos
+mesmos arquivos, não depende do resultado do teste pendente), o Chief segue
+para ela em paralelo. Só trava tarefa que dependa diretamente do resultado
+não confirmado.

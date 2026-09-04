@@ -16,6 +16,10 @@ fechar):
 F1.1 VOZ KORE → F1.2 LATÊNCIA → F1.3 MICROFONE SEM LOOP → F1.4 VOZ → AÇÃO REAL
 ```
 
+A ordem acima é prioridade, não trava. F1.1 aguardando teste físico do Alex
+não impede começar F1.2 (ou outra tarefa `SAFE`/independente) em paralelo —
+ver `.claude/DECISIONS.md`, 2026-09-04.
+
 ## Task ativa
 
 Nenhuma. Aguardando próximo pedido do Alex.

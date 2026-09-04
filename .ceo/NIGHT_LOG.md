@@ -299,3 +299,12 @@ Isso é trabalho real, mas é uma frente própria — passar por 30+ testes deci
 a caso não é "conectar a interface" nem correção pontual, é uma auditoria de suite inteira.
 Parando aqui por disciplina de escopo, não por preguiça: o diagnóstico está pronto pra quem for
 fazer esse trabalho não precisar redescobrir isso do zero.
+
+### Checkpoint — 17 commits, sessão bem longa
+
+Mais 1 teste corrigido (`test_ponte_claude.py`, copy desatualizada — comportamento real
+confirmado inalterado antes de mexer). 45→37 falhos conhecidos, zero regressão nova em nenhum
+momento. Candidato em disco reflete tudo até `f8faeb7`. Working tree limpo (só arquivos de
+outra sessão, intocados). Continuando em ritmo mais leve — a varredura ampla de conexões e
+test-debt seguro já rendeu o que dava render sem abrir escopo novo (gates de segurança, UI
+nova, integrações externas ficam fora, como já registrado).

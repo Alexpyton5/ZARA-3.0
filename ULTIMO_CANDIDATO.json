@@ -1,14 +1,14 @@
 {
-  "BUILD_ID": "release-candidate-20260904-0722",
-  "BUILD_TIMESTAMP": "2026-09-04T07:22:00-03:00",
+  "BUILD_ID": "release-candidate-20260904-0726",
+  "BUILD_TIMESTAMP": "2026-09-04T07:26:00-03:00",
   "BASE_CANDIDATE": "release",
   "BUILD_METHOD": "npm run electron:build (tsc + vite build + tsc electron + electron-builder), sidecar via dist-sidecar/zara-backend.exe (extraResources)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "7fad5a0",
+  "GIT_COMMIT": "e933820",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\win-unpacked\\ZARA 3.0.exe",
   "EXE_SHA256": "67dc2a7036860a68e5312c212c31b8772ac463ed0289fcc44897867f55075e89",
   "BACKEND_SHA256": "dcf98235b00f1550ac5906aef69d459785efb42a896f8da23774e8d5409909d0",
-  "ASAR_SHA256": "670e68739247d171ce40645c1d3b4da3404f01a6011d0bde9deb92e6a0ce7ce6",
-  "DELTA": "Tudo dos candidatos anteriores + ponte IPC de memoria de usuario/projeto (sem consumidor de UI ainda, infraestrutura pronta). Handshake real confirmado 7x nesta madrugada."
+  "ASAR_SHA256": "4e406cb79f42cd6145c017ae3c563713bb42b15675bd9a45eddafa3e4b04ea11",
+  "DELTA": "Candidato consolidado com tudo desta madrugada: T1 backend fix, Home real, Rede/Energia/Processos/Diagnostico, audio de voz (mic+fala), Core reagindo a texto/acao, relogio real, barge-in real, ponte de memoria, timeout de boot com margem real. Handshake real confirmado 8x. Falta: confirmacao fisica de audio, tela e barge-in falado."
 }

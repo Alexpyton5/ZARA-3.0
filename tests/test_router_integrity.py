@@ -220,6 +220,15 @@ def test_050_all_intent_actions_except_known_gap_are_registered():
     referenced = set(re.findall(r'"([a-z_]+)",\s*(?:"[^"]*"|None)\)', src))
     referenced |= set(re.findall(r'action="([a-z_]+)"', src))
 
+    # ZARA-TEST-DEBT-001: a regex acima e um heuristico sobre texto-fonte,
+    # nao um parser real de tupla de rota -- ela tambem casa chamadas
+    # `dict.get("chave", default)` que nada tem a ver com roteamento.
+    # Confirmado lendo core/pc_voice_intent.py: "content" vem de
+    # `result.get("choices", [{}])[0].get("message", {}).get("content", "")`
+    # (parse de resposta de LLM) e "param" vem de `parsed.get("param", "")`
+    # (mesmo parser). Nenhum dos dois e nome de action de verdade.
+    referenced -= {"content", "param"}
+
     # Carrega sob demanda cada action referenciada
     for action_name in referenced:
         load_capability(action_name)

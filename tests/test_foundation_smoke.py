@@ -46,26 +46,47 @@ class TestIntentClassification:
     """M7: Intent classification system."""
 
     def test_intent_classifier_imports(self):
-        """Intent classifier module exists."""
+        """Intent classifier module exists.
+
+        ZARA-TEST-DEBT-001: o simbolo era 'classify'; o modulo foi
+        refeito para 'classify_intent_with_llm' (nome atual, confirmado
+        lendo core/intent_classifier.py). Teste desatualizado, nao bug.
+        """
         try:
             from core import intent_classifier
-            assert hasattr(intent_classifier, 'classify'), "classify function not found"
+            assert hasattr(intent_classifier, 'classify_intent_with_llm'), \
+                "classify_intent_with_llm function not found"
         except ImportError as e:
             pytest.skip(f"intent_classifier import failed: {e}")
 
     def test_pc_voice_intent_imports(self):
-        """PC voice intent module exists."""
+        """PC voice intent module exists.
+
+        ZARA-TEST-DEBT-001: '_resolve_pc_intent' nunca existiu como funcao
+        de modulo nesta versao -- a deteccao vive em
+        PcVoiceIntentDetector.detect(text), confirmado lendo
+        core/pc_voice_intent.py. Teste desatualizado, nao bug.
+        """
         try:
             from core import pc_voice_intent
-            assert hasattr(pc_voice_intent, '_resolve_pc_intent'), "_resolve_pc_intent not found"
+            assert hasattr(pc_voice_intent, 'PcVoiceIntentDetector'), \
+                "PcVoiceIntentDetector class not found"
+            assert hasattr(pc_voice_intent.PcVoiceIntentDetector, 'detect'), \
+                "PcVoiceIntentDetector.detect not found"
         except ImportError as e:
             pytest.skip(f"pc_voice_intent import failed: {e}")
 
     def test_local_deterministic_actions_defined(self):
-        """LOCAL_DETERMINISTIC_ACTIONS set is defined."""
+        """LOCAL_DETERMINISTIC_ACTIONS set is defined.
+
+        ZARA-TEST-DEBT-001: virou frozenset (imutavel, mais seguro contra
+        mutacao acidental) em algum ponto -- frozenset nao e subclasse de
+        set em Python, entao isinstance(x, set) sempre falhava mesmo com o
+        conjunto correto. Teste desatualizado, nao bug.
+        """
         try:
             from core.pc_voice_intent import _LOCAL_DETERMINISTIC_ACTIONS
-            assert isinstance(_LOCAL_DETERMINISTIC_ACTIONS, set), "Not a set"
+            assert isinstance(_LOCAL_DETERMINISTIC_ACTIONS, (set, frozenset)), "Not a set/frozenset"
             assert len(_LOCAL_DETERMINISTIC_ACTIONS) > 0, "Set is empty"
         except ImportError:
             pytest.skip("LOCAL_DETERMINISTIC_ACTIONS not found")
@@ -99,18 +120,30 @@ class TestVoiceEngine:
     """M7: Voice system initialization."""
 
     def test_gemini_live_imports(self):
-        """Gemini Live voice engine can import."""
+        """Gemini Live voice engine can import.
+
+        ZARA-TEST-DEBT-001: a classe e 'GeminiLiveVoice' (confirmado lendo
+        core/gemini_live_voice.py), nao 'GeminiLive'. Teste desatualizado,
+        nao bug.
+        """
         try:
             from core import gemini_live_voice
-            assert hasattr(gemini_live_voice, 'GeminiLive'), "GeminiLive class not found"
+            assert hasattr(gemini_live_voice, 'GeminiLiveVoice'), "GeminiLiveVoice class not found"
         except ImportError as e:
             pytest.skip(f"gemini_live_voice import failed: {e}")
 
     def test_voice_tts_imports(self):
-        """Text-to-speech module loads."""
+        """Text-to-speech module loads.
+
+        ZARA-TEST-DEBT-001: nao ha funcao de modulo 'speak' -- a cascata de
+        TTS (Kore/Edge/Kokoro/Gemini com fallback) vive em
+        TTSManager.speak(text), confirmado lendo core/voice_tts.py. Teste
+        desatualizado, nao bug.
+        """
         try:
             from core import voice_tts
-            assert hasattr(voice_tts, 'speak'), "speak function not found"
+            assert hasattr(voice_tts, 'TTSManager'), "TTSManager class not found"
+            assert hasattr(voice_tts.TTSManager, 'speak'), "TTSManager.speak not found"
         except ImportError as e:
             pytest.skip(f"voice_tts import failed: {e}")
 
@@ -224,7 +257,11 @@ class TestIPC:
         main_ts = PROJECT_ROOT / "frontend" / "src" / "main.ts"
         assert main_ts.exists(), f"main.ts not found at {main_ts}"
 
-        with open(main_ts) as f:
+        # ZARA-TEST-DEBT-001: sem encoding explicito, Windows usa a codepage
+        # local (cp1252 nesta maquina) em vez de UTF-8 -- quebra em qualquer
+        # comentario com acento (o arquivo tem varios, em portugues). Teste
+        # desatualizado, nao bug no main.ts.
+        with open(main_ts, encoding="utf-8") as f:
             content = f.read()
 
         # Should contain IPC handler registrations

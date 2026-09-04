@@ -277,3 +277,25 @@ de "isso está bloqueado" para essa frase específica, ela provavelmente cai no 
 isso" genérico. Ainda vale registrar e considerar devolver o padrão (é barato, é só regex), mas
 não é o incêndio que a primeira leitura sugeria. Não mexi — mesmo sendo baixo risco, é
 `core/pc_voice_intent.py`, e prefiro deixar pra alguém decidir com calma.
+
+### Padrão sistêmico identificado nos 33 falhos restantes (não corrigido, só diagnosticado)
+
+`test_system_env_and_files_list_safety.py` tem o MESMO padrão exato do `test_os_power_gate_207`:
+a action (`system_env`, capability=CODE_EXECUTION) é interceptada pelo gate de capability do
+registry ANTES de chegar no check interno que o teste espera (`ENVIRONMENT_READ_BLOCKED`). Two
+data points já confirmam: isso não é bug de segurança — é um lote inteiro de testes escrito
+antes do hardening "chamada direta também passa pelo gate do registry" (comentário próprio em
+`action_registry.py:566`), nunca atualizado depois.
+
+**Hipótese, não confirmada em todos:** provavelmente vale para boa parte dos 33 restantes
+(`test_remote_approval_bridge.py`, `test_remote_approval_e2e.py`, `test_os_ops_truth_contracts.py`
+pelo menos parecem candidatos pelo nome). Corrigir cada um direito exige: (a) só trocar a
+mensagem esperada quando o teste queria testar exatamente esse gate, ou (b) ajustar o setup do
+teste pra ativar Supercérebro/bypassar o gate externo quando o teste queria testar um
+comportamento INTERNO da action (ex.: `test_system_env_never_echoes_the_value_being_set` quer
+`success=True`, precisa do gate externo desativado pra chegar no código que testa de verdade).
+
+Isso é trabalho real, mas é uma frente própria — passar por 30+ testes decidindo (a) ou (b) caso
+a caso não é "conectar a interface" nem correção pontual, é uma auditoria de suite inteira.
+Parando aqui por disciplina de escopo, não por preguiça: o diagnóstico está pronto pra quem for
+fazer esse trabalho não precisar redescobrir isso do zero.

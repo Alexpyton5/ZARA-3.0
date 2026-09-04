@@ -211,12 +211,18 @@ function startPythonSidecar(): Promise<void> {
       }
     })
 
+    // ZARA-SIDECAR-TIMEOUT-MARGEM-001: boot a frio medido nesta madrugada
+    // ficou em ~30-35s (varias repeticoes, IPC bruto contra o binario real).
+    // 45s deixava so 10-15s de folga -- pouco, com o disco C perto do limite
+    // (~9GB livres) deixando a extracao do PyInstaller onefile mais lenta em
+    // dias ruins. 75s da margem real sem esconder uma falha de verdade por
+    // muito tempo.
     startupTimer = setTimeout(() => {
       if (pythonProcess === child && !isPythonReady) {
-        settleReject(new Error('Python sidecar startup timeout (45s)'))
+        settleReject(new Error('Python sidecar startup timeout (75s)'))
         child.kill()
       }
-    }, 45000)
+    }, 75000)
   })
 }
 

@@ -244,11 +244,11 @@
   align-items: center;
   justify-content: flex-start;
   padding-top: 6px;
-  /* A folga entre a esfera e o dock É a composição: é onde os anéis da
-   * plataforma aparecem. O feixe foi encurtado na mesma medida em que este
-   * gap cresceu, então a altura total da coluna não mudou (o Sistema lá
-   * embaixo não se mexe) — só abriu espaço para a plataforma existir. */
-  gap: 62px;
+  /* A folga entre a esfera e o dock É a composição: é onde o feixe e os
+   * anéis da plataforma aparecem. Medida na MASTER: do fundo da esfera até o
+   * topo do dock são ~130px. Como o feixe agora ocupa 76px desse trecho em
+   * fluxo, o gap restante é o que sobra até o dock. */
+  gap: 78px;
   min-height: 340px;
   position: relative;
   margin: 0;
@@ -1181,7 +1181,9 @@
 .zh-core-platform {
   position: absolute;
   left: 50%;
-  top: 300px;
+  /* 300px encostava a plataforma na barriga da esfera. Na MASTER existe um
+   * vão de ~50px entre as duas, e é nele que o feixe é visível. */
+  top: 318px;
   width: 1px;
   height: 1px;
   z-index: 0;
@@ -1395,38 +1397,56 @@
  * A altura é calculada para terminar NA superfície do disco, não atravessá-la. */
 .zh-core-shaft {
   position: relative;
-  top: 14px;
-  width: 5px;
-  height: 26px;
-  margin-top: -4px;
-  background: linear-gradient(180deg, transparent 0%, rgba(0, 230, 165, 0.55) 22%, rgba(0, 240, 175, 0.7) 60%, rgba(0, 214, 153, 0.4) 90%, transparent 100%);
-  filter: blur(1.6px);
+  top: 8px;
+  /* O feixe cobre o VÃO INTEIRO entre a barriga da esfera e a superfície do
+   * disco (~76px aqui, ~50px na MASTER em 1440). Antes tinha 26px e ficava
+   * escondido dentro do brilho da própria esfera: existia no DOM e não
+   * aparecia em lugar nenhum na tela. */
+  width: 6px;
+  height: 76px;
+  margin-top: -6px;
+  /* Halo externo: largo e macio, escurecendo para cima (a luz nasce na
+   * esfera e ganha corpo ao descer). */
+  background: linear-gradient(180deg,
+    rgba(0, 230, 165, 0) 0%,
+    rgba(0, 230, 165, 0.28) 18%,
+    rgba(0, 240, 175, 0.5) 58%,
+    rgba(0, 245, 180, 0.62) 88%,
+    rgba(0, 230, 165, 0.2) 100%);
+  filter: blur(3px);
   opacity: 1;
 }
 
+/* Núcleo do feixe: linha fina quase branca, que é o que a MASTER mostra. */
 .zh-core-shaft::before {
   content: '';
   position: absolute;
   left: 50%;
-  top: 0;
+  top: -10px;
   transform: translateX(-50%);
-  width: 2px;
-  height: 300%;
-  top: -170%;
-  background: linear-gradient(180deg, transparent 0%, rgba(150, 255, 220, 0.35) 34%, rgba(240, 255, 250, 0.95) 72%, rgba(255, 255, 255, 1) 88%, rgba(170, 255, 225, 0.6) 100%);
+  width: 1.6px;
+  height: calc(100% + 14px);
+  background: linear-gradient(180deg,
+    rgba(200, 255, 236, 0) 0%,
+    rgba(200, 255, 236, 0.55) 22%,
+    rgba(240, 255, 250, 0.95) 62%,
+    rgba(255, 255, 255, 1) 92%,
+    rgba(190, 255, 232, 0.7) 100%);
+  box-shadow: 0 0 6px rgba(120, 255, 214, 0.7);
 }
 
+/* Flare de contato: o alargamento exatamente onde o feixe encosta no disco. */
 .zh-core-shaft::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: -6px;
+  bottom: -7px;
   transform: translateX(-50%);
-  width: 68px;
-  height: 18px;
+  width: 58px;
+  height: 16px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 1), rgba(120, 255, 214, 0.65) 38%, rgba(0, 230, 165, 0.25) 70%, transparent 88%);
-  filter: blur(2px);
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.95), rgba(120, 255, 214, 0.6) 36%, rgba(0, 230, 165, 0.22) 70%, transparent 88%);
+  filter: blur(2.5px);
 }
 
 .zh-core-mark {
@@ -1555,8 +1575,8 @@
   border-radius: 22px;
   transform: translateY(-2px);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0) 38%),
-    linear-gradient(180deg, rgba(30, 36, 40, 0.62) 0%, rgba(10, 14, 16, 0.78) 58%, rgba(5, 8, 9, 0.86) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, rgba(44, 52, 56, 0.66) 0%, rgba(16, 21, 23, 0.8) 58%, rgba(7, 10, 11, 0.88) 100%);
   border: 1px solid rgba(150, 190, 178, 0.1);
   box-shadow:
     0 26px 54px -20px rgba(0, 0, 0, 0.95),
@@ -1568,14 +1588,24 @@
   -webkit-backdrop-filter: blur(26px) saturate(1.15);
 }
 
+/* Aresta de prata no topo do dock: na MASTER ela atravessa a barra quase
+ * inteira e é o que dá a leitura de metal polido. Em 8%..92% e com pouca
+ * opacidade ela sumia e a barra virava uma laje preta. */
 .zh-dock::before {
   content: '';
   position: absolute;
-  left: 8%;
-  right: 8%;
+  left: 3%;
+  right: 3%;
   top: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(232, 250, 243, 0.42) 32%, rgba(232, 250, 243, 0.5) 50%, rgba(232, 250, 243, 0.42) 68%, transparent);
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(232, 250, 243, 0.3) 12%,
+    rgba(240, 253, 248, 0.72) 40%,
+    rgba(245, 255, 251, 0.82) 50%,
+    rgba(240, 253, 248, 0.72) 60%,
+    rgba(232, 250, 243, 0.3) 88%,
+    transparent);
   pointer-events: none;
 }
 
@@ -2027,9 +2057,12 @@
 }
 
 .zh-core {
-  width: 284px;
-  height: 284px;
-  filter: drop-shadow(0 0 34px #00bd8242) drop-shadow(0 20px 46px #000000c9);
+  /* Medido no master.png: a esfera tem ~230px em 1440. Em 284px ela comia a
+   * faixa vertical inteira e o feixe Core->plataforma não tinha onde
+   * aparecer — na MASTER esse trecho de luz tem ~50px. */
+  width: 244px;
+  height: 244px;
+  filter: drop-shadow(0 0 30px #00bd8238);
 }
 
 .zh-core-glass {
@@ -2391,14 +2424,49 @@
     radial-gradient(circle at 35% 24%, #ffffff38 0%, transparent 13%),
     radial-gradient(circle at 50% 54%, #17483b66 0%, #06120ed8 52%, #010504f5 84%, transparent 100%);
   border: 1px solid #c7f7e72e;
+  /* Na MASTER a esfera é VIDRO ESCURO com um crescente esmeralda contido na
+   * barriga — não uma bola neon. O halo emerald estava espalhado demais e
+   * comia o contorno de vidro; aqui ele fica mais curto e mais fechado, e o
+   * specular branco do topo ganha força para a leitura ser de material. */
   box-shadow:
-    inset 14px 15px 22px -20px #ffffffd9,
-    inset -15px -18px 26px -15px #00d6998a,
+    inset 16px 16px 22px -20px #ffffffe6,
+    inset -13px -15px 18px -14px #00d6996e,
     inset 0 0 0 1px #18bd8750,
     0 0 0 4px #0b382b55,
-    0 0 0 6px #1de9a11e,
-    0 0 20px 2px #00d69935,
+    0 0 0 6px #1de9a116,
+    0 0 16px 0 #00d69926,
     0 18px 42px -18px #000000f0;
+}
+
+/* Halos externos da MASTER: dois aros finíssimos bem afastados da esfera,
+ * quase invisíveis, que dão a leitura de "campo" em volta do Core. Eles
+ * ficam no wrap, não no `.zh-core`, para não entrarem no `overflow` nem nos
+ * insets do vidro. */
+.zh-core-wrap::before,
+.zh-core-wrap::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.zh-core-wrap::before {
+  width: 300px;
+  height: 300px;
+  margin-left: -150px;
+  margin-top: -28px;
+  border: 1px solid rgba(126, 224, 196, 0.13);
+}
+
+.zh-core-wrap::after {
+  width: 362px;
+  height: 362px;
+  margin-left: -181px;
+  margin-top: -59px;
+  border: 1px solid rgba(126, 224, 196, 0.07);
 }
 
 .zh-core::before,
@@ -2609,9 +2677,10 @@
  * compacta, sem modificar a estrutura dos controles. */
 @media (min-width: 1301px) {
   .zh-system-row {
-    /* -32px cobria o rodapé do card Comunicações. A faixa continua subindo
-     * para a altura da MASTER, só que sem comer o card de cima. */
-    margin-top: -20px;
+    /* Sem margem negativa: a coluna do Core precisa da altura inteira para
+     * caber esfera + feixe + plataforma + dock na proporção da MASTER, e
+     * puxar a faixa para cima comia justamente esse trecho. */
+    margin-top: 0;
     min-height: 294px;
     overflow: hidden;
   }

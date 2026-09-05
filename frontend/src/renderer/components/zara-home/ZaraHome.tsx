@@ -13,6 +13,7 @@ import { WindowControls } from './WindowControls';
 import { ZaraCore } from './ZaraCore';
 import { VoiceDock } from './VoiceDock';
 import { SectionView } from './SectionView';
+import { ConversationStrip, useConversationFeed } from './ConversationStrip';
 import { useZaraCoreState } from './useZaraCoreState';
 import { useSystemMetrics } from './useSystemMetrics';
 import { useBattery } from './useBattery';
@@ -42,6 +43,8 @@ export function ZaraHome() {
   const wifi = useWifiStatus();
   const power = usePowerPlans();
   const clock = useClock();
+  const feed = useConversationFeed();
+  const [awaitingReply, setAwaitingReply] = useState(false);
 
   // TODO: nome/foto reais dependem de uma integração de conta ainda não
   // construída (Google/Microsoft) — fora do escopo desta missão, per
@@ -98,7 +101,20 @@ export function ZaraHome() {
         <div className="zh-top-bar">
           <Header userFirstName={userName.split(' ')[0] ?? userName} />
           <div className="zh-top-bar-center">
-            <TextCommandInput />
+            <TextCommandInput
+              onSent={(message) => { feed.push('user', message); setAwaitingReply(true); }}
+              onReply={(reply) => {
+                setAwaitingReply(false);
+                if ('error' in reply) feed.push('system', reply.error);
+                else feed.push('assistant', reply.content, reply.engine);
+              }}
+            />
+            <ConversationStrip
+              turns={feed.turns}
+              pending={awaitingReply}
+              onClear={feed.clear}
+              onSeeAll={() => setActiveNav('Conversas')}
+            />
           </div>
           <div />
         </div>

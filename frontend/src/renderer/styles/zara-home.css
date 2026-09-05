@@ -2932,3 +2932,91 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* --- tira de conversa sob o campo de comando ---------------------------
+ * Absoluta de propósito: a resposta não pode empurrar o Core, os cards nem
+ * o painel de Sistema para baixo quando aparece. */
+
+.zh-top-bar-center { position: relative; }
+
+.zh-strip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  /* Mesma largura do campo de comando: a tira é a resposta DAQUELE campo,
+   * não um painel novo com geometria própria. */
+  max-width: 364px;
+  z-index: 6;
+  border-radius: 13px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 22px 46px -20px rgba(0, 0, 0, 0.9);
+  animation: zh-strip-in 200ms var(--zh-ease);
+}
+
+@keyframes zh-strip-in {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.zh-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 7px 13px;
+  border-bottom: 1px solid var(--zh-line);
+  font-size: 11px;
+  color: var(--zh-muted);
+  letter-spacing: 0.03em;
+}
+
+.zh-strip-head > span:first-child { flex: 1; }
+
+.zh-strip-all,
+.zh-strip-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--zh-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 6px;
+}
+
+.zh-strip-all:hover,
+.zh-strip-close:hover { background: #ffffff0f; color: var(--zh-text); }
+
+.zh-strip-body {
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 9px 13px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.zh-strip-turn {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #d3ded9;
+  overflow-wrap: anywhere;
+}
+
+.zh-strip-turn strong {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--zh-muted);
+  margin-bottom: 2px;
+}
+
+.zh-strip-turn[data-role='user'] { color: #a9b7b2; }
+.zh-strip-turn[data-role='system'] { color: #ffb4a8; }
+.zh-strip-pending { color: var(--zh-muted); font-style: italic; }

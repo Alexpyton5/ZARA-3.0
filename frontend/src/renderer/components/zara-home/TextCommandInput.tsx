@@ -6,6 +6,10 @@ import zaraLogo from '../../../assets/zara-home/zara-logo-transparent.png';
 interface TextCommandInputProps {
   engine?: string;
   onSent?: (message: string) => void;
+  /** Resposta REAL do backend ao envio — o que `handle_send_message` devolve
+   *  em `{response, engine}`. Sem isto o texto era via de mão única: a
+   *  mensagem saía e a resposta era descartada. */
+  onReply?: (reply: { content: string; engine?: string } | { error: string }) => void;
 }
 
 /**
@@ -15,7 +19,7 @@ interface TextCommandInputProps {
  * de conversa própria ainda: cada envio é uma mensagem nova para o fluxo de
  * intent/Planner/ToolRouter existente, que já lida com contexto no backend.
  */
-export function TextCommandInput({ engine = 'auto', onSent }: TextCommandInputProps) {
+export function TextCommandInput({ engine = 'auto', onSent, onReply }: TextCommandInputProps) {
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -27,6 +31,8 @@ export function TextCommandInput({ engine = 'auto', onSent }: TextCommandInputPr
     if (!message || !window.zaraIPC?.message?.send) return;
 
     setSending(true);
+    onSent?.(message);
+    setValue('');
     try {
       // ZARA-BARGE-IN-TEXTO-001: se a ZARA estiver falando quando o Alex
       // digita, ela tem que calar e ouvir — mesma regra do "Zara, pare" e do
@@ -40,9 +46,17 @@ export function TextCommandInput({ engine = 'auto', onSent }: TextCommandInputPr
         // Áudio já foi cortado no cliente; avisar o backend é best-effort.
       }
 
-      await window.zaraIPC.message.send({ message, engine, history: [] });
-      onSent?.(message);
-      setValue('');
+      const reply = await window.zaraIPC.message.send({ message, engine, history: [] });
+      // A resposta vem do backend; se ela não vier, isso é dito, e não
+      // substituído por um texto amigável inventado aqui.
+      const content = typeof reply?.response === 'string' ? reply.response : '';
+      if (content.trim()) {
+        onReply?.({ content, engine: typeof reply?.engine === 'string' ? reply.engine : undefined });
+      } else {
+        onReply?.({ error: 'A ZARA não devolveu resposta para esta mensagem.' });
+      }
+    } catch (err) {
+      onReply?.({ error: err instanceof Error ? err.message : String(err) });
     } finally {
       setSending(false);
     }

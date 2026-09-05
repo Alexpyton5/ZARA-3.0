@@ -1858,6 +1858,20 @@ class IPCHandler:
     # falso sucesso que este projeto inteiro existe para combater.
     _RESSALVA = " Não consegui confirmar; se não tiver acontecido, me fala."
 
+    async def _emitir_estado_do_core(self, estado: str) -> None:
+        """ZARA-CORE-STATE-001 — estado do Core para a interface.
+
+        O Core foi desenhado com 11 estados, mas o backend só emitia
+        LISTENING/THINKING/SPEAKING/STANDBY: "executando", "deu certo" e
+        "falhou" nunca acendiam na tela. Isto é puramente aditivo — informa
+        o que já está acontecendo, não altera despacho nenhum. Falha de
+        canal nunca pode derrubar a ação: o visual é secundário à execução.
+        """
+        try:
+            await self.send_event('state-change', estado)
+        except Exception:
+            pass
+
     async def _try_pc_intent(self, text: str) -> str | None:
         self._ultimo_resultado_de_acao = None
         resposta = await self._executar_intent_de_pc(text)
@@ -2038,7 +2052,13 @@ class IPCHandler:
                     return f"Posso copiar esse conteúdo sensível de {len(pending)} caracteres?"
                 return f"Posso copiar ‘{preview}’?"
             stage = "executor"
+            await self._emitir_estado_do_core('EXECUTING')
             result = await execute_action(action_to_execute, **params)
+            await self._emitir_estado_do_core(
+                'SUCCESS'
+                if (result is not None and getattr(result, "success", False))
+                else 'ERROR'
+            )
             # ZARA-NAO-VERIFICADO-001: guardado para o embrulho decidir se a
             # frase pode sair afirmativa ou precisa da ressalva honesta.
             self._ultimo_resultado_de_acao = result

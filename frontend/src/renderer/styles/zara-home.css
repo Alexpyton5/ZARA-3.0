@@ -330,14 +330,18 @@
   gap: 11px;
   padding: 9px 11px;
   border-radius: 10px;
-  color: var(--zh-muted);
+  /* MASTER: rótulo claro e legível. Em `--zh-muted` a Sidebar inteira lia
+   * como desabilitada — só o item ativo parecia clicável. */
+  color: #d5e1dd;
   font-size: 13px;
   letter-spacing: 0.01em;
   background: transparent;
-  border: none;
+  /* Borda transparente reservada: o item ativo ganha aro sem empurrar o
+   * texto 1px para o lado. */
+  border: 1px solid transparent;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.2s var(--zh-ease), color 0.2s var(--zh-ease), transform 0.2s var(--zh-ease);
+  transition: background-color 0.2s var(--zh-ease), color 0.2s var(--zh-ease), border-color 0.2s var(--zh-ease), transform 0.2s var(--zh-ease);
 }
 
 .zh-nav-item:hover {
@@ -351,8 +355,9 @@
 }
 
 .zh-nav-item[data-active='true'] {
-  background: linear-gradient(90deg, #20f4ae22, transparent);
-  color: var(--zh-emerald);
+  background: #ffffff0a;
+  border: 1px solid #2ee0a340;
+  color: #f2f8f6;
 }
 
 .zh-user-card {
@@ -2101,11 +2106,15 @@
 .zh-nav-item svg {
   width: 20px;
   height: 20px;
+  color: var(--zh-muted);
 }
 
+.zh-nav-item:hover svg { color: #cfdcd8; }
+
+.zh-nav-item[data-active='true'] svg { color: var(--zh-emerald); }
+
 .zh-nav-item[data-active='true'] {
-  background: linear-gradient(90deg, #20f4ae43, #087b5540 72%, transparent);
-  box-shadow: inset 0 0 18px #16e3a313, 0 0 18px #00d69912;
+  box-shadow: inset 0 0 14px #16e3a30f;
 }
 
 .zh-user-card {
@@ -2121,11 +2130,12 @@
   width: 50px;
   height: 50px;
   font-size: 13px;
-  background:
-    radial-gradient(circle at 38% 27%, #ddfff1 0 5%, transparent 6%),
-    radial-gradient(circle at 48% 42%, #1de4a1 0 20%, #0a7655 45%, #062219 76%);
-  border: 1px solid #53d8a58c;
-  box-shadow: 0 0 15px #00d6993d, inset 0 0 10px #d4fff133;
+  /* MASTER: disco escuro, iniciais claras, aro fino. O orbe emerald aceso
+   * competia com o Core, que é o único elemento que deve brilhar assim. */
+  background: radial-gradient(circle at 42% 32%, #1b2c27 0%, #101a17 60%, #0a1210 100%);
+  border: 1px solid #7de7c033;
+  color: #d8e6e1;
+  box-shadow: inset 0 1px 0 #ffffff12;
 }
 
 .zh-user-meta strong {
@@ -2691,11 +2701,14 @@
   transform: translateX(2px);
 }
 
+/* Terceiro bloco para o mesmo estado, que vencia os outros dois e trazia de
+ * volta o gradiente verde forte com glow externo. Na MASTER o item ativo é
+ * uma pílula ESCURA com aro fino: o brilho pertence ao Core, não à Sidebar.
+ * Uma fonte por propriedade — as duas definições acima ficam com o resto. */
 .zh-nav-item[data-active='true'] {
-  background:
-    linear-gradient(100deg, #10bd8055 0%, #08764e39 56%, #00d69915 100%);
-  border-color: #4ce7b480;
-  box-shadow: inset 0 1px 0 #ffffff24, 0 0 16px #00d69935;
+  background: #ffffff0d;
+  border-color: #2ee0a33d;
+  box-shadow: inset 0 1px 0 #ffffff14;
 }
 
 @keyframes zh-orbit-spin {

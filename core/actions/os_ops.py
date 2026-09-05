@@ -962,6 +962,52 @@ def os_app_action(app: str) -> ActionResult:
 
 
 @action(
+    name="os_app_list",
+    category="os",
+    description="List the allow-listed Windows applications ZARA can open, with real install/running state",
+    capability="READ_ONLY",
+)
+def os_app_list_action() -> ActionResult:
+    """Expose the SAME allow-list `os_app` uses, so the UI never invents apps.
+
+    A tela de Aplicativos precisa mostrar o que a ZARA REALMENTE consegue
+    abrir. Duplicar essa lista no renderer significaria dois lugares para a
+    verdade e um deles ficaria velho na primeira instalação nova. Aqui a
+    fonte é `_SAFE_WINDOWS_APPS` — a mesma que `os_app` consulta.
+
+    `installed` e `running` só são preenchidos no Windows; fora dele voltam
+    como None (desconhecido), nunca como False, para a UI não afirmar que um
+    app não existe quando na verdade não dá para saber.
+    """
+    is_windows = platform.system() == "Windows"
+    apps: list[dict] = []
+    for app_id, spec in sorted(_SAFE_WINDOWS_APPS.items()):
+        installed: bool | None = None
+        running: bool | None = None
+        if is_windows:
+            try:
+                installed = _resolve_windows_app_command(app_id) is not None
+            except Exception:
+                installed = None
+            try:
+                running = bool(_running_app_pids(set(spec["process_names"])))
+            except Exception:
+                running = None
+        apps.append({
+            "id": app_id,
+            "display_name": str(spec["display_name"]),
+            "aliases": sorted(a for a, target in _APP_ALIASES.items() if target == app_id),
+            "installed": installed,
+            "running": running,
+        })
+    return ActionResult(
+        success=True,
+        output=f"{len(apps)} aplicativos na lista segura.",
+        data={"apps": apps, "platform_supported": is_windows, "count": len(apps)},
+    )
+
+
+@action(
     name="os_close_safe_app",
     category="os",
     description="Close one explicit low-risk allow-listed application window",

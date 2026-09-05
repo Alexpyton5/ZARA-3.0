@@ -12,6 +12,7 @@ import { SystemPanel } from './SystemPanel';
 import { WindowControls } from './WindowControls';
 import { ZaraCore } from './ZaraCore';
 import { VoiceDock } from './VoiceDock';
+import { SectionView } from './SectionView';
 import { useZaraCoreState } from './useZaraCoreState';
 import { useSystemMetrics } from './useSystemMetrics';
 import { useBattery } from './useBattery';
@@ -102,24 +103,36 @@ export function ZaraHome() {
           <div />
         </div>
 
-        <div className="zh-content-top">
-          <main className="zh-main">
-            <ForYouCard />
-            <CommunicationsCard onSeeAll={() => setActiveNav('Conversas')} />
-          </main>
+        {/* Cada item da Sidebar leva a algum lugar de verdade. "Hoje" é a Home
+          * completa; "Sistema" é o mesmo painel de Sistema ocupando a tela; o
+          * resto é a seção correspondente. Antes disso, 10 dos 11 itens só
+          * trocavam o destaque e não mudavam nada na tela. */}
+        {activeNav === 'Hoje' ? (
+          <>
+            <div className="zh-content-top">
+              <main className="zh-main">
+                <ForYouCard />
+                <CommunicationsCard onSeeAll={() => setActiveNav('Conversas')} />
+              </main>
 
-          <div className="zh-core-column">
-            <ZaraCore state={coreState} />
-            <VoiceDock coreState={coreState} onNavigate={setActiveNav} />
-          </div>
+              <div className="zh-core-column">
+                <ZaraCore state={coreState} />
+                <VoiceDock coreState={coreState} onNavigate={setActiveNav} />
+              </div>
 
-          <aside className="zh-right">
-            <ActiveProjectCard />
-            <ToolsCard />
-          </aside>
-        </div>
+              <aside className="zh-right">
+                <ActiveProjectCard />
+                <ToolsCard />
+              </aside>
+            </div>
 
-        <SystemPanel metrics={metrics} battery={battery} wifi={wifi} power={power} />
+            <SystemPanel metrics={metrics} battery={battery} wifi={wifi} power={power} />
+          </>
+        ) : activeNav === 'Sistema' ? (
+          <SystemPanel metrics={metrics} battery={battery} wifi={wifi} power={power} />
+        ) : (
+          <SectionView section={activeNav} />
+        )}
       </div>
     </div>
   );

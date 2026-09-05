@@ -2645,3 +2645,290 @@
     min-height: 236px;
   }
 }
+
+/* ============================================================
+ * Seções da Sidebar (tudo que não é "Hoje")
+ * ============================================================
+ * Um único bloco, no fim do arquivo porque é uma superfície nova — não é
+ * override de nada que veio antes. Reusa os tokens (--zh-emerald, --zh-line,
+ * --zh-muted) e o vidro de `.zh-glass-panel`, para a seção parecer a mesma
+ * casa da Home. */
+
+.zh-section-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.zh-section-view-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px 16px;
+  border-bottom: 1px solid var(--zh-line);
+}
+
+.zh-section-view-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  border: 1px solid #ffffff14;
+  background: #ffffff08;
+  color: var(--zh-emerald);
+}
+
+.zh-section-view-titles { flex: 1; min-width: 0; }
+
+.zh-section-view-titles h1 {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.zh-section-view-titles p {
+  font-size: 12.5px;
+  color: var(--zh-muted);
+  margin: 2px 0 0;
+}
+
+.zh-section-reload {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--zh-line);
+  background: #ffffff06;
+  color: var(--zh-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 180ms var(--zh-ease), color 180ms var(--zh-ease);
+}
+
+.zh-section-reload:hover { background: #ffffff12; color: var(--zh-text); }
+
+.zh-section-view-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 24px 20px;
+}
+
+.zh-section-state {
+  font-size: 13px;
+  color: var(--zh-muted);
+  margin: 4px 0;
+}
+
+.zh-section-state--error { color: #ffb4a8; }
+
+.zh-section-subhead {
+  font-size: 13px;
+  font-weight: 600;
+  color: #dbe6e2;
+  margin: 18px 0 8px;
+}
+
+.zh-section-subhead:first-child { margin-top: 0; }
+
+.zh-section-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.zh-section-count {
+  font-size: 12px;
+  color: var(--zh-muted);
+}
+
+.zh-section-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid #ff8b7a26;
+  background: #ff8b7a0f;
+  color: #ffb4a8;
+  font-size: 11.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 180ms var(--zh-ease);
+}
+
+.zh-section-danger:hover { background: #ff8b7a1f; }
+
+/* --- listas --- */
+
+.zh-msg-list, .zh-fact-list, .zh-cap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zh-msg {
+  border: 1px solid var(--zh-line);
+  border-radius: 10px;
+  background: #ffffff05;
+  padding: 10px 12px;
+}
+
+.zh-msg[data-role='user'] { border-left: 2px solid #7de7c055; }
+
+.zh-msg-meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--zh-muted);
+  margin-bottom: 4px;
+}
+
+.zh-msg-meta strong { color: #dbe6e2; font-size: 12px; }
+
+.zh-msg p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.zh-fact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--zh-line);
+  border-radius: 10px;
+  background: #ffffff05;
+  padding: 10px 12px;
+}
+
+.zh-fact-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.zh-fact-body strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.zh-fact-body > span { font-size: 11px; color: var(--zh-muted); }
+
+/* --- capacidades (Configurações / Dispositivos) --- */
+
+.zh-cap {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--zh-line);
+  border-radius: 10px;
+  background: #ffffff05;
+  padding: 9px 12px;
+}
+
+.zh-cap-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #ffffff26;
+}
+
+/* Verde só para o que está realmente disponível — os outros estados não
+ * podem parecer prontos. */
+.zh-cap[data-status='AVAILABLE'] .zh-cap-dot {
+  background: var(--zh-emerald);
+  box-shadow: 0 0 7px #00d69988;
+}
+.zh-cap[data-status='LIMITED'] .zh-cap-dot { background: #e8c46a; }
+.zh-cap[data-status='UNSUPPORTED'] .zh-cap-dot,
+.zh-cap[data-status='OFFLINE'] .zh-cap-dot { background: #ff8b7a88; }
+
+.zh-cap-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.zh-cap-body strong { font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; }
+.zh-cap-body > span { font-size: 11px; color: var(--zh-muted); }
+
+.zh-cap-status {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--zh-muted);
+  flex-shrink: 0;
+}
+
+/* --- aplicativos --- */
+
+.zh-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.zh-app-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 11px;
+  border: 1px solid #ffffff0d;
+  background: #ffffff06;
+  color: var(--zh-text);
+  cursor: pointer;
+  transition: background-color 180ms var(--zh-ease), transform 180ms var(--zh-ease);
+}
+
+.zh-app-card:hover:not(:disabled) { background: #ffffff10; transform: translateY(-1px); }
+.zh-app-card:disabled { opacity: 0.45; cursor: default; }
+.zh-app-card strong { font-size: 13px; font-weight: 600; }
+.zh-app-card > span { font-size: 11px; color: var(--zh-muted); }
+
+/* --- projetos --- */
+
+.zh-doc-split {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.zh-doc-keys { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.zh-doc-keys button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 11px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--zh-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.zh-doc-keys button:hover { background: #ffffff09; color: var(--zh-text); }
+
+.zh-doc-keys button[data-active='true'] {
+  background: #ffffff0e;
+  border-color: #7de7c033;
+  color: var(--zh-text);
+}
+
+.zh-doc-body h2 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+
+.zh-doc-body pre {
+  margin: 0;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #c8d4d0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

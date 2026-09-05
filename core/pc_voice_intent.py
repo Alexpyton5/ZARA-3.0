@@ -313,6 +313,16 @@ class PcVoiceIntentDetector:
             # Browser destinations remain data passed to closed actions.
             (r'^(?:zara[,\s]+)?(?:abra|abre|acesse)\s+(?:o\s+)?site\s+da\s+openai\s*[.!?]*$',
              self._open_openai, "browser_open_url", "https://openai.com/"),
+            # ZARA-DESTINOS-FIXOS-001: "abra o Gmail" caía no catch-all de APP
+            # e virava "não conheço esse aplicativo". Gmail/Drive/Agenda não
+            # são aplicativos instalados — são destinos fixos de navegador, e
+            # a URL é constante aqui, nunca vem da fala.
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|acesse|v[áa]\s+(?:pra|para))\s+(?:o\s+)?(?:gmail|e-?mail|meu\s+e-?mail)\s*[.!?]*$',
+             self._open_gmail, "browser_open_url", "https://mail.google.com/"),
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|acesse|v[áa]\s+(?:pra|para))\s+(?:o\s+)?(?:google\s+)?drive\s*[.!?]*$',
+             self._open_drive, "browser_open_url", "https://drive.google.com/"),
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|acesse|v[áa]\s+(?:pra|para))\s+(?:[oa]\s+)?(?:minha\s+|meu\s+)?(?:agenda|google\s+agenda|calend[áa]rio)\s*[.!?]*$',
+             self._open_agenda, "browser_open_url", "https://calendar.google.com/"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|acesse|v[áa]\s+para)\s+((?:https?://)?[^\s]+\.[^\s]+)\s*[.!?]*$',
              self._open_url, "browser_open_url", None),
 
@@ -331,7 +341,7 @@ class PcVoiceIntentDetector:
                          self._media_next, "youtube_next", "next"),
             (r'\b(?:o\s+que\s+(?:est[áa]|ta)\s+(?:tocando|passando)|qual\s+(?:m[úu]sica|v[íi]deo)\s+(?:est[áa]|ta)\s+tocando)\b',
              self._youtube_now_playing, "youtube_now_playing", "current"),
-            (r'^(?:zara[,\s]+)?(?:(?:n[ãa]o\s+gostei(?:\s+dessa\s+m[úu]sica)?[,\s]+)?(?:coloque|coloca|bote|bota)\s+outra\s+(?:dele|dela|desse\s+artista)|outra\s+desse\s+artista)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:(?:n[ãa]o\s+gostei(?:\s+dessa\s+m[úu]sica)?[,\s]+)?(?:coloque|coloca|bote|bota)\s+outra\s+(?:dele|dela|desse\s+artista)|outra\s+(?:m[úu]sica\s+)?(?:desse|deste|do)\s+artista|outra\s+(?:dele|dela))\s*[.!?]*$',
              self._youtube_another, "youtube_another_by_artist", "current_artist"),
             (r'^(?:zara[,\s]+)?(?:pesquise?|procure|busque?)\s+(.+?)\s+(?:no|na)\s+spotify\s*[.!?]*$',
              self._media_query, "spotify_search", None),
@@ -339,13 +349,16 @@ class PcVoiceIntentDetector:
              self._youtube_skip_ad, "youtube_skip_ad", "skip"),
             (r'\b(?:abr[ae]r?)\s+(?:uma\s+)?(?:nova\s+(?:guia|aba)|(?:guia|aba)\s+nova)\b',
              self._browser_native, "browser_new_tab", "new_tab"),
-            (r'\b(?:volt[ae]r?)\s+(?:no|pelo|na)\s+(?:navegador|p[áa]gina|chrome)\b',
+            # ZARA-NAVEGADOR-FALA-001: "nova aba" sozinho é ordem, não conversa.
+            (r'^(?:zara[,\s]+)?(?:nova\s+(?:aba|guia)|(?:aba|guia)\s+nova)\s*[.!?]*$',
+             self._browser_native, "browser_new_tab", "new_tab"),
+            (r'\b(?:volt[ae]r?)\s+(?:no|pelo|na|a|à|para\s+a|pra)\s+(?:navegador|p[áa]gina|chrome)(?:\s+anterior)?\b',
              self._browser_native, "browser_back", "back"),
-            (r'\b(?:avanc?[ae]r?|avanç[ae]r?)\s+(?:no|pelo|na)\s+(?:navegador|p[áa]gina|chrome)\b',
+            (r'\b(?:avanc?[ae]r?|avanç[ae]r?)\s+(?:no|pelo|na|a|à|para\s+a|pra)\s+(?:navegador|p[áa]gina|chrome)(?:\s+seguinte)?\b',
              self._browser_native, "browser_forward", "forward"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha)\s+(?:essa|esta|a)\s+(?:guia|aba)\s*[.!?]*$',
              self._browser_native, "browser_close_tab", "close"),
-            (r'^(?:zara[,\s]+)?(?:(?:o\s+que\s+diz)|(?:resuma|resume)|(?:qual\s+[ée]\s+o\s+assunto\s+d[ae]))\s+(?:essa|esta|a)\s+p[áa]gina\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:(?:o\s+que\s+diz)|(?:resuma|resume)|(?:l[êe]|leia|ler)|(?:qual\s+[ée]\s+o\s+assunto\s+d[ae]))\s+(?:essa|esta|a)\s+p[áa]gina\s*[.!?]*$',
              self._browser_native, "browser_read_page", "read"),
             (r'\b(?:tir[ae]r?|faz|faça|fazer|captur[ae]r?|print[ae]?r?)\s+(?:uma\s+|um\s+)?(?:captura\s+de\s+tela|screenshot|print\s+da\s+tela|print)\b',
              self._screenshot, "vision_screenshot", "full"),
@@ -353,7 +366,8 @@ class PcVoiceIntentDetector:
              self._notification_message, "os_notify", None),
 
             # Read-only system truth.
-            (r'^(?:zara[,\s]+)?(?:que\s+horas\s+(?:s[ãa]o|sao)|qual\s+(?:é|e)\s+a\s+hora|hora\s+local)\s*[.!?]*$',
+            (r'^(?:zara[,\s]+)?(?:que\s+horas\s+(?:s[ãa]o|sao)|qual\s+(?:é|e)\s+a\s+hora|hora\s+local'
+             r'|que\s+dia\s+(?:é|e)\s+hoje|qual\s+(?:é|e)\s+a\s+data(?:\s+de\s+hoje)?|em\s+que\s+dia\s+(?:estamos|n[óo]s\s+estamos))\s*[.!?]*$',
              self._system_info, "system_time", "local"),
             (r'\b(?:como\s+(?:est[áa]|ta)\s+o\s+(?:computador|pc)|status\s+do\s+(?:computador|pc)|uso\s+de\s+(?:cpu|ram|mem[óo]ria)|quanto\s+de\s+bateria|quanta\s+bateria|n[íi]vel\s+da\s+bateria)\b',
              self._system_metrics, "system_metrics", "summary"),
@@ -1070,6 +1084,15 @@ Respond ONLY with valid JSON, no extra text."""
 
     def _open_zara_folder(self, m):
         return "zara_root"
+
+    def _open_gmail(self, m):
+        return "https://mail.google.com/"
+
+    def _open_drive(self, m):
+        return "https://drive.google.com/"
+
+    def _open_agenda(self, m):
+        return "https://calendar.google.com/"
 
     def _open_openai(self, m):
         return "https://openai.com/"

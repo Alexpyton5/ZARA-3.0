@@ -33,12 +33,26 @@ def detect_file_intent(text: str) -> FileIntent | None:
     raw = str(text or "").strip().strip(".!?")
     raw = re.sub(r"^zara\s*[,;:]?\s*", "", raw, flags=re.IGNORECASE)
 
-    if re.fullmatch(
-        r"(?:abra|abre|abrir)\s+(?:o\s+)?(?:último|ultimo)\s+(?:arquivo\s+)?(?:que\s+)?(?:eu\s+)?baixei",
+    # ZARA-ARQUIVO-RECENTE-001: só "abra o último arquivo que eu baixei"
+    # casava. "abra o último arquivo", "abra o arquivo mais recente" e "abra o
+    # último download" — as formas que o Alex realmente usa — caíam no
+    # catch-all de abrir APP e viravam "não conheço esse aplicativo".
+    #
+    # A pasta continua sendo Downloads, que é o que "o último arquivo" quer
+    # dizer na prática e é o único destino que esta intent sempre teve. Uma
+    # pasta explícita ("... em documentos") escolhe outra.
+    match = re.fullmatch(
+        r"(?:abra|abre|abrir)\s+(?:o\s+)?(?:(?:último|ultimo)\s+(?:arquivo|download)|arquivo\s+mais\s+recente|(?:último|ultimo)\s+arquivo\s+baixado)"
+        rf"(?:\s+(?:que\s+)?(?:eu\s+)?baixei)?(?:\s+(?:em|de|d[ao])\s+{_FOLDER})?",
         raw,
         re.IGNORECASE,
-    ):
-        return FileIntent("files_open_latest", {"folder": "downloads"})
+    )
+    if match:
+        pasta = match.group(1)
+        return FileIntent(
+            "files_open_latest",
+            {"folder": _FOLDERS[pasta.casefold()] if pasta else "downloads"},
+        )
 
     match = re.fullmatch(rf"(?:liste|mostre)\s+(?:os\s+)?arquivos\s+(?:em|de)\s+{_FOLDER}", raw, re.IGNORECASE)
     if match:

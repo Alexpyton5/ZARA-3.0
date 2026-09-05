@@ -2034,6 +2034,10 @@ class IPCHandler:
                     params["hwnd"] = self._last_window_hwnd
                 if res.action == "window_move":
                     params["side"] = res.param
+            elif res.action in {"window_minimize_named", "window_maximize_named", "window_restore_named"}:
+                # ZARA-JANELA-NOMEADA-001: o app já vem canônico do detector
+                # (resolvido pela mesma lista segura do `os_app`).
+                params["app"] = res.param
             elif res.action == "window_focus_named":
                 params["target"] = res.param
             elif res.action == "browser_scroll":
@@ -2233,7 +2237,13 @@ class IPCHandler:
         partial execution when one requested step is unsupported.
         """
         raw = str(text or "").strip()
-        if not raw or not re.search(r"[,;]|\be\s+depois\b|\bdepois\b", raw, re.IGNORECASE):
+        # ZARA-COMPOUND-E-SOLTO-002: "abra o chrome e vá para o youtube" não
+        # tem vírgula nem "depois", e por isso nem chegava aqui — a frase caía
+        # inteira no catch-all de abrir app e virava "não conheço esse app".
+        # O " e " solto entra como CANDIDATO; quem decide se a divisão vale é
+        # a expansão abaixo, que só aceita quando TODOS os pedaços batem
+        # sozinhos como comando ("pesquise rock e blues" continua indivisível).
+        if not raw or not re.search(r"[,;]|\be\s+depois\b|\bdepois\b|\s+e\s+", raw, re.IGNORECASE):
             return None
         raw = re.sub(r"^\s*zara\s*[,;:]?\s*", "", raw, flags=re.IGNORECASE)
         parts = [
@@ -2245,7 +2255,7 @@ class IPCHandler:
             )
             if part.strip(" .!?")
         ]
-        if not 2 <= len(parts) <= 5:
+        if not parts or len(parts) > 5:
             return None
 
         from core.pc_voice_intent import PcVoiceIntentDetector
@@ -2301,6 +2311,11 @@ class IPCHandler:
                     continue
             expanded_parts.append(part)
         parts = expanded_parts
+
+        # A contagem só pode ser cobrada DEPOIS da expansão: uma frase ligada
+        # apenas por " e " chega aqui como um pedaço só e vira dois.
+        if not 2 <= len(parts) <= 5:
+            return None
 
         detected = [detector.detect(part) for part in parts]
         pc_count = sum(1 for item in detected if item.is_pc_intent)

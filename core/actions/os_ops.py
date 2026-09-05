@@ -77,6 +77,24 @@ _SAFE_WINDOWS_APPS = {
         "executable": "snippingtool.exe",
         "process_names": {"snippingtool.exe"},
     },
+    "calculator": {
+        "display_name": "Calculadora",
+        "opened_reply": "Calculadora aberta e verificada.",
+        # A Calculadora do Windows 10/11 é app de loja: o `calc.exe` clássico
+        # apenas dispara o app e sai, então o processo a observar é o real.
+        "executable": "calc.exe",
+        "process_names": {"calculatorapp.exe", "calculator.exe", "win32calc.exe"},
+    },
+    "file_explorer": {
+        "display_name": "Explorador de Arquivos",
+        "opened_reply": "Explorador de Arquivos aberto e verificado.",
+        "executable": "explorer.exe",
+        # `explorer.exe` já está sempre rodando (é a shell). A verificação por
+        # nome de processo diria "aberto" mesmo sem janela nova; por isso este
+        # app fica FORA do fechamento seguro e a confirmação real vem da
+        # janela, não do processo.
+        "process_names": {"explorer.exe"},
+    },
     "edge": {
         "display_name": "Microsoft Edge",
         "opened_reply": "Microsoft Edge aberto e verificado.",
@@ -221,6 +239,26 @@ _APP_ALIASES = {
     "qwen": "qwen",
     "wise memory optimizer": "wise_memory_optimizer",
     "otimizador de memoria": "wise_memory_optimizer",
+    # "abra o navegador" é como o Alex fala. Sem isto a frase caía no
+    # catch-all e era recusada como app desconhecido.
+    "navegador": "chrome",
+    "browser": "chrome",
+    "internet": "chrome",
+    "google chrome": "chrome",
+    "microsoft edge": "edge",
+    "bloco de notas": "notepad",
+    "gerenciador de tarefas": "task_manager",
+    "ferramenta de captura": "snipping_tool",
+    "calculadora": "calculator",
+    "calculator": "calculator",
+    "calc": "calculator",
+    "explorador": "file_explorer",
+    "explorador de arquivos": "file_explorer",
+    "explorer": "file_explorer",
+    "windows explorer": "file_explorer",
+    "gerenciador de arquivos": "file_explorer",
+    "meu computador": "file_explorer",
+    "este computador": "file_explorer",
 }
 
 
@@ -270,6 +308,9 @@ _SAFE_CLOSE_APPS = {
     "ea_app", "nvidia_app", "windows_media_player",
     "amplitube", "cursor", "ik_product_manager",
     "geforce_now", "opencode", "qwen", "wise_memory_optimizer",
+    # `file_explorer` fica DE FORA de propósito: `explorer.exe` é a shell do
+    # Windows, e fechá-lo derruba a barra de tarefas inteira.
+    "calculator",
 }
 _SAFE_CLOSE_TITLE_TOKENS = {
     "notepad": {"bloco de notas", "notepad"},
@@ -294,6 +335,7 @@ _SAFE_CLOSE_TITLE_TOKENS = {
     "qwen": {"qwen"},
     "wise_memory_optimizer": {"wise memory optimizer"},
     "spotify": {"spotify"},
+    "calculator": {"calculadora", "calculator"},
 }
 
 
@@ -1975,6 +2017,60 @@ def window_maximize_action(hwnd: int | None = None) -> ActionResult:
 @action(name="window_restore", category="os", description="Restore the safe active window", capability="LOCAL_PC_CONTROL")
 def window_restore_action(hwnd: int | None = None) -> ActionResult:
     return _window_state_action("restore", hwnd)
+
+
+def _window_state_named_action(command: str, app: str) -> ActionResult:
+    """Aplica um estado de janela a um app NOMEADO da lista segura.
+
+    "Minimize o Chrome" não tinha caminho nenhum: `window_minimize` só sabia
+    agir sobre a janela ativa ou sobre um hwnd de contexto, então nomear o
+    app caía no LLM — que responde como se tivesse minimizado.
+
+    Reusa as duas peças que já existem: `_window_for_safe_app` (a mesma
+    resolução app -> janela que `os_close_safe_app` usa) e
+    `_window_state_action` (o mesmo executor com verificação de
+    postcondição). Nenhum caminho novo de execução.
+    """
+    if platform.system() != "Windows":
+        return ActionResult(success=False, error="Controle de janelas disponível somente no Windows.")
+    canonical = str(app or "").strip().casefold()
+    spec = _SAFE_WINDOWS_APPS.get(canonical)
+    if spec is None:
+        return ActionResult(
+            success=False,
+            error="Aplicativo não autorizado. Use um aplicativo conhecido da lista segura.",
+            data={"app": canonical, "allowlisted": False},
+        )
+    pids = _running_app_pids(set(spec["process_names"]))
+    target = _window_for_safe_app(canonical, pids)
+    if target is None:
+        return ActionResult(
+            success=False,
+            error=f"Nenhuma janela de {spec['display_name']} foi encontrada.",
+            data={"app": canonical, "allowlisted": True, "hwnd": None},
+        )
+    result = _window_state_action(command, target)
+    if result.data is None:
+        result.data = {}
+    result.data["app"] = canonical
+    if result.success:
+        result.output = f"{spec['display_name']}: {result.output[0].lower()}{result.output[1:]}"
+    return result
+
+
+@action(name="window_minimize_named", category="os", description="Minimize the window of one allowlisted application by name", capability="LOCAL_PC_CONTROL")
+def window_minimize_named_action(app: str) -> ActionResult:
+    return _window_state_named_action("minimize", app)
+
+
+@action(name="window_maximize_named", category="os", description="Maximize the window of one allowlisted application by name", capability="LOCAL_PC_CONTROL")
+def window_maximize_named_action(app: str) -> ActionResult:
+    return _window_state_named_action("maximize", app)
+
+
+@action(name="window_restore_named", category="os", description="Restore the window of one allowlisted application by name", capability="LOCAL_PC_CONTROL")
+def window_restore_named_action(app: str) -> ActionResult:
+    return _window_state_named_action("restore", app)
 
 
 @action(name="window_move", category="os", description="Move an unequivocal recent window to one monitor side", capability="LOCAL_PC_CONTROL")

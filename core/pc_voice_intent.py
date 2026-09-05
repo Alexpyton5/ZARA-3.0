@@ -14,7 +14,14 @@ from typing import Optional
 
 import httpx
 
-from core.actions.os_ops import resolve_app_alias, _SAFE_CLOSE_APPS
+from core.actions.os_ops import resolve_app_alias, _SAFE_CLOSE_APPS, _SAFE_WINDOWS_APPS
+
+# ZARA-JANELA-NOMEADA-001
+_ACOES_DE_JANELA_NOMEADA = {
+    "window_minimize_named",
+    "window_maximize_named",
+    "window_restore_named",
+}
 from core.action_registry import get_registry
 from core.aprendizado import Aprendizado, _forma_do_pedido
 
@@ -371,7 +378,10 @@ class PcVoiceIntentDetector:
              r'(?:(?P<intensity>um\s+pouquinho|um\s+pouco|levemente|muito|bastante|demais|bem)\s+)?'
              r'(?:o\s+)?volume\b',
              self._volume_up, "os_volume", "up"),
-            (r'\b(?:diminu(?:[ae]r?|ir?)|baix[ae]r?|abaix[ae]r?|down|menos\s+volume|decrease?|lower)\s+'
+            # ZARA-VOICE-VERBOS-004: "reduza o volume" não era reconhecido —
+            # "diminua" sim, "reduza" não. É a mesma ordem, e a frase estava
+            # caindo no LLM (que responde como se tivesse reduzido).
+            (r'\b(?:diminu(?:[ae]r?|ir?)|reduz(?:[ae]r?|ir?)?|baix[ae]r?|abaix[ae]r?|down|menos\s+volume|decrease?|lower)\s+'
              r'(?:(?P<intensity>um\s+pouquinho|um\s+pouco|levemente|muito|bastante|demais|bem)\s+)?'
              r'(?:o\s+)?volume\b',
              self._volume_down, "os_volume", "down"),
@@ -469,6 +479,16 @@ class PcVoiceIntentDetector:
              self._window_maximize, "window_maximize", "active"),
             (r'^(?:zara[,\s]+)?(?:(?:restaur[ae]|restaurar)(?:\s+(?:a|esta|essa)\s+janela)?|volt[ae]\s+a\s+janela\s+ao\s+normal)\s*[.!?]*$',
              self._window_restore, "window_restore", "active"),
+            # ZARA-JANELA-NOMEADA-001: "minimize o Chrome" não tinha caminho —
+            # só existia janela ATIVA ou hwnd de contexto, então nomear o app
+            # caía no LLM, que responde como se tivesse minimizado. O nome vai
+            # pela mesma resolução de apelido do `os_app`.
+            (r'^(?:zara[,\s]+)?(?:minimiz[ae]|minimizar)\s+(?:a\s+janela\s+d[oa]\s+|o\s+|a\s+)?(?P<app>[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 ._+-]{0,40}?)\s*[.!?]*$',
+             self._window_named, "window_minimize_named", None),
+            (r'^(?:zara[,\s]+)?(?:maximiz[ae]|maximizar)\s+(?:a\s+janela\s+d[oa]\s+|o\s+|a\s+)?(?P<app>[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 ._+-]{0,40}?)\s*[.!?]*$',
+             self._window_named, "window_maximize_named", None),
+            (r'^(?:zara[,\s]+)?(?:restaur[ae]|restaurar)\s+(?:a\s+janela\s+d[oa]\s+|o\s+|a\s+)?(?P<app>[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 ._+-]{0,40}?)\s*[.!?]*$',
+             self._window_named, "window_restore_named", None),
             (r'\b(?:troc[ae]r?\s+de\s+janela|v[áa]\s+(?:pra|para)\s+a\s+pr[óo]xima\s+janela|pr[óo]xima\s+janela)\b',
              self._window_switch, "window_switch_next", "next"),
             (r'\b(?:traz|traga|coloc[ae]r?|foc[ae]r?|v[áa]\s+(?:pro|para\s+o))\s+(?:n[oa]\s+)?(?:o\s+)?chrome(?:\s+(?:pra|para)\s+frente)?\b',
@@ -757,6 +777,24 @@ class PcVoiceIntentDetector:
                             reply=RESPOSTA_NAO_SEI,
                         )
 
+                if action in _ACOES_DE_JANELA_NOMEADA:
+                    # Mesma lista segura e mesma resolução de apelido do
+                    # `os_app`: nomear janela nunca alcança app fora dela.
+                    resolved = resolve_app_alias(param) or (
+                        param if param in _SAFE_WINDOWS_APPS else None
+                    )
+                    if resolved:
+                        param = resolved
+                    else:
+                        return PcVoiceResult(
+                            is_pc_intent=True,
+                            action=action,
+                            param=param,
+                            blocked=True,
+                            physical_effect=0,
+                            reply=RESPOSTA_NAO_SEI,
+                        )
+
                 if action == "os_close_safe_app" and param not in _SAFE_CLOSE_APPS:
                     resolved = resolve_app_alias(param)
                     if resolved and resolved in _SAFE_CLOSE_APPS:
@@ -1013,6 +1051,9 @@ Respond ONLY with valid JSON, no extra text."""
         return m.group("app").strip()
 
     def _unsupported_close_app(self, m):
+        return m.group("app").strip()
+
+    def _window_named(self, m):
         return m.group("app").strip()
 
     def _open_downloads(self, m):

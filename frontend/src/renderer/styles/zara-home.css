@@ -86,6 +86,20 @@
   -webkit-app-region: no-drag;
 }
 
+/* FASE F (2026-09-05, NOT VISUALLY CERTIFIED): dá aos ícones de status um
+ * "badge" de vidro (como os cards) em vez de flutuarem soltos — o MASTER
+ * mostra esses ícones dentro de um contorno. A opacidade/cor de cada um
+ * continua vindo só do estado real (data-unavailable/data-off em
+ * ZaraHome.tsx) — não fica mais "conectado" do que está de verdade, só o
+ * contêiner ganha a mesma linguagem de material do resto da UI. */
+.zh-status-row > svg {
+  padding: 4px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #ffffff10, transparent 70%);
+  border: 1px solid #ffffff14;
+  box-sizing: content-box;
+}
+
 /* Controles de janela (frameless Electron): discretos, alinhados à direita,
  * aparência de produto — não de browser. */
 .zh-clock {
@@ -2154,7 +2168,11 @@
 
 /* Refinamento ótico dos dois núcleos: o mini-core usa a mesma linguagem do
  * núcleo central, apenas em escala menor. A marca tem alpha real e não recebe
- * nenhum fundo retangular. */
+ * nenhum fundo retangular.
+ * FASE B (2026-09-05, NOT VISUALLY CERTIFIED — sem screenshot pareado ainda):
+ * anel externo levemente contido pra ficar na mesma linguagem "emerald como
+ * acento, não neon" aplicada na Platform; reflexos internos (que dão a
+ * leitura de vidro) ficam como estavam. */
 .zh-core {
   isolation: isolate;
   overflow: visible;
@@ -2167,8 +2185,8 @@
     inset -15px -18px 26px -15px #00d6998a,
     inset 0 0 0 1px #18bd8750,
     0 0 0 4px #0b382b55,
-    0 0 0 7px #1de9a128,
-    0 0 24px 3px #00d69943,
+    0 0 0 6px #1de9a11e,
+    0 0 20px 2px #00d69935,
     0 18px 42px -18px #000000f0;
 }
 

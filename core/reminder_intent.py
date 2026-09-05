@@ -22,8 +22,16 @@ from dataclasses import dataclass
 
 from core.reminder_engine import ReminderEngine, parse_natural_due
 
+# ZARA-LEMBRETE-VERBOS-001: só "lembre de ..." era reconhecido. "crie um
+# lembrete...", "agende um lembrete...", "marca um lembrete..." — as formas
+# que o Alex usa quando pensa no lembrete como coisa, não como pedido — caíam
+# no LLM, que responde como se tivesse agendado sem nada ter sido gravado.
 _INTRO = re.compile(
-    r"^\s*(?:zara[\s,]*)?(?:me\s+)?(?:lembre|lembra|lembrar)\s+(?:de\s+|me\s+)?(?:de\s+)?",
+    r"^\s*(?:zara[\s,]*)?(?:"
+    r"(?:me\s+)?(?:lembre|lembra|lembrar)\s+(?:de\s+|me\s+)?(?:de\s+)?"
+    r"|(?:cri[ae]|criar|agend[ae]|agendar|marqu[ae]|marca|marcar|anot[ae]|anotar|coloqu[ae]|bot[ae])\s+"
+    r"(?:um\s+|uma\s+)?lembrete\s*(?:de\s+|para\s+|pra\s+|:\s*)?"
+    r")",
     re.IGNORECASE,
 )
 
@@ -31,9 +39,12 @@ _TIME_PATTERNS = [
     # daqui a N minutos/horas
     re.compile(r"daqui a (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", re.IGNORECASE),
     # amanhã às H(:MM)? / hoje às H(:MM)? (aceita amanha/amanhã sem acento)
-    re.compile(r"(amanh[ãa]|hoje)(?: às| as| a)?\s*(\d{1,2})(?::(\d{2}))?", re.IGNORECASE),
-    # horário explícito no mesmo dia: "às 16" / "as 16:30"
-    re.compile(r"(?:às|as)\s*(\d{1,2})(?::(\d{2}))?", re.IGNORECASE),
+    re.compile(r"(amanh[ãa]|hoje)(?: às| as| a)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:h(?:oras?|s)?\b)?", re.IGNORECASE),
+    # horário explícito no mesmo dia: "às 16" / "as 16:30" / "às 15h"
+    # ZARA-LEMBRETE-HORA-H-001: sem o sufixo opcional, "às 15h" casava só
+    # "às 15" e o "h" órfão sobrava DENTRO da mensagem — o lembrete gravado
+    # virava "tomar água h".
+    re.compile(r"(?:às|as)\s*(\d{1,2})(?::(\d{2}))?\s*(?:h(?:oras?|s)?\b)?", re.IGNORECASE),
     # em N minutos/horas
     re.compile(r"em (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", re.IGNORECASE),
 ]
@@ -113,7 +124,14 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
     message = (body[:time_match.start()] + " " + body[time_match.end():]).strip()
     message = re.sub(r"\s+", " ", message).strip(" ,;:-")
     if not message:
-        return IntentResult(kind="not_reminder", raw=raw)
+        # Horário sem assunto ("crie um lembrete para as 15h"). O caminho
+        # determinístico PERGUNTA em vez de entregar a frase ao modelo, que
+        # inventaria um assunto ou responderia como se tivesse agendado.
+        return IntentResult(
+            kind="needs_clarification",
+            reply="Lembrete de quê?",
+            raw=raw,
+        )
 
     due = parse_natural_due(time_match.group(0))
     if due is None:

@@ -14,6 +14,29 @@ from typing import Optional
 
 import httpx
 
+# ZARA-LATENCIA-DETECTOR-001
+#
+# `detect()` chamava `httpx.post(...)` direto para o Ollama local a CADA
+# frase que não casava com nenhum padrão — ou seja, em toda conversa normal.
+# Cada chamada construía um cliente novo, e com isso um contexto SSL novo:
+# medido com cProfile, 48 dos ~52 ms de uma frase de conversa eram
+# `load_verify_locations`, antes de qualquer byte sair da máquina.
+#
+# Duas correções, nenhuma delas muda o comportamento quando o Ollama está no
+# ar: o cliente é criado uma vez e reaproveitado, e uma falha de conexão
+# coloca o endpoint em quarentena curta em vez de ser retentada em toda frase.
+_OLLAMA_CLIENTE: httpx.Client | None = None
+_OLLAMA_INDISPONIVEL_ATE: float = 0.0
+_OLLAMA_QUARENTENA_S = 60.0
+
+
+def _ollama_cliente() -> httpx.Client:
+    """Cliente único para o Ollama local (127.0.0.1, sem proxy, sem TLS)."""
+    global _OLLAMA_CLIENTE
+    if _OLLAMA_CLIENTE is None:
+        _OLLAMA_CLIENTE = httpx.Client(timeout=3.0, trust_env=False)
+    return _OLLAMA_CLIENTE
+
 from core.actions.os_ops import resolve_app_alias, _SAFE_CLOSE_APPS, _SAFE_WINDOWS_APPS
 
 # ZARA-JANELA-NOMEADA-001
@@ -851,7 +874,13 @@ class PcVoiceIntentDetector:
         # Try free reasoning fallback as last resort
         # Quick heuristic: if text is very short or looks like greeting/small talk, skip
         text_clean = text.strip().lower()
-        if len(text_clean) >= 3 and text_clean not in {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay"}:
+        global _OLLAMA_INDISPONIVEL_ATE
+        if (
+            len(text_clean) >= 3
+            and text_clean not in {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay"}
+            # Ollama fora do ar: não adianta tentar em toda frase de conversa.
+            and time.monotonic() >= _OLLAMA_INDISPONIVEL_ATE
+        ):
             try:
                 # Get available actions for validation
                 registry = get_registry()
@@ -909,11 +938,7 @@ Respond ONLY with valid JSON, no extra text."""
                 }
                 
                 # Make synchronous HTTP call with short timeout
-                response = httpx.post(
-                    ollama_url,
-                    json=payload,
-                    timeout=3.0  # 3 second timeout - fast fallback
-                )
+                response = _ollama_cliente().post(ollama_url, json=payload)
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -952,6 +977,11 @@ Respond ONLY with valid JSON, no extra text."""
                     except (json.JSONDecodeError, KeyError, TypeError):
                         # Invalid JSON response - fall through to return None
                         pass
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout):
+                # Ollama local fora do ar. Silencioso como antes, mas agora
+                # também para de ser tentado por um tempo: sem isto, toda
+                # frase de conversa paga a conexão que já se sabe que falha.
+                _OLLAMA_INDISPONIVEL_ATE = time.monotonic() + _OLLAMA_QUARENTENA_S
             except Exception:
                 # Any error in free reasoning - fail silently and fall back to deterministic
                 pass

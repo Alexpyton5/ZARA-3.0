@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Grid3x3, Folder, AudioLines, HelpCircle, History, MoreHorizontal } from 'lucide-react';
+import { Grid3x3, Folder, Mic, HelpCircle, History, MoreHorizontal } from 'lucide-react';
 import type { CoreState } from './types';
 import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
 
@@ -108,7 +108,7 @@ export function VoiceDock({ coreState }: VoiceDockProps) {
           disabled={!voiceAvailable}
           onClick={toggleVoice}
         >
-          <AudioLines size={20} strokeWidth={2} />
+          <Mic size={20} strokeWidth={2} />
         </button>
         <span className="zh-dock-separator" aria-hidden="true" />
         <button className="zh-dock-btn" type="button" aria-label="Ajuda">

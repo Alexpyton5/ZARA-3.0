@@ -3,8 +3,9 @@
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, session, shell, Tray, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
 import { join } from 'path'
-import { spawn, execFileSync, ChildProcess } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync, renameSync } from 'fs'
+import { spawn, execFile, execFileSync, ChildProcess } from 'child_process'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, renameSync, unlinkSync } from 'fs'
+import { createHash } from 'crypto'
 import { normalizeReminderEvent } from './reminderEvents'
 
 let pythonProcess: ChildProcess | null = null
@@ -81,71 +82,180 @@ function getWindowIconPath(): string {
   return join(app.getAppPath(), 'public', 'zara.ico')
 }
 
-// UI-001: utilitário de diagnóstico só-leitura para a comparação pixel-perfect
-// contra o MASTER — não altera nada visual, só registra o viewport real da
-// janela em disco pra parar de chutar largura/altura na hora de calibrar CSS.
-// Ver .claude/TASK_BOARD.md (UI-001) / .claude/WORKING_MODEL.md.
-function getUiTestDir(): string {
-  // Mesmo padrão de getMainScript(): em dev, app.getAppPath() resolve para
-  // frontend/dist-electron, então a raiz do repo fica dois níveis acima.
-  return join(app.getAppPath(), '..', '..', '.zara-tests', 'ui')
+// UI-001 / ZERO OWNER MANUAL OPERATIONS (.claude/WORKING_MODEL.md, .claude/DECISIONS.md).
+//
+// Pipeline visual pixel-perfect contra o MASTER, sem NENHUM passo manual do
+// Alex: a ZARA captura sua própria janela, registra o viewport, decide
+// sozinha se a mudança é relevante, e sincroniza com o repo remoto (onde
+// Opus/Sonnet rodam) só quando realmente há novidade — nunca a cada vez que
+// o Alex simplesmente abre o app.
+//
+// findRepoRoot() sobe a árvore de diretórios a partir do executável/appPath
+// procurando ".git" — funciona tanto em dev (app.getAppPath() ==
+// frontend/dist-electron) quanto empacotado (o EXE roda de dentro de
+// frontend/release*/win-unpacked/, vários níveis abaixo da raiz do repo; o
+// truque fixo de "../.." usado antes só era correto em dev). Fora de um
+// checkout do repo (instalação standalone) retorna null e tudo aqui vira
+// no-op silencioso — nunca afeta o uso normal da ZARA.
+function findRepoRoot(): string | null {
+  let dir = app.isPackaged ? join(process.execPath, '..') : app.getAppPath()
+  for (let i = 0; i < 8; i += 1) {
+    if (existsSync(join(dir, '.git'))) return dir
+    const parent = join(dir, '..')
+    if (parent === dir) return null
+    dir = parent
+  }
+  return null
 }
 
-function getViewportDiagnosticsPath(): string {
-  return join(getUiTestDir(), 'current_viewport.json')
+function getUiTestDir(repoRoot: string): string {
+  return join(repoRoot, '.zara-tests', 'ui')
 }
 
-// UI-001 / ZERO OWNER MANUAL OPERATIONS (.claude/WORKING_MODEL.md): captura o
-// Electron real de verdade — nunca pede pro Alex tirar print. Roda sozinha
-// quando a janela aparece em primeiro plano (nunca no boot silencioso pra
-// bandeja) e de novo, com debounce, a cada resize — sem flag, sem
-// configuração, sem gatilho manual.
+function gitHead(repoRoot: string): string | null {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf-8' }).trim()
+  } catch {
+    return null
+  }
+}
+
+function runGit(args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, { cwd, timeout: 20000 }, (error) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
+}
+
+interface CaptureState {
+  last_screenshot_sha256?: string
+  last_synced_head?: string
+}
+
+function readCaptureState(uiDir: string): CaptureState {
+  try {
+    return JSON.parse(readFileSync(join(uiDir, '.capture-state.json'), 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeCaptureState(uiDir: string, state: CaptureState): void {
+  writeFileSync(join(uiDir, '.capture-state.json'), JSON.stringify(state, null, 2), 'utf-8')
+}
+
+// Só existe .zara-tests/ui/QA_REQUEST.flag quando o Chief of Staff (sessão
+// remota) marcou que precisa de evidência nova pra uma task visual ativa —
+// é o único canal pelo qual "existe task ativa" chega até a máquina do Alex,
+// já que os dois lados só se falam via git. Consumido (apagado) assim que
+// vira snapshot.
+async function syncUiSnapshotIfNeeded(win: BrowserWindow, pngBuffer: Buffer): Promise<void> {
+  const repoRoot = findRepoRoot()
+  if (!repoRoot) return
+
+  const uiDir = getUiTestDir(repoRoot)
+  mkdirSync(join(uiDir, 'history'), { recursive: true })
+
+  // Puxa o que a sessão remota já publicou (pedido de QA, master.png novo,
+  // etc.) antes de decidir — best-effort, nunca bloqueia por estar offline.
+  await runGit(['pull', '--ff-only'], repoRoot).catch(() => undefined)
+
+  const newHash = createHash('sha256').update(pngBuffer).digest('hex')
+  const state = readCaptureState(uiDir)
+  const currentHead = gitHead(repoRoot)
+  const markerPath = join(uiDir, 'QA_REQUEST.flag')
+  const hasRequest = existsSync(markerPath)
+
+  const needSnapshot =
+    newHash !== state.last_screenshot_sha256 ||
+    (currentHead !== null && currentHead !== state.last_synced_head) ||
+    hasRequest
+
+  // Viewport sempre fica atualizado no disco local — é diagnóstico barato —
+  // mas só entra no commit quando o snapshot abaixo realmente acontece.
+  writeViewportJson(win, uiDir, currentHead)
+
+  if (!needSnapshot) return
+
+  const targetPath = join(uiDir, 'electron-real.png')
+  if (existsSync(targetPath)) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    renameSync(targetPath, join(uiDir, 'history', `electron-real-${stamp}.png`))
+  }
+  writeFileSync(targetPath, pngBuffer)
+  writeCaptureState(uiDir, { last_screenshot_sha256: newHash, last_synced_head: currentHead ?? state.last_synced_head })
+  if (hasRequest) {
+    try { unlinkSync(markerPath) } catch { /* já sumiu, tudo bem */ }
+  }
+
+  // Commit + push escopados SÓ em .zara-tests/ui — nunca junto de commit de
+  // código do Alex, nunca --force. Se falhar (offline, sem git configurado),
+  // o print continua salvo localmente; só a sincronização remota não rola.
+  try {
+    await runGit(['add', '--', '.zara-tests/ui'], repoRoot)
+    await runGit(['diff', '--cached', '--quiet', '--', '.zara-tests/ui'], repoRoot)
+    // sem erro acima == sem diferença staged == nada pra commitar de verdade
+    return
+  } catch {
+    // diff --quiet saiu com erro == HA diferença staged == segue pro commit
+  }
+  try {
+    await runGit(['commit', '-m', 'ui: snapshot automatico electron-real (zero-manual-ops)'], repoRoot)
+    await runGit(['push'], repoRoot)
+    console.log('[UI-001] snapshot sincronizado com o repo remoto.')
+  } catch (error) {
+    console.warn('[UI-001] snapshot salvo local, mas sync remoto falhou (best-effort):', error)
+  }
+}
+
+// UI-001: captura o Electron real de verdade — nunca pede pro Alex tirar
+// print. Roda sozinha quando a janela aparece em primeiro plano (nunca no
+// boot silencioso pra bandeja) e de novo, com debounce, a cada resize.
 async function captureElectronScreenshot(win: BrowserWindow): Promise<void> {
   try {
     if (win.isDestroyed() || !win.isVisible()) return
-    const uiDir = getUiTestDir()
-    const historyDir = join(uiDir, 'history')
-    mkdirSync(historyDir, { recursive: true })
-
-    const targetPath = join(uiDir, 'electron-real.png')
-    if (existsSync(targetPath)) {
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-      renameSync(targetPath, join(historyDir, `electron-real-${stamp}.png`))
-    }
-
     const image = await win.webContents.capturePage()
-    writeFileSync(targetPath, image.toPNG())
-    console.log('[UI-001] electron-real.png atualizado:', targetPath)
+    await syncUiSnapshotIfNeeded(win, image.toPNG())
   } catch (error) {
-    // Best-effort: nunca deve afetar o uso normal da ZARA (ex.: build
-    // empacotado rodando fora de um checkout do repo).
+    // Best-effort: nunca deve afetar o uso normal da ZARA.
     console.warn('[UI-001] falha ao capturar electron-real.png:', error)
   }
 }
 
+function writeViewportJson(win: BrowserWindow, uiDir: string, sourceHead: string | null): void {
+  const bounds = win.getBounds()
+  const contentBounds = win.getContentBounds()
+  const payload = {
+    window_width: bounds.width,
+    window_height: bounds.height,
+    content_width: contentBounds.width,
+    content_height: contentBounds.height,
+    device_pixel_ratio: null as number | null,
+    zoom: win.webContents.getZoomFactor(),
+    timestamp: new Date().toISOString(),
+    source_head: sourceHead,
+  }
+  win.webContents.executeJavaScript('window.devicePixelRatio').then((dpr) => {
+    payload.device_pixel_ratio = dpr
+    writeFileSync(join(uiDir, 'current_viewport.json'), JSON.stringify(payload, null, 2), 'utf-8')
+  }).catch(() => {
+    writeFileSync(join(uiDir, 'current_viewport.json'), JSON.stringify(payload, null, 2), 'utf-8')
+  })
+}
+
+// UI-001: mesmo diagnóstico de viewport, mas chamado sozinho (fora do fluxo
+// de captura de screenshot) nos resizes intermediários — nunca dispara git.
 async function writeViewportDiagnostics(win: BrowserWindow): Promise<void> {
   try {
     if (win.isDestroyed()) return
-    const bounds = win.getBounds()
-    const contentBounds = win.getContentBounds()
-    const zoom = win.webContents.getZoomFactor()
-    const devicePixelRatio = await win.webContents.executeJavaScript('window.devicePixelRatio').catch(() => null)
-
-    const payload = {
-      window_width: bounds.width,
-      window_height: bounds.height,
-      content_width: contentBounds.width,
-      content_height: contentBounds.height,
-      device_pixel_ratio: devicePixelRatio,
-      zoom,
-    }
-
-    const outPath = getViewportDiagnosticsPath()
-    mkdirSync(join(outPath, '..'), { recursive: true })
-    writeFileSync(outPath, JSON.stringify(payload, null, 2), 'utf-8')
+    const repoRoot = findRepoRoot()
+    if (!repoRoot) return
+    const uiDir = getUiTestDir(repoRoot)
+    mkdirSync(uiDir, { recursive: true })
+    writeViewportJson(win, uiDir, gitHead(repoRoot))
   } catch (error) {
-    // Diagnóstico best-effort: nunca deve derrubar a janela real (ex.: em
-    // build empacotado, o caminho ../../.zara-tests não existe).
     console.warn('[UI-001] falha ao gravar current_viewport.json:', error)
   }
 }

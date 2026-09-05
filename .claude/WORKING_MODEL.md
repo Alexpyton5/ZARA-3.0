@@ -240,11 +240,32 @@ build antigo" como conceito de trabalho — já é a regra vigente em
 Antes de pedir qualquer coisa técnica ao Alex, o Chief tenta descobrir/gerar
 sozinho: repo ativo, pasta, arquivo, screenshot, log, comando, path. Isso
 inclui construir mecanismo permanente no runtime da ZARA (ex.: captura de
-tela automática do Electron real, registro de viewport) em vez de pedir print
-manual — ver `frontend/src/main.ts` (`captureElectronScreenshot`,
-`writeViewportDiagnostics`) e `ZARA_INICIAR.bat` (commit automático de
-`.zara-tests/ui/`), instalados em 2026-09-04 pro pipeline pixel-perfect
-(UI-001).
+tela automática do Electron real, registro de viewport, sync com o repo
+remoto) em vez de pedir print manual — ver `frontend/src/main.ts`
+(`captureElectronScreenshot`, `syncUiSnapshotIfNeeded`,
+`writeViewportDiagnostics`), instalado/corrigido em 2026-09-04/05 pro
+pipeline pixel-perfect (UI-001).
+
+**Transporte remoto (máquina do Alex ↔ sessão do Chief):** os dois lados só
+se falam via git — não há outro canal. Protocolo:
+- A ZARA (Electron) captura sozinha, calcula sha256 do PNG e só considera
+  "mudança relevante" quando: o hash do screenshot mudou, OU o `git HEAD`
+  local mudou desde o último snapshot sincronizado, OU existe
+  `.zara-tests/ui/QA_REQUEST.flag` (ver abaixo). Fora isso, **não commita
+  nada** — abrir a ZARA normalmente nunca gera commit.
+- Antes de decidir, ela dá um `git pull --ff-only` best-effort (silencioso se
+  offline) pra enxergar o que a sessão remota já publicou.
+- Quando há mudança relevante: commit + push escopados só em
+  `.zara-tests/ui/` (nunca `git add -A`, nunca `--force`, nunca junto de
+  código do Alex). Falha de rede/credencial é best-effort — loga e segue, não
+  trava a ZARA.
+- **`QA_REQUEST.flag`** é como o Chief (esta sessão) pede evidência nova sem
+  pedir nada ao Alex: escreve esse arquivo em `.zara-tests/ui/` (com motivo) e
+  espera — na próxima vez que o Alex abrir a ZARA normalmente, o pull traz o
+  pedido, a captura roda, o commit sobe, e o flag é apagado sozinho. Repetir
+  esse arquivo é o gatilho oficial de "task visual ativa" / "QA pediu
+  evidência" do critério de sincronização — nunca pedir ao Alex que gere ou
+  apague esse arquivo manualmente.
 
 Isto não relaxa a política de confirmação para ações sensíveis (push,
 delete, publicação) nem os limites de escopo de `governance.md` — só remove

@@ -64,15 +64,23 @@ Formato simples. Não virar burocracia.
   existia na raiz do repo (git-tracked, legenda própria "Prévia visual ·
   dados da MASTER", commit `1322fcf`), verificado por leitura visual e
   copiado pra `.zara-tests/ui/master.png` (1440×900).
-  electron-real.png: WAITING — automático agora, zero passo manual. Zero
-  Owner Manual Operations (`.claude/WORKING_MODEL.md`, 2026-09-04):
-  `frontend/src/main.ts` (`captureElectronScreenshot`) tira o print real da
-  janela sozinho ~2,5s depois dela aparecer em primeiro plano (e de novo a
-  cada resize/maximize), grava `.zara-tests/ui/electron-real.png` com
-  rotação de histórico, e `ZARA_INICIAR.bat` faz commit local automático do
-  resultado. Só falta o Alex abrir a ZARA normalmente uma vez — não é
-  trabalho manual novo, é o uso normal do app. Commit `d326675` +
-  commit seguinte desta mesma sessão (captura + BAT).
+  electron-real.png: WAITING — pipeline completo e automático (2026-09-05,
+  correção de transporte). `frontend/src/main.ts`:
+  `captureElectronScreenshot` tira o print real ~2,5s depois da janela
+  aparecer em primeiro plano (e de novo a cada resize/maximize);
+  `syncUiSnapshotIfNeeded` dá `git pull --ff-only`, compara sha256 do PNG +
+  `git HEAD` + `.zara-tests/ui/QA_REQUEST.flag`, e só commita/`push` (escopo
+  só `.zara-tests/ui`, nunca `--force`, nunca junto de código do Alex)
+  quando algo realmente mudou — abrir a ZARA normalmente NÃO gera commit
+  sozinho. Bug corrigido nesta rodada: a versão anterior calculava o
+  caminho de `.zara-tests/ui` a partir de `app.getAppPath()` com um `../..`
+  fixo que só é válido em dev — no build empacotado (que é o que o Alex
+  realmente roda) apontava pra dentro de `win-unpacked/`, não pro repo.
+  `findRepoRoot()` agora sobe a árvore procurando `.git`, funciona nos dois
+  modos. `QA_REQUEST.flag` já criado pra esta task — na próxima abertura
+  normal da ZARA o pull traz o pedido, ela captura e sincroniza sozinha, e
+  o flag some. Commits `d326675`, `72bc83c`, `bc36977` + commit seguinte
+  desta sessão (correção de transporte).
   Também grava `current_viewport.json` (largura/altura da janela, content
   bounds, devicePixelRatio, zoom) no mesmo gatilho.
   Não validado por typecheck real nesta sessão (node_modules não instalado

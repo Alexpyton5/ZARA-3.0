@@ -792,9 +792,17 @@ function createWindow(): void {
 
   const iconPath = getWindowIconPath()
   mainWindow = new BrowserWindow({
-    width: 1500,
-    height: 950,
-    minWidth: 1200,
+    // UI-001: a composição calibrada contra o MASTER (zara-home.css, blocos
+    // "Calibração global"/"MASTER 1671×941") precisa de ~1377px de conteúdo
+    // + até 222px de sidebar + padding — não cabe nos 1500px/1200px
+    // anteriores. Nessa largura, `.zh-content` (overflow-y: auto, que pela
+    // spec de CSS também vira overflow-x: auto) ficava rolável na horizontal
+    // sem barra visível de aviso — a coluna direita (Ferramentas/Docker,
+    // botão "Continuar") existe no código mas fica fora da área visível sem
+    // rolar. Aumentando a janela padrão isso volta a aparecer sem rolagem.
+    width: 1680,
+    height: 980,
+    minWidth: 1500,
     minHeight: 800,
     frame: false,
     titleBarStyle: 'hidden',

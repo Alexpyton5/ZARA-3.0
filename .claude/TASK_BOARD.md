@@ -86,6 +86,24 @@ Formato simples. Não virar burocracia.
   Não validado por typecheck real nesta sessão (node_modules não instalado
   aqui); revisão manual do diff contra o padrão existente do arquivo.
 
+  MUDANÇA VISUAL REAL (2026-09-05): achei e corrigi um bug de verdade sem
+  precisar de screenshot novo, só lendo `zara-home.css` + `main.ts`. A
+  composição já está calibrada contra MASTER 1671×941 (`.zh-content-top`
+  fixo em até 1377px + sidebar até 222px + padding ≈ 1650px), mas a janela
+  do Electron abria em 1500px de largura (minWidth 1200px) — mais estreita
+  que a composição. `.zh-content` tem só `overflow-y: auto`, e pela spec de
+  CSS isso vira `overflow-x: auto` também: a coluna direita (Ferramentas
+  com Docker, botão "Continuar" — ambos já existem no código, não estavam
+  faltando) ficava fora da área visível, só alcançável rolando a tela pro
+  lado, sem barra de rolagem óbvia. Corrigido em `frontend/src/main.ts`
+  (`createWindow`): `width: 1680, height: 980, minWidth: 1500`. Verificado
+  por leitura de `ToolsCard.tsx`/`ActiveProjectCard.tsx` (Docker e
+  "Continuar" já implementados) + aritmética das larguras do CSS, não por
+  screenshot. Ícones de status (shield/wifi/cloud) NÃO foram tocados — são
+  intencionalmente monocromáticos/opacos quando não há conexão real
+  (comentário em `zara-home.css` linha ~141, regra anti-falso-sucesso);
+  parecer "menos coloridos que o MASTER" aqui está correto, não é bug.
+
 - ID: UI-002
   owner: UI Director (time novo — agente ainda não criado)
   scope: CORE — diâmetro relativo, forma, glass/crystal, reflexos, rim emerald, escuridão interna, escala/profundidade do logo ZA, integração com fundo

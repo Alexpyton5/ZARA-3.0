@@ -3008,3 +3008,15 @@
   color: var(--zh-muted);
   opacity: 0.5;
 }
+
+/* Ferramenta não encontrada no computador: fica visivelmente indisponível em
+ * vez de aceitar o clique e não abrir nada. */
+.zh-tool-tile:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zh-tool-tile:disabled:hover {
+  background: transparent;
+  transform: none;
+}

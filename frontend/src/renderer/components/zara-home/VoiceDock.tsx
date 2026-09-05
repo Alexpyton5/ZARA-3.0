@@ -46,6 +46,42 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
     };
   }, []);
 
+  // O `listening` era só do renderer: se o Alex fechasse e reabrisse a janela
+  // com a voz já ligada, ou se o backend derrubasse o pipeline sozinho, o
+  // botão continuava contando uma história própria. `voice-status` devolve o
+  // `voice_active` real; ele é quem manda no estado inicial.
+  useEffect(() => {
+    const status = window.zaraIPC?.voice?.status;
+    if (!status) return;
+    let alive = true;
+    status()
+      .then((s: { listening?: boolean }) => {
+        if (alive && typeof s?.listening === 'boolean') setListening(s.listening);
+      })
+      .catch(() => {
+        // Sem leitura de status o botão fica como está; não vale inventar.
+      });
+    return () => { alive = false; };
+  }, []);
+
+  // Voz fora do ar: o microfone do renderer não pode continuar aberto nem o
+  // botão continuar dizendo "ouvindo". O ajuste do estado é feito no render
+  // (padrão de "corrigir estado quando a prop muda"), e o efeito cuida só do
+  // que é externo — desligar a captura e cortar o áudio.
+  const [viOffline, setViOffline] = useState(coreState === 'offline');
+  if (coreState === 'offline' && !viOffline) {
+    setViOffline(true);
+    setListening(false);
+  } else if (coreState !== 'offline' && viOffline) {
+    setViOffline(false);
+  }
+
+  useEffect(() => {
+    if (coreState !== 'offline') return;
+    pararAudioAec();
+    cortarKore();
+  }, [coreState]);
+
   async function toggleVoice() {
     if (!voiceAvailable) return;
     // ZARA-HOME-BARGE-IN-001: enquanto ela fala, o mesmo botao interrompe em

@@ -36,16 +36,61 @@ function ActionCard({
   );
 }
 
-function ActionRow({ icon, label, sub }: { icon: ReactNode; label: string; sub: string }) {
+function ActionRow({
+  icon, label, sub, onClick, disabled,
+}: { icon: ReactNode; label: string; sub: string; onClick?: () => void; disabled?: boolean }) {
+  // Sem `onClick` continua sendo uma linha de leitura, não um botão morto.
+  if (!onClick) {
+    return (
+      <div className="zh-action-row">
+        <span className="zh-action-icon">{icon}</span>
+        <span className="zh-action-text">
+          <span className="zh-action-label">{label}</span>
+          <span className="zh-action-sub">{sub}</span>
+        </span>
+      </div>
+    );
+  }
   return (
-    <div className="zh-action-row">
+    <button className="zh-action-row zh-action-row--btn" type="button" onClick={onClick} disabled={disabled}>
       <span className="zh-action-icon">{icon}</span>
       <span className="zh-action-text">
         <span className="zh-action-label">{label}</span>
         <span className="zh-action-sub">{sub}</span>
       </span>
-    </div>
+    </button>
   );
+}
+
+/**
+ * Card do painel Sistema que roda uma leitura REAL sob demanda.
+ *
+ * A regra é a mesma dos outros: o texto de resultado vem do executor
+ * (`result.output` / `result.error`), nunca de string fixa. Card sem action
+ * por trás continua "Indisponível" e desabilitado — é honesto e é a maioria
+ * deles hoje.
+ */
+function useLeituraSobDemanda(
+  action: string,
+  ler: (data: unknown, output: string) => string,
+) {
+  const execute = window.zaraIPC?.action?.execute;
+  const [sub, setSub] = useState('Indisponível');
+  const [carregando, setCarregando] = useState(false);
+
+  function rodar() {
+    if (!execute || carregando) return;
+    setCarregando(true);
+    execute(action, {})
+      .then((res: { result?: { success?: boolean; data?: unknown; output?: string; error?: string } }) => {
+        const r = res?.result;
+        setSub(r?.success ? ler(r.data, String(r.output ?? '')) : (r?.error || 'Indisponível'));
+      })
+      .catch((e: unknown) => setSub(e instanceof Error ? e.message : 'Indisponível'))
+      .finally(() => setCarregando(false));
+  }
+
+  return { sub: carregando ? 'Consultando…' : sub, rodar, carregando, disponivel: Boolean(execute) };
 }
 
 export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps) {
@@ -53,6 +98,25 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
   const [processLoading, setProcessLoading] = useState(false);
   const [diagnosticSummary, setDiagnosticSummary] = useState<string | null>(null);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+
+  // Lixeira: o que dá para dizer com honestidade é QUANTOS itens existem.
+  // `os_recycle_bin_list` não devolve tamanho, então nada de "2,1 GB".
+  const lixeira = useLeituraSobDemanda('os_recycle_bin_list', (data) => {
+    const n = Array.isArray(data) ? data.length : 0;
+    return n === 0 ? 'Lixeira vazia' : `${n} ${n === 1 ? 'item' : 'itens'} na Lixeira`;
+  });
+
+  // Firewall: o que se pode ler é o ESTADO DO SERVIÇO (mpssvc), e é isso que
+  // a tela diz. Não vira "você está protegido".
+  const firewall = useLeituraSobDemanda('os_service_list', (data) => {
+    const servicos = Array.isArray(data) ? (data as Array<{ Name?: string; Status?: unknown }>) : [];
+    const mpssvc = servicos.find((x) => String(x?.Name || '').toLowerCase() === 'mpssvc');
+    if (!mpssvc) return 'Serviço do firewall não encontrado';
+    const estado = String(mpssvc.Status ?? '');
+    return estado === '4' || estado.toLowerCase() === 'running'
+      ? 'Serviço em execução'
+      : `Serviço: ${estado || 'estado desconhecido'}`;
+  });
 
   function handleAnalisarAgora() {
     const selfStatus = window.zaraIPC?.system?.selfStatus;
@@ -79,7 +143,9 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
     if (listMemory) {
       listMemory()
         .then((res: { success?: boolean; facts?: unknown[] }) => {
-          if (res?.success && Array.isArray(res.facts)) {
+          // Só acrescenta quando HÁ fatos: "0 fatos na memória" é ruído, não
+          // informação.
+          if (res?.success && Array.isArray(res.facts) && res.facts.length > 0) {
             setDiagnosticSummary((prev) => `${prev ?? ''} ${res.facts!.length} fatos na memória.`.trim());
           }
         })
@@ -155,7 +221,13 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
         <div className="zh-system-col zh-system-col--maintenance">
           <h2>Manutenção</h2>
           <div className="zh-action-grid">
-            <ActionCard icon={<Database size={16} strokeWidth={1.7} />} label="Liberar espaço" sub="Indisponível" />
+            <ActionCard
+              icon={<Database size={16} strokeWidth={1.7} />}
+              label="Liberar espaço"
+              sub={lixeira.sub}
+              onClick={lixeira.rodar}
+              disabled={!lixeira.disponivel || lixeira.carregando}
+            />
             <ActionCard icon={<Trash2 size={16} strokeWidth={1.7} />} label="Limpar temporários" sub="Indisponível" />
             <ActionCard icon={<Power size={16} strokeWidth={1.7} />} label="Gerenciar inicialização" sub="Indisponível" />
             <ActionCard
@@ -166,7 +238,13 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
               disabled={processLoading}
             />
             <ActionCard icon={<RotateCw size={16} strokeWidth={1.7} />} label="Atualizar sistema" sub="Indisponível" />
-            <ActionCard icon={<Activity size={16} strokeWidth={1.7} />} label="Diagnóstico ZARA" sub="Indisponível" />
+            <ActionCard
+              icon={<Activity size={16} strokeWidth={1.7} />}
+              label="Diagnóstico ZARA"
+              sub={diagnosticLoading ? 'Analisando…' : diagnosticSummary ?? 'Verificar agora'}
+              onClick={handleAnalisarAgora}
+              disabled={diagnosticLoading || !window.zaraIPC?.system?.selfStatus}
+            />
           </div>
         </div>
 
@@ -174,7 +252,13 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
           <h2>Segurança</h2>
           <ActionRow icon={<Search size={14} strokeWidth={1.7} />} label="Verificação rápida" sub="Indisponível" />
           <ActionRow icon={<ShieldCheck size={14} strokeWidth={1.7} />} label="Verificação completa" sub="Indisponível" />
-          <ActionRow icon={<Shield size={14} strokeWidth={1.7} />} label="Firewall" sub="Indisponível" />
+          <ActionRow
+            icon={<Shield size={14} strokeWidth={1.7} />}
+            label="Firewall"
+            sub={firewall.sub}
+            onClick={firewall.rodar}
+            disabled={!firewall.disponivel || firewall.carregando}
+          />
           <ActionRow icon={<KeyRound size={14} strokeWidth={1.7} />} label="Permissões" sub="Indisponível" />
           <ActionRow icon={<Activity size={14} strokeWidth={1.7} />} label="Ameaças" sub="Indisponível" />
         </div>

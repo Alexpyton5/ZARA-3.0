@@ -31,6 +31,7 @@ const PROBES = [
   ['nada inventado', 'probe-sem-mentira.mjs', ['/tmp/zara-ui']],
   ['Ferramentas', 'probe-ferramentas.mjs', []],
   ['botão de voz', 'probe-voz.mjs', []],
+  ['painel Sistema', 'probe-sistema.mjs', []],
 ];
 
 const TIPOS = {

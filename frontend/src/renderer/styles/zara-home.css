@@ -3244,3 +3244,19 @@
   background: transparent;
   transform: none;
 }
+
+/* Linha de Segurança que É clicável (tem leitura real por trás). As outras
+ * continuam sendo <div>, não botão morto. */
+.zh-action-row--btn {
+  width: 100%;
+  text-align: left;
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 180ms var(--zh-ease);
+}
+
+.zh-action-row--btn:hover:not(:disabled) { background: #ffffff08; }
+.zh-action-row--btn:disabled { cursor: default; opacity: 0.6; }

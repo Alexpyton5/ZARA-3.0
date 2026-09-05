@@ -36,16 +36,20 @@ function GmailGlyph() {
 }
 
 const CHANNELS = [
-  { name: 'WhatsApp', icon: whatsapp, value: '12', badgeClass: 'zh-comm-badge--wa', tint: null },
-  { name: 'Telegram', icon: telegram, value: '3', badgeClass: 'zh-comm-badge--tg', tint: null },
-  { name: 'Instagram', Glyph: InstagramGlyph, value: '5', badgeClass: 'zh-comm-badge--ig', tint: null },
-  { name: 'Gmail', Glyph: GmailGlyph, value: '7', badgeClass: 'zh-comm-badge--gmail', tint: null },
+  { name: 'WhatsApp', icon: whatsapp, badgeClass: 'zh-comm-badge--wa', tint: null },
+  { name: 'Telegram', icon: telegram, badgeClass: 'zh-comm-badge--tg', tint: null },
+  { name: 'Instagram', Glyph: InstagramGlyph, badgeClass: 'zh-comm-badge--ig', tint: null },
+  { name: 'Gmail', Glyph: GmailGlyph, badgeClass: 'zh-comm-badge--gmail', tint: null },
 ];
 
 /**
  * Comunicações — ícones 1:1 com o MASTER (glifos oficiais das marcas).
- * Contagens são valores de demonstração estáticos do MASTER até que o
- * backend exponha contagens reais por canal.
+ *
+ * As contagens (12 / 3 / 5 / 7) vinham da maquete e não de lugar nenhum: a
+ * ZARA não tem integração com WhatsApp, Telegram, Instagram nem Gmail. Um
+ * número ali significa "você tem 12 mensagens não lidas", e isso era falso
+ * toda vez. Enquanto não existir a integração, os canais aparecem
+ * visivelmente não conectados, com o motivo no title.
  */
 interface CommunicationsCardProps {
   /** Leva para a seção Conversas — mesma navegação da Sidebar. */
@@ -57,12 +61,13 @@ export function CommunicationsCard({ onSeeAll }: CommunicationsCardProps) {
     <section className="zh-section zh-glass-panel" aria-label="Comunicações">
       <h2>Comunicações</h2>
       <div className="zh-comm-row">
-        {CHANNELS.map(({ name, icon, Glyph, tint, value, badgeClass }) => (
-          <div className="zh-comm-item" key={name}>
+        {CHANNELS.map(({ name, icon, Glyph, tint, badgeClass }) => (
+          <div className="zh-comm-item" key={name} title={`${name} ainda não conectado`}>
             <div
               className={`zh-comm-badge${badgeClass ? ` ${badgeClass}` : ''}`}
               style={tint ? { background: tint } : undefined}
-              aria-label={name}
+              data-unavailable="true"
+              aria-label={`${name} — não conectado`}
             >
               {icon ? (
                 <img src={icon} alt="" />
@@ -70,7 +75,7 @@ export function CommunicationsCard({ onSeeAll }: CommunicationsCardProps) {
                 Glyph && <Glyph />
               )}
             </div>
-            <span className="zh-comm-value">{value}</span>
+            <span className="zh-comm-value" data-unavailable="true">—</span>
           </div>
         ))}
         <button

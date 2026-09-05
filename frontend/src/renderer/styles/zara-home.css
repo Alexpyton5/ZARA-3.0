@@ -564,7 +564,9 @@
   border: 1px solid #cad6d31c;
   border-radius: 10px;
   padding: 12px 14px;
-  min-height: 240px;
+  /* Na MASTER este card tem ~215px. Em 240px a faixa inteira do Sistema
+   * passava de 380px e a coluna esquerda não cabia mais na tela. */
+  min-height: 208px;
 }
 
 /* Cards de Energia — linhas com borda, título + descritor + dot de seleção */
@@ -849,7 +851,7 @@
 .zh-metric-row span:first-child > svg {
   width: 14px;
   height: 14px;
-  padding: 4px;
+  padding: 3px;
   box-sizing: content-box;
   border-radius: 7px;
   border: 1px solid #ffffff12;
@@ -874,20 +876,33 @@
 .zh-foryou-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .zh-foryou-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 7px 6px;
+  gap: 11px;
+  /* Altura: na MASTER o card "Para você" tem ~253px com 4 linhas. Com 7px de
+   * padding e ícone de 38px ele passava de 300px e a coluna esquerda invadia
+   * a faixa do Sistema. */
+  padding: 5px 6px;
   border-radius: 10px;
+  /* Virou <button> quando cada item passou a levar para a seção
+   * correspondente — sem estes resets herdaria o botão do sistema. */
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 180ms var(--zh-ease), transform 180ms var(--zh-ease);
 }
 
 .zh-foryou-icon {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: 12px;
   display: grid;
   place-items: center;
@@ -1060,13 +1075,6 @@
   color: var(--zh-muted);
 }
 
-.zh-project-percent {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--zh-emerald);
-  margin-top: 2px;
-}
-
 .zh-project-last-session {
   font-size: 13px;
   color: var(--zh-secondary);
@@ -1079,23 +1087,6 @@
   justify-content: space-between;
   gap: 10px;
   margin-top: 10px;
-}
-
-.zh-project-dots {
-  display: flex;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.zh-project-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ffffff22;
-}
-
-.zh-project-dots span[data-active='true'] {
-  background: var(--zh-emerald);
 }
 
 /* Linha "última sessão + Continuar" do MASTER */
@@ -1831,20 +1822,6 @@
   gap: 8px;
 }
 
-.zh-progress-track {
-  flex: 1;
-  height: 4px;
-  border-radius: 999px;
-  /* Track com tint esmeralda — como no MASTER */
-  background: #14ca8826;
-  overflow: hidden;
-}
-
-.zh-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--zh-emerald), var(--zh-emerald-2));
-}
-
 /* Linha de métrica do "Estado do dispositivo".
  * A MASTER não usa régua entre as linhas — o que separa é o espaço e o
  * badge do ícone. As listras que existiam aqui vinham de um layout de
@@ -1854,7 +1831,7 @@
   justify-content: space-between;
   align-items: center;
   font-size: 13.5px;
-  padding: 3px 0;
+  padding: 1px 0;
 }
 
 .zh-metric-row span:first-child { color: #dbe6e2; }
@@ -2079,10 +2056,6 @@
   transform: translateX(2px);
 }
 
-.zh-foryou-item {
-  transition: background-color 180ms var(--zh-ease), transform 180ms var(--zh-ease);
-}
-
 .zh-command-submit {
   width: 76px;
   height: 32px;
@@ -2156,7 +2129,11 @@
  * viviam aqui foram absorvidas pela reconstrução em camadas lá em cima —
  * uma fonte só por propriedade.) */
 .zh-system-row {
-  margin-top: -22px;
+  /* A faixa do Sistema é puxada para cima para ficar na altura da MASTER.
+   * Com -34px ela cobria o rodapé do card Comunicações; -18px mantém a
+   * altura sem comer o card de cima. Uma fonte só para esta propriedade —
+   * havia um segundo `margin-top` adiante que vencia em silêncio. */
+  margin-top: -18px;
   min-height: 302px;
   padding-top: 14px;
 }
@@ -2211,10 +2188,6 @@
 
 .zh-core {
   top: 14px;
-}
-
-.zh-system-row {
-  margin-top: -34px;
 }
 
 
@@ -2636,7 +2609,9 @@
  * compacta, sem modificar a estrutura dos controles. */
 @media (min-width: 1301px) {
   .zh-system-row {
-    margin-top: -32px;
+    /* -32px cobria o rodapé do card Comunicações. A faixa continua subindo
+     * para a altura da MASTER, só que sem comer o card de cima. */
+    margin-top: -20px;
     min-height: 294px;
     overflow: hidden;
   }
@@ -3020,3 +2995,16 @@
 .zh-strip-turn[data-role='user'] { color: #a9b7b2; }
 .zh-strip-turn[data-role='system'] { color: #ffb4a8; }
 .zh-strip-pending { color: var(--zh-muted); font-style: italic; }
+
+/* Canais de comunicação sem integração: visivelmente não conectados, do
+ * mesmo jeito que os ícones de status do topo. Um número aceso ali
+ * significaria "você tem N mensagens não lidas", e isso seria falso. */
+.zh-comm-badge[data-unavailable='true'] {
+  opacity: 0.42;
+  filter: saturate(0.55);
+}
+
+.zh-comm-value[data-unavailable='true'] {
+  color: var(--zh-muted);
+  opacity: 0.5;
+}

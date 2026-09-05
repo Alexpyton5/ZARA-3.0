@@ -127,7 +127,7 @@ export function ZaraHome() {
           <>
             <div className="zh-content-top">
               <main className="zh-main">
-                <ForYouCard />
+                <ForYouCard onNavigate={setActiveNav} />
                 <CommunicationsCard onSeeAll={() => setActiveNav('Conversas')} />
               </main>
 
@@ -137,7 +137,7 @@ export function ZaraHome() {
               </div>
 
               <aside className="zh-right">
-                <ActiveProjectCard />
+                <ActiveProjectCard onNavigate={setActiveNav} />
                 <ToolsCard />
               </aside>
             </div>

@@ -54,7 +54,7 @@ export function Sidebar({ active, onSelect, userName, userPhotoUrl }: SidebarPro
           </button>
         ))}
       </nav>
-      <button className="zh-user-card" type="button">
+      <button className="zh-user-card" type="button" onClick={() => onSelect('Configurações')}>
         <span className="zh-avatar">
           {userPhotoUrl ? <img src={userPhotoUrl} alt={`Foto de ${userName}`} /> : initials(userName)}
         </span>

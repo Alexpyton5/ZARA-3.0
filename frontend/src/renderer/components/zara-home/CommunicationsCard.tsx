@@ -47,7 +47,12 @@ const CHANNELS = [
  * Contagens são valores de demonstração estáticos do MASTER até que o
  * backend exponha contagens reais por canal.
  */
-export function CommunicationsCard() {
+interface CommunicationsCardProps {
+  /** Leva para a seção Conversas — mesma navegação da Sidebar. */
+  onSeeAll?: () => void;
+}
+
+export function CommunicationsCard({ onSeeAll }: CommunicationsCardProps) {
   return (
     <section className="zh-section zh-glass-panel" aria-label="Comunicações">
       <h2>Comunicações</h2>
@@ -68,7 +73,12 @@ export function CommunicationsCard() {
             <span className="zh-comm-value">{value}</span>
           </div>
         ))}
-        <button className="zh-comm-more" type="button" aria-label="Mais comunicações">
+        <button
+          className="zh-comm-more"
+          type="button"
+          aria-label="Ver todas as conversas"
+          onClick={() => onSeeAll?.()}
+        >
           <ChevronRight size={16} strokeWidth={2} />
         </button>
       </div>

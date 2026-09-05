@@ -29,7 +29,15 @@ export function ActiveProjectCard() {
 
       <div className="zh-project-row">
         <p className="zh-project-last-session">Última sessão: hoje, 14:12</p>
-        <button className="zh-project-continue" type="button">
+        {/* Retomar projeto ainda não existe como capacidade no backend. Em vez
+          * de aceitar o clique e não fazer nada, o botão fica desabilitado e
+          * diz por quê — mesma regra dos cards "Indisponível" do Sistema. */}
+        <button
+          className="zh-project-continue"
+          type="button"
+          title="Retomar projeto ainda não disponível"
+          disabled
+        >
           Continuar
           <ChevronRight size={15} strokeWidth={2} />
         </button>

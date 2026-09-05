@@ -1502,6 +1502,24 @@
   transition-duration: 90ms;
 }
 
+/* Sem destino real ainda: fica visivelmente indisponível em vez de aceitar
+ * o clique e não fazer nada. */
+.zh-dock-btn:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.zh-dock-btn:disabled:hover {
+  background: transparent;
+  color: #c3ceca;
+  transform: none;
+}
+
+.zh-project-continue:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* Os separadores é que fazem o agrupamento visual (esquerda | voz | direita),
  * em vez de um space-between distribuindo tudo artificialmente. */
 .zh-dock-separator {

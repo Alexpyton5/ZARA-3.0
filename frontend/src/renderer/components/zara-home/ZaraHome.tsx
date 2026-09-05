@@ -105,12 +105,12 @@ export function ZaraHome() {
         <div className="zh-content-top">
           <main className="zh-main">
             <ForYouCard />
-            <CommunicationsCard />
+            <CommunicationsCard onSeeAll={() => setActiveNav('Conversas')} />
           </main>
 
           <div className="zh-core-column">
             <ZaraCore state={coreState} />
-            <VoiceDock coreState={coreState} />
+            <VoiceDock coreState={coreState} onNavigate={setActiveNav} />
           </div>
 
           <aside className="zh-right">

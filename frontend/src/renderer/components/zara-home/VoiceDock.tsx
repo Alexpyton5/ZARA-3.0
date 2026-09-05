@@ -5,6 +5,8 @@ import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib
 
 interface VoiceDockProps {
   coreState: CoreState;
+  /** Mesma navegação da Sidebar — o dock leva para as seções que já existem. */
+  onNavigate?: (section: string) => void;
 }
 
 /**
@@ -20,7 +22,7 @@ interface VoiceDockProps {
  * existiam prontos (mesma técnica usada pelo HUD antigo), só não estavam
  * plugados nesta árvore de componentes.
  */
-export function VoiceDock({ coreState }: VoiceDockProps) {
+export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
   const [listening, setListening] = useState(false);
   const voiceAvailable = Boolean(window.zaraIPC?.voice?.start && window.zaraIPC?.voice?.stop);
 
@@ -92,10 +94,20 @@ export function VoiceDock({ coreState }: VoiceDockProps) {
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <nav className="zh-dock zh-glass-panel" aria-label="Dock ZARA">
-        <button className="zh-dock-btn" type="button" aria-label="Aplicativos">
+        <button
+          className="zh-dock-btn"
+          type="button"
+          aria-label="Aplicativos"
+          onClick={() => onNavigate?.('Aplicativos')}
+        >
           <Grid3x3 size={17} strokeWidth={1.7} />
         </button>
-        <button className="zh-dock-btn" type="button" aria-label="Arquivos">
+        <button
+          className="zh-dock-btn"
+          type="button"
+          aria-label="Arquivos"
+          onClick={() => onNavigate?.('Arquivos')}
+        >
           <Folder size={17} strokeWidth={1.7} />
         </button>
         <span className="zh-dock-separator" aria-hidden="true" />
@@ -111,13 +123,33 @@ export function VoiceDock({ coreState }: VoiceDockProps) {
           <Mic size={20} strokeWidth={2} />
         </button>
         <span className="zh-dock-separator" aria-hidden="true" />
-        <button className="zh-dock-btn" type="button" aria-label="Ajuda">
+        {/* Ajuda e "mais opções" ainda não têm destino real no app. Ficam
+          * desabilitados e explicados no title em vez de aceitarem o clique e
+          * não fazerem nada — mesma regra de honestidade dos cards do Sistema. */}
+        <button
+          className="zh-dock-btn"
+          type="button"
+          aria-label="Ajuda — não disponível ainda"
+          title="Ajuda ainda não disponível"
+          disabled
+        >
           <HelpCircle size={17} strokeWidth={1.7} />
         </button>
-        <button className="zh-dock-btn" type="button" aria-label="Histórico">
+        <button
+          className="zh-dock-btn"
+          type="button"
+          aria-label="Histórico de conversas"
+          onClick={() => onNavigate?.('Conversas')}
+        >
           <History size={17} strokeWidth={1.7} />
         </button>
-        <button className="zh-dock-btn" type="button" aria-label="Mais opções">
+        <button
+          className="zh-dock-btn"
+          type="button"
+          aria-label="Mais opções — não disponível ainda"
+          title="Mais opções ainda não disponível"
+          disabled
+        >
           <MoreHorizontal size={17} strokeWidth={1.7} />
         </button>
       </nav>

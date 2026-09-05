@@ -1,0 +1,25 @@
+{
+  "_comment": "Registro das abas do time ZARA. Atualizado em 2026-08-20.",
+  "ceo": {
+    "session_id": "local_c4b07745-444f-448d-af42-4f997ccbe6b3",
+    "papel": "Recebe o Alex, decide, distribui, cobra prova. Nao escreve source."
+  },
+  "voz": {
+    "session_id": "local_a1c00dc4-8921-4f9b-a6b4-5445bee1dbb5",
+    "titulo": "Agente VOZ ZARA",
+    "papel": "core/, tests/ — voz, intents, actions, dispatcher",
+    "arquivo": ".claude/time/voz.md"
+  },
+  "frontend": {
+    "session_id": "local_2ca722a3-0559-4483-b826-9a0c0e4de64f",
+    "titulo": "Agente Frontend Zara",
+    "papel": "frontend/src/ — Electron, React, lifecycle do sidecar",
+    "arquivo": ".claude/time/frontend.md"
+  },
+  "build": {
+    "session_id": "local_35cba5cd-c910-4d4e-8672-276f50176a37",
+    "titulo": "Agente BUILD ZARA",
+    "papel": "build_exe.py, tools/ — empacotamento, hashes, candidato",
+    "arquivo": ".claude/time/build.md"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "main": {
+    "type": "split",
+    "direction": "horizontal",
+    "children": [
+      {
+        "type": "leaf",
+        "id": "file-explorer",
+        "state": {
+          "type": "file-explorer"
+        }
+      },
+      {
+        "type": "leaf",
+        "id": "graph",
+        "state": {
+          "type": "graph"
+        }
+      }
+    ]
+  },
+  "left": {
+    "type": "split",
+    "direction": "vertical",
+    "children": [
+      {
+        "type": "leaf",
+        "id": "search",
+        "state": {
+          "type": "search"
+        }
+      },
+      {
+        "type": "leaf",
+        "id": "tags",
+        "state": {
+          "type": "tags"
+        }
+      }
+    ]
+  },
+  "right": {
+    "type": "leaf",
+    "id": "backlinks",
+    "state": {
+      "type": "backlink"
+    }
+  }
+}

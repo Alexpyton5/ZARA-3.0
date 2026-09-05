@@ -19,7 +19,6 @@ SQLite is stored under:
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import time
 import uuid
@@ -43,6 +42,25 @@ class TaskState(StrEnum):
     FAILED = "FAILED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+
+
+class AutonomyPermission(StrEnum):
+    """Product-level permission; action risk gates remain independent."""
+
+    FAZ_SOZINHA = "FAZ_SOZINHA"
+    FAZ_E_AVISA = "FAZ_E_AVISA"
+    PERGUNTA_ANTES = "PERGUNTA_ANTES"
+
+    @property
+    def requires_approval(self) -> bool:
+        return self is AutonomyPermission.PERGUNTA_ANTES
+
+    @property
+    def notify_after(self) -> bool:
+        return self is AutonomyPermission.FAZ_E_AVISA
+
+
+PermissionLevel = AutonomyPermission
 
 
 TERMINAL_STATES = {
@@ -94,8 +112,8 @@ class AutonomyEngine:
 
     @staticmethod
     def _default_db_path() -> Path:
-        local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-        return local / "ZARA3" / "data" / "autonomy" / "zara_autonomy.db"
+        from core.paths import user_data_dir
+        return user_data_dir() / "data" / "autonomy" / "zara_autonomy.db"
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -219,9 +237,16 @@ class AutonomyEngine:
         requires_approval: bool = True,
         approved: bool = False,
         task_id: str | None = None,
+        permission_level: AutonomyPermission | str | None = None,
     ) -> TaskRecord:
         now = time.time()
         task_id = task_id or f"TASK-{uuid.uuid4().hex[:10].upper()}"
+        payload = dict(payload or {})
+        if permission_level is not None:
+            permission = AutonomyPermission(str(permission_level))
+            requires_approval = permission.requires_approval
+            payload["_autonomy_permission"] = permission.value
+            payload["_notify_after"] = permission.notify_after
         approved = bool(approved) or not requires_approval
         state = TaskState.QUEUED if approved else TaskState.WAITING_APPROVAL
         caps = sorted({str(x).strip() for x in required_capabilities if str(x).strip()})
@@ -237,7 +262,7 @@ class AutonomyEngine:
                 """,
                 (
                     task_id, title.strip(), kind.strip(), state.value, int(priority),
-                    self._json(payload or {}), self._json(caps),
+                    self._json(payload), self._json(caps),
                     int(bool(requires_approval)), int(approved), 0, max(1, int(max_attempts)),
                     None, None, now, now, now,
                 ),

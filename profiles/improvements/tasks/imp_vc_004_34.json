@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar algoritmo de aprendizado que ajusta confiança futura baseado em histórico de reações",
+  "context": "Parte do sistema de aprendizado: melhorar tomada de decisão baseado em experiências passadas",
+  "expected_behavior": [
+    "Aumenta confiança em ações que receberam elogios explícitos duas vezes ou mais",
+    "Diminui confiança em ações que receberam correções explícitas duas vezes ou mais",
+    "Mantém confiança neutra para ações com histórico misto ou insuficiente",
+    "Aplica aprendizado apenas após mínimo de 3 ocorrências de mesmo comando/contexto",
+    "Não permite que confiança caia abaixo de 0,1 nem suba acima de 0,9 para evitar extremos"
+  ],
+  "verification": [
+    "Teste unitario: test_confidence_increase_after_two_praises()",
+    "Teste unitario: test_confidence_decrease_after_two_corrections()",
+    "Teste unitario: test_minimum_three_occurrences_required_for_learning()",
+    "Teste unitario: test_confidence_clamped_between_0_point_1_and_0_point_9()",
+    "Teste real: executar sequência de ações com feedback conhecido, verifique ajuste de confiança"
+  ],
+  "files_to_touch": [
+    "core/aprendizado.py",
+    "core/aprendizado_engine.py",
+    "tests/aprendizado/test_learning_algorithm.py"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar sistema de controle de ganho automático para melhorar relação sinal-ruído",
+  "context": "Parte do microfone mais preciso: otimizar nível de entrada de áudio antes do processamento",
+  "expected_behavior": [
+    "Ajusta dinamicamente ganho de entrada baseado no nível de voz do usuário",
+    "Evita clipping quando usuário falar muito alto próximo ao microfone",
+    "Aumenta sensibilidade quando usuário falar baixo ou distante",
+    "Funciona com diferentes tipos de microfone (headset, desktop, embutido)",
+    "Libera ajustes de ganho imediatamente quando usuário parar de falar"
+  ],
+  "verification": [
+    "Teste unitario: test_dynamic_gain_adjustment_based_on_voice_level()",
+    "Teste unitario: test_clipping_prevention_when_voice_too_loud()",
+    "Teste unitario: test_sensitivity_increase_for_quiet_or_distant_voice()",
+    "Teste real: falar em diferentes volumes e distâncias, verifique ajuste adequado de ganho",
+    "Teste de compatibilidade: confirme que funciona com diferentes tipos de microfone"
+  ],
+  "files_to_touch": [
+    "core/voice/automatic_gain_control.py",
+    "tests/voice/test_automatic_gain_control.py"
+  ]
+}

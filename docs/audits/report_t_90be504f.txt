@@ -1,0 +1,11 @@
+FEITO: Revisado o repositório canônico em C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002; verificamos git status, diff, executamos a suite de regressão noturna e buscamos por possíveis segredos.
+PROVA: 
+- git status mostrou arquivos staged (como .known_failures.json, nightly_regression.py) e muitas modificações e exclusões.
+- nightly_regression.py encontrou 3 novas falhas de teste: 
+  tests/test_remote_approval_e2e.py::test_approval_response_does_not_execute_action,
+  tests/test_router_integrity.py::test_050_all_intent_actions_except_known_gap_are_registered,
+  tests/test_voz_queda_silenciosa.py::test_toda_queda_continua_no_log_tecnico.
+- grep por padrões de segredo (sk_, AKIA, github_token, secret, password) em arquivos .py, .ts, .js, .json não encontrou chaves de acesso reais, apenas IDs de tarefa em arquivos JSON internos.
+NAO FEITO: Não realizamos uma busca exaustiva por código morto ou falso sucesso além das falhas de teste identificadas; não medimos latência de voz nem cobertura de testes além do que foi relatado pela suite noturna.
+BLOQUEIO: Nenhum bloqueio identificado.
+PROXIMO: Analisar detalhadamente as 3 falhas de teste para entender se são regressões introduzidas pelas mudanças noturnas e se necessitam de corretação; verificar se há arquivos fora de escopo entre os untracked (como brain/, scripts/, etc.) que devam ser removidos ou movidos.

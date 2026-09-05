@@ -1,0 +1,20 @@
+{
+  "goal": "Implementar detecção de campos de senha por padrão de asteriscos (*****)",
+  "context": "Parte da tarefa de captura segura: detectar campos de senha por padrões de asteriscos antes do processamento de OCR",
+  "expected_behavior": [
+    "Identifica sequências de 4 ou mais asteriscos consecutivos como potencial campo de senha",
+    "Ignora sequências menores que 4 asteriscos para reduzir falsos positivos",
+    "Funciona com diferentes tipos de asterisco (* unicode U+002A)",
+    "Retorna retângulo delimitador ao redor da sequência detectada"
+  ],
+  "verification": [
+    "Teste unitário: test_detect_asterisk_password_four_plus()",
+    "Teste unitário: test_ignore_short_asterisk_sequences()",
+    "Teste real: processe screenshot com campo de senha contendo 6 asteriscos, verifique detecção",
+    "Teste de desempenho: <10ms para processar região 100x100px"
+  ],
+  "files_to_touch": [
+    "core/vision/pii_detector.py",
+    "tests/vision/test_password_detection.py"
+  ]
+}

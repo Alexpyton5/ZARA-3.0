@@ -1,0 +1,31 @@
+FEITO:
+- Executei testes de voz (barge-in, latência, responsividade, comandos, usabilidade, TTS, pipeline, conversação fluência) - todos passaram.
+- Executei testes de IPC (action safety, windows IPC eof, reminder IPC, telegram approval adapter) - todos passaram.
+- Executei testes de segurança (web security), inicialização (ambiente, build manifest, soul), autonomia (policy, levels, iniciativa), quality gate - todos passaram.
+- Gere relatório de cobertura com `coverage run` e `coverage report` focado nos módulos core, mostrando lacunas significativas em áreas de voz, IPC, Telegram, segurança e inicialização.
+- Não alterei nenhum arquivo, não executei a suíte completa (apenas testes direcionados leves).
+
+PROVA:
+- Comandos e saídas dos testes de voz: 123 passed in 4.89s (saída completa do pytest).
+  Exemplo de comando: .venv/Scripts/python.exe -m pytest -q tests/test_voice_barge_in.py tests/test_voice_latency_vad.py tests/test_gemini_live_voice_responsiveness.py tests/test_local_voice.py tests/test_voice_commands_proof.py tests/test_voice_usability.py tests/test_voice_tts_cascade.py tests/test_voice_not_configured_213.py tests/test_voice_pipeline_safety.py tests/test_voice_conversation_fluidity.py
+- Comandos e saídas dos testes de IPC/Telegram: 24 passed in 1.49s.
+  Exemplo de comando: .venv/Scripts/python.exe -m pytest -q tests/test_ipc_action_safety.py tests/test_windows_ipc_eof.py tests/test_reminder_ipc.py tests/test_telegram_approval_adapter.py
+- Comandos e saídas dos testes de segurança/inicialização/autonomia: 101 passed in 0.86s.
+  Exemplo de comando: .venv/Scripts/python.exe -m pytest -q tests/test_web_security.py tests/test_initiative.py tests/test_autonomy_policy.py tests/test_autonomy_levels.py tests/test_quality_gate.py
+- Cobertura combinada (304 passed, 1 skipped) mostrou 30% de cobertura total no core, com módulos críticos abaixo de 50%: 
+  core/actions/code.py (0%), core/actions/vision.py (0%), core/actions/scheduler.py (0%), core/actions/windows_radios.py (0%), core/aprovacao_remota.py (0%), core/audit_log.py (0%), core/diario_auto.py (0%), core/local_pipeline.py (0%), core/mcp/* (0%), core/obsidian_bridge.py (0%), core/plugin_loader.py (0%), core/routing_telemetry.py (0%), core/single_writer.py (0%), core/token_tracker.py (53%), core/trust_gate.py (0%), core/vigia_das_respostas.py (0%), core/windows_audio.py (0%), core/zara_orchestrator.py (19%), core/ipc_handlers.py (40%), core/gemini_live_voice.py (44%), core/voice_stt.py (55%), core/voice_tts.py (49%), core/pc_voice_intent.py (61%), core/file_voice_intent.py (62%).
+- Todos os comandos foram executados no diretório `C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002` usando `.venv\Scripts\python.exe`.
+
+NAO FEITO:
+- Não escrevi código nem documentos.
+- Não apaguei ou movi nenhum arquivo.
+- Não usei outra cópia da ZARA (apenas o root canônico).
+- Não executei a suíte completa de testes (evitei conforme instrução).
+
+BLOQUEIO:
+- Nenhum bloqueio identificado.
+
+PROXIMO:
+1. Criar testes para `core/local_pipeline.py` (0% de cobertura) - crítico para inicialização do pipeline de voz e tratamento de áudio.
+2. Criar testes para `core/ipc_handlers.py` (40% de cobertura) - focar em handlers de mensagens Telegram e comandos de voz para melhorar cobertura de IPC e Telegram.
+3. Criar testes para `core/aprovacao_remota.py` (0% de cobertura) - módulo de segurança relacionado à aprovação remota e validação de identidade, essencial para proteção contra comandos maliciosos.

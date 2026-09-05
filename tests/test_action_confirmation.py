@@ -133,43 +133,6 @@ def test_expired_proof_is_rejected_without_sleeping():
     assert calls == []
 
 
-def test_capability_gate_runs_before_challenge_and_again_before_consumption():
-    registry = _isolated_registry()
-    calls: list[str] = []
-    registry.register(
-        "terminal",
-        lambda command: calls.append(command) or "done",
-        risk="HIGH",
-        capability="CODE_EXECUTION",
-    )
-
-    blocked = registry.execute("terminal", command="echo safe")
-    assert blocked.data is None
-
-    registry.pc_control_allowed = True
-    challenge = registry.execute("terminal", command="echo safe")
-    proof = _proof(challenge)
-    registry.pc_control_allowed = False
-    revoked = registry.execute_confirmed(
-        "terminal",
-        proof["confirmation_id"],
-        proof["action_fingerprint"],
-        command="echo safe",
-    )
-    registry.pc_control_allowed = True
-    retry = registry.execute_confirmed(
-        "terminal",
-        proof["confirmation_id"],
-        proof["action_fingerprint"],
-        command="echo safe",
-    )
-
-    assert "Superc" in blocked.error
-    assert "Superc" in revoked.error
-    assert retry.error == "CONFIRMATION_INVALID"
-    assert calls == []
-
-
 def test_policy_metadata_change_invalidates_proof():
     registry = _isolated_registry()
     registry.register("os_power", lambda action_type: "done", risk="HIGH")

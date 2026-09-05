@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar suporte a fontes de código JetBrains Mono no Tesseract para melhorar OCR de programação",
+  "context": "Parte da tarefa de OCR otimizado para PT-BR técnico: treinar Tesseract com fontes de código comuns",
+  "expected_behavior": [
+    "Adiciona suporte a fonte JetBrains Mono regular, bold, italic e bold-italic",
+    "Melhora taxa de reconhecimento de caracteres de programação ({}()[];:,.+-*/=<>!",
+    "Reduz confusão entre caracteres similares em código (O/0, l/1/I, 5/S)",
+    "Funciona com tamanhos de fonte de 8pt a 24pt comuns em IDEs",
+    "Mantém compatibilidade com texto geral em português"
+  ],
+  "verification": [
+    "Teste unitario: test_jetbrains_mono_support_added_to_tesseract()",
+    "Teste unitario: test_improved_recognition_of_programming_characters()",
+    "Teste unitario: test_reduced_confusion_O_0_l_1_5_S()",
+    "Teste real: processe screenshot de código Java/JetBrains Mono, verifique >90% acurácia em identificação de tokens",
+    "Teste de regressão: confirme que OCR de texto geral não foi degradado"
+  ],
+  "files_to_touch": [
+    "core/vision/ocr_processor.py",
+    "core/vision/technical_fonts/jetbrains_mono/",
+    "tests/vision/test_jetbrains_mono_ocr.py"
+  ]
+}

@@ -6,13 +6,27 @@ from __future__ import annotations
 import json
 import os
 import platform
-import re
 import sys
 from datetime import datetime
 
 import psutil
 
 from core.action_registry import ActionResult, action, get_registry
+
+
+@action(name="system_time", category="system", description="Read the local system clock", capability="READ_ONLY")
+def system_time_action() -> ActionResult:
+    """Return the current timezone-aware local clock without model inference."""
+    observed = datetime.now().astimezone()
+    return ActionResult(
+        success=True,
+        output=f"Agora são {observed:%H:%M}.",
+        data={
+            "local_iso": observed.isoformat(),
+            "timezone": observed.tzname() or "LOCAL",
+            "verified": True,
+        },
+    )
 
 
 @action(
@@ -30,6 +44,13 @@ from core.action_registry import ActionResult, action, get_registry
 def system_info_action(detailed: bool = False) -> ActionResult:
     """Get system information."""
     try:
+        boot_timestamp = psutil.boot_time()
+        battery = psutil.sensors_battery()
+        adapters = []
+        for name, stats in psutil.net_if_stats().items():
+            adapters.append({"name": name, "is_up": bool(stats.isup), "speed_mbps": int(stats.speed or 0), "mtu": int(stats.mtu or 0)})
+        system_drive = os.environ.get("SystemDrive", "C:") + os.sep if platform.system() == "Windows" else os.sep
+        disk = psutil.disk_usage(system_drive)
         info = {
             "platform": platform.system(),
             "platform_version": platform.version(),
@@ -38,7 +59,18 @@ def system_info_action(detailed: bool = False) -> ActionResult:
             "processor": platform.processor(),
             "python_version": sys.version.split()[0],
             "hostname": platform.node(),
-            "boot_time": datetime.fromtimestamp(psutil.boot_time()).isoformat(),
+            "boot_time": datetime.fromtimestamp(boot_timestamp).isoformat(),
+            "uptime_seconds": max(0, int(datetime.now().timestamp() - boot_timestamp)),
+            "battery": None if battery is None else {
+                "percent": float(battery.percent),
+                "plugged": bool(battery.power_plugged),
+                "seconds_left": None if battery.secsleft in {psutil.POWER_TIME_UNKNOWN, psutil.POWER_TIME_UNLIMITED} else int(battery.secsleft),
+            },
+            "network": {
+                "connected": any(adapter["is_up"] and not adapter["name"].casefold().startswith("loopback") for adapter in adapters),
+                "adapters": adapters,
+            },
+            "disk": {"path": system_drive, "total": disk.total, "used": disk.used, "free": disk.free, "percent": disk.percent},
         }
 
         if detailed:
@@ -238,62 +270,39 @@ def system_kill_action(pid: int, force: bool = False) -> ActionResult:
         return ActionResult(success=False, error=str(e))
 
 
-_SENSITIVE_ENV = re.compile(
-    r"(API[_-]?KEY|SECRET|PASSWORD|TOKEN|PASSWD|CREDENTIAL|AUTH|PRIVATE[_-]?KEY|"
-    r"OPENAI|GEMINI|GROQ|NVIDIA|ANTHROPIC|OPENROUTER|GOOGLE_API|DEEPSEEK)",
-    re.IGNORECASE,
-)
-
-def _redact_env(env: dict) -> dict:
-    """Return a copy with sensitive values redacted (never expose secrets)."""
-    out = {}
-    for k, v in env.items():
-        if _SENSITIVE_ENV.search(k):
-            out[k] = "[REDACTED]" if v else v
-        else:
-            out[k] = v
-    return out
-
-
 @action(
     name="system_env",
     category="system",
-    description="Get or set environment variables",
+    description="Set an environment variable for this process. Reading environment "
+    "variables back is never allowed, regardless of variable name — there is no "
+    "reliable pattern to tell secret names from public ones, so ZARA never echoes "
+    "or lists environment values.",
+    risk="MEDIUM",
+    capability="CODE_EXECUTION",
     parameters={
         "type": "object",
         "properties": {
-            "var_name": {"type": "string", "description": "Variable name (omit to list all)"},
-            "value": {"type": "string", "description": "Value to set (omit to get)"},
+            "var_name": {"type": "string", "description": "Variable name to set"},
+            "value": {"type": "string", "description": "Value to set"},
         },
         "required": [],
     },
 )
 def system_env_action(var_name: str = "", value: str = "") -> ActionResult:
-    """Get or set environment variables. Sensitive values are redacted."""
+    """Set an environment variable. Never reads or echoes values back."""
+    if not var_name or not value:
+        # No write requested (or incomplete) -- refuse the read path outright.
+        # ZARA_TEST_PUBLIC_NAME=... calls with value set skip this branch.
+        return ActionResult(
+            success=False,
+            error="ENVIRONMENT_READ_BLOCKED",
+            data=None,
+        )
+
     try:
-        if not var_name:
-            # List all (redacted)
-            env = _redact_env(dict(os.environ))
-            return ActionResult(
-                success=True,
-                output=json.dumps(env, indent=2),
-                data=env
-            )
-
-        if not value:
-            # Get (redacted)
-            val = os.environ.get(var_name)
-            if val is None:
-                return ActionResult(success=False, error=f"Variable {var_name} not set")
-            if _SENSITIVE_ENV.search(var_name):
-                return ActionResult(success=True, output="[REDACTED]", data={var_name: "[REDACTED]"})
-            return ActionResult(success=True, output=val, data={var_name: val})
-
-        # Set
         os.environ[var_name] = value
-        return ActionResult(success=True, output=f"Set {var_name}=[REDACTED]" if _SENSITIVE_ENV.search(var_name) else f"Set {var_name}={value}")
-
+        return ActionResult(success=True, output=f"Variável {var_name} definida.", data=None)
     except Exception as e:
-        return ActionResult(success=False, error=str(e))
+        return ActionResult(success=False, error=str(e), data=None)
 
 get_registry()

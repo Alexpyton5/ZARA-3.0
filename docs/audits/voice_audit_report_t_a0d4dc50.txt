@@ -1,0 +1,32 @@
+Auditoria de voz estilo JARVIS da ZARA (continuidade 171)
+===========================================================
+
+Fluxo inspecionado:
+- Microfone -> Gemini Live -> alto-falante (via PortAudio ou Electron renderer)
+- Wake word: gate Vosk local desativado por padrão; detecção por transcrição em ipc_handlers._on_gemini_live_turn (_WAKE_PREFIX_RE)
+- Barge-in: microfone aberto continuamente; interrupção detectada pelo VAD do servidor; tratamento em GeminiLiveVoice._receive_loop (interrompe fala, reseta estado, acorda interrupt_speech)
+- Reconexão: sessão pode ser retomada via session_resumption_update (linhas 839-843); tratamento de go_away (linhas 845-846)
+- Resposta falada: modo de áudio configurável (audio_transport); renderer usa AEC do Chromium; eco mitigado por looks_like_assistant_echo e filtro de stop words
+- Métricas: contagem de checks, detecções e latência do wake word (mesmo quando desativado, código preparado)
+- Estado: controle de turno (utterance_open, turn_route_decided, turn_direct, turn_echo_suspect, etc.) para evitar eco e manter ordem
+- Timeout de início: tratamento de VOICE_START_TIMEOUT sem bloquear loop de eventos (teste test_blocked_audio_open_times_out_without_blocking_event_loop)
+
+Testes existentes:
+- tests/test_voice_barge_in.py: 4 testes aprovados (barge-in imediato, reset de estado, turn_echo_suspect, limpeza de filas)
+- tests/test_gemini_live_voice_responsiveness.py: testes de timeout de áudio, roteamento de wake, comando único, ignorar fala sem wake, parada por comando de voz, interrupt manual, callback de interrupção
+
+Lacunas comprovadas (sem alteração de código):
+1. Não há teste explícito para wake word em modo local (wake_word_enabled=True) via api_keys.json.
+2. Não há teste de reconexão após perda de rede (simular erro e recuperação).
+3. Não há teste de latência física (microfone real, áudio real) para garantir resposta <500ms (alvo de produto).
+4. Não há teste que verifique o cancelamento de eco no modo renderer (garantir que fala da assistente não seja processada como entrada).
+5. Cobertura de testes para módulo gemini_live_voice é baixa (conforme relatórios de qualidade).
+
+Próximos passos sugeridos (cartões pequenos):
+- Criar teste para wake_word_mode: "local" garantindo que não corta início do comando.
+- Criar teste de reconexão: simular erro de rede durante sessão e verificar recuperação.
+- Criar teste de latência com setup físico (microfone e alto-falante) para validar resposta <500ms (não estimar).
+- Criar teste de eco no modo renderer: verificar que fala da assistente não é tratada como entrada do usuário.
+- Enriquecer suite de testes para melhorar cobertura de gemini_live_voice (mínimo: teste de start/stop, estado de conexão, métricas de wake word).
+
+Nenhum arquivo foi alterado; apenas inspeção e relatório.

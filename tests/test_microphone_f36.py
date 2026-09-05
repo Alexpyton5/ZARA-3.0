@@ -1,0 +1,347 @@
+"""
+Tests for F3.6: Microphone absent or denied without freezing ZARA.
+
+These tests verify that:
+1. Microphone permission denied errors are handled gracefully
+2. Missing microphone errors are handled gracefully
+3. ZARA continues operating without freezing
+4. No retry loops on permanent failures
+"""
+
+import asyncio
+import sys
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
+import pytest
+
+# Add project root to path
+sys.path.insert(0, "/c/Users/alexp/Downloads/ZARA 3.0 CLEAN 002")
+
+from core.gemini_live_voice import (
+    GeminiLiveVoice,
+    GeminiLiveVoiceConfig,
+)
+from core.voice_stt import (
+    AudioInput,
+    VoiceConfig,
+    VoiceNotConfiguredError,
+    VoicePipeline,
+)
+
+
+class TestMicrophoneMissingOrDenied:
+    """Tests for microphone missing or denied scenarios."""
+
+    @pytest.fixture
+    def voice_config(self):
+        return GeminiLiveVoiceConfig(api_key="test", audio_transport="local")
+
+    @pytest.mark.asyncio
+    async def test_microphone_permission_denied_graceful_failure(self, voice_config, monkeypatch):
+        """Test that microphone permission denied fails gracefully without freezing ZARA."""
+        _install_live_dependencies(monkeypatch)
+        voice = GeminiLiveVoice(voice_config)
+
+        # Mock client.aio.live.connect to succeed
+        session = _WaitingSession()
+        fake_client = SimpleNamespace()
+        fake_client.aio = SimpleNamespace()
+        fake_client.aio.live = SimpleNamespace()
+        fake_client.aio.live.connect = Mock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=session), __aexit__=AsyncMock()))
+        
+        import google.genai as genai
+        monkeypatch.setattr(genai, "Client", Mock(return_value=fake_client))
+        
+        # Mock _open_streams to return False with permanent failure flag set
+        def failing_open_streams(_sd, _gen):
+            import sounddevice as sd
+            voice._mic_permanent_failure = True
+            return False
+        
+        monkeypatch.setattr(voice, "_open_streams", failing_open_streams)
+        
+        # Start should fail gracefully with clear error
+        with pytest.raises(RuntimeError, match="VOICE_MIC_PERMANENT_FAILURE"):
+            await voice.start(timeout=0.1)
+        
+        # Verify voice is not active
+        assert voice.active is False
+        assert voice.connected is False
+
+    @pytest.mark.asyncio
+    async def test_microphone_missing_graceful_failure(self, voice_config, monkeypatch):
+        """Test that missing microphone fails gracefully without freezing ZARA."""
+        _install_live_dependencies(monkeypatch)
+        voice = GeminiLiveVoice(voice_config)
+
+        # Mock client connection
+        session = _WaitingSession()
+        fake_client = SimpleNamespace()
+        fake_client.aio = SimpleNamespace()
+        fake_client.aio.live = SimpleNamespace()
+        fake_client.aio.live.connect = Mock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=session), __aexit__=AsyncMock()))
+        
+        import google.genai as genai
+        monkeypatch.setattr(genai, "Client", Mock(return_value=fake_client))
+        
+        # Mock _open_streams to return False with permanent failure flag set
+        def failing_open_streams(_sd, _gen):
+            import sounddevice as sd
+            voice._mic_permanent_failure = True
+            return False
+        
+        monkeypatch.setattr(voice, "_open_streams", failing_open_streams)
+        
+        # Start should fail gracefully
+        with pytest.raises(RuntimeError, match="VOICE_MIC_PERMANENT_FAILURE"):
+            await voice.start(timeout=0.1)
+        
+        # Verify voice is not active
+        assert voice.active is False
+
+    @pytest.mark.asyncio
+    async def test_microphone_invalid_device_graceful_failure(self, voice_config, monkeypatch):
+        """Test that invalid device ID fails gracefully."""
+        _install_live_dependencies(monkeypatch)
+        voice = GeminiLiveVoice(voice_config)
+
+        # Mock client connection
+        session = _WaitingSession()
+        fake_client = SimpleNamespace()
+        fake_client.aio = SimpleNamespace()
+        fake_client.aio.live = SimpleNamespace()
+        fake_client.aio.live.connect = Mock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=session), __aexit__=AsyncMock()))
+        
+        import google.genai as genai
+        monkeypatch.setattr(genai, "Client", Mock(return_value=fake_client))
+        
+        # Mock _open_streams to return False with permanent failure flag set
+        def failing_open_streams(_sd, _gen):
+            import sounddevice as sd
+            voice._mic_permanent_failure = True
+            return False
+        
+        monkeypatch.setattr(voice, "_open_streams", failing_open_streams)
+        
+        with pytest.raises(RuntimeError, match="VOICE_MIC_PERMANENT_FAILURE"):
+            await voice.start(timeout=0.1)
+        
+        assert voice.active is False
+
+    @pytest.mark.asyncio
+    async def test_audio_input_permission_denied(self, monkeypatch):
+        """Test AudioInput handles permission denied gracefully."""
+        config = VoiceConfig()
+        
+        # Mock sounddevice to raise PortAudioError
+        import sounddevice as sd
+        
+        class MockSoundDevice:
+            PortAudioError = sd.PortAudioError
+            
+            @staticmethod
+            def RawInputStream(*args, **kwargs):
+                raise sd.PortAudioError("Permission denied", -9985)
+        
+        monkeypatch.setattr("core.voice_stt.sd", MockSoundDevice())
+        
+        audio = AudioInput(config)
+        
+        with pytest.raises(VoiceNotConfiguredError, match="AUDIO_INPUT_FAILED.*permanent=True"):
+            audio.start()
+
+    @pytest.mark.asyncio
+    async def test_audio_input_device_unavailable(self, monkeypatch):
+        """Test AudioInput handles device unavailable gracefully."""
+        config = VoiceConfig()
+        
+        import sounddevice as sd
+        
+        class MockSoundDevice:
+            PortAudioError = sd.PortAudioError
+            
+            @staticmethod
+            def RawInputStream(*args, **kwargs):
+                raise sd.PortAudioError("Device unavailable", -9985)
+        
+        monkeypatch.setattr("core.voice_stt.sd", MockSoundDevice())
+        
+        audio = AudioInput(config)
+        
+        with pytest.raises(VoiceNotConfiguredError, match="AUDIO_INPUT_FAILED.*permanent=True"):
+            audio.start()
+
+    @pytest.mark.asyncio
+    async def test_voice_pipeline_handles_audio_start_failure(self, monkeypatch):
+        """Test VoicePipeline handles audio start failure gracefully."""
+        config = VoiceConfig()
+        config.vosk_model_path = ""  # Will fail to load
+        
+        # Mock VoskSTT to avoid model loading
+        class MockVosk:
+            def __init__(self, config):
+                pass
+            def recognize(self, data):
+                return None
+            def partial_recognize(self, data):
+                return None
+            def reset(self):
+                pass
+        
+        monkeypatch.setattr("core.voice_stt.VoskSTT", MockVosk)
+        
+        # Mock AudioInput to fail
+        import sounddevice as sd
+        
+        class MockSoundDevice:
+            PortAudioError = sd.PortAudioError
+            
+            @staticmethod
+            def RawInputStream(*args, **kwargs):
+                raise sd.PortAudioError("Permission denied", -9985)
+        
+        monkeypatch.setattr("core.voice_stt.sd", MockSoundDevice())
+        
+        from core.voice_stt import VoicePipeline
+        
+        # Create pipeline with error callback
+        errors = []
+        def on_error(e):
+            errors.append(e)
+        
+        pipeline = VoicePipeline(
+            config,
+            on_wake=lambda: None,
+            on_speech=lambda t: None,
+            on_partial=lambda t: None,
+            on_level=lambda l: None,
+        )
+        # Add on_error attribute
+        pipeline.on_error = on_error
+        
+        # Start should not crash
+        pipeline.start()
+        
+        # Give it time to try starting
+        await asyncio.sleep(0.1)
+        
+        # Pipeline should be in ERROR state
+        assert pipeline.state == "ERROR"
+        assert len(errors) == 1
+        assert "AUDIO_INPUT_FAILED" in str(errors[0])
+
+    @pytest.mark.asyncio
+    async def test_local_engine_pyaudio_failure(self, monkeypatch):
+        """Test LocalVoiceEngine handles PyAudio failure gracefully."""
+        from voice.local_engine import LocalVoiceEngine
+        from voice.voice_manager import VoiceConfig as LocalVoiceConfig
+        
+        config = LocalVoiceConfig(
+            stt_model="base",
+            tts_engine="kokoro",
+            tts_voice="pf_dora",
+        )
+        
+        engine = LocalVoiceEngine()
+        
+        # Mock all init methods to succeed except _start_simple_loop
+        async def mock_init_whisper():
+            pass
+        async def mock_init_kokoro():
+            pass
+        async def mock_init_vad():
+            pass
+            
+        monkeypatch.setattr(engine, "_init_whisper", mock_init_whisper)
+        monkeypatch.setattr(engine, "_init_kokoro", mock_init_kokoro)
+        monkeypatch.setattr(engine, "_init_vad", mock_init_vad)
+        
+        await engine.initialize(config)
+        
+        # Mock pyaudio to fail
+        class MockPyAudio:
+            def __init__(self):
+                raise OSError("No audio input device")
+        
+        import voice.local_engine as le
+        # Mock the import inside _start_simple_loop
+        import builtins
+        original_import = builtins.__import__
+        
+        def mock_import(name, *args, **kwargs):
+            if name == "pyaudio":
+                mock_pyaudio = Mock()
+                mock_pyaudio.PyAudio = MockPyAudio
+                mock_pyaudio.paInt16 = 8
+                return mock_pyaudio
+            return original_import(name, *args, **kwargs)
+        
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        
+        # Start listening should handle failure gracefully
+        transcripts = []
+        async def on_transcript(text):
+            transcripts.append(text)
+        
+        await engine.start_listening(on_transcript, lambda: None)
+        
+        # Give it time to try
+        await asyncio.sleep(0.1)
+        
+        # Should not crash, should signal failure
+        assert engine.is_listening is True  # Still listening state, but no audio
+
+
+def _install_live_dependencies(monkeypatch):
+    """Install fake modules for google.genai and sounddevice."""
+    fake_genai = SimpleNamespace()
+    fake_types = SimpleNamespace()
+    fake_google = SimpleNamespace(genai=fake_genai)
+    
+    # Mock sounddevice
+    import sounddevice as sd
+    fake_sd = Mock()
+    fake_sd.PortAudioError = sd.PortAudioError
+    fake_sd.RawInputStream = Mock()
+    fake_sd.query_devices = Mock(return_value=[])
+    fake_sd.default = SimpleNamespace(device=(None, None))
+    
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+    fake_genai.types = fake_types
+    # Add Client to fake_genai
+    fake_genai.Client = Mock()
+    
+    # Mock types
+    fake_types.LiveConnectConfig = Mock()
+    fake_types.SpeechConfig = Mock()
+    fake_types.VoiceConfig = Mock()
+    fake_types.PrebuiltVoiceConfig = Mock()
+    fake_types.AudioTranscriptionConfig = Mock()
+    fake_types.ContextWindowCompressionConfig = Mock()
+    fake_types.SlidingWindow = Mock()
+    fake_types.SessionResumptionConfig = Mock()
+    fake_types.Content = Mock()
+    fake_types.Part = Mock()
+    fake_types.RealtimeInputConfig = Mock()
+    fake_types.AutomaticActivityDetection = Mock()
+    fake_types.EndSensitivity = SimpleNamespace(
+        END_SENSITIVITY_HIGH=1,
+        END_SENSITIVITY_LOW=2
+    )
+    fake_types.Blob = Mock()
+
+
+class _WaitingSession:
+    def __init__(self):
+        self.release = asyncio.Event()
+
+    async def receive(self):
+        await self.release.wait()
+        if False:
+            yield None
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-xvs"])

@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar deteção de barras de rolagem (scrollbar) vertical e horizontal",
+  "context": "Parte da tarefa de detetor de elementos UI: identificar elementos de navegação",
+  "expected_behavior": [
+    "Detecta barras de rolagem vertical à direita ou à esquerda do conteúdo",
+    "Detecta barras de rolagem horizontal na parte inferior ou superior do conteúdo",
+    "Identifica componentes: trilho, polegar (thumb) e setas de incremento/decremento",
+    "Funciona com temas claro e escuro do Windows",
+    "Retorna coordenadas, tamanho, orientação e estado da barra de rolagem detectada"
+  ],
+  "verification": [
+    "Teste unitario: test_detect_vertical_scrollbar_right_side()",
+    "Teste unitario: test_detect_horizontal_scrollbar_bottom()",
+    "Teste unitario: test_identify_scrollbar_components_track_thumb_arrows()",
+    "Teste real: processe screenshot com área de texto rolável, verifique deteção de barras de rolagem",
+    "Teste de desempenho: <60ms para processar região 400x400px contendo área de texto com scrollbars"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "tests/vision/test_scrollbar_detection.py"
+  ]
+}

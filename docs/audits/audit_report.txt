@@ -1,0 +1,75 @@
+AUDITORIA DE PROATIVIDADE E MEMORIA DA ZARA [continuidade 147]
+
+=== ACHEI (Concrete findings) ===
+
+1. PROATIVIDADE (Initiative Engine - core/initiative/):
+   - Engine checks: silent period (23h-8h), max interruptions/hour (default: 1), utility threshold (default: 0.7), anti-repetition history (default: 100 entries)
+   - _get_utility() returns hardcoded 0.5 - needs real implementation based on environment/memory context
+   - _get_advice() returns static "Lembrete: basta um pequeno passo para começar." - needs real pattern-based generation
+   - _is_recent_advice() uses SHA256 hashing for deduplication, with time-based cutoff
+   - Repetition limit: max_interruptions_per_hour=1 is very restrictive for real use
+
+2. MEMORIA (Aprendizado - core/aprendizado.py):
+   - Episode tracking: registers pedido->acao->resultado->reacao cycle
+   - Lesson learning: forma+acao pairs with acertos/erros counters; lessons only trigger when erros > acertos
+   - Daily close (fechar_o_dia): summarises actions, categorizes as acertou/errou, writes to diario table
+   - Project state absorption (absorver_do_projeto): only captures decision/result markers (consertei, está pronto, etc.)
+   - Historia/resumo: growing memory that persists across days via diario table
+   - Sugestoes de atalho: generates shortcuts when a command pattern is used 3+ times
+
+3. VAD E Wake Word (gemini_live_voice.py):
+   - Vosk wake detector lazy-loaded; gate OFF by default (wake_word_enabled=False)
+   - Wake word via transcricao em ipc_handlers._on_gemini_live_turn (no local gate cutting audio)
+   - VAD: silencia_ms=300, padding_ms=100, fim_sensivel=True
+   - Echo tail: echo_speech_tail_seconds=0.8s preserves barge-in
+   - Metrics tracked: wake_word_checks, detections, latency_ms total/count
+
+4. AEC (Renderer mode):
+   - ZARA-AEC-RENDERER-001: audio transport "local" feeds far-end to Chromium AEC
+   - Measured: echo abaixo do ruido da sala, voz do Alex +30dB, 0 interrupcoes do servidor no piso do eco
+
+5. GAPS IDENTIFICADOS:
+   - Initiative _get_utility() returns 0.5 hardcoded - no real context awareness
+   - Initiative max_interruptions_per_hour=1 is extremely restrictive
+   - No real advice generation based on learned patterns
+   - Aprendizado lesson trigger: only when erros > acertos (never triggers if balanced)
+   - Wake word gate was previously ON and caused: bad audio (buffer cutting), latency (local recognition step), barge-in impossible (gate closed during ZARA speaking)
+
+=== PROVA (Evidence - commands and outputs) ===
+
+Files audited (all in C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002):
+- core/initiative/engine.py — initiative loop, checks, advice, repetition
+- core/initiative/config.py — configuration defaults
+- core/aprendizado.py — episode tracking, lessons, diario close
+- core/gemini_live_voice.py — config, wake gate, VAD, AEC, metrics
+- core/autonomy_engine.py — task states, leases, checkpoints, completion
+- .mypy_cache/ — type checking artifacts
+- /c/Users/alexp/AppData/Local/ZARA3/data/autonomy/zara_autonomy.db — task db (schema verified)
+
+Comandos executados:
+- python3 check_task.py — verified DB schema columns
+- ls /c/Users/alexp/Downloads/ZARA\ 3.0\ CLEAN\ 002/core/ — listed all source files
+- read_file on core/initiative/engine.py — read initiative engine source
+- read_file on core/aprendizado.py — read learning system source
+- read_file on core/gemini_live_voice.py — read voice system source (first 500+ lines)
+
+=== NAO FEITO (What was not accomplished) ===
+- Real utility calculation for initiative engine (currently hardcoded 0.5)
+- Real advice generation based on learned patterns
+- Vosk model presence check in the system
+- Live voice session execution (requires GEMINI_API_KEY)
+- Interruption limit reduction from 1 to more realistic value
+- Silent period configuration beyond defaults
+
+=== BLOQUEIO (Blocks/limitations) ===
+- No GEMINI_API_KEY configured — live voice cannot be started
+- Vosk PT model not verified present in user_data_dir()
+- Initiative engine real implementation requires rebuild, not just config changes
+- Background computer use restrictions prevent desktop automation
+
+=== PROXIMO (Next steps) ===
+- Implement real _get_utility() based on environment context and learned patterns
+- Reduce max_interruptions_per_hour from 1 to 3-5 for practical use
+- Implement _get_advice() based on aprendizado lessons
+- Verify Vosk model availability and enable wake_word_enabled if appropriate
+- Test daily close (fechar_o_dia) cycle with real episode registrations

@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar análise de entradas de diário para identificar padrões temporais de comandos",
+  "context": "Parte do sistema de antecipação: descobrir quando o usuário tende a fazer certos pedidos",
+  "expected_behavior": [
+    "Analisa entradas de diário dos últimos 30 dias para encontrar padrões horários",
+    "Identifica blocos de tempo com alta probabilidade de tipos específicos de comandos",
+    "Exige mínimo de 3 ocorrências em dias diferentes para considerar padrão estabelecido",
+    "Fornece probabilidade condicional: P(comando|horário_dia)",
+    "Atualiza padrões continuamente à medida que novos dados de diário ficam disponíveis"
+  ],
+  "verification": [
+    "Teste unitario: test_hourly_command_pattern_detection_from_diary()",
+    "Teste unitario: test_minimum_three_occurrences_required_for_pattern()",
+    "Teste unitario: test_conditional_probability_calculation()",
+    "Teste real: após 10 dias de uso com padrão conhecido, verifique deteção do padrão",
+    "Teste de atualização: confirme que padrão se ajusta quando comportamento do usuário muda"
+  ],
+  "files_to_touch": [
+    "core/anticipation.py",
+    "core/diary.py",
+    "tests/anticipation/test_temporal_patterns.py"
+  ]
+}

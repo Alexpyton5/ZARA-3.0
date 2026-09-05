@@ -1,0 +1,43 @@
+FEITO:
+- Verifiquei o status do repositório canonical em C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002.
+- Examinei as mudanças staged e not staged via git status e git diff --stat.
+- Revisei os diffs específicos de core/ipc_handlers.py e core/actions/os_ops.py.
+- Examinei o script nightly_regression.py e o executei.
+- Verifiquei se o .gitignore contém padrões para arquivos %TEMP%.
+
+PROVA:
+- git status output:
+  On branch backup/estado-20260820-1143
+  Changes to be committed:
+    new file:   .known_failures.json
+    renamed:    core/identity.py -> core/_identity_tmp.py
+    new file:   nightly_regression.py
+  Changes not staged for commit: (list of modified/deleted files)
+  Untracked files: (%TEMP%voz_*.txt, .github/, AUDITORIA_RESULTS.md, etc.)
+- git diff --stat output: 68 files changed, 1535 insertions(+), 6284 deletions(-)
+- nightly_regression.py execution output:
+  Running nightly regression suite...
+  Total tests collected: 1399
+  Tests run (approx): 10
+  Failed tests: 10
+  [lista das 10 novas falhas]
+  Known failures (baseline): 3
+  NEW FAILURES DETECTED: 10
+  3 test(s) now fixed
+- grep -n "%TEMP%" .gitignore retornou sem correspondência (padrão não presente).
+
+NAO FEITO:
+- Não realizei varredura por secrets (chaves de API, tokens) no código.
+- Não verifiquei presença de código morto (comentado ou inacessível).
+- Não procurei por afirmações de falso sucesso (ex.: mensagens de sucesso sem verificação de pós‑condição).
+- Não examinei cada arquivo individualmente para garantir que estejam dentro do escopo definido.
+
+BLOQUEIO:
+Nenhum.
+
+PROXIMO:
+1. Escanear o repositório por padrões comuns de secrets (ex.: sk_live, ak_, sg_, tokens) usando grep ou ferramenta semelhante e relatar quaisquer ocorrências.
+2. Procurar por código comentado ou blocos inacessíveis que possam indicar código morto.
+3. Verificar mensagens de retorno ou logs que afirmem sucesso sem checagem de resultado real (falso sucesso).
+4. Atualizar .gitignore para incluir padrões de arquivos temporários de voz (%TEMP%voz_*.txt e similares) a fim de evitar que tais arquivos apareçam como untracked.
+5. Executar novamente a suite de regressão noturna após eventuais ajustes de baseline, se apropriado.

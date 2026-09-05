@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar deteção de campos de entrada de texto (textbox, input field)",
+  "context": "Parte da tarefa de detetor de elementos UI: identificar campos onde usuário pode digitar",
+  "expected_behavior": [
+    "Detecta campos de entrada de texto simples (uma linha)",
+    "Detecta áreas de texto múltiplas linhas (multiline textbox)",
+    "Ignora rótulos e texto estático próximo aos campos",
+    "Funciona com campos com e sem borda visível",
+    "Retorna coordenadas, tamanho e tipo do campo de entrada detectado"
+  ],
+  "verification": [
+    "Teste unitario: test_detect_single_line_textbox()",
+    "Teste unitario: test_detect_multiline_textbox()",
+    "Teste unitario: test_ignore_labels_and_static_text()",
+    "Teste real: processe screenshot com formulário contendo campos de texto, verifique deteção",
+    "Teste de desempenho: <50ms para processar região 300x300px contendo campos de entrada"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "tests/vision/test_text_input_detection.py"
+  ]
+}

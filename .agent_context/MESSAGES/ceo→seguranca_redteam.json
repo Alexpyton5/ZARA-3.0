@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "seguranca_redteam",
+  "timestamp": "2026-08-19T14:35:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-007",
+  "summary": "Auditoria de segurança completa",
+  "details": "Analise todo o codebase (core/, frontend/, integrations/, config/). Documente em .agent_context/REVIEWS/security_audit.md:\n1. Prompt injection: entrada de voz, Telegram, ponte Claude/Codex, IPC\n2. Permissões: ações perigosas (delete, power, admin), HWND validation\n3. Dados sensíveis: api_keys.json, tokens Telegram, chaves Gemini/Groq\n4. Supply chain: requirements.txt, dependências, PyInstaller bundled\n5. IPC hardening: validação de mensagens Electron↔Python\n6. Telemetria/privacidade: o que sai da máquina\n7. Classificação de vulnerabilidades (CRITICAL/HIGH/MEDIUM/LOW)\n8. Mitigações recomendadas por item\nDependência: TASK-001 para contexto de código.",
+  "recommended_next": "Após TASK-001, foco em prompt injection via voz e IPC"
+}

@@ -13,6 +13,8 @@
   "include": [
     "src/reminderEvents.ts",
     "src/renderer/lib/chatHistory.ts",
+    "src/renderer/lib/autoScroll.ts",
+    "src/renderer/lib/aecAudio.ts",
     "tests/**/*.ts"
   ]
 }

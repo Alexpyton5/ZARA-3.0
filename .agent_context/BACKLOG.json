@@ -1,0 +1,80 @@
+{
+  "current_task": "TASK-001",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Mapear arquitetura atual da ZARA 3.0 (core, frontend, actions, voice pipeline)",
+      "assignee": "pesquisador_reverso",
+      "status": "in_progress",
+      "priority": "P0",
+      "depends_on": [],
+      "deliverable": ".agent_context/RESEARCH_INSIGHTS.md#SECAO-ARQUITETURA-ATUAL",
+      "started_at": "2026-08-19T14:35:00-03:00"
+    },
+    {
+      "id": "TASK-002",
+      "title": "Pesquisar skills Hermes úteis para ZARA (voz, automação, UI, agentes)",
+      "assignee": "pesquisador_reverso",
+      "status": "in_progress",
+      "priority": "P0",
+      "depends_on": [],
+      "deliverable": ".agent_context/RESEARCH_INSIGHTS.md#SECAO-SKILLS-HERMES",
+      "started_at": "2026-08-19T14:35:00-03:00"
+    },
+    {
+      "id": "TASK-003",
+      "title": "Auditar bugs conhecidos no FINAL_GAPS_ROADMAP e CADERNO-DE-TAREFAS",
+      "assignee": "qa_tester",
+      "status": "pending",
+      "priority": "P0",
+      "depends_on": [],
+      "deliverable": ".agent_context/RESEARCH_INSIGHTS.md#SECAO-BUGS-CONHECIDOS"
+    },
+    {
+      "id": "TASK-004",
+      "title": "Definir requisitos de interface moderna (tokens, componentes, HUD, Orb)",
+      "assignee": "designer_ui_ux",
+      "status": "pending",
+      "priority": "P1",
+      "depends_on": ["TASK-001"],
+      "deliverable": ".agent_context/RESEARCH_INSIGHTS.md#SECAO-UI-MODERNA"
+    },
+    {
+      "id": "TASK-005",
+      "title": "Projetar arquitetura MCP para automação Windows (volume, janelas, browser)",
+      "assignee": "arquiteto_mcp",
+      "status": "pending",
+      "priority": "P1",
+      "depends_on": ["TASK-001"],
+      "deliverable": ".agent_context/RESEARCH_INSIGHTS.md#SECAO-MCP-ARCH"
+    },
+    {
+      "id": "TASK-006",
+      "title": "Planejar pipeline de voz (Gemini Live + STT local + TTS neural + wake word)",
+      "assignee": "pesquisador_ux",
+      "status": "pending",
+      "priority": "P0",
+      "depends_on": ["TASK-001"],
+      "deliverable": ".agent_context/RESEARCH_INSIGHTS.md#SECAO-VOICE-PIPELINE"
+    },
+    {
+      "id": "TASK-007",
+      "title": "Auditoria de segurança (prompt injection, permissões, dados sensíveis)",
+      "assignee": "seguranca_redteam",
+      "status": "pending",
+      "priority": "P1",
+      "depends_on": ["TASK-001"],
+      "deliverable": ".agent_context/REVIEWS/security_audit.md"
+    },
+    {
+      "id": "TASK-008",
+      "title": "Criar novos agentes especialistas se necessário (ex: AUDIO_ENGINEER, MCP_BUILDER)",
+      "assignee": "ceo_mentor",
+      "status": "pending",
+      "priority": "P2",
+      "depends_on": ["TASK-001", "TASK-002"],
+      "deliverable": ".agent_context/MESSAGES/ceo→nova-criacao-agentes.json"
+    }
+  ],
+  "updated_at": "2026-08-19T14:40:00-03:00"
+}

@@ -1,0 +1,4 @@
+{
+  "raciocinio_livre_fallback_texto": false,
+  "_comentario": "Etapa 3 do raciocinio livre (docs/audits/PROPOSTA_RACIOCINIO_LIVRE_2026-08-28.md). Mude para true e salve para ligar -- nao precisa reiniciar a Zara nem gerar build novo. So funciona por TEXTO ainda, nao por voz (Etapa 4)."
+}

@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar sistema de notificação que alerta quando sincronização estiver atrasada",
+  "context": "Parte da multi-dispositivo básico: manter usuário informado sobre estado de sincronização",
+  "expected_behavior": [
+    "Monitora tempo desde última sincronização bem-sucedida",
+    "Emite aviso suave quando mais de 24 horas se passaram sem sincronização",
+    "Aumenta urgência do aviso após 72 horas sem sincronização",
+    "Permite configuração dos limiares de tempo para diferentes níveis de notificação",
+    "Notificação é não intrusiva (toast, balão, ou entrada silenciosa no diário)"
+  ],
+  "verification": [
+    "Teste unitario: test_notification_triggered_after_24_hours_without_sync()",
+    "Teste unitario: test_increased_urgency_after_72_hours()",
+    "Teste unitario: test_configurable_threshholds_for_notification_levels()",
+    "Teste real: impedir sincronização por 30 horas, verifique que notificação suave é emitida",
+    "Teste de configurabilidade: confirme que limiares podem ser ajustados conforme necessário"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_notifier.py",
+    "tests/sync/test_sync_notification.py"
+  ]
+}

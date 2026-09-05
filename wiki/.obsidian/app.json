@@ -1,0 +1,24 @@
+{
+  "theme": "obsidian",
+  "cssTheme": "default",
+  "enabledCssSnippets": [],
+  "baseFontSize": 16,
+  "lineHeight": 1.6,
+  "translucency": false,
+  "nativeMenus": false,
+  "legacyEditor": false,
+  "livePreview": true,
+  "showLineNumber": true,
+  "showMargin": true,
+  "readableLineLength": true,
+  "strictLineBreaks": false,
+  "showFrontmatter": true,
+  "showTags": true,
+  "foldHeading": true,
+  "foldIndent": true,
+  "spellcheck": true,
+  "spellcheckLanguages": [
+    "pt-BR",
+    "en-US"
+  ]
+}

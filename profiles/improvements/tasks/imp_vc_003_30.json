@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar deteção de ícones da bandeja do sistema (system tray)",
+  "context": "Parte da tarefa de detetor de elementos UI: identificar elementos de notificação em segundo plano",
+  "expected_behavior": [
+    "Detecta ícones na área de notificação do Windows (bandeja do sistema)",
+    "Identifica ícones de aplicativos em segundo plano (antivírus, volume, rede, bateria)",
+    "Detecta sobreposições de notificação nos ícones (ex: indicador de nova mensagem)",
+    "Funciona com temas claro e escuro do Windows",
+    "Retorna coordenadas, tamanho, identificador do aplicativo e estado de cada ícone detectado"
+  ],
+  "verification": [
+    "Teste unitario: test_detect_system_tray_icons()",
+    "Teste unitario: test_identify_background_app_icons()",
+    "Teste unitario: test_detect_notification_overlays_on_icons()",
+    "Teste real: processe screenshot da área de notificação do Windows, verifique deteção de ícones",
+    "Teste de desempenho: <70ms para processar região 200x100px contendo bandeja do sistema"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "tests/vision/test_system_tray_icon_detection.py"
+  ]
+}

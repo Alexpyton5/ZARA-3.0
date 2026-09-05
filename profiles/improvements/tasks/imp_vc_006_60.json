@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar modo de aprendizado ativo que sugere experimentação segura quando limite suspeito",
+  "context": "Parte do sistema de conhecer limites: distinguir entre verdadeiro limite e falta de tentativa adequada",
+  "expected_behavior": [
+    "Quando limite suspeito mas não confirmado, sugere tentativa em ambiente controlado",
+    "Propõe variação de menor risco para testar hipótese (ex: usar arquivo de teste invece de documento real)",
+    "Fornece garantias de segurança: nada será modificado ou excluído durante experimento",
+    "Aprende com resultado do experimento para melhorar futuro julgamento de limite",
+    "Limita frequência de sugestões de experimentação para evitar sobrecarga do usuário"
+  ],
+  "verification": [
+    "Teste unitario: test_safe_experiment_suggested_when_limit_suspected()",
+    "Teste unitario: test_experiment_proposes_lower_risk_variation()",
+    "Teste unitario: test_safety_guarantees_for_controlled_experiment()",
+    "Teste real: quando limite incerto, verifique que sugestão de teste seguro é oferecida",
+    "Teste de aprendizado: confirme que sistema aprende com resultados dos experimentos sugeridos"
+  ],
+  "files_to_touch": [
+    "core/limit_tracker.py",
+    "core/aprendizado_suggestion_engine.py",
+    "tests/limit_tracker/test_active_learning_suggestion.py"
+  ]
+}

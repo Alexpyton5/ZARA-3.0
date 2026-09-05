@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar teste de acurácia que compara transcrição melhorada com transcrição padrão",
+  "context": "Parte do microfone mais preciso: validar objetivamente as melhorias implementadas",
+  "expected_behavior": [
+    "Compara texto transcrito com pipeline melhorado vs pipeline padrão (Gemini Live apenas)",
+    "Mede taxa de erro de palavra (WER) em conjunto de teste de fala brasileira",
+    "Relata melhoria percentual em acurácia (ex: '25% menos erros')",
+    "Executa automaticamente após cada atualização significativa do pipeline",
+    "Armazena histórico de resultados para deteção de regressões"
+  ],
+  "verification": [
+    "Teste unitario: test_word_error_rate_calculation()",
+    "Teste unitario: test_improvement_percentage_reporting()",
+    "Teste unitario: test_automatic_execution_after_pipeline_update()",
+    "Teste real: executar teste de acurácia, verifique que melhoria mensurável é detectada",
+    "Teste de deteção de regressão: confirme que pioria é identificada imediatamente"
+  ],
+  "files_to_touch": [
+    "core/voice/accuracy_tester.py",
+    "tests/voice/test_accuracy_improvement.py"
+  ]
+}

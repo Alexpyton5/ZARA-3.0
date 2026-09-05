@@ -1,0 +1,18 @@
+{
+  "voice_speaking": false,
+  "fala_interrompida": true,
+  "events": [
+    {
+      "type": "state-change",
+      "state": "LISTENING",
+      "level": null,
+      "speaking": null
+    },
+    {
+      "type": "voice-level",
+      "state": null,
+      "level": 0.0,
+      "speaking": false
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "quando": "20260812-193410",
+  "antes": {
+    "pydantic": "2.13.4",
+    "pydantic-core": "2.41.5",
+    "google-genai": "2.17.0",
+    "sounddevice": "0.5.5"
+  },
+  "depois": {
+    "pydantic": "2.13.4",
+    "pydantic-core": "2.46.4",
+    "google-genai": "2.17.0"
+  },
+  "rollback": "pip-freeze-antes-20260812-193410.txt",
+  "resultado": "google.genai importa"
+}

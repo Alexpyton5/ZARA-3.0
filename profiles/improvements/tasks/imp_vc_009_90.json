@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar teste de integridade que verifica consistência entre dispositivos após sincronização",
+  "context": "Parte da multi-dispositivo básico: garantir que sincronização produziu resultado correto",
+  "expected_behavior": [
+    "Após sincronização, verifica que todos os dispositivos têm versões equivalentes dos dados",
+    "Para aprendizado: confirma que nenhuma entrada foi perdida e conflitos foram resolvidos",
+    "Para diário: confirma que métricas foram combinadas corretamente e insights preservados",
+    "Executa automaticamente após cada ciclo de sincronização bem-sucedida",
+    "Registra falha de integridade como evento significativo para investigação"
+  ],
+  "verification": [
+    "Teste unitario: test_post_sync_consistency_check_across_devices()",
+    "Teste unitario: test_learning_entries_preserved_and_conflicts_resolved()",
+    "Teste unitario: test_diary_metrics_combined_and_insights_preserved()",
+    "Teste real: sincronizar dois dispositivos com dados conhecidos, verifique consistência",
+    "Teste de deteção de problemas: confirme que inconsistências são identificadas imediatamente"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_integrity_checker.py",
+    "tests/sync/test_sync_integrity.py"
+  ]
+}

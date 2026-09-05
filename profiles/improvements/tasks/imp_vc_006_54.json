@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar sugestão de abordagem alternativa quando limite conhecido for detectado",
+  "context": "Parte do sistema de conhecer limites: não apenas dizer que não sabe, mas ajudar a progredir",
+  "expected_behavior": [
+    "Quando limite conhecido, sugere até 2 abordagens diferentes para alcançar objetivo similar",
+    "Sugestões baseadas em histórico de sucesso em contextos relacionados ou semelhantes",
+    "Explica brevemente por que cada sugestão pode funcionar ('Na segunda-feira isso funcionou bem')",
+    "Permite que usuário aceite sugestão ou mantenha pedido original com insistência",
+    "Aprende com aceitação ou rejeição de sugestões para melhorar futuras recomendações"
+  ],
+  "verification": [
+    "Teste unitario: test_suggestion_offered_when_limit_known()",
+    "Teste unitario: test_suggestions_based_on_related_context_success()",
+    "Teste unitario: test_explanation_includes_rationale()",
+    "Teste real: após limite conhecido, verifique que sugestão útil é oferecida",
+    "Teste de aprendizado: confirme que sistema aprende quando usuário segue sugestão"
+  ],
+  "files_to_touch": [
+    "core/limit_tracker.py",
+    "core/aprendizado_suggestion_engine.py",
+    "tests/limit_tracker/test_limit_suggestions.py"
+  ]
+}

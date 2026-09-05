@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "Alex", email = "alex@zara.local"}]
-keywords = ["assistant", "ai", "jarvis", "voice", "neural", "hermes", "offline"]
+keywords = ["assistant", "ai", "jarvis", "voice", "neural", "offline"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",
@@ -41,6 +41,11 @@ dependencies = [
     "opencv-python>=4.8.0",
     "pillow>=10.0.0",
     "playwright>=1.40.0",
+    "edge-tts>=6.1.0",
+    "miniaudio>=1.59",
+    "yt-dlp>=2024.1.0",
+    "faster-whisper>=0.10.0",
+    "pypdf>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +54,11 @@ dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "ruff>=0.4.0", "mypy>=1.9.0", 
 [project.scripts]
 zara = "main:main"
 zara-build = "build_exe:build"
+zara-cli = "scripts.cli:main"
+zara-build-cli = "scripts.build:main"
+zara-deploy = "scripts.deploy:main"
+zara-sync = "scripts.sync:main"
+zara-health = "scripts.health_check:main"
 
 [tool.uv]
 dev-dependencies = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "ruff>=0.4.0", "mypy>=1.9.0"]
@@ -60,6 +70,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "safe: pure logic, no hardware, no browser, no real filesystem/OS calls",
+    "sandbox: temp dirs, fake processes, isolated test browser/session, mocked APIs",
+    "live: touches real hardware (volume, brightness, windows, apps, browser, mic, audio, real network). Skipped unless ALLOW_LIVE_TESTS=1.",
+]
 
 [tool.ruff]
 line-length = 100

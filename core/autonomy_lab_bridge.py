@@ -80,7 +80,7 @@ class AutonomyLabBridge:
         }
 
         # Capability-based assignment, not worker-name pinning.
-        # A future execution layer may let OpenClaw/OpenCode/Hermes/another worker
+        # A future execution layer may let OpenClaw/OpenCode/another worker
         # claim this task if it advertises "development".
         return self.engine.create_task(
             title=str(proposal["title"]),

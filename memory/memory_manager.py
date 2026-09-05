@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from threading import Lock
 
+from core.storage import atomic_write_json
+
 
 def get_base_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -24,6 +26,7 @@ except Exception:
     _MEMORY_DIR = BASE_DIR / "memory"
 
 MEMORY_PATH = _MEMORY_DIR / "long_term.json"
+MEMORY_BACKUP_PATH = _MEMORY_DIR / "long_term.backup.json"
 MEMORY_EXPORT_DIR = _MEMORY_DIR / "exports"
 LEGACY_MEMORY_PATH = BASE_DIR / "memory" / "long_term.json"
 _lock            = Lock()
@@ -63,22 +66,40 @@ def _empty_memory() -> dict:
         "notes":         {},
     }
 
+def _load_backup_or_none() -> dict | None:
+    """Best-effort recovery from the last known-good snapshot."""
+    if not MEMORY_BACKUP_PATH.exists():
+        return None
+    try:
+        data = json.loads(MEMORY_BACKUP_PATH.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def load_memory() -> dict:
     if not MEMORY_PATH.exists():
         return _empty_memory()
     with _lock:
         try:
             data = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                base = _empty_memory()
-                for key in base:
-                    if key not in data:
-                        data[key] = {}
-                return data
-            return _empty_memory()
+        except json.JSONDecodeError as e:
+            print(f"[Memory] ⚠️ CORRUPTED long_term.json ({e}) — tentando backup")
+            data = _load_backup_or_none()
+            if data is None:
+                print("[Memory] ⚠️ Backup ausente ou também corrompido — memória de longo prazo zerada")
+                return _empty_memory()
+            print("[Memory] Recuperado do backup long_term.backup.json")
         except Exception as e:
             print(f"[Memory] ⚠️ Load error: {e}")
             return _empty_memory()
+        if isinstance(data, dict):
+            base = _empty_memory()
+            for key in base:
+                if key not in data:
+                    data[key] = {}
+            return data
+        return _empty_memory()
 
 def _all_entries(memory: dict) -> list[tuple]:
     entries = []
@@ -103,16 +124,21 @@ def _trim_to_limit(memory: dict) -> dict:
         print(f"[Memory] 🗑️  Trimmed {cat}/{key}")
     return memory
 
+def _write_memory_files(memory: dict) -> None:
+    """Atomic write (temp + rename) plus a recovery backup for corrupt reads."""
+    atomic_write_json(MEMORY_PATH, memory)
+    try:
+        atomic_write_json(MEMORY_BACKUP_PATH, memory)
+    except Exception as e:
+        print(f"[Memory] Backup write failed (non-fatal): {e}")
+
+
 def save_memory(memory: dict) -> None:
     if not isinstance(memory, dict):
         return
     memory = _trim_to_limit(memory)
-    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with _lock:
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        _write_memory_files(memory)
 
 
 def _truncate_value(val: str) -> str:
@@ -376,11 +402,7 @@ def save_session_summary(summary: str, language: str = "") -> None:
     sessions.append(entry)
     memory["sessions"] = sessions[-_SESSION_MAX:]
     with _lock:
-        MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        _write_memory_files(memory)
     try:
         from memory.episodic_memory import record_episode
 
@@ -408,10 +430,7 @@ def pop_last_session() -> dict | None:
                 return None
             entry = sessions.pop()          # remove the last entry
             memory["sessions"] = sessions
-            MEMORY_PATH.write_text(
-                json.dumps(memory, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            _write_memory_files(memory)
             return entry
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")

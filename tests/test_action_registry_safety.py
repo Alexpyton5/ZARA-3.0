@@ -8,7 +8,8 @@ import asyncio
 
 import pytest
 
-from core.action_registry import ActionRegistry
+import core.action_registry as action_registry
+from core.action_registry import ActionRegistry, action
 
 
 def _isolated_registry() -> ActionRegistry:
@@ -86,24 +87,7 @@ def test_medium_risk_stays_closed_until_separately_authorized():
     assert calls == ["ran", "ran"]
 
 
-def test_supercerebro_off_blocks_non_read_only_even_with_confirmation():
-    registry = _isolated_registry()
-    calls: list[str] = []
-    registry.register(
-        "fake_pc_control",
-        lambda: calls.append("ran") or "done",
-        risk="LOW",
-        capability="PC_CONTROL",
-    )
-
-    result = registry.execute("fake_pc_control", confirm=True)
-
-    assert not result.success
-    assert "Superc" in result.error
-    assert calls == []
-
-
-def test_supercerebro_off_keeps_sanitized_read_only_available():
+def test_read_only_action_is_always_available():
     registry = _isolated_registry()
     registry.register("fake_read", lambda: "safe", capability="READ_ONLY")
 
@@ -111,6 +95,69 @@ def test_supercerebro_off_keeps_sanitized_read_only_available():
 
     assert result.success
     assert result.output == "safe"
+
+
+def test_local_pc_control_is_always_available():
+    registry = _isolated_registry()
+    registry.register(
+        "local_volume",
+        lambda level: f"volume={level}",
+        category="os",
+        capability="LOCAL_PC_CONTROL",
+    )
+
+    result = registry.execute("local_volume", level=35)
+
+    assert result.success
+    assert result.output == "volume=35"
+
+
+def test_local_pc_control_does_not_bypass_medium_risk_gate():
+    registry = _isolated_registry()
+    calls: list[str] = []
+    registry.register(
+        "local_clipboard_write",
+        lambda: calls.append("ran") or "done",
+        category="os",
+        risk="MEDIUM",
+        capability="LOCAL_PC_CONTROL",
+    )
+
+    blocked = registry.execute("local_clipboard_write")
+    confirmed = registry.execute("local_clipboard_write", confirm=True)
+
+    assert not blocked.success
+    assert confirmed.success
+    assert calls == ["ran"]
+
+
+@pytest.mark.parametrize(
+    ("name", "category", "risk"),
+    [
+        ("local_high", "general", "HIGH"),
+        ("mcp_local_low", "general", "LOW"),
+        ("mcp_local_medium", "general", "MEDIUM"),
+        ("mcp_local_high", "general", "HIGH"),
+        ("local_mcp_low", "mcp", "LOW"),
+        ("local_mcp_medium", "mcp", "MEDIUM"),
+        ("local_mcp_high", "mcp", "HIGH"),
+    ],
+)
+def test_registration_rejects_invalid_local_pc_control_without_orphan_metadata(name, category, risk):
+    registry = _isolated_registry()
+
+    with pytest.raises(ValueError):
+        registry.register(
+            name,
+            lambda: "must not register",
+            category=category,
+            risk=risk,
+            capability="LOCAL_PC_CONTROL",
+        )
+
+    assert registry.get(name) is None
+    assert registry.get_spec(name) is None
+    assert name not in registry.list_actions(category)
 
 
 def test_registration_normalizes_known_policy_values():

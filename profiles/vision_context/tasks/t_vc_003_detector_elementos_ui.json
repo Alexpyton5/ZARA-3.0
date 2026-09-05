@@ -1,0 +1,22 @@
+{
+  "goal": "Identificar e descrever elementos interativos na tela (botões, menus, campos de texto, ícones) para permitir comandos como 'clique no botão salvar' ou 'oque é esse ícone no canto?'",
+  "context": "Baseado na necessidade de interação contextual - não só descrever o que vê, mas entender o *significado funcional* do que está na tela.",
+  "expected_behavior": [
+    "Usa contours + template matching para detectar botões padrão do Windows",
+    "Identifica campos de entrada por aspecto ratio e posição relativa a rótulos",
+    "Reconhece ícones da bandeja do sistema (volume, rede, bateria)",
+    "Retorna descrição estruturada: {tipo: 'botao', texto: 'Salvar', posição: [x,y,w,h], acao_sugerida: 'clique'}",
+    "Funciona com temas escuros/claros do Windows"
+  ],
+  "verification": [
+    "Unit test: test_ui_detects_standard_windows_button()",
+    "Unit test: test_ui_recognizes_system_tray_icons()",
+    "Teste real: processe screenshot do Gerenciador de Tarefas, identifique corretamente abas e gráficos",
+    "Teste de linguagem: verifique que descriptions são em português natural"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "core/vision/template_matcher.py",
+    "tests/vision/test_ui_detection.py"
+  ]
+}

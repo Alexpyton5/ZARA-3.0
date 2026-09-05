@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 200" role="img" aria-label="ZA">
+  <defs>
+    <!-- Gradiente sobre a marca INTEIRA (userSpaceOnUse): topo esmeralda,
+         base quase preta — uma peça única de metal, não faixas listradas -->
+    <linearGradient id="za-face" gradientUnits="userSpaceOnUse" x1="165" y1="0" x2="165" y2="200">
+      <stop offset="0" stop-color="#46c49c"/>
+      <stop offset="0.35" stop-color="#258362"/>
+      <stop offset="0.65" stop-color="#134634"/>
+      <stop offset="1" stop-color="#081f16"/>
+    </linearGradient>
+    <!-- Brilho de aresta superior, também global -->
+    <linearGradient id="za-edge" gradientUnits="userSpaceOnUse" x1="165" y1="0" x2="165" y2="200">
+      <stop offset="0" stop-color="#8df0cb" stop-opacity="0.9"/>
+      <stop offset="0.45" stop-color="#4fbd99" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#081f16" stop-opacity="0.08"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="url(#za-face)" stroke="url(#za-edge)" stroke-width="2" stroke-linejoin="miter">
+    <!-- Z: barra superior espessa -->
+    <path d="M8 10 H136 V48 H8 Z"/>
+    <!-- Z: diagonal espessa -->
+    <path d="M136 48 H100 L8 128 H44 Z"/>
+    <!-- MONOGRAMA: banda contínua = base do Z + barra do A -->
+    <path d="M8 128 H274 L298 170 H8 Z"/>
+    <!-- A: pernas grossas, contra pequeno escuro, vão abaixo da banda -->
+    <path fill-rule="evenodd" d="M204 6 L312 194 H96 Z M204 52 L246 128 H162 Z M138 170 H270 L284 194 H124 Z"/>
+    <!-- A: triângulo sólido largo e achatado abaixo da banda -->
+    <path d="M204 176 L252 194 H156 Z"/>
+  </g>
+</svg>

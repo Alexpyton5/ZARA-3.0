@@ -1,0 +1,333 @@
+--- /dev/null
++++ b/memory/infrastructure_memory.py
+@@ -0,0 +1,332 @@
++"""Infrastructure Memory - SQLite-backed structured record of infrastructure components."""
++
++from __future__ import annotations
++
++import json
++import re
++import sqlite3
++import threading
++import time
++from pathlib import Path
++from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
++
++from core.paths import user_data_dir
++
++
++def _default_clock() -> float:
++    return time.time()
++
++
++def _validate_name(name: str) -> str:
++    if not isinstance(name, str):
++        raise TypeError("name must be a string")
++    if not name or not name.strip():
++        raise ValueError("name must be non-empty")
++    # Normalize: lowercase, replace spaces and underscores with hyphen, alnum and hyphen only
++    normalized = re.sub(r'[^a-z0-9]+', '-', name.lower().strip())
++    normalized = normalized.strip('-')
++    if not normalized:
++        raise ValueError("name must contain at least one alphanumeric character")
++    return normalized
++
++
++def _validate_status(status: str) -> str:
++    allowed = {"healthy", "degraded", "offline", "unknown"}
++    if status not in allowed:
++        raise ValueError(f"status must be one of {sorted(allowed)}")
++    return status
++
++
++_SECRET_KEYS = {
++    "password", "passwd", "token", "api_key", "apikey",
++    "secret", "authorization", "cookie"
++}
++
++
++def _contains_secret(details: Dict) -> bool:
++    if not isinstance(details, dict):
++        return False
++    for key in details:
++        if isinstance(key, str) and key.lower() in _SECRET_KEYS:
++            return True
++    return False
++
++
++def _validate_endpoint(endpoint: Optional[str]) -> Optional[str]:
++    if endpoint is None:
++        return None
++    if not isinstance(endpoint, str):
++        raise TypeError("endpoint must be a string or None")
++    endpoint = endpoint.strip()
++    if not endpoint:
++        return None
++    # Basic validation: reject userinfo (user:pass) in scheme
++    if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://[^@]+@', endpoint):
++        raise ValueError("endpoint must not contain userinfo (username:password)")
++    # Reject common secret query parameters
++    lower = endpoint.lower()
++    if any(secret in lower for secret in ("token=", "api_key=", "password=")):
++        raise ValueError("endpoint must not contain secret query parameters")
++    return endpoint
++
++
++def _validate_details(details: Dict) -> Dict:
++    if not isinstance(details, dict):
++        raise TypeError("details must be a dictionary")
++    # Check for secret keys
++    if _contains_secret(details):
++        raise ValueError("details must not contain secret keys: password, token, api_key, secret, authorization, cookie")
++    # Ensure JSON-serializable and limit depth
++    def _check_depth(obj, depth=0):
++        if depth > 10:
++            raise ValueError("details exceeds maximum nesting depth of 10")
++        if isinstance(obj, dict):
++            for k, v in obj.items():
++                if not isinstance(k, str):
++                    raise TypeError("details keys must be strings")
++                _check_depth(v, depth + 1)
++        elif isinstance(obj, list):
++            for item in obj:
++                _check_depth(item, depth + 1)
++        # Other types (str, int, float, bool, None) are allowed
++    _check_depth(details)
++    # Try to serialize to ensure JSON-safe
++    try:
++        json.dumps(details)
++    except (TypeError, ValueError) as e:
++        raise ValueError(f"details must be JSON-serializable: {e}") from e
++    return details
++
++
++class InfrastructureMemory:
++    """Thread-safe SQLite-backed infrastructure component registry."""
++
++    def __init__(
++        self,
++        base_dir: Optional[Path] = None,
++        clock: Optional[Callable[[], float]] = None,
++    ) -> None:
++        if base_dir is None:
++            base_dir = user_data_dir() / "data" / "infrastructure-memory"
++        self.base_dir = Path(base_dir)
++        self.base_dir.mkdir(parents=True, exist_ok=True)
++        self.db_path = self.base_dir / "infrastructure_memory.db"
++        self.clock = clock or _default_clock
++        self._lock = threading.RLock()
++        self._init_db()
++
++    def _init_db(self) -> None:
++        with self._lock, sqlite3.connect(self.db_path) as conn:
++            conn.execute("""
++                CREATE TABLE IF NOT EXISTS components (
++                    name TEXT PRIMARY KEY,
++                    kind TEXT NOT NULL,
++                    environment TEXT NOT NULL,
++                    endpoint TEXT,
++                    status TEXT NOT NULL,
++                    details JSON NOT NULL,
++                    observed_at REAL NOT NULL,
++                    updated_at REAL NOT NULL
++                )
++            """)
++            conn.execute("""
++                CREATE INDEX IF NOT EXISTS idx_components_env ON components(environment)
++            """)
++            conn.execute("""
++                CREATE INDEX IF NOT EXISTS idx_components_status ON components(status)
++            """)
++            conn.commit()
++
++    def _row_to_dict(self, row: Tuple) -> Dict:
++        name, kind, environment, endpoint, status, details_json, observed_at, updated_at = row
++        try:
++            details = json.loads(details_json)
++        except json.JSONDecodeError:
++            details = {}
++        return {
++            "name": name,
++            "kind": kind,
++            "environment": environment,
++            "endpoint": endpoint,
++            "status": status,
++            "details": details,
++            "observed_at": observed_at,
++            "updated_at": updated_at,
++            "stale": False,  # will be set by caller if needed
++        }
++
++    def upsert_component(
++        self,
++        *,
++        name: str,
++        kind: str,
++        environment: str,
++        endpoint: Optional[str] = None,
++        status: str = "unknown",
++        details: Optional[Dict] = None,
++        observed_at: Optional[float] = None,
++    ) -> None:
++        """Insert or update a component record."""
++        name = _validate_name(name)
++        if not isinstance(kind, str) or not kind:
++            raise ValueError("kind must be a non-empty string")
++        if not isinstance(environment, str) or not environment:
++            raise ValueError("environment must be a non-empty string")
++        endpoint = _validate_endpoint(endpoint)
++        status = _validate_status(status)
++        if details is None:
++            details = {}
++        details = _validate_details(details)
++        if observed_at is None:
++            observed_at = self.clock()
++        else:
++            if not isinstance(observed_at, (int, float)) or observed_at < 0:
++                raise ValueError("observed_at must be a non-negative number")
++        updated_at = self.clock()
++
++        with self._lock, sqlite3.connect(self.db_path) as conn:
++            conn.execute("""
++                INSERT INTO components (
++                    name, kind, environment, endpoint, status, details,
++                    observed_at, updated_at
++                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
++                ON CONFLICT(name) DO UPDATE SET
++                    kind=excluded.kind,
++                    environment=excluded.environment,
++                    endpoint=excluded.endpoint,
++                    status=excluded.status,
++                    details=excluded.details,
++                    observed_at=excluded.observed_at,
++                    updated_at=excluded.updated_at
++            """, (
++                name, kind, environment, endpoint, status,
++                json.dumps(details), observed_at, updated_at
++            ))
++            conn.commit()
++
++    def get_component(
++        self,
++        name: str,
++        *,
++        max_age_seconds: Optional[int] = None,
++    ) -> Optional[Dict]:
++        """Get a component by name, returning a dict with stale flag."""
++        name = _validate_name(name)
++        with self._lock, sqlite3.connect(self.db_path) as conn:
++            cursor = conn.execute("""
++                SELECT name, kind, environment, endpoint, status, details,
++                       observed_at, updated_at
++                FROM components WHERE name = ?
++            """, (name,))
++        row = cursor.fetchone()
++        if row is None:
++            return None
++        component = self._row_to_dict(row)
++        if max_age_seconds is not None:
++            age = self.clock() - component["observed_at"]
++            component["stale"] = age > max_age_seconds
++        return component
++
++    def list_components(
++        self,
++        *,
++        environment: Optional[str] = None,
++        status: Optional[str] = None,
++        max_age_seconds: Optional[int] = None,
++    ) -> List[Dict]:
++        """List components with optional filters."""
++        where = []
++        params: List[Union[str, int, float]] = []
++        if environment is not None:
++            where.append("environment = ?")
++            params.append(environment)
++        if status is not None:
++            where.append("status = ?")
++            params.append(status)
++        where_clause = "WHERE " + " AND ".join(where) if where else ""
++        with self._lock, sqlite3.connect(self.db_path) as conn:
++            cursor = conn.execute(f"""
++                SELECT name, kind, environment, endpoint, status, details,
++                       observed_at, updated_at
++                FROM components
++                {where_clause}
++                ORDER BY name
++            """, params)
++            rows = cursor.fetchall()
++        components = [self._row_to_dict(row) for row in rows]
++        if max_age_seconds is not None:
++            now = self.clock()
++            for comp in components:
++                age = now - comp["observed_at"]
++                comp["stale"] = age > max_age_seconds
++        return components
++
++    def build_context(
++        self,
++        *,
++        environment: Optional[str] = None,
++        max_age_seconds: int = 3600,
++        budget_bytes: int = 4096,
++    ) -> Dict:
++        """Build a ContextEnvelope-friendly dict of infrastructure components."""
++        from core.context_envelope import build_context_envelope
++
++        # Get base envelope (empty)
++        base_envelope = build_context_envelope(
++            memory=(),
++            environment=(),
++            capabilities=(),
++            budget_bytes=budget_bytes,
++        )
++        # Start with a copy of the base envelope's payload
++        context = dict(base_envelope.payload())
++
++        # Fetch components
++        components = self.list_components(
++            environment=environment,
++            max_age_seconds=max_age_seconds,
++        )
++        # We'll collect entries to add, respecting budget
++        # We'll compute the current size of the context JSON
++        try:
++            current_json = json.dumps(context, separators=(',', ':'))
++        except (TypeError, ValueError):
++            current_json = "{}"
++        current_size = len(current_json)
++
++        # We'll iterate over components in deterministic order (by name)
++        for comp in components:
++            # Skip if stale
++            if comp.get("stale", False):
++                continue
++            key = f"infra:{comp['name']}"
++            value = {
++                "kind": comp["kind"],
++                "environment": comp["environment"],
++                "endpoint": comp["endpoint"],
++                "status": comp["status"],
++                "details": comp["details"],
++                "observed_at": comp["observed_at"],
++                "updated_at": comp["updated_at"],
++            }
++            try:
++                json_str = json.dumps(value, separators=(',', ':'))
++            except (TypeError, ValueError):
++                # Should not happen because we validated, but skip if error
++                continue
++            # Calculate the size if we add this entry: key: json_str,
++            # We need to account for the colon, space, and a trailing comma and space if not the last.
++            # We'll approximate by adding 2 for the colon and space, and 2 for the comma and space.
++            entry_size = len(key) + 2 + len(json_str) + 2  # key: value,
++            new_size = current_size + entry_size
++            if new_size > budget_bytes:
++                # Would exceed budget, skip this and all remaining (since we are in order)
++                break
++            # Add the entry
++            context[key] = json_str
++            current_size = new_size
++
++        return context
+\ No newline at end of file

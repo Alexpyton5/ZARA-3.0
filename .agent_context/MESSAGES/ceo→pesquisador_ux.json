@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "pesquisador_ux",
+  "timestamp": "2026-08-19T14:35:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-006",
+  "summary": "Planejar pipeline de voz completo",
+  "details": "Analise core/gemini_live_voice.py, core/voice_stt.py, core/voice_tts.py, core/pc_voice_intent.py, core/ipc_handlers.py. Documente em .agent_context/RESEARCH_INSIGHTS.md na seção SECAO-VOICE-PIPELINE:\n1. Estado atual: Gemini Live (Kore), Vosk STT, Kokoro/Edge TTS, Porcupine wake\n2. Latência medida (cronometro.py) e gargalos\n3. Barge-in, self-listening, VAD (server vs local Silero)\n4. Roteamento CONVERSA vs ACAO (pc_voice_intent.py)\n5. Melhorias: Whisper Groq (precisão+latência), openWakeWord, AEC WebRTC\n6. Arquitetura alvo: mic → VAD → STT → intent → action → TTS → speaker\nDependência: TASK-001 para mapeamento completo.",
+  "recommended_next": "Prototipar VAD local + Whisper Groq após TASK-001"
+}

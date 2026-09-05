@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "revisor_supervisor",
+  "timestamp": "2026-08-19T14:45:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-REVIEW-001",
+  "summary": "Definir critérios de aceitação e processo de review",
+  "details": "Estabeleça o processo de revisão para todas as entregas da fábrica ZARA:\n1. Critério mínimo: nota >= 9.0 (conforme agent_roster.md)\n2. Zero quebra de código antigo (regressão)\n3. Cobertura de testes >= 90%\n4. Latência voz < 500ms\n5. Zero vulnerabilidades CRITICAL/HIGH\n6. Formato de review: .agent_context/REVIEWS/review_<task>.json\n7. Selo PASS/FAIL por deliverable\n8. Checklist de verificação por tipo de tarefa (pesquisa, código, UI, segurança)\nAguardar primeiras entregas dos agentes de pesquisa.",
+  "recommended_next": "Quando TASK-001 a TASK-007 entregarem, iniciar reviews"
+}

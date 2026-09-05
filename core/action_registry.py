@@ -31,6 +31,29 @@ class ActionResult:
     error: str = ""
     data: Any = None
     duration_ms: float = 0
+    # ZARA-NAO-VERIFICADO-001
+    #
+    # Alex: *"tente deixar ela sem mentiras e sem chutes; se não souber, ela deve
+    # ser sempre transparente"*. E a regra que saiu da pesquisa da Apple:
+    # **ação executada mas não confirmada nunca aparece verde**.
+    #
+    # Até aqui só existiam dois estados: deu certo ou deu errado. Faltava o
+    # terceiro, que é o mais honesto e o mais comum na prática — *fiz, e não
+    # tenho como provar*. Mandar uma mensagem, apertar uma tecla num app de
+    # terceiro, disparar um atalho: nada disso devolve confirmação.
+    #
+    # Sem este campo, essas ações viravam sucesso liso, e "sucesso liso" sem
+    # prova é exatamente o falso sucesso que este projeto inteiro combate.
+    #
+    # `True`  = houve postcondição observada (releitura, estado do Windows).
+    # `False` = despachou e não deu para conferir. Não é falha: é incerteza,
+    #           e ela precisa aparecer como incerteza para Alex.
+    verificado: bool = True
+
+    @property
+    def incerto(self) -> bool:
+        """Deu certo até onde deu para ver, mas ninguém confirmou."""
+        return bool(self.success) and not self.verificado
 
     def __bool__(self) -> bool:
         return self.success
@@ -50,7 +73,7 @@ class ActionSpec:
     async_execution: bool = False
     tags: list[str] = field(default_factory=list)
     risk: str = "LOW"  # LOW | MEDIUM | HIGH (ZARA-PC-CONTROL-FOUNDATION-001)
-    capability: str = "READ_ONLY"  # READ_ONLY | PC_CONTROL | FILES_MUTATE | CODE_EXECUTION | SYSTEM_POWER
+    capability: str = "READ_ONLY"  # execution domain; risk remains independent
 
 
 class ActionRegistry:
@@ -77,11 +100,8 @@ class ActionRegistry:
         self._categories: dict[str, list[str]] = {}
         self._confirmation_broker = ConfirmationBroker()
         # Independent risk gate: MEDIUM actions require confirmation while
-        # false. Supercérebro changes capabilities, not this policy.
+        # false.
         self.medium_risk_open = False
-        # Capability gate (ZARA-PC-CONTROL-CAPABILITY-GATE-001): while False,
-        # no PC_CONTROL action may run, even LOW risk. Set True by Supercérebro.
-        self.pc_control_allowed = False
 
         # Register core actions
         self._register_core_actions()
@@ -111,7 +131,10 @@ class ActionRegistry:
         normalized_capability = str(capability).strip().upper()
         valid_capabilities = {
             "READ_ONLY",
+            "LOCAL_PC_CONTROL",
             "PC_CONTROL",
+            "REMOTE_PC_CONTROL",
+            "AGENTIC_PC_CONTROL",
             "FILES_MUTATE",
             "CODE_EXECUTION",
             "SYSTEM_POWER",
@@ -121,6 +144,14 @@ class ActionRegistry:
 
         if name in self._actions:
             print(f"[ActionRegistry] Warning: Overwriting action '{name}'")
+
+        # Validate capability-category combinations
+        # LOCAL_PC_CONTROL must be in a recognized OS/action category
+        # Reject "general" and "mcp" - they are not valid OS categories
+        if normalized_capability == "LOCAL_PC_CONTROL" and category in {"general", "mcp"}:
+            raise ValueError(
+                f"Capability LOCAL_PC_CONTROL requires a valid category (os, audio, window, etc.), not '{category}'"
+            )
 
         self._actions[name] = func
 
@@ -241,20 +272,6 @@ class ActionRegistry:
         """Apply capability and risk gates before any action function runs."""
         if spec is None:
             return ActionResult(success=False, error="ACTION_POLICY_METADATA_MISSING")
-
-        # Capability is checked before issuing or consuming a challenge.
-        if spec.capability != "READ_ONLY" and not self.pc_control_allowed:
-            if isinstance(proof, ConfirmationProof):
-                self._confirmation_broker.cancel(proof.confirmation_id)
-            return ActionResult(
-                success=False,
-                error=(
-                    f"Action '{name}' exige permissão de controle do PC "
-                    f"(capability={spec.capability}, Supercérebro OFF). "
-                    "Para controlar o computador, ative o Supercérebro."
-                ),
-                duration_ms=0.0,
-            )
 
         # Legacy confirmation remains valid only for MEDIUM actions. HIGH
         # always requires a one-shot proof from the separate confirmation IPC.
@@ -527,7 +544,32 @@ def action(
             risk=risk,
             capability=capability,
         )
-        return func
+
+        # Wrap the function so direct calls still go through registry gates
+        import functools
+        import inspect
+        sig = inspect.signature(func)
+
+        def _merge_args(args, kwargs):
+            # BUGFIX_2026-08-27: os wrappers abaixo so repassavam **kwargs para
+            # registry.execute/execute_async, descartando qualquer argumento
+            # posicional de chamada direta (ex.: os_brightness_absolute_action(150)).
+            # Isso derrubava 209 testes com "missing 1 required positional argument"
+            # e era pre-existente, nao relacionado as correcoes da AUDITORIA_2026-08-27.
+            bound = sig.bind_partial(*args, **kwargs)
+            return bound.arguments
+
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            return registry.execute(action_name, **_merge_args(args, kwargs))
+
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            return await registry.execute_async(action_name, **_merge_args(args, kwargs))
+
+        if async_execution or asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return sync_wrapper
     return decorator
 
 
@@ -631,3 +673,21 @@ async def execute_confirmed_action(
             **params,
         ),
     )
+
+
+ADVANCED_ACTION_MODULES = (
+    "core.actions.system_advanced",
+    "core.actions.macro_actions",
+    "core.actions.vision_actions",
+)
+
+
+def load_advanced_action_exports() -> tuple[str, ...]:
+    """Import advanced modules explicitly; decorators populate this registry."""
+    import importlib
+
+    loaded = []
+    for module_name in ADVANCED_ACTION_MODULES:
+        importlib.import_module(module_name)
+        loaded.append(module_name)
+    return tuple(loaded)

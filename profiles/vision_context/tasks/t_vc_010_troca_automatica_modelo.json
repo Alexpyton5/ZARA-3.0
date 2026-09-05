@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar troca automática para modelos gratuitos quando crédito do Codex acabar",
+  "context": "Baseado em IDEIAS-DO-ALEX.md 'Na fila' - item 6: 'Trocar de modelo quando o crédito acabar'. O roteador já está instalado.",
+  "expected_behavior": [
+    "Monitorar uso de crédito do Codex em tempo real",
+    "Quando limite próximo, começar a rotear tarefas não-críticas para modelos gratuitos",
+    "Manter Codex apenas para arquitetura crítica, integração/build e portão final",
+    "Usar modelos NVIDIA (Nemotron) para varredura mecânica e leitura",
+    "Forcer modo de economia quando usuário indicar que está off ou em modo de baixa bateria"
+  ],
+  "verification": [
+    "Unit test: test_model_router_detects_low_credit()",
+    "Unit test: test_model_router_routes_non_critical_to_free()",
+    "Teste real: simular esgotamento de crédito, verificar que tarefas de leitura vão para Nemotron",
+    "Verificar que tarefas críticas (build, integração) permanecem no Codex até o limite"
+  ],
+  "files_to_touch": [
+    "core/model_router.py",
+    "core/model_usage_monitor.py",
+    "tests/model_router/test_router_system.py"
+  ]
+}

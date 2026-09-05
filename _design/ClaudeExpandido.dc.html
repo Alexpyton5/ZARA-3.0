@@ -1,0 +1,203 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+        :root {
+      --mil-300: #8fc17f; --mil-400: #73a662; --mil-500: #5f8354;
+      --mil-900: #161a15; --mil-950: #0b0f0b;
+      --terra-500: #d9a441; --terra-600: #c0392b;
+      --txt-1: #e4e9e2; --txt-2: #a1a9a0; --txt-3: #8d9a88; --txt-4: #6e7d6b;
+      --line: rgba(190, 211, 184, 0.11);
+      --line-strong: rgba(190, 211, 184, 0.19);
+      --danger: #e0705f;
+    }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: var(--mil-300); text-decoration: none; }
+    a:hover { color: var(--mil-400); }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: #060806;">
+
+  <div style="position: absolute; inset: 0; background:
+      radial-gradient(1000px 600px at 22% 10%, rgba(143,193,127,0.17), transparent 62%),
+      radial-gradient(860px 660px at 84% 88%, rgba(217,164,65,0.11), transparent 62%),
+      linear-gradient(158deg, #0b0f0b 0%, #070a07 54%, #0d1310 100%);"></div>
+
+  <div style="position: relative; height: 100%; padding: 30px 40px 34px; display: flex; flex-direction: column; gap: 20px;">
+
+    <!-- Cabeçalho do modo expandido -->
+    <div style="display: flex; align-items: center; gap: 13px;">
+      <div style="width: 34px; height: 34px; border-radius: 11px; background: rgba(217,164,65,0.16); border: 1px solid rgba(217,164,65,0.34); display: flex; align-items: center; justify-content: center;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--terra-500)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m8 17-5-5 5-5M16 7l5 5-5 5"/></svg>
+      </div>
+      <div>
+        <div style="font-size: 19px; font-weight: 600; color: var(--txt-1); letter-spacing: -0.02em;">Claude Code</div>
+        <div style="font-size: 11.5px; color: var(--txt-4); font-family: ui-monospace, 'Cascadia Mono', monospace; margin-top: 1px;">~/Downloads/ZARA 3.0 CLEAN 002</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 7px; padding: 6px 13px; border-radius: 999px; background: rgba(143,193,127,0.13); border: 1px solid rgba(143,193,127,0.30); margin-left: 6px;">
+        <div style="display: flex; align-items: flex-end; gap: 2.5px; height: 13px;">
+          <div style="width: 2.5px; height: 5px; border-radius: 2px; background: {{accent}};"></div>
+          <div style="width: 2.5px; height: 11px; border-radius: 2px; background: {{accent}};"></div>
+          <div style="width: 2.5px; height: 8px; border-radius: 2px; background: {{accent}};"></div>
+          <div style="width: 2.5px; height: 13px; border-radius: 2px; background: {{accent}};"></div>
+          <div style="width: 2.5px; height: 6px; border-radius: 2px; background: {{accent}};"></div>
+        </div>
+        <span style="font-size: 11px; color: {{accent}}; font-weight: 600;">ZARA ouvindo</span>
+      </div>
+
+      <div style="flex-grow: 1;"></div>
+
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <div style="padding: 8px 15px; border-radius: 999px; background: rgba(20,25,20,0.55); backdrop-filter: blur(20px); border: 1px solid var(--line); font-size: 12px; color: var(--txt-2);">Ler resposta em voz alta</div>
+        <div style="width: 36px; height: 36px; border-radius: 12px; background: rgba(20,25,20,0.55); backdrop-filter: blur(20px); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--txt-2)" stroke-width="1.9" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
+        </div>
+        <div style="width: 36px; height: 36px; border-radius: 12px; background: rgba(20,25,20,0.55); backdrop-filter: blur(20px); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--txt-2)" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversa -->
+    <div style="flex-grow: 1; display: flex; gap: 20px; min-height: 0;">
+
+      <div style="flex-grow: 1; background: rgba(9,12,9,0.6); backdrop-filter: blur(26px); border: 1px solid var(--line); border-radius: 22px; padding: 24px 26px; display: flex; flex-direction: column; gap: 18px; min-width: 0; box-shadow: 0 24px 60px rgba(0,0,0,0.44);">
+
+        <div style="display: flex; gap: 13px;">
+          <span style="font-size: 11px; color: var(--txt-4); font-family: ui-monospace, 'Cascadia Mono', monospace; padding-top: 3px; width: 52px; flex-shrink: 0;">você</span>
+          <div style="min-width: 0;">
+            <span style="font-size: 14px; color: var(--txt-2); line-height: 1.6;">o comando de voz tá demorando demais quando eu peço pra abrir o youtube e tocar alguma coisa. descobre onde tá indo o tempo</span>
+            <div style="display: inline-flex; align-items: center; gap: 5px; margin-left: 9px; padding: 2px 8px; border-radius: 999px; background: rgba(143,193,127,0.12); border: 1px solid rgba(143,193,127,0.24); vertical-align: middle;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2.2" stroke-linecap="round"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 12a7 7 0 0 1-14 0M12 19v3"/></svg>
+              <span style="font-size: 9.5px; color: {{accent}}; font-weight: 600;">ditado</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 13px;">
+          <span style="font-size: 11px; color: var(--terra-500); font-family: ui-monospace, 'Cascadia Mono', monospace; padding-top: 3px; width: 52px; flex-shrink: 0;">claude</span>
+          <div style="min-width: 0; display: flex; flex-direction: column; gap: 13px;">
+            <span style="font-size: 14px; color: var(--txt-2); line-height: 1.6;">Medi a cadeia inteira. O despacho não é o problema — ele leva menos de 5&nbsp;ms. O tempo todo está na etapa <span style="color: var(--txt-1); font-weight: 600;">“toque”</span>: ela varre a árvore de acessibilidade do Windows inteiro procurando o vídeo, com espera de até 8&nbsp;segundos.</span>
+
+            <div style="border-radius: 14px; border: 1px solid var(--line); background: rgba(11,15,11,0.5); padding: 15px 17px; display: flex; flex-direction: column; gap: 11px;">
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <span style="font-size: 11.5px; color: var(--txt-3); width: 118px; flex-shrink: 0;">abrir o youtube</span>
+                <div style="flex-grow: 1; height: 7px; border-radius: 4px; background: rgba(190,211,184,0.09); overflow: hidden;">
+                  <div style="width: 9%; height: 100%; border-radius: 4px; background: {{accent}};"></div>
+                </div>
+                <span style="font-size: 11.5px; color: var(--txt-2); font-variant-numeric: tabular-nums; width: 62px; text-align: right; flex-shrink: 0;">0,4 s</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <span style="font-size: 11.5px; color: var(--txt-3); width: 118px; flex-shrink: 0;">pesquisar</span>
+                <div style="flex-grow: 1; height: 7px; border-radius: 4px; background: rgba(190,211,184,0.09); overflow: hidden;">
+                  <div style="width: 17%; height: 100%; border-radius: 4px; background: {{accent}};"></div>
+                </div>
+                <span style="font-size: 11.5px; color: var(--txt-2); font-variant-numeric: tabular-nums; width: 62px; text-align: right; flex-shrink: 0;">0,8 s</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <span style="font-size: 11.5px; color: var(--txt-1); width: 118px; flex-shrink: 0; font-weight: 600;">tocar</span>
+                <div style="flex-grow: 1; height: 7px; border-radius: 4px; background: rgba(190,211,184,0.09); overflow: hidden;">
+                  <div style="width: 100%; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--terra-500), var(--danger));"></div>
+                </div>
+                <span style="font-size: 11.5px; color: var(--danger); font-variant-numeric: tabular-nums; width: 62px; text-align: right; flex-shrink: 0; font-weight: 600;">4,6 s</span>
+              </div>
+            </div>
+
+            <span style="font-size: 14px; color: var(--txt-2); line-height: 1.6;">Dá pra escopar a busca só na janela do navegador em vez do desktop inteiro. Quer que eu faça e empacote pra você testar?</span>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1;"></div>
+
+        <!-- Caixa de ditado -->
+        <div style="display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-radius: 16px; background: rgba(143,193,127,0.07); border: 1px solid rgba(143,193,127,0.24);">
+          <div style="display: flex; align-items: flex-end; gap: 3px; height: 22px; flex-shrink: 0;">
+            <div style="width: 3px; height: 8px; border-radius: 2px; background: {{accent}};"></div>
+            <div style="width: 3px; height: 18px; border-radius: 2px; background: {{accent}};"></div>
+            <div style="width: 3px; height: 12px; border-radius: 2px; background: {{accent}};"></div>
+            <div style="width: 3px; height: 22px; border-radius: 2px; background: {{accent}};"></div>
+            <div style="width: 3px; height: 10px; border-radius: 2px; background: {{accent}};"></div>
+            <div style="width: 3px; height: 16px; border-radius: 2px; background: {{accent}};"></div>
+            <div style="width: 3px; height: 7px; border-radius: 2px; background: {{accent}};"></div>
+          </div>
+          <span style="font-size: 14.5px; color: var(--txt-1); line-height: 1.5; min-width: 0; flex-grow: 1;">“pode fazer, mas antes me mostra quanto tempo vai cair”<span style="display: inline-block; width: 2px; height: 17px; background: {{accent}}; margin-left: 3px; vertical-align: text-bottom;"></span></span>
+          <div style="padding: 9px 20px; border-radius: 999px; background: {{accent}}; color: var(--mil-950); font-size: 12.5px; font-weight: 600; flex-shrink: 0;">Enviar</div>
+        </div>
+      </div>
+
+      <!-- Trilha lateral -->
+      <div style="width: 268px; flex-shrink: 0; display: flex; flex-direction: column; gap: 15px;">
+
+        <div style="background: rgba(22,26,21,0.5); backdrop-filter: blur(26px); border: 1px solid var(--line); border-radius: 20px; padding: 17px; display: flex; flex-direction: column; gap: 12px;">
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--txt-2);">Nesta sessão</span>
+          <div style="display: flex; align-items: baseline; gap: 7px;">
+            <span style="font-size: 26px; font-weight: 600; color: var(--txt-1); letter-spacing: -0.025em;">14</span>
+            <span style="font-size: 11.5px; color: var(--txt-3);">arquivos alterados</span>
+          </div>
+          <div style="height: 1px; background: var(--line);"></div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 5px; height: 5px; border-radius: 50%; background: {{accent}}; flex-shrink: 0;"></div>
+              <span style="font-size: 11px; color: var(--txt-3); font-family: ui-monospace, 'Cascadia Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">core/model_router.py</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 5px; height: 5px; border-radius: 50%; background: {{accent}}; flex-shrink: 0;"></div>
+              <span style="font-size: 11px; color: var(--txt-3); font-family: ui-monospace, 'Cascadia Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">core/pc_voice_intent.py</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 5px; height: 5px; border-radius: 50%; background: var(--terra-500); flex-shrink: 0;"></div>
+              <span style="font-size: 11px; color: var(--txt-3); font-family: ui-monospace, 'Cascadia Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">core/ipc_handlers.py</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: rgba(22,26,21,0.5); backdrop-filter: blur(26px); border: 1px solid var(--line); border-radius: 20px; padding: 17px; display: flex; flex-direction: column; gap: 11px;">
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--txt-2);">Testes</span>
+          <div style="display: flex; align-items: baseline; gap: 7px;">
+            <span style="font-size: 26px; font-weight: 600; color: {{accent}}; letter-spacing: -0.025em;">1502</span>
+            <span style="font-size: 11.5px; color: var(--txt-3);">passaram</span>
+          </div>
+          <div style="height: 6px; border-radius: 3px; background: rgba(190,211,184,0.09); overflow: hidden; display: flex;">
+            <div style="width: 96%; background: {{accent}};"></div>
+            <div style="flex-grow: 1; background: var(--danger);"></div>
+          </div>
+          <span style="font-size: 10.5px; color: var(--txt-4);">66 falhas — as mesmas de antes, nenhuma nova</span>
+        </div>
+
+        <div style="flex-grow: 1; background: rgba(22,26,21,0.5); backdrop-filter: blur(26px); border: 1px solid var(--line); border-radius: 20px; padding: 17px; display: flex; flex-direction: column; gap: 11px; min-height: 0;">
+          <span style="font-size: 12.5px; font-weight: 600; color: var(--txt-2);">Falar com</span>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(217,164,65,0.12); border: 1px solid rgba(217,164,65,0.28);">
+              <div style="width: 7px; height: 7px; border-radius: 50%; background: var(--terra-500);"></div>
+              <span style="font-size: 12px; color: var(--txt-1); font-weight: 500;">Claude Code</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(11,15,11,0.42); border: 1px solid var(--line);">
+              <div style="width: 7px; height: 7px; border-radius: 50%; background: var(--txt-4);"></div>
+              <span style="font-size: 12px; color: var(--txt-3);">Codex</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#8fc17f","options":["#8fc17f","#7fb3ff","#d9a441","#e0705f"],"section":"Tema"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#8fc17f' };
+  }
+}
+</script>
+</body>
+</html>

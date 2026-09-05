@@ -1,0 +1,1235 @@
+{
+  "generated_at": "2026-09-04T14:04:39",
+  "commit": "2dff34e",
+  "root_hygiene": "CRITICAL",
+  "entries": [
+    {
+      "name": ".agent_context",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.02,
+      "file_count": 12
+    },
+    {
+      "name": ".ceo",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.04,
+      "file_count": 5
+    },
+    {
+      "name": ".claude",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.16,
+      "file_count": 54
+    },
+    {
+      "name": ".dsh-inspect",
+      "type": "dir",
+      "category": "CACHE",
+      "reason": "cache regeneravel",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 194.48,
+      "file_count": 29607
+    },
+    {
+      "name": ".git",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "controle de versao",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": null,
+      "file_count": null
+    },
+    {
+      "name": ".gitignore",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.46
+    },
+    {
+      "name": ".mcp.json",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 0.65
+    },
+    {
+      "name": ".opencode",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 0.0,
+      "file_count": 3
+    },
+    {
+      "name": ".pnpm-store",
+      "type": "dir",
+      "category": "CACHE",
+      "reason": "cache regeneravel",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 2007.57,
+      "file_count": 49622
+    },
+    {
+      "name": ".pytest_cache",
+      "type": "dir",
+      "category": "CACHE",
+      "reason": "cache regeneravel",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 0.15,
+      "file_count": 5
+    },
+    {
+      "name": ".ruff_cache",
+      "type": "dir",
+      "category": "CACHE",
+      "reason": "cache regeneravel",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 0.04,
+      "file_count": 32
+    },
+    {
+      "name": ".venv",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 1230.73,
+      "file_count": 36003
+    },
+    {
+      "name": ".zara-dev",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 1.25,
+      "file_count": 80
+    },
+    {
+      "name": ".zara-tests",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.54,
+      "file_count": 113
+    },
+    {
+      "name": "__pycache__",
+      "type": "dir",
+      "category": "CACHE",
+      "reason": "cache regeneravel",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 0.05,
+      "file_count": 2
+    },
+    {
+      "name": "_design",
+      "type": "dir",
+      "category": "LEGACY",
+      "reason": "ja isolado intencionalmente (prefixo _)",
+      "git_tracked": true,
+      "referenced_by": [
+        "tools\\zara_root_audit.py",
+        "ARCHITECTURE_MAP.md",
+        "CURRENT_STATE_REPORT.md",
+        "FOUNDATION_BASELINE.md"
+      ],
+      "size_mb": 3.05,
+      "file_count": 8
+    },
+    {
+      "name": "_quarentena",
+      "type": "dir",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 6812.94,
+      "file_count": 9841
+    },
+    {
+      "name": "ABRIR-A-ZARA.bat",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.06
+    },
+    {
+      "name": "ARCHITECTURE_MAP.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "AUDIT_EXECUTIVE_SUMMARY.md",
+        "CLAUDE.md",
+        "CURRENT_STATE_REPORT.md",
+        "FOUNDATION_BASELINE.md",
+        "TRANSFORMATION_PLAN.md"
+      ],
+      "size_kb": 14.86
+    },
+    {
+      "name": "assets",
+      "type": "dir",
+      "category": "BUILD_ARTIFACTS",
+      "reason": "saida de build/empacotamento",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.09,
+      "file_count": 3
+    },
+    {
+      "name": "audit_aprendizado.py",
+      "type": "file",
+      "category": "SCRIPTS",
+      "reason": "script Python solto na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 11.38
+    },
+    {
+      "name": "AUDIT_EXECUTIVE_SUMMARY.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 6.84
+    },
+    {
+      "name": "build-sidecar",
+      "type": "dir",
+      "category": "BUILD_ARTIFACTS",
+      "reason": "saida de build/empacotamento",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 378.83,
+      "file_count": 15
+    },
+    {
+      "name": "build_exe.py",
+      "type": "file",
+      "category": "SCRIPTS",
+      "reason": "script Python solto na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 23.63
+    },
+    {
+      "name": "BUILD_PIPELINE_MAP.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "FOUNDATION_M1-M7_REPORT.md"
+      ],
+      "size_kb": 4.74
+    },
+    {
+      "name": "BUILD_REPRODUCIBILITY_TEST.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "CORRECTIONS_AND_AUDITS.md"
+      ],
+      "size_kb": 2.53
+    },
+    {
+      "name": "CADERNO-DE-TAREFAS.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [
+        "ARCHITECTURE_MAP.md"
+      ],
+      "size_kb": 14.11
+    },
+    {
+      "name": "CLAUDE.md",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 5.77
+    },
+    {
+      "name": "CLAUDE_SKILLS.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.7
+    },
+    {
+      "name": "CLEAN_BUILD_ID.txt",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "texto solto -- provavel relatorio/registro",
+      "git_tracked": true,
+      "referenced_by": [
+        "tools\\limpar_pasta.py",
+        "build_exe.py",
+        "BUILD_PIPELINE_MAP.md"
+      ],
+      "size_kb": 0.01
+    },
+    {
+      "name": "codex_loop.py",
+      "type": "file",
+      "category": "SCRIPTS",
+      "reason": "script Python solto na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 0.97
+    },
+    {
+      "name": "config",
+      "type": "dir",
+      "category": "CONFIG",
+      "reason": "configuracao",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.0,
+      "file_count": 6
+    },
+    {
+      "name": "core",
+      "type": "dir",
+      "category": "SOURCE",
+      "reason": "codigo-fonte ativo",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 3.12,
+      "file_count": 207
+    },
+    {
+      "name": "core_boundary.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.26
+    },
+    {
+      "name": "CORRECTIONS_AND_AUDITS.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 7.64
+    },
+    {
+      "name": "coverage.json",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [
+        "core\\gemini_live_voice.py",
+        "core\\actions\\code.py",
+        "core\\actions\\media_apps.py",
+        "scripts\\quarentena\\_probe_live_sdk2.py",
+        "ARCHITECTURE_MAP.md"
+      ],
+      "size_kb": 592.89
+    },
+    {
+      "name": "CURRENT_STATE_REPORT.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "AUDIT_EXECUTIVE_SUMMARY.md",
+        "CLAUDE.md",
+        "TRANSFORMATION_PLAN.md"
+      ],
+      "size_kb": 18.53
+    },
+    {
+      "name": "data",
+      "type": "dir",
+      "category": "RUNTIME",
+      "reason": "estado de runtime do usuario",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 0.01,
+      "file_count": 6
+    },
+    {
+      "name": "DEPENDENCY_BASELINE.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "FOUNDATION_M1-M7_REPORT.md"
+      ],
+      "size_kb": 4.73
+    },
+    {
+      "name": "dist-sidecar",
+      "type": "dir",
+      "category": "BUILD_ARTIFACTS",
+      "reason": "saida de build/empacotamento",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 350.2,
+      "file_count": 1
+    },
+    {
+      "name": "docs",
+      "type": "dir",
+      "category": "DOCS",
+      "reason": "documentacao",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.6,
+      "file_count": 100
+    },
+    {
+      "name": "DOSSIE ZARA",
+      "type": "dir",
+      "category": "UNKNOWN",
+      "reason": "diretorio nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.02,
+      "file_count": 21
+    },
+    {
+      "name": "electron-dev.log",
+      "type": "file",
+      "category": "LOGS",
+      "reason": "arquivo de log",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_kb": 452.96
+    },
+    {
+      "name": "executor-perpetuo.log",
+      "type": "file",
+      "category": "LOGS",
+      "reason": "arquivo de log",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_kb": 2.16
+    },
+    {
+      "name": "FOUNDATION_BASELINE.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "FOUNDATION_M1-M7_REPORT.md"
+      ],
+      "size_kb": 5.4
+    },
+    {
+      "name": "FOUNDATION_M1-M7_REPORT.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "CORRECTIONS_AND_AUDITS.md"
+      ],
+      "size_kb": 11.8
+    },
+    {
+      "name": "frontend",
+      "type": "dir",
+      "category": "SOURCE",
+      "reason": "codigo-fonte ativo",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 1677.08,
+      "file_count": 26742
+    },
+    {
+      "name": "IDEIAS-DO-ALEX.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [
+        "CADERNO-DE-TAREFAS.md"
+      ],
+      "size_kb": 7.22
+    },
+    {
+      "name": "INSTALL_HERMES.txt",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "texto solto -- provavel relatorio/registro",
+      "git_tracked": true,
+      "referenced_by": [
+        "tools\\limpar_pasta.py"
+      ],
+      "size_kb": 0.96
+    },
+    {
+      "name": "INTENT_BASELINE.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "FOUNDATION_M1-M7_REPORT.md"
+      ],
+      "size_kb": 7.05
+    },
+    {
+      "name": "interface nova.jpg",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "imagem solta na raiz -- proposito nao obvio",
+      "git_tracked": true,
+      "referenced_by": [
+        "core\\ipc_handlers.py",
+        "tests\\test_selo_na_tela.py",
+        "frontend\\src\\renderer\\lib\\aparencia.ts"
+      ],
+      "size_kb": 250.82
+    },
+    {
+      "name": "IPC_MAP.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "CLAUDE.md",
+        "CORRECTIONS_AND_AUDITS.md",
+        "FOUNDATION_M1-M7_REPORT.md"
+      ],
+      "size_kb": 6.66
+    },
+    {
+      "name": "kanban.db",
+      "type": "file",
+      "category": "RUNTIME",
+      "reason": "banco de dados local",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 0.0
+    },
+    {
+      "name": "KEEP_CONNECT_REFACTOR_REPLACE.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [
+        "AUDIT_EXECUTIVE_SUMMARY.md",
+        "CURRENT_STATE_REPORT.md",
+        "FOUNDATION_BASELINE.md",
+        "TRANSFORMATION_PLAN.md"
+      ],
+      "size_kb": 12.06
+    },
+    {
+      "name": "lembretes",
+      "type": "dir",
+      "category": "RUNTIME",
+      "reason": "estado de runtime do usuario",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_mb": 0.0,
+      "file_count": 1
+    },
+    {
+      "name": "localhost.png",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "imagem solta na raiz -- proposito nao obvio",
+      "git_tracked": true,
+      "referenced_by": [
+        "core\\url_security.py",
+        "tests\\test_local_pipeline.py",
+        "tests\\test_web_security.py",
+        "scripts\\fix\\apply_pipecat.py",
+        "frontend\\src\\main.ts"
+      ],
+      "size_kb": 693.08
+    },
+    {
+      "name": "main.py",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 4.02
+    },
+    {
+      "name": "master.png",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "imagem solta na raiz -- proposito nao obvio",
+      "git_tracked": true,
+      "referenced_by": [
+        "core\\ipc_handlers.py",
+        "core\\actions\\os_ops.py",
+        "frontend\\src\\renderer\\components\\zara-home\\ZaraHome.tsx",
+        "UI_FIDELITY_HANDOFF.md"
+      ],
+      "size_kb": 968.78
+    },
+    {
+      "name": "memory",
+      "type": "dir",
+      "category": "SOURCE",
+      "reason": "codigo-fonte ativo",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.13,
+      "file_count": 11
+    },
+    {
+      "name": "memory_system",
+      "type": "dir",
+      "category": "SOURCE",
+      "reason": "codigo-fonte ativo",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.01,
+      "file_count": 4
+    },
+    {
+      "name": "MODEL_PROVIDER_CONTRACT.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "core\\ai_provider_contracts.py",
+        "NIGHT_04_OWNER_DECISIONS.md",
+        "NIGHT_TASK_BOARD_04.md"
+      ],
+      "size_kb": 2.62
+    },
+    {
+      "name": "MODEL_ROUTER_ARCHITECTURE.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "core\\ai_provider_contracts.py",
+        "MODEL_PROVIDER_CONTRACT.md",
+        "NIGHT_MISSION_04_FINAL_REPORT.md",
+        "NIGHT_TASK_BOARD_04.md",
+        "PLANNER_INTEGRATION_MAP.md"
+      ],
+      "size_kb": 3.46
+    },
+    {
+      "name": "NIGHT_04_OWNER_DECISIONS.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_MISSION_04_FINAL_REPORT.md",
+        "NIGHT_TASK_BOARD_04.md"
+      ],
+      "size_kb": 3.09
+    },
+    {
+      "name": "NIGHT_MISSION_03_FINAL_REPORT.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 15.81
+    },
+    {
+      "name": "NIGHT_MISSION_04_FINAL_REPORT.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_TASK_BOARD_04.md",
+        "PLANNER_ARCHITECTURE.md"
+      ],
+      "size_kb": 6.04
+    },
+    {
+      "name": "NIGHT_TASK_BOARD.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_MISSION_04_FINAL_REPORT.md",
+        "NIGHT_TASK_BOARD_04.md"
+      ],
+      "size_kb": 2.38
+    },
+    {
+      "name": "NIGHT_TASK_BOARD_04.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_MISSION_04_FINAL_REPORT.md"
+      ],
+      "size_kb": 3.14
+    },
+    {
+      "name": "NIGHT_TASK_BOARD_2.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 3.75
+    },
+    {
+      "name": "NIGHT_TASK_BOARD_3.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 4.1
+    },
+    {
+      "name": "OPENCLAW_AUTO_OPEN_ROOT_CAUSE.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 4.12
+    },
+    {
+      "name": "PATCH_SHA256_MANIFEST.txt",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "texto solto -- provavel relatorio/registro",
+      "git_tracked": true,
+      "referenced_by": [
+        "tools\\limpar_pasta.py",
+        "tests\\test_build_manifest.py",
+        "build_exe.py",
+        "BUILD_PIPELINE_MAP.md"
+      ],
+      "size_kb": 0.09
+    },
+    {
+      "name": "PERSONALIDADE_DA_ZARA.txt",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "texto solto -- provavel relatorio/registro",
+      "git_tracked": true,
+      "referenced_by": [
+        "core\\gemini_live_voice.py",
+        "core\\personality.py",
+        "tests\\test_personality_shared_source.py",
+        "README.md"
+      ],
+      "size_kb": 0.47
+    },
+    {
+      "name": "PLANNER_ARCHITECTURE.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_MISSION_04_FINAL_REPORT.md",
+        "NIGHT_TASK_BOARD_04.md"
+      ],
+      "size_kb": 5.09
+    },
+    {
+      "name": "PLANNER_INTEGRATION_MAP.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_TASK_BOARD_04.md"
+      ],
+      "size_kb": 2.74
+    },
+    {
+      "name": "PLANNER_REAL_USE_CASES.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "tests\\test_planner_recipes.py"
+      ],
+      "size_kb": 5.7
+    },
+    {
+      "name": "PLANNER_TOOL_FLOW.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_TASK_BOARD_04.md"
+      ],
+      "size_kb": 1.85
+    },
+    {
+      "name": "plugins",
+      "type": "dir",
+      "category": "SOURCE",
+      "reason": "codigo-fonte ativo",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.0,
+      "file_count": 3
+    },
+    {
+      "name": "profiles",
+      "type": "dir",
+      "category": "SOURCE",
+      "reason": "codigo-fonte ativo",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.12,
+      "file_count": 100
+    },
+    {
+      "name": "pyproject.toml",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 3.09
+    },
+    {
+      "name": "README.md",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 4.69
+    },
+    {
+      "name": "run.py",
+      "type": "file",
+      "category": "SCRIPTS",
+      "reason": "script Python solto na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 0.1
+    },
+    {
+      "name": "run_tests.py",
+      "type": "file",
+      "category": "SCRIPTS",
+      "reason": "script Python solto na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.62
+    },
+    {
+      "name": "run‑integration.cmd",
+      "type": "file",
+      "category": "TOOLS",
+      "reason": "script solto na raiz (bat/ps1/cmd)",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 1.43
+    },
+    {
+      "name": "scripts",
+      "type": "dir",
+      "category": "SCRIPTS",
+      "reason": "scripts utilitarios",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.18,
+      "file_count": 55
+    },
+    {
+      "name": "SHA256_MANIFEST.txt",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "texto solto -- provavel relatorio/registro",
+      "git_tracked": true,
+      "referenced_by": [
+        "tools\\limpar_pasta.py",
+        "tests\\test_build_manifest.py",
+        "build_exe.py",
+        "BUILD_PIPELINE_MAP.md"
+      ],
+      "size_kb": 0.09
+    },
+    {
+      "name": "skills",
+      "type": "dir",
+      "category": "DOCS",
+      "reason": "documentacao",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.05,
+      "file_count": 10
+    },
+    {
+      "name": "SMOKE_TEST_REPORT.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "CORRECTIONS_AND_AUDITS.md",
+        "FOUNDATION_M1-M7_REPORT.md"
+      ],
+      "size_kb": 10.92
+    },
+    {
+      "name": "snapshot_zara.py",
+      "type": "file",
+      "category": "SCRIPTS",
+      "reason": "script Python solto na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 21.17
+    },
+    {
+      "name": "spikes",
+      "type": "dir",
+      "category": "LEGACY",
+      "reason": "ja isolado intencionalmente (prefixo _)",
+      "git_tracked": true,
+      "referenced_by": [
+        "tools\\zara_root_audit.py"
+      ],
+      "size_mb": 0.03,
+      "file_count": 4
+    },
+    {
+      "name": "TEST_BASELINE.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_MISSION_04_FINAL_REPORT.md",
+        "ZARA_CONTINUOUS_VALIDATION.md"
+      ],
+      "size_kb": 3.4
+    },
+    {
+      "name": "test_history.sqlite3",
+      "type": "file",
+      "category": "RUNTIME",
+      "reason": "banco de dados local",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 20.0
+    },
+    {
+      "name": "TEST_ISOLATION_POLICY.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "TEST_RUN_POLICY.md",
+        "ZARA_CONTINUOUS_VALIDATION.md"
+      ],
+      "size_kb": 4.07
+    },
+    {
+      "name": "TEST_RUN_POLICY.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "TEST_BASELINE.md",
+        "TEST_ISOLATION_POLICY.md"
+      ],
+      "size_kb": 3.0
+    },
+    {
+      "name": "tests",
+      "type": "dir",
+      "category": "TESTS",
+      "reason": "suite de testes",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 3.78,
+      "file_count": 274
+    },
+    {
+      "name": "TOOL_ACTION_INVENTORY.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_TASK_BOARD.md"
+      ],
+      "size_kb": 11.33
+    },
+    {
+      "name": "TOOL_SECURITY_REVIEW.md",
+      "type": "file",
+      "category": "UNKNOWN",
+      "reason": "arquivo nao classificado pelas regras",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_TASK_BOARD.md"
+      ],
+      "size_kb": 10.27
+    },
+    {
+      "name": "TOOL_VERIFICATION_MAP.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "NIGHT_TASK_BOARD.md"
+      ],
+      "size_kb": 6.81
+    },
+    {
+      "name": "tools",
+      "type": "dir",
+      "category": "TOOLS",
+      "reason": "ferramentas de operacao",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.32,
+      "file_count": 63
+    },
+    {
+      "name": "TRANSFORMATION_PLAN.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "AUDIT_EXECUTIVE_SUMMARY.md",
+        "CORRECTIONS_AND_AUDITS.md",
+        "CURRENT_STATE_REPORT.md",
+        "FOUNDATION_BASELINE.md",
+        "FOUNDATION_M1-M7_REPORT.md"
+      ],
+      "size_kb": 11.89
+    },
+    {
+      "name": "UI_FIDELITY_GOALS.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "UI_FIDELITY_HANDOFF.md",
+        "UI_FIDELITY_TASK_BOARD.md"
+      ],
+      "size_kb": 7.13
+    },
+    {
+      "name": "UI_FIDELITY_HANDOFF.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 4.61
+    },
+    {
+      "name": "UI_FIDELITY_TASK_BOARD.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "UI_FIDELITY_GOALS.md",
+        "UI_FIDELITY_HANDOFF.md"
+      ],
+      "size_kb": 4.59
+    },
+    {
+      "name": "update_manifest.py",
+      "type": "file",
+      "category": "SCRIPTS",
+      "reason": "script Python solto na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 1.0
+    },
+    {
+      "name": "voice",
+      "type": "dir",
+      "category": "SOURCE",
+      "reason": "codigo-fonte ativo",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.06,
+      "file_count": 5
+    },
+    {
+      "name": "wiki",
+      "type": "dir",
+      "category": "DOCS",
+      "reason": "documentacao",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.05,
+      "file_count": 68
+    },
+    {
+      "name": "windows-ops",
+      "type": "dir",
+      "category": "TOOLS",
+      "reason": "ferramentas de operacao",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_mb": 0.0,
+      "file_count": 1
+    },
+    {
+      "name": "ZARA_ACTIVE_BUILD.json",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 1.07
+    },
+    {
+      "name": "ZARA_ACTIVE_BUILD.txt",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 0.08
+    },
+    {
+      "name": "ZARA_AGENT_START_HERE.md",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_kb": 2.21
+    },
+    {
+      "name": "ZARA_ARCHITECTURE.md",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 3.2
+    },
+    {
+      "name": "ZARA_CONTINUOUS_VALIDATION.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 4.03
+    },
+    {
+      "name": "ZARA_CURRENT_STATE.md",
+      "type": "file",
+      "category": "DOCS",
+      "reason": "documento operacional oficial (secao 46)",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.62
+    },
+    {
+      "name": "ZARA_DECISIONS.md",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.13
+    },
+    {
+      "name": "ZARA_HOME_UI_INTEGRATION.md",
+      "type": "file",
+      "category": "REPORTS",
+      "reason": "relatorio/registro historico pontual",
+      "git_tracked": true,
+      "referenced_by": [
+        "frontend\\src\\renderer\\App.tsx",
+        "frontend\\src\\renderer\\components\\zara-home\\ZaraHome.tsx"
+      ],
+      "size_kb": 6.18
+    },
+    {
+      "name": "ZARA_INICIAR.bat",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": false,
+      "referenced_by": [],
+      "size_kb": 2.51
+    },
+    {
+      "name": "ZARA_TESTAR_TUDO.bat",
+      "type": "file",
+      "category": "KEEP_ROOT",
+      "reason": "oficial, fixo na raiz",
+      "git_tracked": true,
+      "referenced_by": [],
+      "size_kb": 2.43
+    }
+  ]
+}

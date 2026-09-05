@@ -1,0 +1,21 @@
+{
+  "goal": "Implementar sistema que reconhece quando a ZARA já tentou e falhou várias vezes numa mesma tarefa",
+  "context": "Baseado em IDEIAS-DO-ALEX.md 'Na fila' - item 3: 'Ela conhecer os próprios limites'. Evitar insistir em abordagens que não funcionam.",
+  "expected_behavior": [
+    "Registrar tentativas falhas por tipo de ação e contexto",
+    "Após 3 falhas consecutivas em mesma ação/contexto, marcar como 'limite conhecido'",
+    "Responder com honestidade: 'Isso eu já tentei 3 vezes e nunca deu certo'",
+    "Sugerir abordagem alternativa ou pedir ajuda humana quando aplicável",
+    "Resetar limite após sucesso comprovado ou passagem de tempo significativa"
+  ],
+  "verification": [
+    "Unit test: test_limit_tracking_consecutive_failures()",
+    "Unit test: test_limit_honest_response_after_3_failures()",
+    "Teste real: solicitar ação impossível 4x, verificar que na 4ª responde limite conhecido",
+    "Verificar que limite é contextual (mesma ação em contexto diferente pode funcionar)"
+  ],
+  "files_to_touch": [
+    "core/limit_tracker.py",
+    "tests/limit_tracker/test_limit_system.py"
+  ]
+}

@@ -1,0 +1,12 @@
+FEITO:
+Integrado servidores MCP (filesystem, git, github, sqlite, fetch) ao gerenciador de clientes MCP em core/actions/os_ops.py e mapeado 38 ações MCP em core/action_mapping.py. Os servidores MCP locais (file_ops, registry, processes, network, ui_automation) e os servidores MCP built-in da configuração estão agora registrados e disponíveis para uso via registry de capacidades.
+PROVA:
+- core/actions/os_ops.py atualizado para registrar 10 servidores MCP (5 locais + 5 built-in)
+- core/action_mapping.py atualizado para mapear 38 ações MCP para o módulo os_ops
+- test_mcp_import.py confirma que as ações estão mapeadas corretamente (38 ações MCP no mapping)
+- test_mcp_fundamentals.py mostra que as ações fundamentais ainda carregam corretamente (23 ações)
+- test_mcp_direct_load.py e test_mcp_action_load.py validam o funcionamento do sistema de carregamento de capacidades
+NAO FEITO:
+Teste completo de conectividade com os servidores MCP built-in (filesystem, git, github, sqlite, fetch) devido à necessidade de pacotes npm @modelcontextprotocol/server-* que podem não estar disponíveis no registry npm públicos. Os servidores MCP locais (file_ops, registry, processes, network, ui_automation) são funcionais e testados.
+PROXIMO:
+Instalar os pacotes npm necessários para os servidores MCP built-in via: npm install -g @modelcontextprotocol/server-filesystem @modelcontextprotocol/server-git @modelcontextprotocol/server-github @modelcontextprotocol/server-sqlite @modelcontextprotocol/server-fetch, então testar a conectividade completa com todos os servidores MCP integrados.

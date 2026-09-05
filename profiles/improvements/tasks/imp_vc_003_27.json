@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar deteção de abas (tab control) e painéis associados",
+  "context": "Parte da tarefa de detetor de elementos UI: identificar elementos de organização de conteúdo",
+  "expected_behavior": [
+    "Detecta controle de abas com múltiplas abas selecionáveis",
+    "Identifica aba atualmente selecionada através de highlight visual",
+    "Associa cada aba ao seu painel de conteúdo correspondente",
+    "Funciona com abas na parte superior, inferior, esquerda ou direita",
+    "Retorna coordenadas, tamanho, estado e associações da estrutura de abas detectada"
+  ],
+  "verification": [
+    "Teste unitario: test_detect_tab_control_with_multiple_tabs()",
+    "Teste unitario: test_identify_selected_tab_by_visual_highlight()",
+    "Teste unitario: test_associate_tabs_with_content_panels()",
+    "Teste unitario: test_handle_tabs_on_different_positions()",
+    "Teste real: processe screenshot com controle de abas (ex: Propriedades do Sistema), verifique deteção",
+    "Teste de desempenho: <80ms para processar região 400x400px contendo controle de abas"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "tests/vision/test_tab_control_detection.py"
+  ]
+}

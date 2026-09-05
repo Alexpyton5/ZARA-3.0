@@ -22,8 +22,16 @@ from dataclasses import dataclass
 
 from core.reminder_engine import ReminderEngine, parse_natural_due
 
+# ZARA-LEMBRETE-VERBOS-001: só "lembre de ..." era reconhecido. "crie um
+# lembrete...", "agende um lembrete...", "marca um lembrete..." — as formas
+# que o Alex usa quando pensa no lembrete como coisa, não como pedido — caíam
+# no LLM, que responde como se tivesse agendado sem nada ter sido gravado.
 _INTRO = re.compile(
-    r"^\s*(?:zara[\s,]*)?(?:me\s+)?(?:lembre|lembra|lembrar)\s+(?:de\s+|me\s+)?(?:de\s+)?",
+    r"^\s*(?:zara[\s,]*)?(?:"
+    r"(?:me\s+)?(?:lembre|lembra|lembrar)\s+(?:de\s+|me\s+)?(?:de\s+)?"
+    r"|(?:cri[ae]|criar|agend[ae]|agendar|marqu[ae]|marca|marcar|anot[ae]|anotar|coloqu[ae]|bot[ae])\s+"
+    r"(?:um\s+|uma\s+)?lembrete\s*(?:de\s+|para\s+|pra\s+|:\s*)?"
+    r")",
     re.IGNORECASE,
 )
 
@@ -31,7 +39,12 @@ _TIME_PATTERNS = [
     # daqui a N minutos/horas
     re.compile(r"daqui a (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", re.IGNORECASE),
     # amanhã às H(:MM)? / hoje às H(:MM)? (aceita amanha/amanhã sem acento)
-    re.compile(r"(amanh[ãa]|hoje)(?: às| as| a)?\s*(\d{1,2})(?::(\d{2}))?", re.IGNORECASE),
+    re.compile(r"(amanh[ãa]|hoje)(?: às| as| a)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:h(?:oras?|s)?\b)?", re.IGNORECASE),
+    # horário explícito no mesmo dia: "às 16" / "as 16:30" / "às 15h"
+    # ZARA-LEMBRETE-HORA-H-001: sem o sufixo opcional, "às 15h" casava só
+    # "às 15" e o "h" órfão sobrava DENTRO da mensagem — o lembrete gravado
+    # virava "tomar água h".
+    re.compile(r"(?:às|as)\s*(\d{1,2})(?::(\d{2}))?\s*(?:h(?:oras?|s)?\b)?", re.IGNORECASE),
     # em N minutos/horas
     re.compile(r"em (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", re.IGNORECASE),
 ]
@@ -53,6 +66,33 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
     raw = (text or "").strip()
     if not raw:
         return IntentResult(kind="not_reminder", raw=raw)
+
+    lowered = raw.casefold().strip(" .?!")
+    if lowered in {"quais são meus lembretes", "quais sao meus lembretes", "liste meus lembretes"}:
+        if engine is None:
+            return IntentResult(kind="list", reply="Não há armazenamento de lembretes disponível.", raw=raw)
+        pending = engine.scheduled()
+        if not pending:
+            return IntentResult(kind="list", reply="Você não tem lembretes pendentes.", raw=raw)
+        summary = "; ".join(f"{item.id}: {item.message}" for item in pending)
+        return IntentResult(kind="list", reply=f"Lembretes pendentes: {summary}", raw=raw)
+
+    management = re.fullmatch(
+        r"(?:cancele|cancelar|conclua|complete)\s+(?:o\s+)?lembrete\s+(REM-[A-Z0-9-]+)",
+        raw,
+        re.IGNORECASE,
+    )
+    if management:
+        rid = management.group(1).upper()
+        completing = management.group(0).casefold().startswith(("conclua", "complete"))
+        changed = bool(engine and (engine.complete(rid) if completing else engine.cancel(rid)))
+        verb = "concluído" if completing else "cancelado"
+        return IntentResult(
+            kind="complete" if completing else "cancel",
+            reminder_id=rid,
+            reply=f"Lembrete {rid} {verb}." if changed else f"Não encontrei o lembrete pendente {rid}.",
+            raw=raw,
+        )
 
     # precisa comecar com "lembre de ..." (apos opcional "zara")
     m = _INTRO.match(raw)
@@ -84,39 +124,58 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
     message = (body[:time_match.start()] + " " + body[time_match.end():]).strip()
     message = re.sub(r"\s+", " ", message).strip(" ,;:-")
     if not message:
-        return IntentResult(kind="not_reminder", raw=raw)
+        # Horário sem assunto ("crie um lembrete para as 15h"). O caminho
+        # determinístico PERGUNTA em vez de entregar a frase ao modelo, que
+        # inventaria um assunto ou responderia como se tivesse agendado.
+        return IntentResult(
+            kind="needs_clarification",
+            reply="Lembrete de quê?",
+            raw=raw,
+        )
 
     due = parse_natural_due(time_match.group(0))
     if due is None:
-        return IntentResult(kind="not_reminder", raw=raw)
+        return IntentResult(kind="needs_clarification", message=message, reply="Esse horário é inválido. Qual horário devo usar?", raw=raw)
 
     human_due = _humanize_due(time_match.group(0), due)
 
     if engine is not None:
         try:
             reminder = engine.create(message, due, timezone="local", source="voice")
+        except Exception as exc:
+            # BUG-001: create/commit/readback nao provado -> falha explicita
             return IntentResult(
-                kind="reminder",
-                reminder_id=reminder.id,
+                kind="reminder_failed",
                 message=message,
                 due_at_utc=due,
                 human_due=human_due,
-                reply=f"Certo. Vou te lembrar de {message} {human_due}.",
+                reply=(
+                    "Não consegui criar esse lembrete: falha ao salvar/confirmar "
+                    f"no armazenamento ({exc}). Ele NÃO está agendado."
+                ),
                 raw=raw,
             )
-        except Exception:
-            return IntentResult(
-                kind="not_reminder",
-                reply="Não consegui criar esse lembrete.",
-                raw=raw,
-            )
+        return IntentResult(
+            kind="reminder",
+            reminder_id=reminder.id,
+            message=message,
+            due_at_utc=due,
+            human_due=human_due,
+            reply=f"Certo. Vou te lembrar de {message} {human_due}. (id {reminder.id})",
+            raw=raw,
+        )
 
+    # engine=None: nao ha storage -> NUNCA prometer "vou te lembrar" (BUG-001).
+    # retorna falha explicita, sem mensagem falsa de sucesso.
     return IntentResult(
-        kind="reminder",
+        kind="reminder_failed",
         message=message,
         due_at_utc=due,
         human_due=human_due,
-        reply=f"Certo. Vou te lembrar de {message} {human_due}.",
+        reply=(
+            "Não consigo criar esse lembrete agora: o armazenamento de "
+            "lembretes não está disponível. Ele NÃO está agendado."
+        ),
         raw=raw,
     )
 
@@ -135,6 +194,9 @@ def _humanize_due(time_text: str, due_epoch: float) -> str:
         hh = m.group(2)
         mm = m.group(3) or "00"
         return f"{day} às {hh}:{mm}"
+    m = re.match(r"(?:às|as)\s*(\d{1,2})(?::(\d{2}))?", t)
+    if m:
+        return f"às {m.group(1)}:{m.group(2) or '00'}"
     m = re.match(r"em (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", t)
     if m:
         return f"em {m.group(1)} minuto(s) ou hora(s)"

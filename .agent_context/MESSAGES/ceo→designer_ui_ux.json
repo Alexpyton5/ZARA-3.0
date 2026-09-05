@@ -1,0 +1,10 @@
+{
+  "from": "ceo_mentor",
+  "to": "designer_ui_ux",
+  "timestamp": "2026-08-19T14:35:00-03:00",
+  "type": "assignment",
+  "task_id": "TASK-004",
+  "summary": "Definir requisitos de interface moderna",
+  "details": "Analise frontend/src/renderer/components/zara/ (Chat, HUD, Orb, Waveform, PainelAparencia, PainelConfiguracoes, ZaraControlCenter, ConversaInstrumento, ZaraLab, ZaraVoiceOrb). Documente em .agent_context/RESEARCH_INSIGHTS.md na seção SECAO-UI-MODERNA:\n1. Tokens de design atuais (cores, espaçamento, tipografia)\n2. Componentes reutilizáveis vs hardcoded\n3. Gaps para interface 'premium' (cereja do bolo do Alex)\n4. Referências de design systems (Linear, Stripe, Vercel, Apple)\n5. Plano de migração: tokens → componentes → páginas\n6. Acessibilidade e temas (claro/escuro/personalizado)\nDependência: aguardar TASK-001 para contexto completo.",
+  "recommended_next": "Após TASK-001, criar design tokens e component library"
+}

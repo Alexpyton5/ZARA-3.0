@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar suporte a fontes de código Cascadia Code no Tesseract para melhorar OCR de programação",
+  "context": "Parte da tarefa de OCR otimizado para PT-BR técnico: treinar Tesseract com fontes de código comuns",
+  "expected_behavior": [
+    "Adiciona suporte a fonte Cascadia Code regular, bold, italic e bold-italic",
+    "Melhora taxa de reconhecimento de caracteres de programação ({}()[];:,.+-*/=<>!",
+    "Reduz confusão entre caracteres similares em código (O/0, l/1/I, 5/S)",
+    "Funciona com tamanhos de fonte de 8pt a 24pt comuns em IDEs",
+    "Mantém compatibilidade com texto geral em português"
+  ],
+  "verification": [
+    "Teste unitario: test_cascadia_code_support_added_to_tesseract()",
+    "Teste unitario: test_improved_recognition_of_programming_characters()",
+    "Teste unitario: test_reduced_confusion_O_0_l_1_5_S()",
+    "Teste real: processe screenshot de código terminal/Cascadia Code, verifique >90% acurácia em identificação de tokens",
+    "Teste de regressão: confirme que OCR de texto geral não foi degradado"
+  ],
+  "files_to_touch": [
+    "core/vision/ocr_processor.py",
+    "core/vision/technical_fonts/cascadia_code/",
+    "tests/vision/test_cascadia_code_ocr.py"
+  ]
+}

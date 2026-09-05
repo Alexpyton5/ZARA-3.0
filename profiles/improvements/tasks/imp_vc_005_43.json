@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar geração automática de resumo diário em linguagem natural",
+  "context": "Parte do diário automático: criar texto legível resumindo o dia",
+  "expected_behavior": [
+    "Gera resumo assim que o dia terminar (meia-noite) ou quando solicitado por voz",
+    "Usa linguagem natural e coloquial ('Hoje você pediu volume 12 vezes, acertou 10')",
+    "Inclui métricas principais: total de comandos, taxa de sucesso, tempo médio de resposta",
+    "Destaca padrões interessantes descobertos ('Você tende a pedir mais café às 10h')",
+    "Limita resumo a 3-5 frases para manter concisão e utilidade"
+  ],
+  "verification": [
+    "Teste unitario: test_diary_summary_generates_at_midnight()",
+    "Teste unitario: test_summary_uses_natural_language_not_technical_jargon()",
+    "Teste unitario: test_summary_includes_key_metrics_and_patterns()",
+    "Teste real: deixar ZARA funcionando por um dia, verifique resumo gerado automaticamente",
+    "Teste de ativação por voz: confirme que comando 'ZARA, me dê o resumo do dia' funciona"
+  ],
+  "files_to_touch": [
+    "core/diary.py",
+    "core/diary_summary_generator.py",
+    "tests/diary/test_summary_generation.py"
+  ]
+}

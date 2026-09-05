@@ -12,12 +12,6 @@ const zaraAPI = {
     list: () => ipcRenderer.invoke('engine-list'),
   },
 
-  // Supercerebro
-  supercerebro: {
-    toggle: (active: boolean) => ipcRenderer.invoke('supercerebro-toggle', active),
-    status: () => ipcRenderer.invoke('supercerebro-status'),
-  },
-
   // Messaging
   message: {
     send: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) =>
@@ -31,6 +25,28 @@ const zaraAPI = {
     clear: () => ipcRenderer.invoke('conversation-history-clear'),
   },
 
+  memoryGalaxy: {
+    list: () => ipcRenderer.invoke('memory-galaxy-list'),
+  },
+
+  // ZARA-MEMORIA-BRIDGE-001: handlers ja existiam prontos no backend
+  // (handle_memory_user_*, handle_project_memory_*), sem nenhuma ponte ate
+  // o renderer -- nem preload, nem main.ts. So a Home ainda nao tem uma
+  // tela que consuma isto (fica para uma missao de UI de memoria).
+  userMemory: {
+    add: (payload: { fact: string; category?: string; confidence?: number; source?: string }) =>
+      ipcRenderer.invoke('memory-user-add', payload),
+    search: (payload: { query: string; since?: number; until?: number; limit?: number }) =>
+      ipcRenderer.invoke('memory-user-search', payload),
+    list: (payload?: { category?: string; status?: string }) =>
+      ipcRenderer.invoke('memory-user-list', payload),
+    forget: (id: string) => ipcRenderer.invoke('memory-user-forget', { id }),
+  },
+  projectMemory: {
+    get: (key: string) => ipcRenderer.invoke('project-memory-get', { key }),
+    list: () => ipcRenderer.invoke('project-memory-list'),
+  },
+
   // Actions
   action: {
     execute: (action: string, params: Record<string, any>) => ipcRenderer.invoke('action-execute', action, params),
@@ -41,6 +57,9 @@ const zaraAPI = {
   system: {
     metrics: () => ipcRenderer.invoke('system-metrics'),
     info: () => ipcRenderer.invoke('system-info'),
+    // ZARA-DIAGNOSTICO-CARD-001: canal 'self-status' já existia no backend
+    // (handle_self_status), sem ponte até o renderer. Só isso faltava.
+    selfStatus: () => ipcRenderer.invoke('self-status'),
   },
 
   // Voice
@@ -48,6 +67,12 @@ const zaraAPI = {
     start: () => ipcRenderer.invoke('voice-start'),
     stop: () => ipcRenderer.invoke('voice-stop'),
     status: () => ipcRenderer.invoke('voice-status'),
+    // ZARA-AEC-RENDERER-001: microfone limpo pelo AEC do Chromium, sem
+    // resposta do backend — é fluxo contínuo, não requisição.
+    sendMicChunk: (pcm: string) => ipcRenderer.send('voice-mic-chunk', pcm),
+    // ZARA-BOTAO-MUDO-005. Com argumento: define. Sem argumento: só consulta,
+    // que é como o botão descobre a cor certa quando o app abre.
+    mute: (mudo?: boolean) => ipcRenderer.invoke('voice-mute', mudo),
   },
 
   // Config
@@ -99,10 +124,14 @@ const zaraAPI = {
       ipcRenderer.on('voice-level', handler)
       return () => ipcRenderer.off('voice-level', handler)
     },
-    supercerebroChange: (callback: (active: boolean) => void) => {
-      const handler = (_event: any, active: boolean) => callback(active)
-      ipcRenderer.on('supercerebro-change', handler)
-      return () => ipcRenderer.off('supercerebro-change', handler)
+    // ZARA-AEC-RENDERER-001. `stop: true` significa cortar agora (barge-in),
+    // não silêncio.
+    voiceOutputAudio: (
+      callback: (data: { pcm?: string; sampleRate?: number; stop?: boolean }) => void,
+    ) => {
+      const handler = (_event: any, data: any) => callback(data || {})
+      ipcRenderer.on('voice-output-audio', handler)
+      return () => ipcRenderer.off('voice-output-audio', handler)
     },
     reminderCreated: (callback: (reminder: ReminderEvent) => void) => {
       const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)
@@ -110,10 +139,15 @@ const zaraAPI = {
       return () => ipcRenderer.off('reminder-created', handler)
     },
     reminderFired: (callback: (reminder: ReminderEvent) => void) => {
-      const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)
-      ipcRenderer.on('reminder-fired', handler)
-      return () => ipcRenderer.off('reminder-fired', handler)
-    },
+          const handler = (_event: unknown, reminder: ReminderEvent) => callback(reminder)
+          ipcRenderer.on('reminder-fired', handler)
+          return () => ipcRenderer.off('reminder-fired', handler)
+        },
+        routingTelemetry: (callback: (telemetry: { success: boolean; latency: number | null; fallback: boolean; pendingReview: number; error?: string | null }) => void) => {
+          const handler = (_event: unknown, telemetry: any) => callback(telemetry)
+          ipcRenderer.on('routing-telemetry', handler)
+          return () => ipcRenderer.off('routing-telemetry', handler)
+        },
   },
 }
 

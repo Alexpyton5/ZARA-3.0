@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar visualização de forma de onda em tempo real para auxiliar no diagnóstico de problemas de áudio",
+  "context": "Parte do microfone mais preciso: ferramenta de depuração para melhorar experiência do usuário",
+  "expected_behavior": [
+    "Mostra forma de onda do áudio capturado em janela discreta e não intrusiva",
+    "Atualiza em tempo real com baixa latência (<50ms)",
+    "Indica visualmente quando sistema detecta fala vs silêncio",
+    "Mostra nível de ruído estimado e limiares de deteção de fala",
+    "Pode ser ativada/desativada através de comando de voz especial"
+  ],
+  "verification": [
+    "Teste unitario: test_waveform_display_shows_audio_capture()",
+    "Teste unitario: test_real_time_update_with_low_latency()",
+    "Teste unitario: test_visual_indicator_for_speech_vs_silence()",
+    "Teste real: ativar visualização, falar e observar correspondência entre áudio e forma de onda",
+    "Teste de usabilidade: confirme que interface é compreensível para não-técnicos"
+  ],
+  "files_to_touch": [
+    "core/voice/waveform_visualizer.py",
+    "tests/voice/test_waveform_visualization.py"
+  ]
+}

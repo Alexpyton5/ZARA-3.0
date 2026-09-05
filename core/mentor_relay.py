@@ -1,17 +1,17 @@
 """ZARA Mentor Relay 001
 
 A truthful, zero-cost bridge contract between the local ZARA LAB and the
-external Mentor conversation already used by Hermes' continuity loop.
+external Mentor conversation, carried by an external continuity process.
 
 This module does NOT embed ChatGPT, does NOT use OpenAI API keys, and does NOT
 pretend a local model is the Mentor.
 
 Protocol folders:
 %LOCALAPPDATA%/ZARA3/data/mentor-relay/
-  outbox/   ZARA -> Hermes continuity -> Mentor
-  inbox/    Hermes continuity -> ZARA
+  outbox/   ZARA -> continuity process -> Mentor
+  inbox/    continuity process -> ZARA
   archive/  consumed replies / processed outbound messages
-  status.json  heartbeat written by the external Hermes relay
+  status.json  heartbeat written by the external continuity process
 
 All writes are atomic JSON files. No secrets are required.
 """
@@ -40,8 +40,8 @@ class MentorRelay:
 
     def __init__(self, root: str | Path | None = None):
         if root is None:
-            local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-            root = local / "ZARA3" / "data" / "mentor-relay"
+            from core.paths import user_data_dir
+            root = user_data_dir() / "data" / "mentor-relay"
         self.root = Path(root)
         self.outbox = self.root / "outbox"
         self.inbox = self.root / "inbox"
@@ -75,7 +75,7 @@ class MentorRelay:
             if online:
                 return RelayStatus(
                     state="ONLINE VIA RELAY",
-                    detail="Conectado ao Mentor externo pela ponte Hermes/Continuity.",
+                    detail="Conectado ao Mentor externo pela ponte de continuidade.",
                     online=True,
                     updated_at=updated,
                     age_seconds=age,
@@ -135,10 +135,18 @@ class MentorRelay:
                     "content": content,
                     "created_at": float(data.get("created_at") or time.time()),
                     "source": str(data.get("source") or "mentor_external"),
+                    # Preserve the real sender identity so another agent's message
+                    # is never rendered as if the Mentor had written it.
+                    "agent": str(data.get("agent") or "mentor").strip().lower() or "mentor",
+                    "task_id": data.get("task_id"),
                 })
                 archive_path = self.archive / f"{relay_id}.reply.json"
                 if archive_path.exists():
-                    archive_path.unlink()
+                    # Ja entregue uma vez: duplicata nao pode ser reentregue.
+                    replies.pop()
+                    dup = self.archive / f"{path.stem}.duplicate-{int(time.time())}.json"
+                    os.replace(path, dup)
+                    continue
                 os.replace(path, archive_path)
             except Exception:
                 bad = self.archive / f"{path.stem}.invalid-{int(time.time())}.json"
@@ -156,6 +164,54 @@ class MentorRelay:
         if dest.exists():
             dest.unlink()
         os.replace(src, dest)
+
+    def _load_outbound(self, relay_id: str) -> tuple[Path, dict[str, Any]] | None:
+        src = self.outbox / f"{relay_id}.json"
+        if not src.exists():
+            return None
+        try:
+            return src, json.loads(src.read_text(encoding="utf-8"))
+        except Exception:
+            return src, {}
+
+    def mark_outbound_delivered(self, relay_id: str, detail: str = "") -> bool:
+        """Archive an outbound message ONLY when it was really delivered.
+
+        Returns False when the id is unknown, so a caller can never report a
+        delivery that did not happen.
+        """
+        loaded = self._load_outbound(relay_id)
+        if loaded is None:
+            return False
+        src, payload = loaded
+        payload["status"] = "DELIVERED"
+        payload["delivered_at"] = time.time()
+        if detail:
+            payload["delivery_detail"] = str(detail)[:200]
+        dest = self.archive / f"{relay_id}.request.json"
+        self._atomic_json(dest, payload)
+        try:
+            src.unlink()
+        except OSError:
+            return False
+        return True
+
+    def mark_outbound_failed(self, relay_id: str, reason: str = "") -> bool:
+        """Record a real failure and KEEP the message queued for retry.
+
+        A failed send must never look delivered and must never silently vanish.
+        """
+        loaded = self._load_outbound(relay_id)
+        if loaded is None:
+            return False
+        src, payload = loaded
+        payload["status"] = "FAILED"
+        payload["attempts"] = int(payload.get("attempts") or 0) + 1
+        payload["failed_at"] = time.time()
+        # Sanitized: only a short, non-sensitive reason is persisted.
+        payload["last_error"] = " ".join(str(reason).split())[:200]
+        self._atomic_json(src, payload)
+        return True
 
     def snapshot(self) -> dict[str, Any]:
         s = self.status()

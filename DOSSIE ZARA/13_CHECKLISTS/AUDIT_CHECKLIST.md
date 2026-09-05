@@ -1,0 +1,25 @@
+# Checklist de auditoria
+
+- [ ] raiz inteira percorrida
+- [ ] package files lidos
+- [ ] scripts lidos
+- [ ] Electron main lido
+- [ ] preload lido
+- [ ] renderer lido
+- [ ] frontend inteiro lido
+- [ ] services lidos
+- [ ] state lido
+- [ ] database lido
+- [ ] memory lida
+- [ ] voice lida
+- [ ] automations lidas
+- [ ] integrations lidas
+- [ ] IPC mapeado
+- [ ] env/config mapeado
+- [ ] installer/build mapeado
+- [ ] código morto identificado
+- [ ] duplicações identificadas
+- [ ] mocks/fakes identificados
+- [ ] riscos de segurança identificados
+- [ ] classificação completa
+- [ ] plano aprovado antes de exclusões

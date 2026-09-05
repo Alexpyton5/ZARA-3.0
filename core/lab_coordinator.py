@@ -2,7 +2,7 @@
 
 LAB CORE 001 intentionally separates discussion/approval from code execution.
 It provides a real local council room, persistent proposals/tasks, worker health,
-and direct ZARA/Hermes participation. Code workers are registered but are not
+and direct ZARA participation. Code workers are registered but are not
 allowed to edit production until the execution runtime is explicitly enabled in
 a later, separately validated module.
 """
@@ -15,6 +15,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,16 @@ from core.autonomy_lab_bridge import AutonomyLabBridge
 from core.lab_worker_runtime import LabWorkerRuntime
 from core.mentor_relay import MentorRelay
 from core.paths import data_dir
+
+try:
+    from tools.room_relay.lab_bridge import OpenCodeBridge, resolve_lab_target
+except ImportError:  # pragma: no cover - frozen builds without the tools bundle
+    class OpenCodeBridge:  # type: ignore[no-redef]
+        def enqueue(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            raise RuntimeError("OpenCode bridge indisponível neste build")
+
+    def resolve_lab_target(target: str, content: str) -> str:  # type: ignore[no-redef]
+        return (target or "").strip().lower()
 
 
 @dataclass
@@ -39,15 +50,15 @@ class WorkerState:
 class LabCoordinator:
     """Persistent council + approval gate for ZARA's development laboratory."""
 
-    def __init__(self, orchestrator: Any = None, hermes: Any = None, worker_runtime: LabWorkerRuntime | None = None):
+    def __init__(self, orchestrator: Any = None, worker_runtime: LabWorkerRuntime | None = None):
         self.orchestrator = orchestrator
-        self.hermes = hermes
         self.worker_runtime = worker_runtime or LabWorkerRuntime()
         self.root = data_dir() / "lab"
         self.root.mkdir(parents=True, exist_ok=True)
         self.db_path = self.root / "zara_lab.db"
         self.autonomy = AutonomyLabBridge(self.db_path)
         self.mentor_relay = MentorRelay()
+        self.opencode_bridge = OpenCodeBridge()
         self.dev_config_path = data_dir() / "dev-team-config.json"
         self._lock = asyncio.Lock()
         self._initialized = False
@@ -150,13 +161,6 @@ class LabCoordinator:
         return None
 
     async def worker_states(self) -> list[dict[str, Any]]:
-        hermes_connected = False
-        if self.hermes:
-            try:
-                hermes_connected = bool(await self.hermes.health_check())
-            except Exception:
-                hermes_connected = False
-
         opencode = self._resolve_tool("opencode")
         cline = self._resolve_tool("cline")
         aider = self._resolve_tool("aider", str(Path.home() / "aider-env" / "venv" / "Scripts" / "aider.exe"))
@@ -168,7 +172,7 @@ class LabCoordinator:
         oc_detail = str(oc.get("detail") or "Lead Developer.")
         if oc_state == "ERROR":
             oc_state = "DEFERRED"
-            oc_detail = "Integração de chat adiada; OpenCode permanece instalado para retomada futura."
+            oc_detail = "Chat integrado via file relay (ROOM_WORKER); execução de escrita exige TASK_ID + EXECUTE."
 
         states = [
             WorkerState("alex", "ALEX", "OWNER / APPROVAL", "ONLINE", "Autoridade final do produto.", can_chat=True),
@@ -181,25 +185,37 @@ class LabCoordinator:
                 self.mentor_relay.status().detail,
                 can_chat=True,
             ),
-            WorkerState("hermes", "HERMES", "LOCAL OPS", "ONLINE" if hermes_connected else "OFFLINE", "Gateway local e operações Windows.", can_chat=hermes_connected),
-            WorkerState("opencode", "OPENCODE", "LEAD DEVELOPER", oc_state, oc_detail, executable=opencode, can_chat=bool(oc.get("can_chat")) and oc_state not in {"DEFERRED", "ERROR"}, can_execute=False),
+            WorkerState(
+                "codex",
+                "CODEX",
+                "PRIMARY DEVELOPER",
+                "NOT CONFIGURED",
+                "Codex Desktop nao possui ponte local configurada para o LAB; a Room externa nao e simulada como conexao interna.",
+                can_chat=False,
+                can_execute=False,
+            ),
+            WorkerState("opencode", "OPENCODE", "LEAD DEVELOPER", oc_state, oc_detail, executable=opencode, can_chat=True, can_execute=False),
             WorkerState("openclaw", "OPENCLAW", "AGENT RUNTIME / R&D", str(claw.get("state") or ("INSTALLED" if openclaw else "NOT INSTALLED")), str(claw.get("detail") or "Runtime persistente de agentes e pesquisa."), executable=openclaw, can_chat=bool(claw.get("can_chat")), can_execute=False),
             WorkerState("cline", "CLINE", "QA / HEADLESS", "LIMITED" if cline else "NOT INSTALLED", "Instalado; hardware local abaixo da recomendação para executor principal.", executable=cline, can_chat=False, can_execute=False),
             WorkerState("aider", "AIDER", "PATCH / GIT", "INSTALLED" if aider else "NOT INSTALLED", "Especialista em patches cirúrgicos; execução ainda bloqueada.", executable=aider, can_chat=False, can_execute=False),
+            WorkerState("revisor_supervisor", "REVISOR_SUPERVISOR", "QA / FINAL REVIEW", "REGISTERED", "Avaliação final de entregas EXECUTOR_DEV. Critérios: nota ≥ 9.0, zero quebra legado, cobertura ≥ 90%, latência voz < 500ms, zero vulnerabilidades críticas. Emite PASS/FAIL em .agent_context/REVIEWS/review_<task>.json.", can_chat=True, can_execute=False),
         ]
         return [asdict(s) for s in states]
 
     async def get_state(self) -> dict[str, Any]:
         await self.initialize()
         await self._sync_mentor_replies()
+        await self._sync_opencode_replies()
         workers = await self.worker_states()
         async with self._lock:
             return await asyncio.to_thread(self._read_state, workers)
 
     def _read_state(self, workers: list[dict[str, Any]]) -> dict[str, Any]:
         with self._connect() as conn:
+            # rowid breaks created_at ties: two messages written inside the same
+            # clock tick must still render in insertion order (deterministic).
             messages = [dict(row) for row in conn.execute(
-                "SELECT * FROM messages ORDER BY created_at DESC LIMIT 120"
+                "SELECT * FROM messages ORDER BY created_at DESC, rowid DESC LIMIT 120"
             ).fetchall()][::-1]
             proposals = [dict(row) for row in conn.execute(
                 "SELECT * FROM proposals ORDER BY updated_at DESC LIMIT 40"
@@ -247,7 +263,9 @@ class LabCoordinator:
         content = (content or "").strip()
         if not content:
             raise ValueError("Mensagem vazia")
-        if target not in {"zara", "hermes", "mentor", "opencode", "openclaw", "cline", "aider"}:
+        # @OPENCODE mention routes to OpenCode regardless of the dropdown target.
+        target = resolve_lab_target(target, content)
+        if target not in {"zara", "mentor", "opencode", "openclaw", "cline", "aider", "revisor_supervisor"}:
             raise ValueError(f"Participante desconhecido: {target}")
 
         await self._insert_message(author, target, content, "chat")
@@ -265,14 +283,6 @@ class LabCoordinator:
                     f"Alex: {content}"
                 )
                 response = str(await self.orchestrator.process_message(prompt, engine="auto"))
-            elif target == "hermes":
-                if not self.hermes or not await self.hermes.health_check():
-                    raise RuntimeError("Hermes Gateway offline")
-                response = str(await self.hermes.send_message(
-                    content,
-                    history=[],
-                    team="general",
-                ))
             elif target == "mentor":
                 queued = self.mentor_relay.enqueue(author, content)
                 await self._activity("mentor-relay", "MENTOR_QUEUED", queued["relay_id"])
@@ -284,14 +294,33 @@ class LabCoordinator:
                     "relay_id": queued["relay_id"],
                     "relay_online": self.mentor_relay.status().online,
                 }
-            elif target in {"opencode", "openclaw"}:
+            elif target == "opencode":
+                recent = await asyncio.to_thread(self._recent_lab_messages)
+                queued = self.opencode_bridge.enqueue(author=author, content=content, recent=recent)
+                await self._activity("opencode-relay", "OPENCODE_QUEUED", queued["task_id"])
+                # No answer is fabricated. OpenCode reads the task through the
+                # file relay and its reply is imported by _sync_opencode_replies().
+                return {
+                    "success": True,
+                    "state": "QUEUED",
+                    "task_id": queued["task_id"],
+                    "message_id": queued["message_id"],
+                    "authorization": queued["authorization"],
+                }
+            elif target == "openclaw":
                 if not self.worker_runtime:
                     raise RuntimeError("Worker Runtime indisponível")
                 result = await self.worker_runtime.chat(target, content)
                 response = str(result.get("response") or "")
                 if not response:
-                    raise RuntimeError(f"{target.upper()} retornou resposta vazia")
+                    raise RuntimeError("OPENCLAW retornou resposta vazia")
                 state = "OK"
+            elif target == "revisor_supervisor":
+                state = "INSTALLED"
+                response = (
+                    "REVISOR_SUPERVISOR permanece registrado, mas sua execução ainda não foi habilitada nesta etapa. "
+                    "Use o Mentor para acionar avaliação final (task.state == READY_FOR_REVIEW)."
+                )
             else:
                 state = "INSTALLED"
                 response = (
@@ -306,13 +335,14 @@ class LabCoordinator:
         return {"success": state in {"OK", "EXTERNAL", "INSTALLED"}, "state": state, "response": response}
 
     async def _sync_mentor_replies(self) -> None:
-        """Import real Mentor replies delivered by Hermes continuity."""
+        """Import real Mentor/agent replies delivered by the external relay."""
         replies = await asyncio.to_thread(self.mentor_relay.drain_replies, 20)
         for item in replies:
             relay_id = str(item["relay_id"])
             # Idempotency: relay_id is stored inside message id.
             msg_id = f"mentor-relay-{relay_id}"
             now = float(item.get("created_at") or time.time())
+            agent = str(item.get("agent") or "mentor").strip().lower() or "mentor"
             async with self._lock:
                 inserted = await asyncio.to_thread(
                     self._insert_mentor_reply_sync,
@@ -320,19 +350,70 @@ class LabCoordinator:
                     relay_id,
                     str(item["content"]),
                     now,
+                    agent,
                 )
             if inserted:
-                await self._activity("mentor", "MENTOR_REPLY_IMPORTED", relay_id)
+                await self._activity(agent, "RELAY_REPLY_IMPORTED", relay_id)
             await asyncio.to_thread(self.mentor_relay.mark_outbound_processed, relay_id)
 
-    def _insert_mentor_reply_sync(self, msg_id: str, relay_id: str, content: str, now: float) -> bool:
+    def _insert_mentor_reply_sync(
+        self, msg_id: str, relay_id: str, content: str, now: float, agent: str = "mentor"
+    ) -> bool:
         with self._connect() as conn:
             exists = conn.execute("SELECT id FROM messages WHERE id=?", (msg_id,)).fetchone()
             if exists:
                 return False
             conn.execute(
                 "INSERT INTO messages(id,author,target,content,kind,created_at) VALUES(?,?,?,?,?,?)",
-                (msg_id, "mentor", "alex", content, "agent", now),
+                (msg_id, agent, "alex", content, "agent", now),
+            )
+            return True
+
+    def _recent_lab_messages(self, limit: int = 6) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT author, content FROM messages ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    async def _sync_opencode_replies(self) -> None:
+        """Import OpenCode replies delivered through the file relay.
+
+        Idempotent: message ids are stored inside the LAB message id and also
+        tracked in the relay store, so a reply never appears twice.
+        """
+        replies = await asyncio.to_thread(self.opencode_bridge.drain_replies, 20)
+        for item in replies:
+            message_id = str(item.get("message_id") or "")
+            if not message_id:
+                continue
+            msg_id = f"opencode-relay-{message_id}"
+            now = time.time()
+            timestamp = item.get("timestamp")
+            if isinstance(timestamp, str):
+                try:
+                    now = datetime.fromisoformat(timestamp).timestamp()
+                except ValueError:
+                    now = time.time()
+            async with self._lock:
+                inserted = await asyncio.to_thread(
+                    self._insert_opencode_reply_sync,
+                    msg_id,
+                    str(item.get("content") or ""),
+                    now,
+                )
+            if inserted:
+                await self._activity("opencode", "OPENCODE_REPLY_IMPORTED", message_id)
+            await asyncio.to_thread(self.opencode_bridge.mark_imported, message_id)
+
+    def _insert_opencode_reply_sync(self, msg_id: str, content: str, now: float) -> bool:
+        with self._connect() as conn:
+            exists = conn.execute("SELECT id FROM messages WHERE id=?", (msg_id,)).fetchone()
+            if exists:
+                return False
+            conn.execute(
+                "INSERT INTO messages(id,author,target,content,kind,created_at) VALUES(?,?,?,?,?,?)",
+                (msg_id, "opencode", "alex", content, "agent", now),
             )
             return True
 
@@ -341,7 +422,7 @@ class LabCoordinator:
         title, summary = title.strip(), summary.strip()
         if not title or not summary:
             raise ValueError("Título e resumo são obrigatórios")
-        if owner not in {"opencode", "cline", "aider", "hermes"}:
+        if owner not in {"opencode", "cline", "aider"}:
             owner = "opencode"
         risk = risk.upper()
         if risk not in {"LOW", "MEDIUM", "HIGH"}:

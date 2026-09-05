@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar detecção de padrões de uso recorrentes (horários, sequências de comandos)",
+  "context": "Parte do diário automático: identificar hábitos e rotinas do usuário",
+  "expected_behavior": [
+    "Identifica horários do dia com maior volume de comandos (picos de uso)",
+    "Detecta sequências comuns de comandos (ex: abrir navegador → acessar e-mail → verificar clima)",
+    "Reconhece padrões semanais (ex: segundas manhãs com mais lembretes)",
+    "Exige mínimo de 3 ocorrências para considerar um padrão estabelecido",
+    "Fornece força do padrão (0-1) baseado na consistência ao longo do tempo"
+  ],
+  "verification": [
+    "Teste unitario: test_daily_usage_pattern_detection()",
+    "Teste unitario: test_command_sequence_pattern_recognition()",
+    "Teste unitario: test_weekly_pattern_detection_with_minimum_occurrences()",
+    "Teste real: simular uso por 10 dias com padrões conhecidos, verifique detecção",
+    "Teste de sensibilidade: confirme que padrões com poucas ocorrências não são detectados falsamente"
+  ],
+  "files_to_touch": [
+    "core/diary.py",
+    "core/diary_pattern_detector.py",
+    "tests/diary/test_pattern_detection.py"
+  ]
+}

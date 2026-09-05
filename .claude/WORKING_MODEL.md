@@ -187,6 +187,17 @@ OWNER REQUIRED
 Isto formaliza o que já está em `CLAUDE.md` (SHORT MODE) — mesmo espírito,
 vocabulário de status um pouco mais explícito para tarefas longas/delegadas.
 
+**2026-09-05 (correção do Alex) — check-in de PR não é exceção ao silêncio.**
+Não reagendar check-in periódico (`send_later`/trigger) só porque existe uma
+PR aberta, e nunca mandar mensagem pra ele de "sem mudança" (nem "re-armado
+silenciosamente" — isso também é ruído). Monitoramento de PR própria
+continua existindo, mas via o wake **orientado a evento** da própria
+inscrição (`subscribe_pr_activity` — dispara quando algo muda de verdade:
+push, CI, review), nunca por um timer que eu mesmo agendo pra "ir checar".
+Sem novidade real (CI vermelho, review, conflito) = zero mensagem, zero
+re-agendamento — só os quatro sinais de sempre: `CHECKPOINT` / `BLOCKED` /
+`FINAL` / `OWNER REQUIRED`.
+
 ## Owner Rest Mode
 
 Quando o Alex disser que vai dormir, trabalhar em outra coisa ou sair: entrar

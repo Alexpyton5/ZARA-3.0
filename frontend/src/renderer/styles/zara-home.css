@@ -1725,35 +1725,6 @@
   transition: background-color 180ms var(--zh-ease), transform 180ms var(--zh-ease);
 }
 
-@media (max-width: 1280px) {
-  .zh-sidebar {
-    width: 186px;
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-
-  .zh-content {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-
-  .zh-top-bar,
-  .zh-content-top,
-  .zh-system-row {
-    max-width: none;
-  }
-
-  .zh-top-bar,
-  .zh-content-top {
-    grid-template-columns: minmax(250px, 0.78fr) minmax(340px, 1.2fr) minmax(280px, 0.95fr);
-  }
-
-  .zh-dock {
-    width: min(500px, 100%);
-  }
-}
-
-
 .zh-command-submit {
   width: 76px;
   height: 32px;
@@ -1823,7 +1794,12 @@
 
 
 /* Refinamento 2: base luminosa do core, rodapé dentro do enquadramento e
- * hierarquia dos cards conforme o screenshot de referência. */
+ * hierarquia dos cards conforme o screenshot de referência.
+ * FASE C (2026-09-05): este passo tinha deixado os anéis mais saturados/
+ * brilhantes que a intenção original de "titânio fumê, emerald só como
+ * acento de energia" (ver comentário em .zh-platform-ring, linha ~1160) —
+ * width/height/posição ficam (calibração real), só a cor/opacidade volta a
+ * ser mais contida: menos "neon", mais metal. */
 .zh-core-platform {
   top: 334px;
 }
@@ -1832,12 +1808,12 @@
   top: 7px;
   width: 214px;
   height: 40px;
-  background: radial-gradient(ellipse at 50% 18%, #25473a99 0%, #101b18d9 46%, #020504f0 82%, transparent 100%);
+  background: radial-gradient(ellipse at 50% 18%, #1c2420b0 0%, #0e1412dd 46%, #020403f2 82%, transparent 100%);
   box-shadow:
     0 12px 24px -8px #000000f0,
-    inset 0 2px 4px #ffffff28,
+    inset 0 2px 4px #ffffff20,
     inset 0 -10px 16px -8px #000000f0,
-    0 2px 16px 2px #14ca8848;
+    0 2px 14px 1px #14ca8830;
 }
 
 .zh-platform-ring--1 {
@@ -1845,28 +1821,28 @@
   width: 320px;
   height: 46px;
   border-width: 1.5px;
-  border-color: #34e9ad91;
-  opacity: 0.95;
+  border-color: #3a6a5866;
+  opacity: 0.85;
   background:
-    linear-gradient(180deg, #ffffff18 0%, transparent 28%),
-    linear-gradient(180deg, #1d3630b8 0%, #0b1613cc 55%, #07100ed4 100%);
+    linear-gradient(180deg, #ffffff14 0%, transparent 28%),
+    linear-gradient(180deg, #1d2622b8 0%, #0b1210cc 55%, #070c0bd4 100%);
   box-shadow:
-    inset 0 2px 3px -1px #ffffff42,
+    inset 0 2px 3px -1px #ffffff30,
     inset 0 -2px 5px -2px #000000c0,
-    0 0 9px 1px #14ca8865,
-    0 3px 18px -2px #14ca884c;
+    0 0 7px 1px #14ca8840,
+    0 3px 18px -2px #14ca8830;
 }
 
 .zh-platform-ring--4 {
   top: 47px;
   width: 404px;
   height: 58px;
-  border-color: #2b8e6f70;
-  opacity: 0.7;
+  border-color: #1f2c27;
+  opacity: 0.5;
   box-shadow:
-    inset 0 1px 2px -1px #ffffff1b,
+    inset 0 1px 2px -1px #ffffff14,
     inset 0 -2px 5px -2px #000000e8,
-    0 0 12px -2px #14ca8835,
+    0 0 10px -2px #14ca8820,
     0 10px 20px -8px #000000d0;
 }
 
@@ -1942,34 +1918,6 @@
   transform: translateY(-1px);
 }
 
-
-/* Calibração final do viewport do Electron: a referência usa uma composição
- * larga mesmo quando o conteúdo CSS é medido em viewport compacto. */
-@media (max-width: 1300px) {
-  .zh-sidebar {
-    width: 206px;
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-
-  .zh-content {
-    padding-left: 24px;
-    padding-right: 20px;
-  }
-
-  .zh-top-bar,
-  .zh-content-top {
-    grid-template-columns: 293px 458px 370px;
-    gap: 14px;
-    max-width: none;
-    width: 1149px;
-  }
-
-  .zh-system-row {
-    width: 1149px;
-    max-width: none;
-  }
-}
 
 .zh-main > .zh-section:nth-child(2) {
   min-height: 128px;
@@ -2272,56 +2220,6 @@
   opacity: 0.94;
 }
 
-.zh-project-badge {
-  position: relative;
-  width: 78px;
-  height: 78px;
-  border: 1px solid #b7f8e34d;
-  background:
-    radial-gradient(circle at 31% 23%, #ffffff4a 0%, transparent 13%),
-    radial-gradient(circle at 50% 55%, #17503c 0%, #06150f 55%, #010604 88%);
-  box-shadow:
-    inset 8px 9px 14px -12px #ffffffb8,
-    inset -8px -10px 14px -8px #00d6997a,
-    inset 0 0 0 1px #1cc9934e,
-    0 0 0 3px #0b382b4a,
-    0 0 0 5px #1de9a124,
-    0 0 15px 2px #00d69945,
-    0 6px 14px -7px #000000ee;
-  isolation: isolate;
-}
-
-.zh-project-badge::before,
-.zh-project-badge::after {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.zh-project-badge::before {
-  inset: -4px;
-  border: 1px solid #5eeac08c;
-  box-shadow: 0 0 7px #00d69942;
-}
-
-.zh-project-badge::after {
-  inset: 2px;
-  border: 1px solid #ffffff2e;
-  border-top-color: #ffffffa6;
-  transform: rotate(-30deg);
-}
-
-.zh-project-badge img {
-  position: relative;
-  z-index: 1;
-  width: 56px;
-  height: 49px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 5px #00edaaac) drop-shadow(0 3px 5px #000000d0);
-  mix-blend-mode: screen;
-}
-
 .zh-sidebar-brand img,
 .zh-command-form > img {
   object-fit: contain;
@@ -2353,9 +2251,12 @@
 }
 
 
-/* Mini-core: manter o mesmo material do core grande sem a névoa externa.
- * O aro é definido, a luz fica confinada à borda e a logo não recebe blur. */
+/* Mini-core (badge "Projeto ativo"): mesmo material do core grande, sem a
+ * névoa externa. Aro definido, luz confinada à borda, logo sem blur —
+ * consolidado numa única declaração (antes duplicada em blocos sucessivos
+ * que se sobrescreviam parcialmente). */
 .zh-project-badge {
+  position: relative;
   width: 78px;
   height: 78px;
   border: 1px solid #d9fff033;
@@ -2369,6 +2270,16 @@
     0 0 0 3px #0b382b42,
     0 0 0 4px #24d99b22,
     0 4px 9px -7px #000000f5;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.zh-project-badge::before,
+.zh-project-badge::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .zh-project-badge::before {
@@ -2384,19 +2295,6 @@
   border-left-color: #9bffe07c;
   transform: rotate(-29deg);
   box-shadow: none;
-}
-
-.zh-project-badge img {
-  width: 52px;
-  height: 46px;
-  filter: drop-shadow(0 0 2px #00e6a0b8) drop-shadow(0 2px 3px #000000e8);
-  mix-blend-mode: normal;
-}
-
-
-.zh-project-badge {
-  overflow: hidden;
-  isolation: isolate;
 }
 
 .zh-project-badge .zh-project-badge-glass {
@@ -2432,98 +2330,13 @@
 }
 
 
-/* Calibração global de composição contra o MASTER 1671×941. */
-@media (max-width: 1300px) {
-  .zh-top-bar,
-  .zh-content-top {
-    grid-template-columns: 320px 490px 438px;
-    gap: 16px;
-    width: 1280px;
-    max-width: none;
-  }
-
-  .zh-top-bar-center .zh-command-form {
-    width: 365px;
-  }
-
-  .zh-system-row {
-    width: 1280px;
-    max-width: none;
-  }
-}
-
-
-/* Composição global — ajuste de escala e ancoragem das colunas ao MASTER. */
-@media (max-width: 1300px) {
-  .zh-sidebar {
-    width: 221px;
-  }
-
-  .zh-top-bar,
-  .zh-content-top {
-    grid-template-columns: 320px 520px 470px;
-    width: 1342px;
-  }
-
-  .zh-system-row {
-    width: 1342px;
-  }
-}
-
-
-/* Calibração final de largura após medição DOM: preservar a ancoragem do
- * MASTER e evitar que a coluna direita seja empurrada além do canvas. */
-@media (max-width: 1300px) {
-  .zh-sidebar {
-    width: 206px;
-  }
-
-  .zh-top-bar,
-  .zh-content-top {
-    grid-template-columns: 320px 480px 440px;
-    width: 1272px;
-  }
-
-  .zh-system-row {
-    width: 1272px;
-  }
-}
-
-
-@media (max-width: 1300px) {
-  .zh-top-bar,
-  .zh-content-top {
-    grid-template-columns: 324px 496px 440px;
-    width: 1292px;
-  }
-
-  .zh-system-row {
-    width: 1292px;
-  }
-}
-
-
-/* MASTER 1671×941 — ajuste de composição: sidebar 222, main 346, core 529,
- * right 470, mantendo 16px de gutter entre colunas. */
-@media (max-width: 1300px) {
-  .zh-sidebar {
-    width: 222px;
-  }
-
-  .zh-top-bar,
-  .zh-content-top {
-    grid-template-columns: 346px 529px 470px;
-    width: 1377px;
-  }
-
-  .zh-system-row {
-    width: 1377px;
-  }
-}
-
-
-/* MASTER desktop 1671×941: esta regra fica fora do breakpoint para que a
- * captura Electron/headless use as mesmas proporções do screenshot-alvo. */
+/* Calibração de composição contra o MASTER 1671×941 (sidebar 206, colunas
+ * 346/529/470, gutter 16px) — janela mínima é 1500px (main.ts), então esta é
+ * a única regra de largura alcançável; as cinco variantes anteriores de
+ * `@media (max-width: 1300px)` empilhadas aqui (tentativas sucessivas de
+ * calibração que nunca foram limpas) ficaram mortas depois da correção do
+ * tamanho de janela do UI-001 e foram removidas — a última delas já tinha os
+ * mesmos números desta regra. */
 @media (min-width: 1301px) {
   .zh-sidebar {
     width: 206px;

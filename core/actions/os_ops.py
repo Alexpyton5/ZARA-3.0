@@ -26,6 +26,33 @@ _SAFE_WINDOWS_APPS = {
         "executable": "chrome.exe",
         "process_names": {"chrome.exe"},
     },
+    # ZARA-FERRAMENTAS-001: o card "Ferramentas" da Home já oferecia estes
+    # quatro, mas nenhum estava na lista segura — o clique caía em
+    # "aplicativo não autorizado" e não abria nada.
+    "vs_code": {
+        "display_name": "VS Code",
+        "opened_reply": "VS Code aberto e verificado.",
+        "executable": "Code.exe",
+        "process_names": {"code.exe"},
+    },
+    "postman": {
+        "display_name": "Postman",
+        "opened_reply": "Postman aberto e verificado.",
+        "executable": "Postman.exe",
+        "process_names": {"postman.exe"},
+    },
+    "figma": {
+        "display_name": "Figma",
+        "opened_reply": "Figma aberto e verificado.",
+        "executable": "Figma.exe",
+        "process_names": {"figma.exe"},
+    },
+    "docker": {
+        "display_name": "Docker Desktop",
+        "opened_reply": "Docker Desktop aberto e verificado.",
+        "executable": "Docker Desktop.exe",
+        "process_names": {"docker desktop.exe"},
+    },
     "task_manager": {
         "display_name": "Gerenciador de Tarefas",
         "opened_reply": "Gerenciador de Tarefas aberto e verificado.",
@@ -178,6 +205,14 @@ _APP_ALIASES = {
     "amplitube": "amplitube",
     "amplitube 5": "amplitube",
     "cursor": "cursor",
+    "vs code": "vs_code",
+    "vscode": "vs_code",
+    "visual studio code": "vs_code",
+    "code": "vs_code",
+    "postman": "postman",
+    "figma": "figma",
+    "docker": "docker",
+    "docker desktop": "docker",
     "ik product manager": "ik_product_manager",
     "geforce now": "geforce_now",
     "geforce": "geforce_now",
@@ -351,6 +386,29 @@ def browser_search_action(query: str) -> ActionResult:
     return result
 
 
+# ZARA-FERRAMENTAS-001: caminhos de instalação padrão dos apps que não ficam
+# na PATH do Windows. Antes só Chrome e Edge tinham isso, num if solto; agora
+# é uma tabela — cada app novo é uma linha, não um ramo a mais no código.
+_APP_INSTALL_RELATIVES: dict[str, tuple[str, ...]] = {
+    "chrome": ("Google/Chrome/Application/chrome.exe",),
+    "edge": ("Microsoft/Edge/Application/msedge.exe",),
+    "vs_code": (
+        "Programs/Microsoft VS Code/Code.exe",
+        "Microsoft VS Code/Code.exe",
+    ),
+    "postman": (
+        "Postman/Postman.exe",
+        "Postman/app/Postman.exe",
+    ),
+    "figma": (
+        "Figma/Figma.exe",
+    ),
+    "docker": (
+        "Docker/Docker/Docker Desktop.exe",
+    ),
+}
+
+
 def _resolve_windows_app_command(app: str) -> list[str] | None:
     """Resolve only a canonical allow-listed app id to a fixed executable."""
     spec = _SAFE_WINDOWS_APPS.get(app)
@@ -368,18 +426,18 @@ def _resolve_windows_app_command(app: str) -> list[str] | None:
     # caminho absoluto do .exe achado no Menu Iniciar do Alex.
     if os.path.isabs(executable) and Path(executable).is_file():
         return [executable]
-    if app not in {"chrome", "edge"}:
+    relatives = _APP_INSTALL_RELATIVES.get(app)
+    if not relatives:
         return [executable]
 
-    relative = "Google/Chrome/Application/chrome.exe" if app == "chrome" else "Microsoft/Edge/Application/msedge.exe"
-    candidates = [
-        Path(os.environ.get("PROGRAMFILES", "")) / relative,
-        Path(os.environ.get("PROGRAMFILES(X86)", "")) / relative,
-        Path(os.environ.get("LOCALAPPDATA", "")) / relative,
-    ]
-    for candidate in candidates:
-        if str(candidate) and candidate.is_file():
-            return [str(candidate)]
+    for relative in relatives:
+        for root in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA", "APPDATA"):
+            base = os.environ.get(root, "")
+            if not base:
+                continue
+            candidate = Path(base) / relative
+            if candidate.is_file():
+                return [str(candidate)]
     return None
 
 

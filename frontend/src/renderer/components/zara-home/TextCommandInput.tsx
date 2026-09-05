@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AudioLines } from 'lucide-react';
+import { cortarKore } from '../../lib/aecAudio';
 import zaraLogo from '../../../assets/zara-home/zara-logo-transparent.png';
 
 interface TextCommandInputProps {
@@ -27,6 +28,18 @@ export function TextCommandInput({ engine = 'auto', onSent }: TextCommandInputPr
 
     setSending(true);
     try {
+      // ZARA-BARGE-IN-TEXTO-001: se a ZARA estiver falando quando o Alex
+      // digita, ela tem que calar e ouvir — mesma regra do "Zara, pare" e do
+      // botão de voz. Antes só a voz interrompia; pelo texto ela continuava
+      // falando por cima da própria resposta anterior. Cortar quando não há
+      // áudio tocando é inofensivo.
+      cortarKore();
+      try {
+        await window.zaraIPC?.message?.interrupt?.();
+      } catch {
+        // Áudio já foi cortado no cliente; avisar o backend é best-effort.
+      }
+
       await window.zaraIPC.message.send({ message, engine, history: [] });
       onSent?.(message);
       setValue('');

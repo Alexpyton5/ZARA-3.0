@@ -94,6 +94,38 @@ Só decisão estável/importante. Não é log de rotina — isso fica no git.
   `0e582ec`, 2026-09-04). Não reintroduzir nenhum dos dois — já registrado em
   `.claude/rules/path-rules/backend-core.md`.
 
+## 2026-09-05 — UI se confere renderizando, não lendo
+
+Decidido durante o turno CORUJÃO, e virou regra:
+
+- **Nenhuma afirmação sobre a Home vale sem render.** "O código está certo"
+  não é evidência de que a tela está certa. Três defeitos desta madrugada
+  passariam despercebidos numa leitura de código: os anéis da plataforma
+  invisíveis contra a aurora, a faixa do Sistema cobrindo o card
+  Comunicações, e a resposta de texto que era descartada.
+- **O harness é `node .zara-tests/ui/run-ui-checks.mjs`.** Builda, sobe um
+  servidor local em 127.0.0.1 e roda os probes contra o DOM. Quem mexer na
+  Home roda isso antes de dizer que está bom.
+- **Os probes injetam o formato REAL dos handlers**, copiado de
+  `core/ipc_handlers.py`. Um stub com formato inventado prova nada — foi
+  exatamente assim que RAM e Disco ficaram meses sem aparecer.
+- **Nível de evidência do harness é `RUNTIME_AUTOMATED`**, e não sobe
+  sozinho. Ele prova o renderer, não o EXE que o Alex abre.
+
+## 2026-09-05 — dado de maquete é pior que botão morto
+
+A Home mostrava "João espera sua resposta • WhatsApp • 10 min", "Reunião às
+14:00", contagens de mensagens não lidas em quatro canais sem integração, e
+uma barra de progresso de projeto em 61%. Tudo herdado da maquete.
+
+Decisão: **conteúdo de maquete não entra em tela de produto.** Um botão que
+não faz nada custa um clique; um dado inventado custa o Alex ir procurar uma
+mensagem que não existe, e custa a confiança em todo o resto da tela. Sem
+fonte real, a tela diz que não tem — nunca preenche com exemplo.
+
+O probe `.zara-tests/ui/probe-sem-mentira.mjs` falha se qualquer uma dessas
+frases voltar.
+
 ## Separação de memória (não duplicar estado)
 
 - `.claude/` = como o Claude trabalha (este modelo de operação).

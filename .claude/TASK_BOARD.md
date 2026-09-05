@@ -4,6 +4,54 @@ Formato simples. Não virar burocracia.
 
 ## DONE
 
+- ID: T-2026-09-05-07
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: harness de UI — um comando builda, serve e roda 7 probes contra o DOM
+  files: `.zara-tests/ui/run-ui-checks.mjs` + 7 `probe-*.mjs`
+  DoD: `node .zara-tests/ui/run-ui-checks.mjs` -> 7/7 (commit `c027e74`+)
+
+- ID: T-2026-09-05-06
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: botão de voz do dock deixou de contar história própria; segue `voice-status` e cai junto com o Core
+  files: `frontend/src/renderer/components/zara-home/VoiceDock.tsx`
+  DoD: `probe-voz.mjs` 4/4 (commit `4bb0a3d`)
+
+- ID: T-2026-09-05-05
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: Ferramentas parou de fingir que abriu — rótulo vem do executor, tile some quando o app não existe
+  files: `ToolsCard.tsx`, `zara-home.css`
+  DoD: `probe-ferramentas.mjs` 6/6 (commit `c027e74`)
+
+- ID: T-2026-09-05-04
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: remover TODO dado inventado da Home (João/WhatsApp, reunião 14:00, 12/3/5/7, 61%)
+  files: `ForYouCard.tsx`, `CommunicationsCard.tsx`, `ActiveProjectCard.tsx`, `useHomeSignals.ts`, `zara-home.css`
+  DoD: `probe-sem-mentira.mjs` 9/9, com backend cheio e vazio (commit `014b10b`)
+
+- ID: T-2026-09-05-03
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: estados do Core presos (SUCCESS/ERROR eternos) e "Aguardando autorização" que nunca acendia
+  files: `useZaraCoreState.ts`, `frontend/src/main.ts`
+  DoD: `probe-estados.mjs` 12/12 (commit `9070fa6`)
+
+- ID: T-2026-09-05-02
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: comando de texto passou a ter volta na tela (tira de conversa, voz e texto na mesma tira)
+  files: `ConversationStrip.tsx`, `TextCommandInput.tsx`, `ZaraHome.tsx`, `zara-home.css`
+  DoD: `probe-texto.mjs` 5/5, incluindo resposta vazia e erro de IPC (commit `987cc16`)
+
+- ID: T-2026-09-05-01
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: 10 dos 11 itens da Sidebar não levavam a lugar nenhum; agora cada um lê um canal IPC que já existia
+  files: `SectionView.tsx`, `ZaraHome.tsx`, `core/actions/os_ops.py` (`os_app_list`), `zara-home.css`
+  DoD: `probe-sections.mjs` 11/11 (commit `f2c8c36`)
+
+- ID: T-2026-09-05-00
+  owner: Chief of Staff (turno CORUJÃO)
+  scope: plataforma, dock e painel Sistema medidos pixel a pixel contra a MASTER
+  files: `zara-home.css`, `SystemPanel.tsx`, `VoiceDock.tsx`
+  DoD: render local comparado com `master.png` região a região (commit `bb39c82`)
+
 - ID: T-2026-09-04-01
   owner: Chief of Staff
   scope: instalar modelo de operação permanente (Chief of Staff + hierarquia)

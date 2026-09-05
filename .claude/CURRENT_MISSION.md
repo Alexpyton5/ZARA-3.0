@@ -31,9 +31,14 @@ F1.1 VOZ KORE → F1.2 LATÊNCIA → F1.3 MICROFONE SEM LOOP → F1.4 VOZ → A�
 
 ## Task ativa
 
-Nenhuma em execução ainda. Próxima: **UI-001 GLOBAL COMPOSITION**
-(Pixel-Perfect Analyst / Opus — analisar MASTER vs. Electron atual antes de
-qualquer CSS).
+Nenhuma em execução. Turno CORUJÃO de 2026-09-05 (madrugada) fechado — ver
+`.claude/TASK_BOARD.md`, série `T-2026-09-05-*`, e o resumo do dono em
+`.zara-dev/reports/CORUJAO_2026-09-05.md`.
+
+O que mudou de método nesse turno: a Home passou a ser conferida
+**renderizando**, não lendo código. `node .zara-tests/ui/run-ui-checks.mjs`
+builda, sobe um servidor local e roda 7 probes contra o DOM real. Qualquer
+sessão futura que mexer na Home roda isso antes de dizer que está bom.
 
 ## Owner da task
 
@@ -51,10 +56,16 @@ A definir no brief do Pixel-Perfect Analyst para cada região (ver
 
 ## Status
 
-`IDLE` — política instalada, nenhuma região iniciada.
+`AGUARDANDO ALEX` — o que foi feito na madrugada está commitado e enviado
+para `backup/estado-20260820-1143-xywufc`, mas **nada disso foi visto
+rodando no Windows**. O nível de evidência de tudo é `RUNTIME_AUTOMATED`
+(render headless), nunca `PACKAGED_RUNTIME` nem `PHYSICAL_BY_ALEX`.
 
 ## Next action
 
-UI-001 GLOBAL COMPOSITION: Pixel-Perfect Analyst compara MASTER vs. Electron
-atual (viewport fixo) e produz o primeiro brief. Depois, Frontend Executor
-implementa.
+1. Empacotar um build com o estado atual e gravar `BUILD_INFO.json`
+   (`.claude/rules/build-release.md`).
+2. Pedir ao Alex o micro smoke físico de nível 1 — 3 comandos, com
+   `ALEX_OPEN_THIS_EXE:` e caminho absoluto.
+3. Só depois disso qualquer coisa da madrugada pode subir de nível de
+   evidência.

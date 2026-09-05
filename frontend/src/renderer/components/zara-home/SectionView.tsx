@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   MessageCircle, Folder, File, LayoutGrid, Workflow, BrainCircuit,
-  FlaskConical, Monitor, Settings, RefreshCw, Trash2,
+  FlaskConical, Monitor, Settings, RefreshCw, Trash2, HelpCircle,
 } from 'lucide-react';
 
 /**
@@ -413,6 +413,67 @@ function Capacidades({ title, subtitle, icon }: { title: string; subtitle: strin
   );
 }
 
+/** Nomes de categoria do registry em português, para a tela do Alex. */
+const CATEGORIAS: Record<string, string> = {
+  os: 'Computador', system: 'Sistema', files: 'Arquivos', media: 'Mídia',
+  browser: 'Navegador', window: 'Janelas', automation: 'Automações',
+  vision: 'Tela', web: 'Web', code: 'Código', scheduler: 'Agendamentos',
+  mcp: 'MCP', plugin: 'Plugins',
+};
+
+function Ajuda() {
+  const list = window.zaraIPC?.action?.list;
+  const { data, error, loading, reload } = useChannel(list ? () => list() : null);
+
+  // `action-list` devolve o registry INTEIRO, com a descrição escrita na
+  // própria action. É a única resposta honesta para "o que a ZARA sabe
+  // fazer": nada aqui é uma lista paralela mantida à mão no renderer.
+  const acoes = data && typeof data === 'object'
+    ? Object.values(data as Record<string, { name: string; description?: string; category?: string; risk?: string }>)
+    : [];
+
+  const porCategoria = new Map<string, typeof acoes>();
+  for (const a of acoes) {
+    const cat = CATEGORIAS[String(a.category ?? '')] ?? String(a.category ?? 'Outros');
+    if (!porCategoria.has(cat)) porCategoria.set(cat, []);
+    porCategoria.get(cat)!.push(a);
+  }
+  const categorias = [...porCategoria.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  return (
+    <SectionShell
+      icon={<HelpCircle size={18} strokeWidth={1.7} />}
+      title="O que a ZARA sabe fazer"
+      subtitle="Lido do registro de ações do backend, não de uma lista escrita à mão."
+      onReload={list ? reload : undefined}
+    >
+      <StateLine loading={loading} error={error} empty={acoes.length === 0} emptyText="Nenhuma ação registrada." />
+      {acoes.length > 0 && (
+        <>
+          <p className="zh-section-count" style={{ marginBottom: 12 }}>
+            {acoes.length} ações registradas em {categorias.length} categorias
+          </p>
+          {categorias.map(([cat, itens]) => (
+            <div key={cat}>
+              <h2 className="zh-section-subhead">{cat} · {itens.length}</h2>
+              <ul className="zh-fact-list">
+                {itens.map((a) => (
+                  <li key={a.name} className="zh-fact">
+                    <span className="zh-fact-body">
+                      <strong>{a.description || a.name}</strong>
+                      <span>{a.name}{a.risk && a.risk !== 'LOW' ? ` · risco ${a.risk}` : ''}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </>
+      )}
+    </SectionShell>
+  );
+}
+
 function NaoConstruido({ icon, title, motivo }: { icon: ReactNode; title: string; motivo: string }) {
   return (
     <SectionShell icon={icon} title={title} subtitle="Ainda não construído.">
@@ -431,6 +492,7 @@ export function SectionView({ section }: { section: string }) {
     case 'Automações': return <Automacoes />;
     case 'Aplicativos': return <Aplicativos />;
     case 'ZARA Lab': return <Lab />;
+    case 'Ajuda': return <Ajuda />;
     case 'Configurações':
       return (
         <Capacidades

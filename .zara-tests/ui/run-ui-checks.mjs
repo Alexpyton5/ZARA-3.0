@@ -32,6 +32,7 @@ const PROBES = [
   ['Ferramentas', 'probe-ferramentas.mjs', []],
   ['botão de voz', 'probe-voz.mjs', []],
   ['painel Sistema', 'probe-sistema.mjs', []],
+  ['botões do dock', 'probe-dock.mjs', []],
 ];
 
 const TIPOS = {

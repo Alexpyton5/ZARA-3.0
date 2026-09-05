@@ -1202,12 +1202,12 @@
   left: 50%;
   top: 10px;
   transform: translateX(-50%);
-  width: 700px;
-  height: 160px;
+  width: 560px;
+  height: 108px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(0, 214, 153, 0.10) 0%, rgba(0, 176, 128, 0.045) 40%, transparent 74%);
-  filter: blur(12px);
-  opacity: 0.85;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 214, 153, 0.07) 0%, rgba(0, 176, 128, 0.03) 42%, transparent 76%);
+  filter: blur(14px);
+  opacity: 0.6;
 }
 
 .zh-platform-seat,
@@ -1223,56 +1223,18 @@
  * lateral (::before, dá espessura) + poça de contato luminosa (::after).
  * Fino e com massa — não a laje preta das passadas anteriores. */
 .zh-platform-seat {
-  top: 16px;
-  width: 152px;
-  height: 22px;
-  /* Na MASTER o miolo do disco é LUZ, não uma tampa preta: o feixe bate ali e
-   * a poça emerald domina. O preenchimento escuro anterior fazia o centro
-   * ler como um buraco. */
-  background:
-    linear-gradient(180deg, rgba(210, 235, 226, 0.12) 0%, rgba(255, 255, 255, 0) 42%),
-    radial-gradient(ellipse at 50% 50%, rgba(150, 255, 224, 0.62) 0%, rgba(0, 224, 160, 0.4) 46%, rgba(0, 176, 126, 0.24) 74%, rgba(24, 58, 49, 0.6) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(240, 255, 250, 0.6),
-    inset 0 -6px 10px -6px rgba(0, 0, 0, 0.6),
-    inset 0 0 18px -2px rgba(0, 230, 165, 0.6),
-    0 0 30px rgba(0, 230, 165, 0.42),
-    0 6px 14px -6px rgba(0, 0, 0, 0.85);
-}
-
-.zh-platform-seat::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 3px;
-  transform: translateX(-50%);
-  width: 150px;
-  height: 21px;
-  border-radius: 50%;
-  z-index: -1;
-  /* Parede lateral do disco: metal, com o aro da frente pegando luz. A
-   * versão preta anterior aparecia como uma faixa escura na metade de baixo
-   * da elipse — o oposto da MASTER, onde a frente do disco é a parte mais
-   * clara. */
-  background: linear-gradient(180deg, rgba(58, 78, 72, 0.95), rgba(24, 36, 33, 0.96) 55%, rgba(12, 20, 18, 0.97));
-  box-shadow:
-    inset 0 -1px 0 rgba(226, 244, 238, 0.5),
-    0 6px 14px -6px rgba(0, 0, 0, 0.9);
-}
-
-.zh-platform-seat::after {
-  content: '';
-  position: absolute;
-  /* Na MASTER a poça mais forte fica na FRENTE do disco (parte de baixo da
-   * elipse), não no centro geométrico — é onde o feixe encosta. */
-  left: 50%;
-  top: 62%;
-  transform: translate(-50%, -50%);
-  width: 124px;
-  height: 19px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(240, 255, 250, 0.98) 0%, rgba(120, 255, 214, 0.68) 26%, rgba(0, 230, 165, 0.34) 58%, transparent 100%);
-  filter: blur(1.5px);
+  /* A poça esmeralda no miolo do disco: é aqui que o feixe encosta, e é a
+   * única fonte de cor da peça. O resto é metal. */
+  top: 18px;
+  width: 138px;
+  height: 15px;
+  background: radial-gradient(ellipse at 50% 52%,
+    rgba(236, 255, 248, 0.95) 0%,
+    rgba(130, 255, 218, 0.72) 20%,
+    rgba(0, 226, 162, 0.42) 46%,
+    rgba(0, 168, 121, 0.18) 74%,
+    transparent 100%);
+  box-shadow: 0 0 26px 2px rgba(0, 230, 165, 0.35);
 }
 
 /* Poça de luz ambiente no chão (a luz emerald espalhada) + sombra de
@@ -1304,65 +1266,94 @@
   filter: blur(4px);
 }
 
-/* Anéis: SÓ luz, sem preenchimento — a aurora do fundo passa através deles.
- * Era aqui o erro central: placas opacas empilhadas liam como uma elipse
- * preta. A borda de baixo é sempre mais forte que o resto do aro: é onde a
- * luz se acumula na frente do objeto, e é isso que dá a perspectiva. */
+/* ============================================================
+ * Plataforma — disco de titânio fumê usinado
+ * ============================================================
+ * Medido no master.png (recorte 600,420–930,500 a 4x): o disco tem ~245px de
+ * largura por ~42px de altura, e NÃO é um grupo de aros de arame. É uma peça
+ * torneada: um aro externo GROSSO com aresta de prata no topo e parede
+ * escura embaixo, três terraços internos descendo em degraus, e uma poça
+ * esmeralda no miolo onde o feixe encosta.
+ *
+ * A versão anterior desenhava 3 elipses de borda 1px — daí a leitura de
+ * wireframe simplório. Aqui a espessura vem de `border-width` de verdade
+ * (7px no aro externo), e o metal vem de cada aresta ter cor própria: topo
+ * claro, laterais médias, frente escura com realce de luz refletida do chão.
+ *
+ * Papéis (a ordem no DOM já pinta do externo para o interno):
+ *   ring--4 = aro externo (corpo da peça)
+ *   ring--3 = terraço 2
+ *   ring--2 = terraço 3
+ *   ring--1 = lábio interno (é ele que acende nos estados ativos)
+ *   seat    = poça esmeralda central
+ */
 .zh-platform-ring {
-  background: none;
-  border-style: solid;
+  border: none;
 }
 
-/* Geometria e material corrigidos contra a MASTER (medido no PNG, não
- * estimado): lá os aros formam um GRUPO APERTADO — o externo tem ~245px e o
- * interno ~185px, 4 aros em ~30px de raio total — e são de TITÂNIO, cinza
- * claro metálico, não emerald. O emerald aparece só na poça central e no
- * halo largo e fraco em volta. A versão anterior (252→482px, tudo verde)
- * lia como ondulação de água, não como uma base sólida. */
-.zh-platform-ring--1 {
-  top: 12px;
-  width: 198px;
-  height: 30px;
-  border-width: 1.4px;
-  border-color: rgba(216, 236, 230, 0.9);
-  border-top-color: rgba(246, 255, 252, 1);
-  border-bottom-color: rgba(236, 252, 247, 1);
+/* Técnica: cada anel é uma ELIPSE CHEIA com gradiente vertical de metal, e o
+ * anel seguinte (menor, mais acima no DOM) cobre o miolo do anterior. O que
+ * sobra visível de cada um é a sua faixa — o terraço. Assim o tom corre liso
+ * em volta da peça.
+ *
+ * Border com cor por lado (tentativa anterior) não serve: a elipse ganha
+ * quebras duras a 45° nos cantos do border e a peça lê como pulseira
+ * partida.
+ *
+ * GEOMETRIA: todos os terraços são CONCÊNTRICOS — mesmo centro vertical
+ * (y=30 dentro da plataforma), porque estão na mesma face plana do disco.
+ * Empilhá-los deslocando para baixo, como estava, transformava a peça numa
+ * calota maciça. A espessura da peça vem só do aro externo, projetado para
+ * baixo pela primeira sombra sem blur. */
+.zh-platform-ring--4 {
+  top: 10px;
+  width: 258px;
+  height: 31px;
+  background: linear-gradient(180deg,
+    #cfdcd8 0%, #7c8a86 3%, #3c4644 10%, #2a3230 38%, #1d2422 72%, #333f3c 100%);
   box-shadow:
-    0 0 14px rgba(0, 240, 175, 0.4),
-    inset 0 0 18px rgba(0, 230, 165, 0.2);
-}
-
-.zh-platform-ring--2 {
-  top: 15px;
-  width: 224px;
-  height: 36px;
-  border-width: 1.2px;
-  border-color: rgba(198, 222, 215, 0.72);
-  border-top-color: rgba(238, 250, 246, 0.95);
-  border-bottom-color: rgba(226, 244, 238, 0.95);
-  box-shadow: 0 0 12px rgba(0, 235, 170, 0.26);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(150, 190, 180, 0.22),
+    0 8px 0 -4px #121716,
+    0 9px 0 -3px rgba(130, 172, 161, 0.2),
+    0 14px 26px -10px rgba(0, 0, 0, 0.95),
+    0 0 26px -8px rgba(0, 214, 153, 0.2);
 }
 
 .zh-platform-ring--3 {
-  top: 19px;
-  width: 250px;
-  height: 42px;
-  border-width: 1px;
-  border-color: rgba(180, 206, 199, 0.5);
-  border-top-color: rgba(224, 240, 236, 0.8);
-  border-bottom-color: rgba(212, 234, 228, 0.85);
-  box-shadow: 0 0 10px rgba(0, 230, 165, 0.18);
+  top: 12px;
+  width: 220px;
+  height: 27px;
+  background: linear-gradient(180deg,
+    #b9c8c4 0%, #6a7874 4%, #303a38 13%, #212927 45%, #2c3835 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(140, 180, 170, 0.18);
 }
 
-/* O único aro largo: o halo de luz espalhada no chão, bem fraco. */
-.zh-platform-ring--4 {
-  top: 26px;
-  width: 430px;
-  height: 62px;
-  border-width: 1px;
-  border-color: rgba(105, 235, 195, 0.16);
-  border-bottom-color: rgba(150, 250, 220, 0.28);
-  box-shadow: 0 0 16px rgba(0, 230, 165, 0.1);
+.zh-platform-ring--2 {
+  top: 14px;
+  width: 184px;
+  height: 22px;
+  background: linear-gradient(180deg,
+    #aec0bb 0%, #5f6f6b 5%, #29332f 16%, #1b2320 52%, #26332e 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(130, 180, 165, 0.2);
+}
+
+/* Lábio interno: a última borda antes da luz, já pegando o verde da poça.
+ * É este aro que reage a estado. */
+.zh-platform-ring--1 {
+  top: 16px;
+  width: 152px;
+  height: 18px;
+  background: linear-gradient(180deg,
+    #b6ccc6 0%, #5d7a72 6%, #1e3a33 20%, #122a25 58%, #1e463c 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(90, 220, 185, 0.32),
+    0 0 12px -3px rgba(0, 230, 165, 0.35);
 }
 
 .zh-core {
@@ -1407,18 +1398,18 @@
    * disco (~76px aqui, ~50px na MASTER em 1440). Antes tinha 26px e ficava
    * escondido dentro do brilho da própria esfera: existia no DOM e não
    * aparecia em lugar nenhum na tela. */
-  width: 6px;
-  height: 76px;
+  width: 3px;
+  height: 58px;
   margin-top: -6px;
   /* Halo externo: largo e macio, escurecendo para cima (a luz nasce na
    * esfera e ganha corpo ao descer). */
   background: linear-gradient(180deg,
     rgba(0, 230, 165, 0) 0%,
-    rgba(0, 230, 165, 0.28) 18%,
-    rgba(0, 240, 175, 0.5) 58%,
-    rgba(0, 245, 180, 0.62) 88%,
-    rgba(0, 230, 165, 0.2) 100%);
-  filter: blur(3px);
+    rgba(0, 230, 165, 0.2) 20%,
+    rgba(0, 240, 175, 0.34) 60%,
+    rgba(0, 245, 180, 0.42) 90%,
+    rgba(0, 230, 165, 0.14) 100%);
+  filter: blur(1.6px);
   opacity: 1;
 }
 
@@ -1429,15 +1420,15 @@
   left: 50%;
   top: -10px;
   transform: translateX(-50%);
-  width: 1.6px;
-  height: calc(100% + 14px);
+  width: 1.4px;
+  height: calc(100% + 16px);
   background: linear-gradient(180deg,
     rgba(200, 255, 236, 0) 0%,
     rgba(200, 255, 236, 0.55) 22%,
     rgba(240, 255, 250, 0.95) 62%,
     rgba(255, 255, 255, 1) 92%,
     rgba(190, 255, 232, 0.7) 100%);
-  box-shadow: 0 0 6px rgba(120, 255, 214, 0.7);
+  box-shadow: 0 0 4px rgba(150, 255, 224, 0.85);
 }
 
 /* Flare de contato: o alargamento exatamente onde o feixe encosta no disco. */
@@ -1447,11 +1438,11 @@
   left: 50%;
   bottom: -7px;
   transform: translateX(-50%);
-  width: 58px;
-  height: 16px;
+  width: 38px;
+  height: 11px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.95), rgba(120, 255, 214, 0.6) 36%, rgba(0, 230, 165, 0.22) 70%, transparent 88%);
-  filter: blur(2.5px);
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.9), rgba(120, 255, 214, 0.5) 38%, rgba(0, 230, 165, 0.16) 72%, transparent 88%);
+  filter: blur(2px);
 }
 
 .zh-core-mark {
@@ -1651,14 +1642,18 @@
     inset 0 0 30px rgba(0, 235, 170, 0.32);
 }
 
-.zh-core-wrap:has(.zh-core[data-state='executing']) .zh-platform-seat::after {
-  transform: translate(-50%, -50%) scale(1.16);
+.zh-core-wrap:has(.zh-core[data-state='executing']) .zh-platform-seat {
+  transform: translate(-50%, 0) scale(1.14);
 }
 
+/* Offline: o metal continua lá (é objeto físico), mas a LUZ apaga. */
 .zh-core-wrap:has(.zh-core[data-state='offline']) .zh-core-shaft,
-.zh-core-wrap:has(.zh-core[data-state='offline']) .zh-platform-ring,
-.zh-core-wrap:has(.zh-core[data-state='offline']) .zh-platform-seat::after {
-  opacity: 0.18;
+.zh-core-wrap:has(.zh-core[data-state='offline']) .zh-platform-seat {
+  opacity: 0.16;
+}
+
+.zh-core-wrap:has(.zh-core[data-state='offline']) .zh-platform-ring--1 {
+  box-shadow: none;
 }
 
 @keyframes zh-shaft-flow {
@@ -1666,8 +1661,8 @@
   50% { opacity: 1; }
 }
 
-.zh-platform-seat::after {
-  transition: transform 320ms var(--zh-ease);
+.zh-platform-seat {
+  transition: transform 320ms var(--zh-ease), opacity 320ms var(--zh-ease);
 }
 .zh-core[data-state='thinking'],
 .zh-core[data-state='planning'] { animation-duration: 0.7s; filter: saturate(1.2); }
@@ -1728,11 +1723,17 @@
   align-self: center;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 520px;
-  padding: 7px 22px;
-  border-radius: 22px;
+  /* MASTER: a barra tem ~506px em 1440 (35% da largura), ~45px de altura e
+   * raio de canto pequeno — é uma LAJE de vidro fumê, não uma pílula. Com
+   * raio 22 e 60px de altura ela lia como cápsula e perdia autoridade.
+   * `space-between` porque na MASTER os ícones ocupam a barra inteira; com
+   * `center` + gap pequeno eles se amontoavam no meio e sobravam duas
+   * margens vazias grandes. */
+  justify-content: space-between;
+  gap: 0;
+  width: 552px;
+  padding: 2px 24px;
+  border-radius: 15px;
   transform: translateY(-2px);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0) 42%),
@@ -1760,11 +1761,11 @@
   height: 1px;
   background: linear-gradient(90deg,
     transparent,
-    rgba(232, 250, 243, 0.3) 12%,
-    rgba(240, 253, 248, 0.72) 40%,
-    rgba(245, 255, 251, 0.82) 50%,
-    rgba(240, 253, 248, 0.72) 60%,
-    rgba(232, 250, 243, 0.3) 88%,
+    rgba(232, 250, 243, 0.14) 14%,
+    rgba(240, 253, 248, 0.4) 40%,
+    rgba(245, 255, 251, 0.48) 50%,
+    rgba(240, 253, 248, 0.4) 60%,
+    rgba(232, 250, 243, 0.14) 86%,
     transparent);
   pointer-events: none;
 }
@@ -1800,8 +1801,8 @@
 }
 
 .zh-dock-btn svg {
-  width: 19px;
-  height: 19px;
+  width: 21px;
+  height: 21px;
 }
 
 .zh-dock-btn:hover {
@@ -1839,7 +1840,7 @@
   width: 1px;
   height: 16px;
   background: linear-gradient(180deg, transparent, rgba(160, 190, 182, 0.18) 20%, rgba(160, 190, 182, 0.18) 80%, transparent);
-  margin: 0 12px;
+  margin: 0 10px;
   opacity: 0.7;
 }
 
@@ -1849,11 +1850,11 @@
  * em vez de um blur uniforme. */
 .zh-dock-voice {
   position: relative;
-  width: 72px;
-  height: 72px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
   border: none;
-  margin: -22px 14px -6px;
+  margin: -16px 18px -16px;
   color: #d8e6e1;
   display: grid;
   place-items: center;
@@ -1903,8 +1904,8 @@
 .zh-dock-voice svg {
   position: relative;
   z-index: 1;
-  width: 25px;
-  height: 25px;
+  width: 27px;
+  height: 27px;
   filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.6));
 }
 
@@ -2064,9 +2065,14 @@
 }
 
 .zh-bg-glass {
-  opacity: 0.58;
+  /* O fundo estava a 58% de opacidade com brightness lift: sobre o preto do
+   * root isso vira LEITE — as montanhas perdem borda e a aurora perde
+   * profundidade, e a tela inteira parece imagem mal resolvida. Na MASTER o
+   * fundo é escuro e nítido, com preto real entre as montanhas.
+   * Mais opacidade + contraste devolve a nitidez sem trocar o asset. */
+  opacity: 0.92;
   background-position: center 56%;
-  filter: saturate(1.08) brightness(1.05);
+  filter: saturate(1.12) contrast(1.16) brightness(0.9);
 }
 
 .zh-sidebar {
@@ -2225,19 +2231,29 @@
   /* Medido no master.png: a esfera tem ~230px em 1440. Em 284px ela comia a
    * faixa vertical inteira e o feixe Core->plataforma não tinha onde
    * aparecer — na MASTER esse trecho de luz tem ~50px. */
-  width: 244px;
-  height: 244px;
+  /* 16% da largura da tela, que é a proporção da MASTER (230px em 1440).
+   * Em 244px a esfera ficava pequena demais para o vão e a composição
+   * inteira lia como afastada. O feixe encurtou na mesma medida, então a
+   * altura total da coluna não mudou. */
+  width: 262px;
+  height: 262px;
   filter: drop-shadow(0 0 30px #00bd8238);
 }
 
 .zh-core-glass {
-  filter: drop-shadow(0 -12px 18px #ffffff13) drop-shadow(0 4px 14px #00e6a53c);
+  /* Sem sombra nenhuma: o asset já traz specular e crescente, e qualquer
+   * drop-shadow aqui vira halo em volta do vidro.
+   *
+   * O que ele PRECISA é de exposição. Medido no master.png contra o nosso
+   * render, no mesmo ponto do crescente (r=0,85 do raio, 60°): MASTER
+   * (22,70,52) contra (20,247,228) sem filtro — o asset renderiza quase
+   * quatro vezes mais claro que a referência, e é isso que fazia a esfera
+   * parecer uma bola de néon em vez de vidro escuro. Só correção tonal;
+   * nenhuma camada nova. */
+  filter: brightness(0.5) saturate(0.78) contrast(1.12);
 }
 
-.zh-core-mark {
-  width: 162px;
-  height: 116px;
-}
+
 
 .zh-system-row {
   padding: 14px 8px 16px;
@@ -2585,21 +2601,22 @@
 .zh-core {
   isolation: isolate;
   overflow: visible;
-  background:
-    radial-gradient(circle at 35% 24%, #ffffff38 0%, transparent 13%),
-    radial-gradient(circle at 50% 54%, #17483b66 0%, #06120ed8 52%, #010504f5 84%, transparent 100%);
-  border: 1px solid #c7f7e72e;
+  /* O `core-glass.png` JÁ é o vidro pronto: escuro, com specular limpo no
+   * topo e crescente esmeralda na barriga — é o mesmo material da MASTER.
+   * Tudo que o CSS acrescentava por cima (blob branco em 35%/24%, aros
+   * girando, arco rotacionado) estava SUJANDO um asset acabado: o miolo
+   * clareava, o crescente virava neon e sobravam fragmentos dentro do vidro.
+   * Aqui embaixo do asset fica só o fundo escuro que ele precisa. */
+  background: radial-gradient(circle at 50% 52%, #0a1a15 0%, #05100c 58%, #020706 88%, transparent 100%);
+  border: 1px solid #c7f7e71f;
   /* Na MASTER a esfera é VIDRO ESCURO com um crescente esmeralda contido na
    * barriga — não uma bola neon. O halo emerald estava espalhado demais e
    * comia o contorno de vidro; aqui ele fica mais curto e mais fechado, e o
    * specular branco do topo ganha força para a leitura ser de material. */
   box-shadow:
-    inset 16px 16px 22px -20px #ffffffe6,
-    inset -13px -15px 18px -14px #00d6996e,
-    inset 0 0 0 1px #18bd8750,
-    0 0 0 4px #0b382b55,
-    0 0 0 6px #1de9a116,
-    0 0 16px 0 #00d69926,
+    inset 0 0 0 1px #18bd873a,
+    0 0 0 5px #0b382b3d,
+    0 0 22px 0 #00d6991f,
     0 18px 42px -18px #000000f0;
 }
 
@@ -2634,36 +2651,32 @@
   border: 1px solid rgba(126, 224, 196, 0.07);
 }
 
-.zh-core::before,
-.zh-core::after {
+/* Os dois aros que viviam aqui (um girando, outro rotacionado -24deg com a
+ * borda superior quase branca) desenhavam ARCOS por cima do vidro. Eram eles
+ * os "fragmentos" e o "triângulo" soltos dentro da esfera. O contorno da
+ * esfera é o do próprio asset; o campo em volta vive em `.zh-core-wrap`. */
+.zh-core::before {
   content: '';
   position: absolute;
-  inset: -10px;
+  inset: -1px;
   border-radius: 50%;
   pointer-events: none;
-}
-
-.zh-core::before {
-  border: 1px solid #51e6b173;
-  box-shadow: 0 0 10px #00d69944, inset 0 0 10px #00d69922;
-  animation: zh-orbit-spin 16s linear infinite;
-}
-
-.zh-core::after {
-  inset: -4px;
-  border: 1px solid #eafff52b;
-  border-top-color: #ffffffa8;
-  border-left-color: #80f3ca70;
-  transform: rotate(-24deg);
-  filter: blur(0.2px);
+  box-shadow: inset 0 0 24px -6px #00d6991a;
 }
 
 .zh-core-mark {
-  width: 156px;
-  height: 136px;
+  /* MASTER: a marca ocupa ~7% da largura da tela e é CHAPADA — cor emerald
+   * média com bisel, sem halo. O glow + `mix-blend-mode: screen` faziam ela
+   * vibrar e clarear o miolo do vidro. */
+  width: 122px;
+  height: 87px;
   object-fit: contain;
-  filter: drop-shadow(0 0 7px #00e8a2bb) drop-shadow(0 5px 9px #000000d0);
-  mix-blend-mode: screen;
+  /* O asset traz o bloom do render original. Na MASTER a marca é metal
+   * emerald FOSCO, não neon: dessaturar e escurecer um pouco aproxima sem
+   * adicionar camada nova por cima. */
+  filter: saturate(0.4) brightness(0.9);
+  mix-blend-mode: normal;
+  opacity: 0.96;
 }
 
 .zh-core[data-state='offline'] {
@@ -2787,8 +2800,12 @@
 
 
 /* TASK 1 — logos circulares: preservar o asset limpo e remover somente os
- * halos/filtros artificiais aplicados sobre a marca. Nenhuma outra região é alterada. */
-.zh-core-mark,
+ * halos/filtros artificiais aplicados sobre a marca.
+ *
+ * `.zh-core-mark` SAIU desta regra: ela vencia em silêncio a correção tonal
+ * da marca do Core (`filter: none` derruba o `saturate`), e a marca voltava
+ * a sair mint neon contra o sage da MASTER. A regra da marca do Core agora
+ * mora num lugar só, junto do resto do Core. */
 .zh-project-badge .zh-project-badge-logo {
   filter: none;
   mix-blend-mode: normal;
@@ -3273,3 +3290,45 @@
 
 .zh-action-row--btn:hover:not(:disabled) { background: #ffffff08; }
 .zh-action-row--btn:disabled { cursor: default; opacity: 0.6; }
+
+/* --- dock: grupos laterais e menu rápido ------------------------------- */
+
+/* Os botões laterais vivem em dois grupos com a MESMA largura elástica, e a
+ * lente de voz fica entre eles. Só assim ela cai no eixo da barra: com todos
+ * os botões como irmãos diretos, a largura da lente e dos separadores puxava
+ * a distribuição para um lado. */
+.zh-dock-side {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  flex: 1;
+  min-width: 0;
+}
+
+.zh-dock-menu {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 8px;
+  z-index: 8;
+  min-width: 186px;
+  padding: 6px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 44px -18px rgba(0, 0, 0, 0.92);
+}
+
+.zh-dock-menu-item {
+  padding: 8px 11px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #d5e1dd;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms var(--zh-ease);
+}
+
+.zh-dock-menu-item:hover { background: #ffffff10; color: var(--zh-text); }

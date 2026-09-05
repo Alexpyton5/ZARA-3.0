@@ -1,5 +1,15 @@
 import type { CoreState } from './types';
-import zaraLogo from '../../../assets/zara-home/zara-logo-transparent.png';
+// ZARA-ZA-LIMPA-001: `zara-logo-transparent.png` não tem transparência
+// nenhuma — TODO pixel do canto é opaco (RGB ~121,156,149). Esse retângulo
+// cinza-esverdeado era o "triângulo estranho" flutuando dentro do vidro; a
+// marca vinha colada num pedaço do render original.
+//
+// `zara-mark-clean.png` é o MESMO monograma (mesmo bisel, mesma nitidez),
+// recortado por chave de cor a partir dele: fica o que é emerald saturado ou
+// realce claro esverdeado, sai o fundo, o blob de reflexo e a poeira do
+// render. `zara-mark.png`, a outra opção pronta, tem 94px e chega borrado
+// nesse tamanho.
+import zaraLogo from '../../../assets/zara-home/zara-mark-clean.png';
 import coreGlass from '../../../assets/zara-home/core-glass.png';
 
 const LABELS: Record<CoreState, string> = {

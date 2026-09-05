@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LayoutGrid, Folder, AudioLines, HelpCircle, Clock, MoreHorizontal } from 'lucide-react';
 import type { CoreState } from './types';
 import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
@@ -22,8 +22,12 @@ interface VoiceDockProps {
  * existiam prontos (mesma técnica usada pelo HUD antigo), só não estavam
  * plugados nesta árvore de componentes.
  */
+/** Destinos do menu rápido — todos são seções que existem de verdade. */
+const MENU_RAPIDO = ['Sistema', 'Projetos', 'Automações', 'ZARA Lab', 'Dispositivos', 'Configurações'];
+
 export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
   const [listening, setListening] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
   const voiceAvailable = Boolean(window.zaraIPC?.voice?.start && window.zaraIPC?.voice?.stop);
 
   // A saída de voz (Kore) precisa estar pronta para tocar mesmo antes do
@@ -127,26 +131,53 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
     : coreState === 'speaking' ? 'Interromper'
     : listening ? 'Parar modo voz' : 'Abrir modo voz';
 
+  // Menu rápido do botão "mais": só destinos que EXISTEM na Sidebar. É
+  // navegação, não uma gaveta de recursos futuros.
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuAberto) return;
+    function fora(e: MouseEvent) {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuAberto(false);
+    }
+    function esc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuAberto(false);
+    }
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', fora);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [menuAberto]);
+
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <nav className="zh-dock zh-glass-panel" aria-label="Dock ZARA">
-        <button
-          className="zh-dock-btn"
-          type="button"
-          aria-label="Aplicativos"
-          onClick={() => onNavigate?.('Aplicativos')}
-        >
-          <LayoutGrid size={18} strokeWidth={1.7} />
-        </button>
-        <button
-          className="zh-dock-btn"
-          type="button"
-          aria-label="Arquivos"
-          onClick={() => onNavigate?.('Arquivos')}
-        >
-          <Folder size={17} strokeWidth={1.7} />
-        </button>
-        <span className="zh-dock-separator" aria-hidden="true" />
+        {/* Três grupos: o botão de voz é o do MEIO de verdade. Com todos os
+          * botões como irmãos diretos e `space-between`, a lente saía do eixo
+          * porque os separadores e a largura dela deslocavam a distribuição. */}
+        <span className="zh-dock-side">
+          <button
+            className="zh-dock-btn"
+            type="button"
+            aria-label="Aplicativos"
+            title="Aplicativos que a ZARA pode abrir"
+            onClick={() => onNavigate?.('Aplicativos')}
+          >
+            <LayoutGrid size={21} strokeWidth={1.7} />
+          </button>
+          <span className="zh-dock-separator" aria-hidden="true" />
+          <button
+            className="zh-dock-btn"
+            type="button"
+            aria-label="Arquivos e memórias"
+            title="Arquivos e memórias"
+            onClick={() => onNavigate?.('Memórias')}
+          >
+            <Folder size={21} strokeWidth={1.7} />
+          </button>
+        </span>
+
         <button
           className="zh-dock-voice"
           type="button"
@@ -156,39 +187,58 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
           disabled={!voiceAvailable}
           onClick={toggleVoice}
         >
-          <AudioLines size={22} strokeWidth={2} />
+          <AudioLines size={27} strokeWidth={2} />
         </button>
-        <span className="zh-dock-separator" aria-hidden="true" />
-        {/* Ajuda e "mais opções" ainda não têm destino real no app. Ficam
-          * desabilitados e explicados no title em vez de aceitarem o clique e
-          * não fazerem nada — mesma regra de honestidade dos cards do Sistema. */}
-        <button
-          className="zh-dock-btn"
-          type="button"
-          aria-label="Ajuda — não disponível ainda"
-          title="Ajuda ainda não disponível"
-          disabled
-        >
-          <HelpCircle size={17} strokeWidth={1.7} />
-        </button>
-        <button
-          className="zh-dock-btn"
-          type="button"
-          aria-label="Histórico de conversas"
-          onClick={() => onNavigate?.('Conversas')}
-        >
-          <Clock size={18} strokeWidth={1.7} />
-        </button>
-        <button
-          className="zh-dock-btn"
-          type="button"
-          aria-label="Mais opções — não disponível ainda"
-          title="Mais opções ainda não disponível"
-          disabled
-        >
-          <MoreHorizontal size={17} strokeWidth={1.7} />
-        </button>
+
+        <span className="zh-dock-side">
+          <button
+            className="zh-dock-btn"
+            type="button"
+            aria-label="Ajuda — o que a ZARA sabe fazer"
+            title="O que a ZARA sabe fazer"
+            onClick={() => onNavigate?.('Ajuda')}
+          >
+            <HelpCircle size={21} strokeWidth={1.7} />
+          </button>
+          <span className="zh-dock-separator" aria-hidden="true" />
+          <button
+            className="zh-dock-btn"
+            type="button"
+            aria-label="Histórico de conversas"
+            title="Histórico de conversas"
+            onClick={() => onNavigate?.('Conversas')}
+          >
+            <Clock size={21} strokeWidth={1.7} />
+          </button>
+          <button
+            className="zh-dock-btn"
+            type="button"
+            aria-label="Mais"
+            title="Menu rápido"
+            aria-expanded={menuAberto}
+            onClick={() => setMenuAberto((v) => !v)}
+          >
+            <MoreHorizontal size={21} strokeWidth={1.7} />
+          </button>
+        </span>
       </nav>
+
+      {menuAberto && (
+        <div className="zh-dock-menu zh-glass-panel" ref={menuRef} role="menu" aria-label="Menu rápido">
+          {MENU_RAPIDO.map((destino) => (
+            <button
+              key={destino}
+              className="zh-dock-menu-item"
+              type="button"
+              role="menuitem"
+              onClick={() => { setMenuAberto(false); onNavigate?.(destino); }}
+            >
+              {destino}
+            </button>
+          ))}
+        </div>
+      )}
+
       {coreState === 'offline' && (
         <span className="zh-not-connected" style={{ marginTop: 6 }}>
           Voz não conectada

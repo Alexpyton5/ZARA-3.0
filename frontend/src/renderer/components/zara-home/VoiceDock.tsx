@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Grid3x3, Folder, Mic, HelpCircle, History, MoreHorizontal } from 'lucide-react';
+import { LayoutGrid, Folder, AudioLines, HelpCircle, Clock, MoreHorizontal } from 'lucide-react';
 import type { CoreState } from './types';
 import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
 
@@ -100,7 +100,7 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
           aria-label="Aplicativos"
           onClick={() => onNavigate?.('Aplicativos')}
         >
-          <Grid3x3 size={17} strokeWidth={1.7} />
+          <LayoutGrid size={18} strokeWidth={1.7} />
         </button>
         <button
           className="zh-dock-btn"
@@ -120,7 +120,7 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
           disabled={!voiceAvailable}
           onClick={toggleVoice}
         >
-          <Mic size={20} strokeWidth={2} />
+          <AudioLines size={22} strokeWidth={2} />
         </button>
         <span className="zh-dock-separator" aria-hidden="true" />
         {/* Ajuda e "mais opções" ainda não têm destino real no app. Ficam
@@ -141,7 +141,7 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
           aria-label="Histórico de conversas"
           onClick={() => onNavigate?.('Conversas')}
         >
-          <History size={17} strokeWidth={1.7} />
+          <Clock size={18} strokeWidth={1.7} />
         </button>
         <button
           className="zh-dock-btn"

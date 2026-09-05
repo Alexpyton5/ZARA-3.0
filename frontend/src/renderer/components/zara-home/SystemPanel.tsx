@@ -110,7 +110,7 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
       <div className="zh-system-grid">
         <div className="zh-system-col zh-system-col--status">
           <div className="zh-device-card">
-            <h2><Cpu size={14} strokeWidth={1.8} /> Estado do dispositivo</h2>
+            <h2>Estado do dispositivo</h2>
             <div className="zh-status-summary">
               <strong>Monitorando</strong>
               <span>Métricas reais do sistema</span>
@@ -153,7 +153,7 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
         </div>
 
         <div className="zh-system-col zh-system-col--maintenance">
-          <h2><Database size={14} strokeWidth={1.8} /> Manutenção</h2>
+          <h2>Manutenção</h2>
           <div className="zh-action-grid">
             <ActionCard icon={<Database size={16} strokeWidth={1.7} />} label="Liberar espaço" sub="Indisponível" />
             <ActionCard icon={<Trash2 size={16} strokeWidth={1.7} />} label="Limpar temporários" sub="Indisponível" />
@@ -171,7 +171,7 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
         </div>
 
         <div className="zh-system-col zh-system-col--security">
-          <h2><Shield size={14} strokeWidth={1.8} /> Segurança</h2>
+          <h2>Segurança</h2>
           <ActionRow icon={<Search size={14} strokeWidth={1.7} />} label="Verificação rápida" sub="Indisponível" />
           <ActionRow icon={<ShieldCheck size={14} strokeWidth={1.7} />} label="Verificação completa" sub="Indisponível" />
           <ActionRow icon={<Shield size={14} strokeWidth={1.7} />} label="Firewall" sub="Indisponível" />
@@ -180,7 +180,7 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
         </div>
 
         <div className="zh-system-col zh-system-col--energy">
-          <h2><Gauge size={14} strokeWidth={1.8} /> Energia</h2>
+          <h2>Energia</h2>
           {power.supported && power.plans.length > 0 ? (
             power.plans.map((plan, index) => {
               const Icon = ENERGY_ICONS[index % ENERGY_ICONS.length];
@@ -208,19 +208,9 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
         </div>
 
         <div className="zh-system-col zh-diagnostic-col">
-          <h2><Activity size={14} strokeWidth={1.8} /> Diagnóstico inteligente</h2>
-          <svg className="zh-diagnostic-wave" viewBox="0 0 200 40" aria-hidden="true">
-            <path
-              className="zh-diagnostic-wave-ghost"
-              d="M0 26 C 18 26, 24 12, 40 12 S 62 30, 80 30 S 104 8, 122 8 S 146 26, 164 26 S 184 16, 200 16"
-            />
-            <path
-              className="zh-diagnostic-wave-line"
-              d="M0 24 C 18 24, 24 10, 40 10 S 62 28, 80 28 S 104 6, 122 6 S 146 24, 164 24 S 184 14, 200 14"
-            />
-          </svg>
+          <h2>Diagnóstico inteligente</h2>
           <p className="zh-diagnostic-title">Por que meu PC está lento?</p>
-          <p className={diagnosticSummary ? undefined : 'zh-not-connected'}>
+          <p className={diagnosticSummary ? 'zh-diagnostic-body' : 'zh-diagnostic-body zh-not-connected'}>
             {diagnosticLoading
               ? 'Analisando…'
               : diagnosticSummary ?? 'ZARA pode analisar as próprias capacidades agora.'}
@@ -234,6 +224,18 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
             Analisar agora
             <ChevronRight size={14} strokeWidth={2} />
           </button>
+          {/* A onda vive no rodapé do card, como na MASTER — decoração que
+            * fecha o card, não cabeçalho que empurra o título para baixo. */}
+          <svg className="zh-diagnostic-wave" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
+            <path
+              className="zh-diagnostic-wave-ghost"
+              d="M0 34 C 30 34, 46 30, 66 26 S 104 22, 124 16 S 158 12, 200 2"
+            />
+            <path
+              className="zh-diagnostic-wave-line"
+              d="M0 36 C 30 36, 46 32, 66 28 S 104 24, 124 18 S 158 14, 200 4"
+            />
+          </svg>
         </div>
       </div>
     </section>

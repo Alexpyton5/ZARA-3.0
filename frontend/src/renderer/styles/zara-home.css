@@ -564,6 +564,7 @@
   border: 1px solid #cad6d31c;
   border-radius: 10px;
   padding: 12px 14px;
+  min-height: 240px;
 }
 
 /* Cards de Energia — linhas com borda, título + descritor + dot de seleção */
@@ -574,6 +575,7 @@
   width: 100%;
   padding: 9px 10px;
   margin-bottom: 8px;
+  min-height: 53px;
   border-radius: 10px;
   border: 1px solid #ffffff10;
   background: #ffffff05;
@@ -596,7 +598,7 @@
 }
 
 .zh-energy-text strong {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--zh-text);
 }
@@ -626,34 +628,42 @@
 .zh-action-row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 5px 0;
+  gap: 11px;
+  padding: 8px 0;
+  border-bottom: 1px solid #ffffff0b;
 }
 
+.zh-action-row:last-child { border-bottom: none; }
+
+/* Badge do ícone — mesmo tratamento das métricas, como na MASTER. */
 .zh-action-icon {
   color: var(--zh-muted);
-  opacity: 0.7;
   flex-shrink: 0;
   display: grid;
   place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid #ffffff12;
+  background: #ffffff08;
 }
 
 .zh-action-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  line-height: 1.3;
+  line-height: 1.32;
 }
 
 .zh-action-label {
-  font-size: 12px;
-  color: #c7d2ce;
+  font-size: 13px;
+  color: #dbe6e2;
 }
 
 .zh-action-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--zh-muted);
-  opacity: 0.5;
+  opacity: 0.62;
 }
 
 /* Grade de mini-cards para Manutenção (2 colunas). */
@@ -663,11 +673,16 @@
   gap: 8px;
 }
 
+/* Na MASTER o mini-card de Manutenção é uma LINHA: ícone à esquerda, texto
+ * à direita, altura baixa. A versão em coluna (ícone em cima) dobrava a
+ * altura do card e desalinhava a coluna inteira do Sistema. */
 .zh-action-card {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 9px 10px;
   border-radius: 10px;
   background: #ffffff06;
   border: 1px solid #ffffff0a;
@@ -685,7 +700,8 @@
   color: var(--zh-muted);
   opacity: 0.85;
   display: grid;
-  place-items: center start;
+  place-items: center;
+  flex-shrink: 0;
 }
 
 .zh-action-card-text {
@@ -695,14 +711,18 @@
   line-height: 1.25;
 }
 
+/* Medido no render, não estimado: a caixa de texto do card tem 118px e
+ * "Gerenciar inicialização" precisa de ~112px a 10px. Acima disso ela quebra
+ * em duas linhas e desalinha a grade inteira de Manutenção. */
 .zh-action-card-text strong {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
 .zh-action-card-text span {
   font-size: 10px;
   color: var(--zh-muted);
+  opacity: 0.62;
 }
 
 .zh-status-summary {
@@ -711,7 +731,7 @@
 
 .zh-status-summary strong {
   display: block;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--zh-emerald);
 }
@@ -721,15 +741,30 @@
   color: var(--zh-muted);
 }
 
+/* Na MASTER esta coluna é um card fechado (borda + fundo próprio), com a
+ * pergunta grande em duas linhas e a onda encostada no rodapé. */
 .zh-diagnostic-col {
   display: flex;
   flex-direction: column;
+  border: 1px solid #cad6d31c;
+  border-radius: 12px;
+  background: #ffffff05;
+  padding: 13px 15px 0;
+  overflow: hidden;
 }
 
 .zh-diagnostic-title {
-  font-size: 13px;
+  font-size: 19px;
   font-weight: 600;
-  margin: 2px 0 4px;
+  line-height: 1.22;
+  margin: 2px 0 8px;
+}
+
+.zh-diagnostic-body {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--zh-muted);
+  margin: 0;
 }
 
 .zh-diagnostic-btn {
@@ -754,9 +789,10 @@
 }
 
 .zh-diagnostic-wave {
-  width: 100%;
-  height: 34px;
-  margin-bottom: 6px;
+  width: calc(100% + 30px);
+  height: 46px;
+  margin: auto -15px 0;
+  display: block;
 }
 
 .zh-diagnostic-wave-ghost,
@@ -782,22 +818,44 @@
   to { stroke-dashoffset: -220; }
 }
 
+/* Cabeçalho de coluna do Sistema. Na MASTER é texto puro, claro e maior —
+ * sem ícone à esquerda. O ícone que havia aqui competia com o badge dos
+ * itens da própria coluna. */
 .zh-system-col h2 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  font-size: 14.5px;
   font-weight: 600;
   text-transform: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  color: #e2ebe8;
+  margin: 0 0 12px;
+}
+
+.zh-diagnostic-col > h2 {
+  font-size: 12px;
+  font-weight: 500;
   color: var(--zh-muted);
-  margin: 0 0 10px;
+  margin-bottom: 10px;
 }
 
 .zh-metric-row span:first-child {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+}
+
+/* Ícone da métrica dentro de um badge quadrado-arredondado, como na MASTER.
+ * O `size={13}` do lucide vira atributo width/height; o CSS ganha dele, então
+ * o badge é o ícone + padding, sem wrapper extra no TSX. */
+.zh-metric-row span:first-child > svg {
+  width: 14px;
+  height: 14px;
+  padding: 4px;
+  box-sizing: content-box;
+  border-radius: 7px;
+  border: 1px solid #ffffff12;
+  background: #ffffff08;
+  color: var(--zh-muted);
+  flex-shrink: 0;
 }
 
 .zh-metric-neutral { color: var(--zh-text); }
@@ -1167,44 +1225,55 @@
  * lateral (::before, dá espessura) + poça de contato luminosa (::after).
  * Fino e com massa — não a laje preta das passadas anteriores. */
 .zh-platform-seat {
-  top: 14px;
-  width: 196px;
-  height: 24px;
+  top: 16px;
+  width: 152px;
+  height: 22px;
+  /* Na MASTER o miolo do disco é LUZ, não uma tampa preta: o feixe bate ali e
+   * a poça emerald domina. O preenchimento escuro anterior fazia o centro
+   * ler como um buraco. */
   background:
-    linear-gradient(180deg, rgba(210, 235, 226, 0.10) 0%, rgba(255, 255, 255, 0) 42%),
-    radial-gradient(ellipse at 50% 34%, rgba(38, 58, 52, 0.92) 0%, rgba(20, 32, 29, 0.88) 46%, rgba(9, 16, 14, 0.86) 78%, rgba(5, 10, 9, 0.8) 100%);
+    linear-gradient(180deg, rgba(210, 235, 226, 0.12) 0%, rgba(255, 255, 255, 0) 42%),
+    radial-gradient(ellipse at 50% 50%, rgba(150, 255, 224, 0.62) 0%, rgba(0, 224, 160, 0.4) 46%, rgba(0, 176, 126, 0.24) 74%, rgba(24, 58, 49, 0.6) 100%);
   box-shadow:
     inset 0 1px 0 rgba(240, 255, 250, 0.6),
-    inset 0 -6px 10px -6px rgba(0, 0, 0, 0.85),
-    inset 0 0 16px -2px rgba(0, 230, 165, 0.5),
-    0 0 22px rgba(0, 230, 165, 0.3),
-    0 6px 14px -6px rgba(0, 0, 0, 0.9);
+    inset 0 -6px 10px -6px rgba(0, 0, 0, 0.6),
+    inset 0 0 18px -2px rgba(0, 230, 165, 0.6),
+    0 0 30px rgba(0, 230, 165, 0.42),
+    0 6px 14px -6px rgba(0, 0, 0, 0.85);
 }
 
 .zh-platform-seat::before {
   content: '';
   position: absolute;
   left: 50%;
-  top: 5px;
+  top: 3px;
   transform: translateX(-50%);
-  width: 190px;
-  height: 23px;
+  width: 150px;
+  height: 21px;
   border-radius: 50%;
   z-index: -1;
-  background: linear-gradient(180deg, rgba(26, 36, 33, 0.95), rgba(6, 11, 10, 0.98));
-  box-shadow: 0 8px 16px -6px rgba(0, 0, 0, 0.95);
+  /* Parede lateral do disco: metal, com o aro da frente pegando luz. A
+   * versão preta anterior aparecia como uma faixa escura na metade de baixo
+   * da elipse — o oposto da MASTER, onde a frente do disco é a parte mais
+   * clara. */
+  background: linear-gradient(180deg, rgba(58, 78, 72, 0.95), rgba(24, 36, 33, 0.96) 55%, rgba(12, 20, 18, 0.97));
+  box-shadow:
+    inset 0 -1px 0 rgba(226, 244, 238, 0.5),
+    0 6px 14px -6px rgba(0, 0, 0, 0.9);
 }
 
 .zh-platform-seat::after {
   content: '';
   position: absolute;
+  /* Na MASTER a poça mais forte fica na FRENTE do disco (parte de baixo da
+   * elipse), não no centro geométrico — é onde o feixe encosta. */
   left: 50%;
-  top: 50%;
+  top: 62%;
   transform: translate(-50%, -50%);
-  width: 132px;
-  height: 24px;
+  width: 124px;
+  height: 19px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(240, 255, 250, 0.95) 0%, rgba(120, 255, 214, 0.6) 26%, rgba(0, 230, 165, 0.3) 58%, transparent 100%);
+  background: radial-gradient(ellipse at 50% 50%, rgba(240, 255, 250, 0.98) 0%, rgba(120, 255, 214, 0.68) 26%, rgba(0, 230, 165, 0.34) 58%, transparent 100%);
   filter: blur(1.5px);
 }
 
@@ -1246,47 +1315,56 @@
   border-style: solid;
 }
 
+/* Geometria e material corrigidos contra a MASTER (medido no PNG, não
+ * estimado): lá os aros formam um GRUPO APERTADO — o externo tem ~245px e o
+ * interno ~185px, 4 aros em ~30px de raio total — e são de TITÂNIO, cinza
+ * claro metálico, não emerald. O emerald aparece só na poça central e no
+ * halo largo e fraco em volta. A versão anterior (252→482px, tudo verde)
+ * lia como ondulação de água, não como uma base sólida. */
 .zh-platform-ring--1 {
-  top: 10px;
-  width: 252px;
-  height: 34px;
-  border-width: 1.5px;
-  border-color: rgba(190, 255, 235, 1);
-  border-bottom-color: rgba(235, 255, 248, 1);
+  top: 12px;
+  width: 198px;
+  height: 30px;
+  border-width: 1.4px;
+  border-color: rgba(216, 236, 230, 0.9);
+  border-top-color: rgba(246, 255, 252, 1);
+  border-bottom-color: rgba(236, 252, 247, 1);
   box-shadow:
-    0 0 26px rgba(0, 240, 175, 0.75),
-    0 0 60px rgba(0, 220, 158, 0.35),
-    inset 0 0 26px rgba(0, 230, 165, 0.26);
+    0 0 14px rgba(0, 240, 175, 0.4),
+    inset 0 0 18px rgba(0, 230, 165, 0.2);
 }
 
 .zh-platform-ring--2 {
-  top: 16px;
-  width: 324px;
-  height: 44px;
+  top: 15px;
+  width: 224px;
+  height: 36px;
   border-width: 1.2px;
-  border-color: rgba(150, 255, 220, 0.82);
-  border-bottom-color: rgba(210, 255, 240, 1);
-  box-shadow: 0 0 22px rgba(0, 235, 170, 0.5), 0 0 48px rgba(0, 214, 153, 0.22);
+  border-color: rgba(198, 222, 215, 0.72);
+  border-top-color: rgba(238, 250, 246, 0.95);
+  border-bottom-color: rgba(226, 244, 238, 0.95);
+  box-shadow: 0 0 12px rgba(0, 235, 170, 0.26);
 }
 
 .zh-platform-ring--3 {
-  top: 23px;
-  width: 400px;
-  height: 54px;
+  top: 19px;
+  width: 250px;
+  height: 42px;
   border-width: 1px;
-  border-color: rgba(120, 248, 205, 0.55);
-  border-bottom-color: rgba(175, 255, 230, 0.8);
-  box-shadow: 0 0 18px rgba(0, 230, 165, 0.32), 0 0 38px rgba(0, 214, 153, 0.14);
+  border-color: rgba(180, 206, 199, 0.5);
+  border-top-color: rgba(224, 240, 236, 0.8);
+  border-bottom-color: rgba(212, 234, 228, 0.85);
+  box-shadow: 0 0 10px rgba(0, 230, 165, 0.18);
 }
 
+/* O único aro largo: o halo de luz espalhada no chão, bem fraco. */
 .zh-platform-ring--4 {
-  top: 30px;
-  width: 482px;
-  height: 64px;
+  top: 26px;
+  width: 430px;
+  height: 62px;
   border-width: 1px;
-  border-color: rgba(105, 235, 195, 0.34);
-  border-bottom-color: rgba(150, 250, 220, 0.55);
-  box-shadow: 0 0 16px rgba(0, 230, 165, 0.2);
+  border-color: rgba(105, 235, 195, 0.16);
+  border-bottom-color: rgba(150, 250, 220, 0.28);
+  box-shadow: 0 0 16px rgba(0, 230, 165, 0.1);
 }
 
 .zh-core {
@@ -1302,7 +1380,11 @@
    * controlada — reflexo especular no topo, núcleo translúcido. */
   background: radial-gradient(circle at 42% 30%,
     #12241d 0%, #0a1712 30%, #050d0a 58%, #020705 82%, transparent 95%);
-  filter: drop-shadow(0 0 26px #00bd8230) drop-shadow(0 18px 40px #000000c0);
+  /* Sem sombra descendente: ela caía EM CIMA da plataforma (que fica abaixo
+   * na mesma pilha) e apagava o disco — o miolo emerald virava uma elipse
+   * preta. O aterramento da esfera é feito na camada da própria plataforma,
+   * por `.zh-platform-contact::before`, onde não engole a luz do disco. */
+  filter: drop-shadow(0 0 26px #00bd8230);
   animation: zh-core-breath 2.6s ease-in-out infinite;
 }
 
@@ -1586,28 +1668,29 @@
  * em vez de um blur uniforme. */
 .zh-dock-voice {
   position: relative;
-  width: 68px;
-  height: 68px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   border: none;
-  margin: -20px 14px -6px;
-  color: #eafff5;
+  margin: -22px 14px -6px;
+  color: #d8e6e1;
   display: grid;
   place-items: center;
   cursor: pointer;
+  /* Em repouso a MASTER mostra uma lente de vidro fumê com aro de TITÂNIO —
+   * o emerald não invade o botão parado. O verde é reservado para o estado
+   * `data-listening`, onde significa "o microfone está aberto de verdade". */
   background:
-    radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 26%),
-    radial-gradient(circle at 50% 52%, rgba(6, 18, 14, 0.96) 0%, rgba(8, 26, 20, 0.94) 38%, rgba(12, 46, 36, 0.92) 66%, rgba(18, 72, 56, 0.9) 88%, rgba(26, 104, 80, 0.88) 100%);
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 30%),
+    radial-gradient(circle at 50% 52%, rgba(20, 28, 26, 0.97) 0%, rgba(14, 22, 20, 0.95) 42%, rgba(10, 18, 16, 0.94) 72%, rgba(16, 30, 27, 0.92) 100%);
   box-shadow:
-    inset 0 0 0 1.5px rgba(140, 255, 220, 0.95),
-    inset 0 2px 6px rgba(226, 255, 244, 0.3),
-    inset 0 -10px 16px -8px rgba(0, 0, 0, 0.9),
-    inset 0 0 26px -4px rgba(0, 230, 165, 0.55),
-    0 0 0 1px rgba(0, 230, 165, 0.4),
-    0 0 18px 0 rgba(0, 230, 165, 0.45),
-    0 0 34px 2px rgba(0, 214, 153, 0.16),
-    0 0 70px 10px rgba(0, 214, 153, 0.08),
-    0 10px 22px -8px rgba(0, 0, 0, 0.85);
+    inset 0 0 0 1.5px rgba(206, 228, 221, 0.5),
+    inset 0 2px 6px rgba(232, 245, 241, 0.16),
+    inset 0 -12px 18px -8px rgba(0, 0, 0, 0.92),
+    inset 0 0 26px -4px rgba(0, 230, 165, 0.14),
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 0 22px 2px rgba(0, 214, 153, 0.1),
+    0 12px 26px -8px rgba(0, 0, 0, 0.9);
   transition:
     transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 220ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -1618,8 +1701,8 @@
   position: absolute;
   inset: 5px;
   border-radius: 50%;
-  border: 1px solid rgba(160, 255, 228, 0.55);
-  box-shadow: 0 0 12px rgba(0, 230, 165, 0.35);
+  border: 1px solid rgba(198, 220, 213, 0.22);
+  box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.5);
   pointer-events: none;
 }
 
@@ -1639,23 +1722,34 @@
 .zh-dock-voice svg {
   position: relative;
   z-index: 1;
-  width: 23px;
-  height: 23px;
-  filter: drop-shadow(0 0 6px rgba(0, 230, 165, 0.55));
+  width: 25px;
+  height: 25px;
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.6));
 }
 
+/* Só quando o microfone está realmente aberto o botão fica emerald. */
+.zh-dock-voice[data-listening='true'] svg {
+  color: #9dffdd;
+  filter: drop-shadow(0 0 7px rgba(0, 230, 165, 0.6));
+}
+
+.zh-dock-voice[data-listening='true']::before {
+  border-color: rgba(160, 255, 228, 0.5);
+  box-shadow: 0 0 12px rgba(0, 230, 165, 0.32);
+}
+
+/* Hover é afordância, não estado: o aro de titânio acende, o emerald entra
+ * só como insinuação. Verde forte continua reservado para `data-listening`. */
 .zh-dock-voice:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow:
-    inset 0 0 0 1px rgba(120, 255, 214, 0.65),
-    inset 0 2px 6px rgba(226, 255, 244, 0.32),
-    inset 0 -10px 16px -8px rgba(0, 0, 0, 0.9),
-    inset 0 0 22px -6px rgba(0, 214, 153, 0.42),
-    0 0 0 1px rgba(0, 214, 153, 0.28),
-    0 0 18px 0 rgba(0, 214, 153, 0.38),
-    0 0 44px 4px rgba(0, 214, 153, 0.2),
-    0 0 88px 14px rgba(0, 214, 153, 0.1),
-    0 12px 26px -8px rgba(0, 0, 0, 0.85);
+    inset 0 0 0 1.5px rgba(228, 244, 239, 0.72),
+    inset 0 2px 6px rgba(232, 245, 241, 0.22),
+    inset 0 -12px 18px -8px rgba(0, 0, 0, 0.9),
+    inset 0 0 24px -5px rgba(0, 230, 165, 0.24),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 0 26px 2px rgba(0, 214, 153, 0.18),
+    0 14px 28px -8px rgba(0, 0, 0, 0.88);
 }
 
 .zh-dock-voice:active {
@@ -1751,18 +1845,19 @@
   background: linear-gradient(90deg, var(--zh-emerald), var(--zh-emerald-2));
 }
 
+/* Linha de métrica do "Estado do dispositivo".
+ * A MASTER não usa régua entre as linhas — o que separa é o espaço e o
+ * badge do ícone. As listras que existiam aqui vinham de um layout de
+ * tabela antigo e deixavam o card visualmente mais pesado que a MASTER. */
 .zh-metric-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--zh-line);
+  font-size: 13.5px;
+  padding: 3px 0;
 }
 
-.zh-metric-row:last-child { border-bottom: none; }
-
-.zh-metric-row span:first-child { color: var(--zh-muted); }
+.zh-metric-row span:first-child { color: #dbe6e2; }
 
 .zh-not-connected {
   color: var(--zh-muted);
@@ -1978,19 +2073,6 @@
   margin-bottom: 12px;
 }
 
-.zh-device-card {
-  padding: 12px 14px;
-  min-height: 240px;
-}
-
-.zh-action-card {
-  min-height: 57px;
-  padding: 10px;
-}
-
-.zh-energy-card {
-  min-height: 53px;
-}
 
 .zh-foryou-item:hover {
   background: #ffffff08;
@@ -2096,23 +2178,6 @@
   padding-right: 16px;
 }
 
-.zh-system-col h2 {
-  color: #c7d7d1;
-}
-
-.zh-status-summary strong {
-  font-size: 16px;
-}
-
-.zh-action-card-text strong,
-.zh-energy-text strong {
-  font-size: 12px;
-}
-
-.zh-action-card-text span,
-.zh-energy-text span {
-  font-size: 10px;
-}
 
 .zh-right > .zh-section:first-child,
 .zh-right > .zh-section:last-child {

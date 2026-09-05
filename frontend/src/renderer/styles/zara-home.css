@@ -244,7 +244,11 @@
   align-items: center;
   justify-content: flex-start;
   padding-top: 6px;
-  gap: 18px;
+  /* A folga entre a esfera e o dock É a composição: é onde os anéis da
+   * plataforma aparecem. O feixe foi encurtado na mesma medida em que este
+   * gap cresceu, então a altura total da coluna não mudou (o Sistema lá
+   * embaixo não se mexe) — só abriu espaço para a plataforma existir. */
+  gap: 62px;
   min-height: 340px;
   position: relative;
   margin: 0;
@@ -1128,7 +1132,7 @@
 .zh-core-platform {
   position: absolute;
   left: 50%;
-  top: 345px;
+  top: 300px;
   width: 1px;
   height: 1px;
   z-index: 0;
@@ -1140,10 +1144,10 @@
   content: '';
   position: absolute;
   left: 50%;
-  top: 20px;
+  top: 10px;
   transform: translateX(-50%);
   width: 700px;
-  height: 170px;
+  height: 160px;
   border-radius: 50%;
   background: radial-gradient(ellipse at 50% 50%, rgba(0, 214, 153, 0.10) 0%, rgba(0, 176, 128, 0.045) 40%, transparent 74%);
   filter: blur(12px);
@@ -1163,9 +1167,9 @@
  * lateral (::before, dá espessura) + poça de contato luminosa (::after).
  * Fino e com massa — não a laje preta das passadas anteriores. */
 .zh-platform-seat {
-  top: 4px;
+  top: 14px;
   width: 196px;
-  height: 30px;
+  height: 24px;
   background:
     linear-gradient(180deg, rgba(210, 235, 226, 0.10) 0%, rgba(255, 255, 255, 0) 42%),
     radial-gradient(ellipse at 50% 34%, rgba(38, 58, 52, 0.92) 0%, rgba(20, 32, 29, 0.88) 46%, rgba(9, 16, 14, 0.86) 78%, rgba(5, 10, 9, 0.8) 100%);
@@ -1180,10 +1184,10 @@
   content: '';
   position: absolute;
   left: 50%;
-  top: 6px;
+  top: 5px;
   transform: translateX(-50%);
   width: 190px;
-  height: 28px;
+  height: 23px;
   border-radius: 50%;
   z-index: -1;
   background: linear-gradient(180deg, rgba(26, 36, 33, 0.95), rgba(6, 11, 10, 0.98));
@@ -1208,11 +1212,11 @@
  * LUZ, não uma sombra preta. */
 .zh-platform-contact {
   position: absolute;
-  top: 30px;
+  top: 20px;
   left: 50%;
   transform: translateX(-50%);
   width: 560px;
-  height: 120px;
+  height: 110px;
   border-radius: 50%;
   background: radial-gradient(ellipse at 50% 50%, rgba(0, 214, 153, 0.16) 0%, rgba(0, 180, 130, 0.07) 38%, transparent 72%);
   filter: blur(6px);
@@ -1242,9 +1246,9 @@
 }
 
 .zh-platform-ring--1 {
-  top: 12px;
-  width: 258px;
-  height: 42px;
+  top: 10px;
+  width: 252px;
+  height: 34px;
   border-width: 1.5px;
   border-color: rgba(120, 255, 214, 0.4);
   border-bottom-color: rgba(150, 255, 224, 0.62);
@@ -1252,9 +1256,9 @@
 }
 
 .zh-platform-ring--2 {
-  top: 24px;
-  width: 330px;
-  height: 56px;
+  top: 16px;
+  width: 324px;
+  height: 44px;
   border-width: 1.2px;
   border-color: rgba(96, 240, 200, 0.22);
   border-bottom-color: rgba(110, 246, 208, 0.4);
@@ -1263,9 +1267,9 @@
 }
 
 .zh-platform-ring--3 {
-  top: 38px;
-  width: 404px;
-  height: 70px;
+  top: 23px;
+  width: 400px;
+  height: 54px;
   border-width: 1px;
   border-color: rgba(80, 220, 185, 0.13);
   border-bottom-color: rgba(88, 228, 192, 0.26);
@@ -1274,9 +1278,9 @@
 }
 
 .zh-platform-ring--4 {
-  top: 54px;
-  width: 486px;
-  height: 86px;
+  top: 30px;
+  width: 482px;
+  height: 64px;
   border-width: 1px;
   border-color: rgba(70, 200, 170, 0.08);
   border-bottom-color: rgba(76, 210, 178, 0.16);
@@ -1319,7 +1323,7 @@
   position: relative;
   top: 14px;
   width: 3px;
-  height: 70px;
+  height: 26px;
   margin-top: -4px;
   background: linear-gradient(180deg, transparent 0%, rgba(0, 214, 153, 0.35) 18%, rgba(0, 214, 153, 0.5) 55%, rgba(0, 214, 153, 0.22) 88%, transparent 100%);
   filter: blur(2.5px);
@@ -1872,7 +1876,6 @@
 
 .zh-core-column {
   padding-top: 12px;
-  gap: 18px;
 }
 
 .zh-core-column::before {

@@ -598,6 +598,11 @@ async function executeActionWithConfirmation(
 
   actionConfirmationDialogOpen = true
   let confirmed = false
+  // O Core foi desenhado com um estado "Aguardando autorização" que nunca
+  // acendia: o gate HIGH é aplicado aqui, no processo principal, e o
+  // renderer nunca ficava sabendo. Isto só informa — o gate em si (desafio
+  // opaco, conferência de fingerprint, cancelamento) não muda em nada.
+  mainWindow?.webContents.send('state-change', 'AWAITING_AUTHORIZATION')
   try {
     const owner = BrowserWindow.fromWebContents(event.sender)
     const result = owner && !owner.isDestroyed()
@@ -611,6 +616,10 @@ async function executeActionWithConfirmation(
   }
 
   if (!confirmed) {
+    // Cancelou: nenhuma execução vem a seguir, então o Core volta ao repouso
+    // aqui. No caminho confirmado quem manda o estado é o backend
+    // (EXECUTING -> SUCCESS/ERROR), e sobrescrever isso daqui seria mentira.
+    mainWindow?.webContents.send('state-change', 'STANDBY')
     await cancelActionConfirmation(challenge.confirmationId)
     return blockedActionResult('CONFIRMATION_CANCELLED', 'USER_CANCELLED')
   }

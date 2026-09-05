@@ -31,9 +31,10 @@ F1.1 VOZ KORE → F1.2 LATÊNCIA → F1.3 MICROFONE SEM LOOP → F1.4 VOZ → A�
 
 ## Task ativa
 
-Nenhuma em execução. Turno CORUJÃO de 2026-09-05 (madrugada) fechado — ver
-`.claude/TASK_BOARD.md`, série `T-2026-09-05-*`, e o resumo do dono em
-`.zara-dev/reports/CORUJAO_2026-09-05.md`.
+Nenhuma em execução. Turno CORUJÃO + sprint de 4h de 2026-09-05 fechados — ver
+`.claude/TASK_BOARD.md`, série `T-2026-09-05-*`, e os relatórios em
+`.zara-dev/reports/CORUJAO_2026-09-05.md` e
+`.zara-dev/reports/SPRINT_4H_2026-09-05.md`.
 
 O que mudou de método nesse turno: a Home passou a ser conferida
 **renderizando**, não lendo código. `node .zara-tests/ui/run-ui-checks.mjs`

@@ -4,6 +4,60 @@ Formato simples. Não virar burocracia.
 
 ## DONE
 
+- ID: T-2026-09-05-16
+  owner: Chief of Staff (sprint 4h)
+  scope: Sidebar contra a MASTER — rótulos legíveis, item ativo sem glow, avatar contido
+  files: `zara-home.css`
+  DoD: 8/8 no harness de UI (commit `99962be`)
+
+- ID: T-2026-09-05-15
+  owner: Chief of Staff (sprint 4h)
+  scope: 52ms de rede escondidos em toda frase de conversa (cliente httpx por chamada + Ollama fora do ar retentado sempre)
+  files: `core/pc_voice_intent.py`, `tests/test_latencia_detector.py`
+  DoD: 52ms -> 0,46ms (Ollama fora) e 50ms -> 2,06ms (no ar); 5 testes (commit `08a114f`)
+
+- ID: T-2026-09-05-14
+  owner: Chief of Staff (sprint 4h)
+  scope: prender a regra "voz e texto percorrem a mesma cadeia" (regressão nº 1 do projeto)
+  files: `tests/test_voz_e_texto_mesma_cadeia.py`
+  DoD: mutação verificada — remover uma etapa da voz quebra 2 de 3 testes (commit `1cd4a41`)
+
+- ID: T-2026-09-05-13
+  owner: Chief of Staff (sprint 4h)
+  scope: lembretes — verbos "crie/agende/marca" e o "h" órfão dentro da mensagem
+  files: `core/reminder_intent.py`, `tests/test_lembrete_verbos.py`
+  DoD: 18 testes; "tomar água h" virou "tomar água" (commit `dc560b7`)
+
+- ID: T-2026-09-05-12
+  owner: Chief of Staff (sprint 4h)
+  scope: navegador/mídia/data/arquivo recente — 12 frases com action pronta e nenhum caminho até ela
+  files: `core/pc_voice_intent.py`, `core/file_voice_intent.py`, `tests/test_navegador_e_arquivo_recente.py`
+  DoD: matriz de navegador 8/20 -> 20/20; 29 testes (commit `74bd9a0`)
+
+- ID: T-2026-09-05-11
+  owner: Chief of Staff (sprint 4h)
+  scope: 4 cards do painel Sistema ligados a actions READ_ONLY reais
+  files: `SystemPanel.tsx`, `zara-home.css`, `.zara-tests/ui/probe-sistema.mjs`
+  DoD: probe novo no harness, 11/11 (commit `5629783`)
+
+- ID: T-2026-09-05-10
+  owner: Chief of Staff (sprint 4h)
+  scope: Calculadora/Explorer, "reduza o volume", "minimize o Chrome", composto ligado por "e"
+  files: `core/actions/os_ops.py`, `core/pc_voice_intent.py`, `core/ipc_handlers.py`, `tests/test_apps_e_janela_nomeada.py`
+  DoD: lista de comandos 17/20 -> 20/20; 26 testes (commit `1ad758b`)
+
+- ID: T-2026-09-05-09
+  owner: Chief of Staff (sprint 4h)
+  scope: fases reais do comando viram estado visível (UNDERSTANDING/EXECUTING/VERIFYING/SUCCESS na ordem certa)
+  files: `core/ipc_handlers.py`, `useZaraCoreState.ts`, `zara-home.css`, `tests/test_core_state_fases.py`
+  DoD: SUCCESS agora sai DEPOIS do readback; 15/15 no probe de estados (commit `40b0244`)
+
+- ID: T-2026-09-05-08
+  owner: Chief of Staff (sprint 4h)
+  scope: Core -> feixe -> plataforma -> dock como uma composição só
+  files: `zara-home.css`
+  DoD: esfera 284->244px, feixe cobrindo o vão inteiro, nada se sobrepõe (commit `6f4e1f2`)
+
 - ID: T-2026-09-05-07
   owner: Chief of Staff (turno CORUJÃO)
   scope: harness de UI — um comando builda, serve e roda 7 probes contra o DOM

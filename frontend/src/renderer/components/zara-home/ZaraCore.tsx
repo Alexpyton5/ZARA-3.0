@@ -9,6 +9,7 @@ const LABELS: Record<CoreState, string> = {
   thinking: 'Pensando',
   planning: 'Planejando',
   executing: 'Executando',
+  verifying: 'Conferindo',
   awaiting_authorization: 'Aguardando autorização',
   speaking: 'Falando',
   success: 'Concluído',

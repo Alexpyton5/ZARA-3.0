@@ -1884,6 +1884,28 @@ class IPCHandler:
         return resposta
 
     async def _executar_intent_de_pc(self, text: str) -> str | None:
+        """ZARA-CORE-STATE-002 — traduz as FASES REAIS deste despacho em estado
+        do Core, e delega o trabalho para `_despachar_intent_de_pc`.
+
+        O Core foi desenhado com estados de entender / executar / verificar,
+        mas o backend só sabia dizer THINKING e STANDBY. As fases existem de
+        verdade aqui dentro: o detector reconhece (UNDERSTANDING), o executor
+        roda (EXECUTING), e o readback abaixo confere o resultado no Windows
+        (VERIFYING). SUCCESS/ERROR só sai no fim, depois da verificação —
+        emitir logo após o executor dizia "deu certo" antes de conferir, que
+        é exatamente o falso sucesso que este projeto combate.
+
+        Nada aqui altera despacho: se uma emissão falhar, o comando segue.
+        """
+        self._fase_do_core = None
+        resposta = await self._despachar_intent_de_pc(text)
+        if self._fase_do_core == "EXECUTED":
+            result = self._ultimo_resultado_de_acao
+            ok = result is not None and getattr(result, "success", False)
+            await self._emitir_estado_do_core("SUCCESS" if ok else "ERROR")
+        return resposta
+
+    async def _despachar_intent_de_pc(self, text: str) -> str | None:
         """Deterministic PC intent (ZARA-COMPUTER-CONTROL-VOLUME-001).
 
         Maps voice/text PC commands to existing os_volume action. Returns
@@ -1937,6 +1959,9 @@ class IPCHandler:
             res = detector.detect(text)
             if not res.is_pc_intent:
                 return None
+            # Aqui o comando FOI reconhecido de forma determinística — é o
+            # momento real de "entendi", não um enfeite de tempo.
+            await self._emitir_estado_do_core('UNDERSTANDING')
             if res.blocked:
                 self._remember_action_failure(res.action, "capability_gate", res.reply)
                 return res.reply or "Não consegui executar esse comando."
@@ -2054,11 +2079,12 @@ class IPCHandler:
             stage = "executor"
             await self._emitir_estado_do_core('EXECUTING')
             result = await execute_action(action_to_execute, **params)
-            await self._emitir_estado_do_core(
-                'SUCCESS'
-                if (result is not None and getattr(result, "success", False))
-                else 'ERROR'
-            )
+            self._fase_do_core = "EXECUTED"
+            if result is not None and getattr(result, "success", False):
+                # O que vem abaixo é readback de verdade (ler o volume no
+                # Windows, conferir o processo, o hwnd, o tamanho do print).
+                # Só depois dele o Core pode dizer SUCCESS.
+                await self._emitir_estado_do_core('VERIFYING')
             # ZARA-NAO-VERIFICADO-001: guardado para o embrulho decidir se a
             # frase pode sair afirmativa ou precisa da ressalva honesta.
             self._ultimo_resultado_de_acao = result

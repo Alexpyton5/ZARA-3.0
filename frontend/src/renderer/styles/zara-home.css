@@ -1458,18 +1458,122 @@
   /* Novo asset SVG da marca — sem filter */
 }
 
-.zh-core[data-state='listening'] { animation-duration: 1.1s; }
+/* ============================================================
+ * Linguagem de estado do Core
+ * ============================================================
+ * Um estado, uma leitura visual. Todos os estados abaixo são EMITIDOS de
+ * verdade pelo backend (`_executar_intent_de_pc` e `handle_send_message`);
+ * nenhum é decoração de tempo. A luz é UMA só: o que acontece na esfera
+ * desce pelo feixe e chega na plataforma, em vez de cada peça piscar
+ * sozinha.
+ *
+ * ouvindo      -> respiração rápida, halo abrindo (energia ENTRANDO)
+ * entendi      -> clarão curto e único
+ * pensando     -> halo girando, feixe trêmulo
+ * executando   -> respiração curta, energia DESCENDO pelo feixe
+ * conferindo   -> esfera estável, varredura passando pelos anéis
+ * falando      -> ondas concêntricas saindo da esfera
+ * autorização  -> âmbar, tudo parado (esperando o Alex)
+ * sucesso/erro -> confirmação curta, volta ao repouso sozinha
+ * offline      -> tudo apagado
+ */
 
-/* Estados que existiam no vocabulário do backend mas não tinham leitura
- * visual própria — ficavam idênticos ao repouso. */
+.zh-core[data-state='listening'] {
+  animation-duration: 1.1s;
+  filter: drop-shadow(0 0 34px #00d69966);
+}
+
 .zh-core[data-state='understanding'] {
-  animation-duration: 1.35s;
-  filter: drop-shadow(0 0 30px #00d69955) drop-shadow(0 18px 42px #000000c4);
+  animation: zh-core-understand 260ms ease-out 1 forwards;
+}
+
+@keyframes zh-core-understand {
+  0% { filter: drop-shadow(0 0 26px #00bd8238); transform: scale(1); }
+  40% { filter: drop-shadow(0 0 46px #9dffdd9c); transform: scale(1.022); }
+  100% { filter: drop-shadow(0 0 30px #00d69955); transform: scale(1); }
+}
+
+.zh-core[data-state='thinking'],
+.zh-core[data-state='planning'] {
+  animation-duration: 0.9s;
+  filter: drop-shadow(0 0 32px #00d6994d);
+}
+
+.zh-core[data-state='executing'] {
+  animation-duration: 0.5s;
+  filter: drop-shadow(0 0 40px #00f0af6b);
+}
+
+.zh-core[data-state='verifying'] {
+  /* Conferindo é o oposto de agitação: a esfera fica FIRME enquanto a
+   * varredura corre pela plataforma. */
+  animation: none;
+  filter: drop-shadow(0 0 30px #7de7c05e);
+}
+
+.zh-core[data-state='speaking'] {
+  animation-duration: 0.9s;
+}
+
+.zh-core[data-state='awaiting_authorization'] {
+  animation-duration: 2.2s;
+  filter: drop-shadow(0 0 34px #e8c46a55);
 }
 
 .zh-core[data-state='success'] {
   animation-duration: 2.4s;
   filter: drop-shadow(0 0 38px #00f0af75) drop-shadow(0 18px 42px #000000c4);
+}
+
+/* Ondas de fala: só existem em `speaking`, e saem da esfera para fora —
+ * é som saindo, não energia entrando. */
+.zh-core-wrap:has(.zh-core[data-state='speaking'])::before {
+  animation: zh-core-wave 1.8s ease-out infinite;
+}
+
+.zh-core-wrap:has(.zh-core[data-state='speaking'])::after {
+  animation: zh-core-wave 1.8s ease-out 0.6s infinite;
+}
+
+@keyframes zh-core-wave {
+  0% { opacity: 0.55; transform: scale(0.9); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+/* Ouvindo: o halo se abre (energia entrando), sem pulsar como em executando. */
+.zh-core-wrap:has(.zh-core[data-state='listening'])::before {
+  border-color: rgba(126, 224, 196, 0.34);
+  animation: zh-core-listen 2.1s ease-in-out infinite;
+}
+
+@keyframes zh-core-listen {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.035); opacity: 1; }
+}
+
+/* Autorização pendente: âmbar em tudo, e nada se mexendo — a máquina está
+ * esperando o Alex, não trabalhando. */
+.zh-core-wrap:has(.zh-core[data-state='awaiting_authorization']) .zh-platform-ring--1 {
+  border-color: rgba(232, 196, 106, 0.75);
+  border-bottom-color: rgba(255, 226, 158, 0.9);
+  box-shadow: 0 0 18px rgba(232, 196, 106, 0.4);
+}
+
+.zh-core-wrap:has(.zh-core[data-state='awaiting_authorization']) .zh-core-shaft {
+  opacity: 0.35;
+}
+
+/* Erro: o feixe e os anéis avermelham. Sem isto, "deu errado" ficava só num
+ * texto e a composição continuava dizendo verde. */
+.zh-core-wrap:has(.zh-core[data-state='error']) .zh-core-shaft {
+  filter: blur(3px) hue-rotate(-115deg) saturate(1.25);
+  opacity: 0.6;
+}
+
+.zh-core-wrap:has(.zh-core[data-state='error']) .zh-platform-ring--1 {
+  border-color: rgba(255, 150, 138, 0.72);
+  border-bottom-color: rgba(255, 190, 180, 0.9);
+  box-shadow: 0 0 18px rgba(255, 120, 106, 0.35);
 }
 
 /* A luz é UMA só: quando a ZARA está agindo, a energia desce pelo feixe e
@@ -1478,8 +1582,59 @@
 .zh-core-wrap:has(.zh-core[data-state='executing']) .zh-core-shaft,
 .zh-core-wrap:has(.zh-core[data-state='speaking']) .zh-core-shaft {
   opacity: 1;
-  filter: blur(1.2px);
+  filter: blur(2.2px);
   animation: zh-shaft-flow 1.1s ease-in-out infinite;
+}
+
+/* Pensando: o feixe treme de leve, como um circuito sob carga — a esfera
+ * está trabalhando mas nada foi para o Windows ainda. */
+.zh-core-wrap:has(.zh-core[data-state='thinking']) .zh-core-shaft,
+.zh-core-wrap:has(.zh-core[data-state='planning']) .zh-core-shaft {
+  animation: zh-shaft-flicker 0.7s ease-in-out infinite;
+}
+
+@keyframes zh-shaft-flicker {
+  0%, 100% { opacity: 0.5; }
+  35% { opacity: 0.9; }
+  60% { opacity: 0.62; }
+}
+
+/* Conferindo: uma varredura corre pela plataforma, do centro para fora.
+ * É a leitura de "estou olhando o Windows para ver se aconteceu". */
+.zh-core-wrap:has(.zh-core[data-state='verifying']) .zh-platform-ring--2,
+.zh-core-wrap:has(.zh-core[data-state='verifying']) .zh-platform-ring--3 {
+  animation: zh-ring-sweep 1.15s ease-out infinite;
+}
+
+.zh-core-wrap:has(.zh-core[data-state='verifying']) .zh-platform-ring--3 {
+  animation-delay: 0.22s;
+}
+
+@keyframes zh-ring-sweep {
+  0% { border-color: rgba(198, 222, 215, 0.5); box-shadow: none; }
+  45% {
+    border-color: rgba(240, 255, 250, 0.95);
+    box-shadow: 0 0 16px rgba(0, 235, 170, 0.5);
+  }
+  100% { border-color: rgba(198, 222, 215, 0.5); box-shadow: none; }
+}
+
+.zh-core-wrap:has(.zh-core[data-state='verifying']) .zh-core-shaft {
+  opacity: 1;
+  animation: none;
+}
+
+/* Sucesso: um pulso ÚNICO sai do disco. Confirmação, não festa contínua. */
+.zh-core-wrap:has(.zh-core[data-state='success']) .zh-platform-ring--1 {
+  animation: zh-ring-confirm 900ms ease-out 1;
+}
+
+@keyframes zh-ring-confirm {
+  0% { box-shadow: 0 0 14px rgba(0, 240, 175, 0.4); }
+  30% {
+    box-shadow: 0 0 40px rgba(0, 255, 190, 0.95), 0 0 90px rgba(0, 235, 170, 0.45);
+  }
+  100% { box-shadow: 0 0 14px rgba(0, 240, 175, 0.4); }
 }
 
 .zh-core-wrap:has(.zh-core[data-state='executing']) .zh-platform-ring--1,

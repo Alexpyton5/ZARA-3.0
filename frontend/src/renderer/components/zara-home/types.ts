@@ -11,6 +11,7 @@ export type CoreState =
   | 'thinking'
   | 'planning'
   | 'executing'
+  | 'verifying'
   | 'awaiting_authorization'
   | 'speaking'
   | 'success'

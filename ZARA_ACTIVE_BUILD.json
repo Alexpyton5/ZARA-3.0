@@ -1,15 +1,15 @@
 {
-  "BUILD_ID": "release-candidate-browsernav-20260905-2315",
-  "BUILD_TIMESTAMP": "2026-09-05T23:15:22.845733-03:00",
-  "BASE_BUILD": "release-candidate-multistep-20260905-2305",
+  "BUILD_ID": "release-candidate-openfile-20260905-2323",
+  "BUILD_TIMESTAMP": "2026-09-05T23:24:07.559100-03:00",
+  "BASE_BUILD": "release-candidate-browsernav-20260905-2315",
   "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "ce0ded0e377b0b549a508ba769df01f43a388f13",
+  "GIT_COMMIT": "40a79aec5e352afbc65d4f1bc45463a9b7f904f2",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\AppData\\Local\\Programs\\zara-frontend\\ZARA 3.0.exe",
   "EXE_SHA256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
-  "BACKEND_SHA256": "D7D06F70A72FFBBC80878F142E911BE11E048FBA96997CC5E4A52FB568877204",
-  "BACKEND_SHA256_ANTERIOR": "865FC393213D8B6038C47A221CA16CA7344E7C9CC20559D2A2EF0976A049F681",
+  "BACKEND_SHA256": "081B32E45E2E6BE8C5A3F8587B586857D05E7CBF764665F923575B886E54329F",
+  "BACKEND_SHA256_ANTERIOR": "D7D06F70A72FFBBC80878F142E911BE11E048FBA96997CC5E4A52FB568877204",
   "ASAR_SHA256": "EE46C7154CE264EF8754FDBF4282590F8F79A18226AD3BB86B161590C2C88001",
-  "DELTA": "Fix: Volte/Avance/Nova aba sozinhos (sem 'no navegador') nao eram reconhecidos -- exemplo golden-path da missao usa exatamente essa forma."
+  "DELTA": "Novo: abrir arquivo especifico por nome (files_open_named) -- so existia abrir o ultimo baixado."
 }

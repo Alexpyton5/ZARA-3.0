@@ -314,8 +314,13 @@ class PcVoiceIntentDetector:
              self._open_url, "browser_open_url", None),
 
             # Closed media destinations; query is data and the host is fixed.
-                        (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|acesse|v[áa]\s+para)\s+(?:o\s+)?youtube\s*[.!?]*$',
-                         self._browser_native, "youtube_open", "youtube"),
+            # ZARA-VA-AO-YOUTUBE-001: "va AO youtube" (contracao a+o) e tao comum
+            # quanto "va PARA o youtube", mas so a segunda forma casava -- em
+            # comando composto ("abra o Chrome, va ao YouTube e pesquise X") a
+            # etapa inteira virava "ainda nao sei fazer" por causa dessa unica
+            # preposicao faltando.
+            (r'^(?:zara[,\s]+)?(?:(?:abra|abre|abrir|acesse|v[áa]\s+para)\s+(?:o\s+)?|v[áa]\s+ao\s+)youtube\s*[.!?]*$',
+             self._browser_native, "youtube_open", "youtube"),
                         (r'\b(?:pesquis[ae]r?|procur[ae]r?|busc[ae]r?|toc[ae]r?)\s+(.+?)\s+(?:no|na)\s+youtube\b',
                          self._media_query, "youtube_search", None),
                         (r'^(?:zara[,\s]+)?(?:toque|toca|coloque|bote|quero\s+ouvir)\s+(?:por\s+)?(.+?)\s*[.!?]*$',

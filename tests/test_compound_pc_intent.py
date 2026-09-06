@@ -48,6 +48,39 @@ async def test_compound_request_executes_nothing_when_one_step_is_unknown():
 
 
 @pytest.mark.asyncio
+async def test_compound_splits_loose_e_when_every_sub_part_is_a_real_intent(monkeypatch):
+    """ZARA-VA-AO-YOUTUBE-001 regression: the mission's own golden-path
+    example ("Abra o Chrome, vá ao YouTube e pesquise Hans Zimmer") has only
+    one comma, so the second half ("vá ao YouTube e pesquise Hans Zimmer")
+    must be split further on the loose " e " -- which only happens when BOTH
+    halves independently match a real intent. "vá ao YouTube" didn't, until
+    the "ao" preposition was added alongside "para"."""
+    handler = IPCHandler(AsyncMock())
+    handler._try_pc_intent = AsyncMock(
+        side_effect=(
+            "Chrome aberto e verificado.",
+            "YouTube enviado ao navegador padrão.",
+            "Pesquisa enviada ao navegador padrão.",
+        )
+    )
+
+    reply = await handler._try_compound_pc_intent(
+        "Abra o Chrome, vá ao YouTube e pesquise Hans Zimmer"
+    )
+
+    assert reply == (
+        "Resultado por etapa: 1) Chrome aberto e verificado. "
+        "2) YouTube enviado ao navegador padrão. "
+        "3) Pesquisa enviada ao navegador padrão."
+    )
+    assert [call.args[0] for call in handler._try_pc_intent.await_args_list] == [
+        "Abra o Chrome",
+        "vá ao YouTube",
+        "pesquise Hans Zimmer",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_ordinary_comma_text_is_not_treated_as_compound_pc_control():
     handler = IPCHandler(AsyncMock())
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.actions.files import (
     files_copy_action,
+    files_create_folder_action,
     files_move_action,
     files_open_latest_action,
     files_organize_by_extension_action,
@@ -11,6 +12,53 @@ from core.actions.files import (
     files_write_action,
 )
 from core.action_registry import get_registry
+
+
+def test_create_folder_makes_new_directory_and_verifies_it(tmp_path):
+    registry = get_registry()
+    original_medium_risk = registry.medium_risk_open
+    registry.medium_risk_open = True
+    try:
+        target = tmp_path / "TesteZaraMissao"
+
+        result = files_create_folder_action(str(target))
+
+        assert result.success is True
+        assert target.is_dir()
+        assert result.data["already_existed"] is False
+    finally:
+        registry.medium_risk_open = original_medium_risk
+
+
+def test_create_folder_is_idempotent_when_it_already_exists(tmp_path):
+    registry = get_registry()
+    original_medium_risk = registry.medium_risk_open
+    registry.medium_risk_open = True
+    try:
+        target = tmp_path / "JaExiste"
+        target.mkdir()
+
+        result = files_create_folder_action(str(target))
+
+        assert result.success is True
+        assert result.data["already_existed"] is True
+    finally:
+        registry.medium_risk_open = original_medium_risk
+
+
+def test_create_folder_refuses_when_a_file_occupies_the_name(tmp_path):
+    registry = get_registry()
+    original_medium_risk = registry.medium_risk_open
+    registry.medium_risk_open = True
+    try:
+        target = tmp_path / "nota.txt"
+        target.write_text("x")
+
+        result = files_create_folder_action(str(target))
+
+        assert result.success is False
+    finally:
+        registry.medium_risk_open = original_medium_risk
 
 
 def test_open_latest_skips_newer_executable_and_requires_window_proof(tmp_path, monkeypatch):

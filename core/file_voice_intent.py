@@ -13,6 +13,9 @@ _FOLDERS = {
 }
 _BASENAME = r"([\wÀ-ÿ .()_-]{1,120}\.[A-Za-z0-9]{1,12})"
 _FOLDER = r"(downloads|documentos|documents|corujão|corujao)"
+# ZARA-CRIAR-PASTA-001: nome de pasta nao tem extensao (diferente de _BASENAME),
+# mas usa o mesmo charset restrito -- _clean_name ja recusa "..", "/" e "\\".
+_FOLDER_NAME = r"([\wÀ-ÿ .()_-]{1,120})"
 
 
 @dataclass
@@ -53,6 +56,11 @@ def detect_file_intent(text: str) -> FileIntent | None:
     if match:
         name = _clean_name(match.group(1))
         return FileIntent("files_text_summary", {"name": name, "folder": _FOLDERS[match.group(2).casefold()]}) if name else None
+
+    match = re.fullmatch(rf"cri[ea]\s+(?:uma\s+)?pasta\s+(?:chamada\s+)?{_FOLDER_NAME}\s+em\s+{_FOLDER}", raw, re.IGNORECASE)
+    if match:
+        name = _clean_name(match.group(1))
+        return FileIntent("files_create_folder", {"name": name, "folder": _FOLDERS[match.group(2).casefold()]}, True) if name else None
 
     match = re.fullmatch(rf"crie\s+(?:o\s+)?arquivo\s+{_BASENAME}\s+em\s+{_FOLDER}\s+com\s+(?:o\s+)?conteúdo\s+(.{{1,2000}})", raw, re.IGNORECASE)
     if match:

@@ -18,6 +18,8 @@ from core.ipc_handlers import IPCHandler
         ("procure ZARA nos arquivos em Documentos", "files_search", False),
         ("resuma o arquivo nota.txt em Downloads", "files_text_summary", False),
         ("crie o arquivo nota.txt em Downloads com o conteúdo Olá", "files_write", True),
+        ("crie uma pasta chamada TesteZaraMissao em Downloads", "files_create_folder", True),
+        ("crie pasta Fotos em Documentos", "files_create_folder", True),
         ("adicione nova linha ao arquivo nota.txt em Downloads", "files_write", True),
         ("sobrescreva o arquivo nota.txt em Downloads com novo", "files_write", True),
         ("renomeie o arquivo nota.txt para final.txt em Downloads", "files_rename", True),
@@ -40,6 +42,8 @@ def test_closed_file_intents(phrase, action, mutating):
         "delete tudo em Downloads",
         r"resuma o arquivo ..\secrets.txt em Downloads",
         "execute powershell em Downloads",
+        "crie uma pasta chamada ../evil em Downloads",
+        r"crie pasta ..\..\Windows em Downloads",
     ],
 )
 def test_file_intents_reject_delete_traversal_and_arbitrary_commands(phrase):
@@ -81,6 +85,27 @@ async def test_explicit_file_mutation_routes_confirmed_known_path(tmp_path, monk
         "files_write",
         path=str(tmp_path / "nota.txt"),
         content="Olá",
+        confirm=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_folder_routes_known_path_and_confirms(tmp_path, monkeypatch):
+    execute = AsyncMock(return_value=ActionResult(
+        success=True,
+        output="Pasta criada e verificada: TesteZaraMissao.",
+        data={"path": str(tmp_path / "TesteZaraMissao"), "already_existed": False},
+    ))
+    monkeypatch.setattr("core.action_registry.execute_action", execute)
+    monkeypatch.setattr("core.actions.os_ops._resolve_safe_folder", lambda folder: tmp_path)
+    handler = IPCHandler(AsyncMock())
+
+    reply = await handler._try_file_intent("crie uma pasta chamada TesteZaraMissao em Downloads")
+
+    assert reply == "Pasta criada e verificada: TesteZaraMissao."
+    execute.assert_awaited_once_with(
+        "files_create_folder",
+        path=str(tmp_path / "TesteZaraMissao"),
         confirm=True,
     )
 

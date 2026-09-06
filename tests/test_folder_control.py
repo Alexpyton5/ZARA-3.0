@@ -17,6 +17,10 @@ from core.pc_voice_intent import PcVoiceIntentDetector
         ("mostre Documents", "documents"),
         ("mostre a Área de Trabalho", "desktop"),
         ("vá para Desktop", "desktop"),
+        # ZARA-DESKTOP-ARTIGO-001: sem acento (texto digitado/STT) e artigo
+        # masculino ("o desktop") caiam no catch-all generico de app.
+        ("abra a area de trabalho", "desktop"),
+        ("abra o desktop", "desktop"),
         ("abra minhas Imagens", "pictures"),
         ("mostre Pictures", "pictures"),
         ("abra a pasta da ZARA", "zara_root"),

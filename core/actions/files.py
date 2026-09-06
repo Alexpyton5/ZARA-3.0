@@ -280,6 +280,43 @@ def files_write_action(
 
 
 @action(
+    name="files_create_folder",
+    category="files",
+    description="Create an empty folder inside a known directory (no-op if it already exists)",
+    risk="MEDIUM",
+    parameters={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Folder path to create"},
+        },
+        "required": ["path"],
+    },
+    capability="FILES_MUTATE",
+)
+def files_create_folder_action(path: str) -> ActionResult:
+    """Create a directory. Verifies the postcondition instead of trusting mkdir's return."""
+    try:
+        folder_path = Path(path).resolve()
+        blocked = _sensitive_path_error(folder_path)
+        if blocked is not None:
+            return blocked
+        if folder_path.exists() and not folder_path.is_dir():
+            return ActionResult(success=False, error=f"Já existe um arquivo (não pasta) em: {folder_path}")
+        already_existed = folder_path.is_dir()
+        folder_path.mkdir(parents=True, exist_ok=True)
+        if not folder_path.is_dir():
+            return ActionResult(success=False, error=f"Não consegui confirmar a pasta depois de criá-la: {folder_path}")
+        verb = "já existia" if already_existed else "criada e verificada"
+        return ActionResult(
+            success=True,
+            output=f"Pasta {verb}: {folder_path.name}.",
+            data={"path": str(folder_path), "already_existed": already_existed},
+        )
+    except Exception as e:
+        return ActionResult(success=False, error=str(e))
+
+
+@action(
     name="files_delete",
     category="files",
     description="Delete file or directory",

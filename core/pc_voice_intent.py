@@ -296,7 +296,11 @@ class PcVoiceIntentDetector:
              self._open_downloads, "os_open", "downloads"),
             (r'^(?:zara[,\s]+)?(?:abr[ae]|abrir|mostr[ae]|v[áa]\s+(?:pra|para))\s+(?:a\s+)?(?:pasta\s+(?:de\s+|dos\s+)?)?(?:meus?\s+)?(?:documentos|documents)\s*[.!?]*$',
              self._open_documents, "os_open", "documents"),
-            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|mostre|v[áa]\s+para)\s+(?:a\s+)?(?:área\s+de\s+trabalho|desktop)\s*[.!?]*$',
+            # ZARA-DESKTOP-ARTIGO-001: "area de trabalho" (sem acento, comum em
+            # texto digitado e em STT) e "abra O desktop" (artigo masculino)
+            # nao casavam -- so existia "a" + "área" acentuada, entao os dois
+            # caiam no catch-all generico de app e viravam "ainda nao sei fazer".
+            (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|mostre|v[áa]\s+para)\s+(?:(?:a\s+)?[áa]rea\s+de\s+trabalho|(?:o\s+)?desktop)\s*[.!?]*$',
              self._open_desktop, "os_open", "desktop"),
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|mostre|v[áa]\s+para)\s+(?:minhas?\s+)?(?:imagens|pictures)\s*[.!?]*$',
              self._open_pictures, "os_open", "pictures"),

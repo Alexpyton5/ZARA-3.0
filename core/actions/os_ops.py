@@ -1828,12 +1828,26 @@ def _window_for_safe_app(app: str, pids: set[int]) -> int | None:
     return None
 
 
-def _window_state_action(command: str, hwnd: int | None = None) -> ActionResult:
+def _window_state_action(command: str, hwnd: int | None = None, target_name: str | None = None) -> ActionResult:
     if platform.system() != "Windows":
         return ActionResult(success=False, error="Controle de janelas disponível somente no Windows.")
     if hwnd is not None and not _eligible_window(hwnd):
         return ActionResult(success=False, error="A janela contextual não existe mais ou deixou de ser segura.")
-    target = hwnd if hwnd is not None else _foreground_window()
+    resolved = hwnd
+    # ZARA-JANELA-NOMEADA-001: "minimize/maximize/restaure o Chrome" pedia uma
+    # janela por NOME, mas so existia suporte para a janela ativa/contextual.
+    # Reaproveita a mesma resolucao de alvo do window_focus_named em vez de
+    # inventar uma segunda forma de achar HWND por app.
+    if resolved is None and target_name is not None:
+        canonical = str(target_name).strip().casefold()
+        if canonical not in _NAMED_WINDOW_TARGETS:
+            return ActionResult(success=False, error="Alvo de janela não permitido.")
+        candidates = [h for h in _eligible_windows() if _window_matches_named_target(h, canonical)]
+        if not candidates:
+            return ActionResult(success=False, error=f"Não encontrei uma janela de {canonical} aberta.")
+        foreground = _foreground_window()
+        resolved = foreground if foreground in candidates else candidates[0]
+    target = resolved if resolved is not None else _foreground_window()
     if target is None:
         return ActionResult(success=False, error="Nenhuma janela ativa segura foi identificada.")
     import ctypes
@@ -1858,19 +1872,19 @@ def _window_state_action(command: str, hwnd: int | None = None) -> ActionResult:
     )
 
 
-@action(name="window_minimize", category="os", description="Minimize the safe active window", capability="LOCAL_PC_CONTROL")
-def window_minimize_action(hwnd: int | None = None) -> ActionResult:
-    return _window_state_action("minimize", hwnd)
+@action(name="window_minimize", category="os", description="Minimize the safe active window, or one named allowlisted window", capability="LOCAL_PC_CONTROL")
+def window_minimize_action(hwnd: int | None = None, target: str | None = None) -> ActionResult:
+    return _window_state_action("minimize", hwnd, target)
 
 
-@action(name="window_maximize", category="os", description="Maximize the safe active window", capability="LOCAL_PC_CONTROL")
-def window_maximize_action(hwnd: int | None = None) -> ActionResult:
-    return _window_state_action("maximize", hwnd)
+@action(name="window_maximize", category="os", description="Maximize the safe active window, or one named allowlisted window", capability="LOCAL_PC_CONTROL")
+def window_maximize_action(hwnd: int | None = None, target: str | None = None) -> ActionResult:
+    return _window_state_action("maximize", hwnd, target)
 
 
-@action(name="window_restore", category="os", description="Restore the safe active window", capability="LOCAL_PC_CONTROL")
-def window_restore_action(hwnd: int | None = None) -> ActionResult:
-    return _window_state_action("restore", hwnd)
+@action(name="window_restore", category="os", description="Restore the safe active window, or one named allowlisted window", capability="LOCAL_PC_CONTROL")
+def window_restore_action(hwnd: int | None = None, target: str | None = None) -> ActionResult:
+    return _window_state_action("restore", hwnd, target)
 
 
 @action(name="window_move", category="os", description="Move an unequivocal recent window to one monitor side", capability="LOCAL_PC_CONTROL")

@@ -157,3 +157,37 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
         ("user", "Como está o projeto?"),
         ("assistant", "Tudo certo, Alex."),
     ]
+
+
+@pytest.mark.asyncio
+async def test_bare_greeting_is_not_rejected_as_missing_text(tmp_path: Path) -> None:
+    """ZARA-SAUDACAO-VAZIA-001 regression.
+
+    "Oi Zara" sozinho e so nome+saudacao: _canonical_request tira os dois e
+    sobra "". Antes do fix isso caia no mesmo "No text provided" de uma
+    mensagem realmente vazia, e o golden path P0 ("Oi Zara" -> resposta
+    normal) quebrava na primeira frase.
+    """
+    sent: list[IPCMessage] = []
+
+    async def send(message: IPCMessage) -> None:
+        sent.append(message)
+
+    class Orchestrator:
+        last_engine_used = "fake_engine"
+
+        async def process_message(self, text: str, engine: str, history=None) -> str:
+            assert text == "Oi Zara"
+            return "Oi, Alex! Como posso ajudar?"
+
+    handler = IPCHandler(send)
+    handler.conversation_history = ConversationHistory(tmp_path / "history.sqlite3")
+    handler.orchestrator = Orchestrator()  # type: ignore[assignment]
+
+    await handler.handle_send_message(
+        IPCMessage(type="send-message", request_id="greeting", payload={"message": "Oi Zara"})
+    )
+
+    assert not any(m.error for m in sent), [m.error for m in sent]
+    response_msg = next(m for m in sent if m.type == "response")
+    assert response_msg.response["response"] == "Oi, Alex! Como posso ajudar?"

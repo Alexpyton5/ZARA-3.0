@@ -558,6 +558,7 @@ class IPCHandler:
 
     def __init__(self, send_callback: Callable[[IPCMessage], Awaitable[None]]):
         self.send = send_callback
+        self._smoke_test = os.environ.get('ZARA_SMOKE_TEST') == '1'
         self.orchestrator: ZaraOrchestrator | None = None
         self.model_router: ModelRouter | None = None
         self.memory: MemoryManager | None = None
@@ -1041,6 +1042,14 @@ class IPCHandler:
 
         if essential_errors:
             raise RuntimeError("; ".join(essential_errors))
+
+        # Release validation exercises the real IPC/core in a disposable data
+        # directory. It never starts microphone, messaging bridges or schedules.
+        if self._smoke_test:
+            from core.reminder_engine import ReminderEngine
+            self.reminder_engine = ReminderEngine(on_fire=self._schedule_reminder_fire)
+            print("[IPC] Isolated smoke mode: read-only IPC; background integrations disabled")
+            return
 
         if LAB_AVAILABLE and LabCoordinator:
             try:
@@ -1991,7 +2000,18 @@ class IPCHandler:
                 params["level"] = max(0, min(100, current + delta))
                 action_to_execute = "os_brightness_absolute"
             elif res.action in {"window_minimize", "window_maximize", "window_restore", "window_move", "window_resize_larger", "window_close"}:
-                if self._last_window_hwnd is not None:
+                # ZARA-JANELA-NOMEADA-001: "minimize/maximize/restaure o Chrome"
+                # manda um alvo por nome (ex.: "chrome"), nao a janela contextual.
+                # "active" e None continuam caindo no hwnd de contexto de sempre.
+                named_target = (
+                    res.param
+                    if res.action in {"window_minimize", "window_maximize", "window_restore"}
+                    and res.param and res.param != "active"
+                    else None
+                )
+                if named_target:
+                    params["target"] = named_target
+                elif self._last_window_hwnd is not None:
                     params["hwnd"] = self._last_window_hwnd
                 if res.action == "window_move":
                     params["side"] = res.param
@@ -2821,6 +2841,30 @@ class IPCHandler:
         except Exception as exc:
             await self.send_error(msg, f"project-memory-list: {exc}")
 
+    async def handle_project_memory_context(self, msg: IPCMessage):
+        """Read actual project selection; legacy document keys are not projects."""
+        if not self.project_memory:
+            await self.send_error(msg, "Project Memory indisponível")
+            return
+        try:
+            projects = []
+            for project_id in self.project_memory.list_projects():
+                keys = self.project_memory.list_project_docs(project_id)
+                docs = [self.project_memory.get_project_doc(project_id, key) for key in keys]
+                timestamps = [doc['updated_at'] for doc in docs if doc and doc.get('updated_at')]
+                projects.append({
+                    'id': project_id, 'keys': keys,
+                    'updated_at': max(timestamps) if timestamps else None,
+                })
+            await self.send_response(msg.request_id, {
+                'success': True,
+                'active_project_id': self.project_memory.get_active_project(),
+                'projects': projects,
+                'legacy_document_keys': self.project_memory.list_docs(),
+            })
+        except Exception as exc:
+            await self.send_error(msg, f"project-memory-context: {exc}")
+
     async def handle_memory_galaxy_list(self, msg: IPCMessage):
         """Return a bounded, read-only view of the real memory stores."""
         nodes: list[dict] = []
@@ -3137,6 +3181,15 @@ class IPCHandler:
 
     async def handle_message(self, msg: IPCMessage):
         """Route message to appropriate handler"""
+        if self._smoke_test and msg.type not in {
+            'engine-list', 'action-list', 'system-metrics', 'system-info',
+            'voice-status', 'config-get', 'reminder-list',
+            'memory-user-search', 'memory-user-list', 'project-memory-get',
+            'project-memory-list', 'project-memory-context',
+            'memory-galaxy-list', 'conversation-history-list',
+        }:
+            await self.send_error(msg, 'SMOKE_READ_ONLY: action blocked during isolated validation')
+            return
         handler_map = {
             'engine-change': self.handle_engine_change,
             'engine-list': self.handle_engine_list,
@@ -3171,6 +3224,7 @@ class IPCHandler:
             'memory-user-forget': self.handle_memory_user_forget,
             'project-memory-get': self.handle_project_memory_get,
             'project-memory-list': self.handle_project_memory_list,
+            'project-memory-context': self.handle_project_memory_context,
             'memory-galaxy-list': self.handle_memory_galaxy_list,
             'conversation-history-list': self.handle_conversation_history_list,
             'conversation-history-clear': self.handle_conversation_history_clear,
@@ -3351,7 +3405,15 @@ class IPCHandler:
 
     async def handle_send_message(self, msg: IPCMessage):
         payload = msg.payload or {}
-        text = _canonical_request(payload.get('text', '') or payload.get('message', ''))
+        raw_text = str(payload.get('text', '') or payload.get('message', '') or '').strip()
+        text = _canonical_request(raw_text)
+        # ZARA-SAUDACAO-VAZIA-001: "Oi Zara" sozinho e so o nome + saudacao --
+        # _canonical_request tira o dois e sobra "". Isso nao e "nada foi
+        # digitado" (raw_text existe); e um cumprimento sem comando junto.
+        # Sem isto, todo "Oi Zara" digitado virava erro "No text provided" em
+        # vez de puxar uma resposta de conversa normal.
+        if not text and raw_text:
+            text = raw_text
         engine = str(payload.get('engine', self.current_engine) or self.current_engine)
 
         if not text:
@@ -3563,17 +3625,25 @@ class IPCHandler:
         # nunca mostrava EXECUTANDO/ERRO durante uma acao real (clique de
         # botao na Home, ex. os_wifi_status, os_power_plan_set). Result.success
         # False sem excecao (ex. _failure()) tambem conta como erro visual.
-        await self.send_event('state-change', 'EXECUTING')
+        show_state = action not in {'os_wifi_status', 'os_power_plan_list'}
+        if show_state:
+            await self.send_event('state-change', 'EXECUTING')
         try:
             result = await execute_action(action, **params)
-            await self.send_response(msg.request_id, {'success': True, 'result': result})
-            result_ok = getattr(result, 'success', True)
-            await self.send_event('state-change', 'SUCCESS' if result_ok else 'ERROR')
+            result_ok = bool(getattr(result, 'success', False))
+            await self.send_response(msg.request_id, {
+                'success': result_ok, 'result': result,
+                'error': getattr(result, 'error', None),
+                'verificado': bool(getattr(result, 'verificado', False)),
+            })
+            if show_state:
+                await self.send_event('state-change', 'SUCCESS' if result_ok else 'ERROR')
         except Exception as e:
             print(f"[IPC] Action error: {e}")
             traceback.print_exc()
             await self.send_error(msg, str(e))
-            await self.send_event('state-change', 'ERROR')
+            if show_state:
+                await self.send_event('state-change', 'ERROR')
 
     async def handle_action_confirm(self, msg: IPCMessage):
         """Consume a private one-shot confirmation and execute the bound action."""
@@ -3610,7 +3680,11 @@ class IPCHandler:
                 action_fingerprint,
                 **params,
             )
-            await self.send_response(msg.request_id, {'success': True, 'result': result})
+            await self.send_response(msg.request_id, {
+                'success': bool(getattr(result, 'success', False)), 'result': result,
+                'error': getattr(result, 'error', None),
+                'verificado': bool(getattr(result, 'verificado', False)),
+            })
         except Exception as e:
             print(f"[IPC] Action confirmation error: {e}")
             traceback.print_exc()

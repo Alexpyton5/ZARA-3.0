@@ -469,6 +469,35 @@ class PcVoiceIntentDetector:
              self._window_maximize, "window_maximize", "active"),
             (r'^(?:zara[,\s]+)?(?:(?:restaur[ae]|restaurar)(?:\s+(?:a|esta|essa)\s+janela)?|volt[ae]\s+a\s+janela\s+ao\s+normal)\s*[.!?]*$',
              self._window_restore, "window_restore", "active"),
+            # ZARA-JANELA-NOMEADA-001: as tres acima so cobriam a janela
+            # ATIVA/contextual. "Minimize o Chrome" pede uma janela por NOME,
+            # que pode nem estar em foco -- mesmos quatro alvos ja permitidos
+            # em window_focus_named (chrome/zara/vscode/project), agora tambem
+            # para minimizar/maximizar/restaurar.
+            (r'^(?:zara[,\s]+)?(?:minimiz[ae]|minimizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?chrome\s*[.!?]*$',
+             self._window_chrome, "window_minimize", "chrome"),
+            (r'^(?:zara[,\s]+)?(?:maximiz[ae]|maximizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?chrome\s*[.!?]*$',
+             self._window_chrome, "window_maximize", "chrome"),
+            (r'^(?:zara[,\s]+)?(?:restaur[ae]|restaurar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?chrome\s*[.!?]*$',
+             self._window_chrome, "window_restore", "chrome"),
+            (r'^(?:zara[,\s]+)?(?:minimiz[ae]|minimizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?zara\s*[.!?]*$',
+             self._window_zara, "window_minimize", "zara"),
+            (r'^(?:zara[,\s]+)?(?:maximiz[ae]|maximizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?zara\s*[.!?]*$',
+             self._window_zara, "window_maximize", "zara"),
+            (r'^(?:zara[,\s]+)?(?:restaur[ae]|restaurar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?zara\s*[.!?]*$',
+             self._window_zara, "window_restore", "zara"),
+            (r'^(?:zara[,\s]+)?(?:minimiz[ae]|minimizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?(?:vs\s*code|visual\s+studio\s+code)\s*[.!?]*$',
+             self._window_vscode, "window_minimize", "vscode"),
+            (r'^(?:zara[,\s]+)?(?:maximiz[ae]|maximizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?(?:vs\s*code|visual\s+studio\s+code)\s*[.!?]*$',
+             self._window_vscode, "window_maximize", "vscode"),
+            (r'^(?:zara[,\s]+)?(?:restaur[ae]|restaurar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?(?:vs\s*code|visual\s+studio\s+code)\s*[.!?]*$',
+             self._window_vscode, "window_restore", "vscode"),
+            (r'^(?:zara[,\s]+)?(?:minimiz[ae]|minimizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?projeto\s*[.!?]*$',
+             self._window_project, "window_minimize", "project"),
+            (r'^(?:zara[,\s]+)?(?:maximiz[ae]|maximizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?projeto\s*[.!?]*$',
+             self._window_project, "window_maximize", "project"),
+            (r'^(?:zara[,\s]+)?(?:restaur[ae]|restaurar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?projeto\s*[.!?]*$',
+             self._window_project, "window_restore", "project"),
             (r'\b(?:troc[ae]r?\s+de\s+janela|v[áa]\s+(?:pra|para)\s+a\s+pr[óo]xima\s+janela|pr[óo]xima\s+janela)\b',
              self._window_switch, "window_switch_next", "next"),
             (r'\b(?:traz|traga|coloc[ae]r?|foc[ae]r?|v[áa]\s+(?:pro|para\s+o))\s+(?:n[oa]\s+)?(?:o\s+)?chrome(?:\s+(?:pra|para)\s+frente)?\b',
@@ -526,6 +555,11 @@ class PcVoiceIntentDetector:
             return PcVoiceResult(is_pc_intent=False)
 
         text_lower = text.lower().strip()
+
+        # Destructive drive formatting has no executable voice route. Keep it
+        # explicit before learned shortcuts or the conversational fallback.
+        if re.fullmatch(r'(?:zara[,\s]+)?format(?:ar|e|a)\s+(?:(?:o\s+)?(?:disco|drive|volume)\s+)?[a-z]:?\s*[.!?]*', text_lower):
+            return PcVoiceResult(is_pc_intent=True, blocked=True, reply="Não formato discos por comando de voz.")
 
         # Fast Path - Intenções Aprendidas: Verificar primeiro no cache de aprendizados
         # Se uma forma de pedido já foi aprendida (acertos >= erros), usar diretamente

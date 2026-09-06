@@ -46,6 +46,79 @@ def test_named_window_alias_keeps_target_distinct_from_wake_word(phrase, target)
     assert result.param == target
 
 
+@pytest.mark.parametrize(
+    ("phrase", "action", "target"),
+    [
+        # ZARA-JANELA-NOMEADA-001: golden path P0 da Missao Jarvis --
+        # "Minimize o Chrome" caia no "ainda nao sei fazer" porque so existia
+        # minimize/maximize/restore da janela ATIVA, nunca por nome de app.
+        ("Minimize o Chrome", "window_minimize", "chrome"),
+        ("minimiza o chrome", "window_minimize", "chrome"),
+        ("maximiza o chrome", "window_maximize", "chrome"),
+        ("restaura o chrome", "window_restore", "chrome"),
+        ("minimiza o vscode", "window_minimize", "vscode"),
+        ("minimiza a zara", "window_minimize", "zara"),
+        ("minimiza o projeto", "window_minimize", "project"),
+    ],
+)
+def test_named_window_minimize_maximize_restore(phrase, action, target):
+    result = PcVoiceIntentDetector().detect(phrase)
+    assert result.action == action
+    assert result.param == target
+    assert result.blocked is False
+
+
+def test_named_window_minimize_finds_and_minimizes_by_app_name(monkeypatch):
+    """The action layer must resolve 'chrome' the same way window_focus_named
+    does, not just accept a bare hwnd."""
+    monkeypatch.setattr(os_ops.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(os_ops, "_eligible_windows", lambda: [11, 12])
+    monkeypatch.setattr(os_ops, "_window_matches_named_target", lambda hwnd, target: hwnd == 12 and target == "chrome")
+    monkeypatch.setattr(os_ops, "_foreground_window", lambda: 11)
+    states = iter(("restored", "minimized"))
+    monkeypatch.setattr(os_ops, "_window_state", lambda hwnd: next(states))
+    monkeypatch.setattr(os_ops, "_window_pid", lambda hwnd: 99)
+    monkeypatch.setattr(os_ops, "_window_process_name", lambda hwnd: "chrome.exe")
+    monkeypatch.setattr(os_ops.time, "sleep", lambda seconds: None)
+
+    result = os_ops.window_minimize_action(target="chrome")
+
+    assert result.success is True
+    assert result.data["hwnd"] == 12
+
+
+def test_named_window_minimize_reports_missing_window(monkeypatch):
+    monkeypatch.setattr(os_ops.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(os_ops, "_eligible_windows", lambda: [])
+
+    result = os_ops.window_minimize_action(target="chrome")
+
+    assert result.success is False
+
+
+@pytest.mark.asyncio
+async def test_local_named_window_command_forwards_target_not_context_hwnd(monkeypatch):
+    """ZARA-JANELA-NOMEADA-001 regression at the IPC dispatch boundary: a
+    stale `_last_window_hwnd` from a previous contextual command must not
+    override an explicit named target like "Minimize o Chrome"."""
+    execute = AsyncMock(return_value=type(
+        "Result", (), {
+            "success": True,
+            "error": "",
+            "output": "Janela minimizada e verificada.",
+            "data": {"hwnd": 12, "pid": 99, "after": "minimized"},
+        }
+    )())
+    handler = IPCHandler(AsyncMock())
+    handler._last_window_hwnd = 123  # leftover context from an earlier command
+    monkeypatch.setattr("core.action_registry.execute_action", execute)
+
+    reply = await handler._try_pc_intent("Minimize o Chrome")
+
+    assert reply == "Janela minimizada e verificada."
+    execute.assert_awaited_once_with("window_minimize", target="chrome")
+
+
 @pytest.mark.parametrize("phrase", ["troque de janela", "vá para a próxima janela"])
 def test_blind_window_switch_requires_named_target(phrase):
     result = PcVoiceIntentDetector().detect(phrase)

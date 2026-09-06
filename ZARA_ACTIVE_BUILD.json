@@ -1,15 +1,15 @@
 {
-  "BUILD_ID": "release-candidate-multistep-20260905-2305",
-  "BUILD_TIMESTAMP": "2026-09-05T23:05:38.137629-03:00",
-  "BASE_BUILD": "release-candidate-files-20260905-2252",
+  "BUILD_ID": "release-candidate-browsernav-20260905-2315",
+  "BUILD_TIMESTAMP": "2026-09-05T23:15:22.845733-03:00",
+  "BASE_BUILD": "release-candidate-multistep-20260905-2305",
   "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "c5dbe9e5ecfd7a6560c7e67073d95f36bd60bbd8",
+  "GIT_COMMIT": "ce0ded0e377b0b549a508ba769df01f43a388f13",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\AppData\\Local\\Programs\\zara-frontend\\ZARA 3.0.exe",
   "EXE_SHA256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
-  "BACKEND_SHA256": "865FC393213D8B6038C47A221CA16CA7344E7C9CC20559D2A2EF0976A049F681",
-  "BACKEND_SHA256_ANTERIOR": "8537C9A8F61F60B557271B29E275675509A668BC3BDD6D4F530A8F7078022F90",
+  "BACKEND_SHA256": "D7D06F70A72FFBBC80878F142E911BE11E048FBA96997CC5E4A52FB568877204",
+  "BACKEND_SHA256_ANTERIOR": "865FC393213D8B6038C47A221CA16CA7344E7C9CC20559D2A2EF0976A049F681",
   "ASAR_SHA256": "EE46C7154CE264EF8754FDBF4282590F8F79A18226AD3BB86B161590C2C88001",
-  "DELTA": "Fix: 'va ao youtube' (preposicao ao) nao era reconhecido, so 'va para o youtube'. Quebrava o comando composto de 3 etapas do golden path da missao (Abra o Chrome, va ao YouTube e pesquise X)."
+  "DELTA": "Fix: Volte/Avance/Nova aba sozinhos (sem 'no navegador') nao eram reconhecidos -- exemplo golden-path da missao usa exatamente essa forma."
 }

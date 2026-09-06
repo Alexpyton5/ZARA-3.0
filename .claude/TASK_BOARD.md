@@ -4,6 +4,33 @@ Formato simples. Não virar burocracia.
 
 ## DONE
 
+- ID: T-JARVIS-P0-01
+  owner: Chief of Staff (sessão principal)
+  scope: Fase 0/1 da Missão Jarvis — confirmar fonte↔build↔runtime e validar
+    golden path de texto+ação no build empacotado
+  files: `core/ipc_handlers.py`, `core/pc_voice_intent.py`, `core/actions/os_ops.py`,
+    `tests/test_conversation_history.py`, `tests/test_window_control.py`,
+    `ZARA_ACTIVE_BUILD.json`/`.txt`, `ZARA_MASTER_CONTEXT.md`
+  DoD: PACKAGED_RUNTIME — testado no app empacotado de verdade (não só pytest):
+    - "Oi Zara" → resposta real, gravada em `conversation_history.sqlite3`
+    - "Abra o Chrome" → `chrome.exe` real na lista de processos
+    - "Quanto de RAM estou usando?" → métrica real na resposta
+    - "Minimize o Chrome" → `IsIconic`=True confirmado via Win32 no processo do Chrome
+  bugs corrigidos (com teste de regressão cada um):
+    1. `handle_send_message` tratava "Oi Zara" sozinho (saudação+nome sem
+       comando, `_canonical_request` esvazia) como texto vazio → "No text
+       provided". Agora cai de volta no texto bruto quando a canonicalização
+       esvazia algo que não estava vazio.
+    2. `window_minimize`/`maximize`/`restore` só aceitavam a janela
+       ativa/contextual — "Minimize o Chrome" (por nome, não em foco) caía em
+       "ainda não sei fazer". Agora resolvem o alvo por nome do mesmo jeito
+       que `window_focus_named` já fazia.
+  fora de escopo por decisão do Alex: "Abra a Calculadora" — ele tirou
+    calculadora da lista de apps em 2026-08-27, não reintroduzir.
+  incidente registrado: `frontend/release/` foi sobrescrito ao rodar
+    `npm run electron:build` sem override de output — ver `.claude/DECISIONS.md`.
+    Builds seguintes usaram `tools/build_candidate.py` (correto, não toca release/).
+
 - ID: T-2026-09-04-01
   owner: Chief of Staff
   scope: instalar modelo de operação permanente (Chief of Staff + hierarquia)
@@ -27,28 +54,56 @@ Formato simples. Não virar burocracia.
 
 ## IN PROGRESS
 
-- ID: T-BACKLOG-F1.1
+—
+
+## TODO (Missão Jarvis, ordem de dependência — ver CURRENT_MISSION.md)
+
+- ID: T-JARVIS-QUALIDADE-RAM
+  owner: a definir
+  scope: resposta de "Quanto de RAM estou usando?" vem com um preâmbulo
+    irrelevante sobre "créditos de API" antes do dado real. Não bloqueia o
+    golden path (a métrica real está correta), mas é ruído de prompt a
+    limpar.
+  files: provavelmente prompt/contexto do orchestrator/model router
+  DoD: resposta cita só o que foi perguntado
+
+- ID: T-JARVIS-P0-02
+  owner: Backend Lead (time novo — a criar quando a tarefa exigir)
+  scope: PC control amplo (janelas, sistema, arquivos, browser) conectado ao
+    pipeline de texto já validado em P0-01
+  files: `core/actions/*`, `core/action_registry.py`, `core/ipc_handlers.py`
+  DoD: cada ação da Fase 2 da missão com verificação real, não só `success`
+
+- ID: T-BACKLOG-F1.1 (preservado, não descartado)
   owner: Voice Lead → `voice-lead` (time novo)
-  scope: voz Kore funcionando na saída (Fase 1, prioridade 1)
+  scope: voz Kore funcionando na saída — retomada quando a missão chegar na
+    camada Voice (prioridade 3 da Missão Jarvis), reaproveitando o trabalho já
+    feito
   files: `core/gemini_live_voice.py`, `core/voice_tts.py`, `core/ipc_handlers.py` (_speak_response, trava)
   DoD: teste físico — Alex ouve a voz Kore, sem fallback silencioso pra SAPI
 
-## TODO
-
-- ID: T-BACKLOG-F1.2
-  owner: Memory/Intelligence Lead (time novo — agente ainda não criado)
-  scope: latência mínima de resposta medida e reduzida
+- ID: T-BACKLOG-F1.2 (preservado)
+  owner: a definir
+  scope: latência mínima de resposta — entra junto com a integração de Voice
   files: `core/model_router.py`
   DoD: número em ms, antes/depois, medido por `[VOICE_TRACE]` + SQLite
 
-- ID: T-BACKLOG-F1.3
+- ID: T-BACKLOG-F1.3 (preservado)
   owner: Voice Lead → `voice-lead` (time novo)
-  scope: microfone sem loop com a própria voz da ZARA
+  scope: microfone sem loop com a própria voz da ZARA — entra junto com Voice
   files: `frontend/src/renderer/lib/aecAudio.ts`, `core/windows_audio.py`
   DoD: teste físico — ZARA não se ouve, barge-in corta áudio de verdade
 
-- ID: T-BACKLOG-F1.4
-  owner: Backend Lead (time novo — agente ainda não criado)
-  scope: comando falado executa ação real no PC (voz = texto)
-  files: `core/ipc_handlers.py`, `core/pc_voice_intent.py`, `core/action_registry.py`
-  DoD: mesma frase por voz e por texto, mesmo resultado físico no Windows
+- ID: T-JARVIS-P1-APPS
+  owner: a definir
+  scope: Native App Host prototype — 1 app desktop real (não web wrapper)
+  files: a mapear
+  DoD: app desktop real controlado pela ZARA, limitação documentada se não
+    for possível reparenting estável
+
+- ID: T-JARVIS-P1-MEMORY
+  owner: Memory/Intelligence Lead (time novo — a criar)
+  scope: conectar tela Memória à memória real (`memory/memory_manager.py`,
+    `core/obsidian_bridge.py`) — sem grafo fake, sem segunda memória
+  files: `memory/*`, `core/obsidian_bridge.py`, tela Memória do frontend
+  DoD: escrever memória real, reiniciar, recuperar

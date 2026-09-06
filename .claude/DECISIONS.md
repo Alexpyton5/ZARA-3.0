@@ -57,6 +57,21 @@ Só decisão estável/importante. Não é log de rotina — isso fica no git.
   `0e582ec`, 2026-09-04). Não reintroduzir nenhum dos dois — já registrado em
   `.claude/rules/path-rules/backend-core.md`.
 
+- **INCIDENTE (2026-09-05, sessão Missão Jarvis) — `frontend/release/` foi
+  sobrescrito.** Ao empacotar a correção do golden path P0, esta sessão rodou
+  `npm run electron:build` direto (sem `--config.directories.output=...`).
+  O `package.json` tem `directories.output: "release"` fixo, então o build
+  saiu para `frontend/release/win-unpacked` — a pasta que `.claude/rules/build-release.md`
+  chama explicitamente de "linhagem baseline" e proíbe sobrescrever. A pasta
+  não é rastreada pelo git (`.gitignore` a exclui), então o conteúdo anterior
+  não é recuperável por `git checkout`. O conteúdo atual de `frontend/release/`
+  reflete o HEAD de hoje (`4f415e6`, dirty), não é lixo, só deixou de ser "a
+  baseline conhecida antiga". Lição registrada: qualquer build daqui pra
+  frente usa **`tools/build_candidate.py`** (troca só o sidecar, nunca toca
+  `release/`) ou, se precisar reconstruir o frontend de verdade, `electron-builder`
+  com `--config.directories.output=<pasta-nova>` explícito — nunca o script
+  `npm run electron:build` cru.
+
 ## Separação de memória (não duplicar estado)
 
 - `.claude/` = como o Claude trabalha (este modelo de operação).

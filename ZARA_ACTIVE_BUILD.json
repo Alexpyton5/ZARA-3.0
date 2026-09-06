@@ -1,15 +1,15 @@
 {
-  "BUILD_ID": "release-candidate-windowfix-20260905-2224",
-  "BUILD_TIMESTAMP": "2026-09-05T22:24:30.427104-03:00",
-  "BASE_BUILD": "release-candidate-textfix-20260905-2204",
+  "BUILD_ID": "release-candidate-files-20260905-2252",
+  "BUILD_TIMESTAMP": "2026-09-05T22:52:47.628673-03:00",
+  "BASE_BUILD": "release-candidate-windowfix-20260905-2224",
   "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
   "GIT_BRANCH": "backup/estado-20260820-1143",
-  "GIT_COMMIT": "4f415e6a4f4b687b043aa4b8d18962b7f15653f7",
+  "GIT_COMMIT": "5146313d62077d883cff2c50e5e1dc08735a926c",
   "GIT_DIRTY": true,
   "EXE_PATH": "C:\\Users\\alexp\\AppData\\Local\\Programs\\zara-frontend\\ZARA 3.0.exe",
   "EXE_SHA256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
-  "BACKEND_SHA256": "3CCBD46014735715504F125492860D30452FDE45A6F23C83F00FAF9C91F0000D",
-  "BACKEND_SHA256_ANTERIOR": "F130BAD6E62CB408CAA6D13AEB6CFF21B82DD72328FAAC7C88A40E035A14A87C",
+  "BACKEND_SHA256": "8537C9A8F61F60B557271B29E275675509A668BC3BDD6D4F530A8F7078022F90",
+  "BACKEND_SHA256_ANTERIOR": "3CCBD46014735715504F125492860D30452FDE45A6F23C83F00FAF9C91F0000D",
   "ASAR_SHA256": "EE46C7154CE264EF8754FDBF4282590F8F79A18226AD3BB86B161590C2C88001",
-  "DELTA": "Fix: Minimize/Maximize/Restaurar por nome de app (ex.: 'Minimize o Chrome') -- so existia para a janela ativa/contextual. core/pc_voice_intent.py + core/actions/os_ops.py + core/ipc_handlers.py."
+  "DELTA": "Fix: abrir Area de Trabalho sem acento/artigo (o desktop). Novo: criar pasta por comando (files_create_folder) via file_voice_intent."
 }

@@ -5,6 +5,7 @@ from core.actions.files import (
     files_create_folder_action,
     files_move_action,
     files_open_latest_action,
+    files_open_named_action,
     files_organize_by_extension_action,
     files_rename_action,
     files_search_action,
@@ -82,6 +83,40 @@ def test_open_latest_skips_newer_executable_and_requires_window_proof(tmp_path, 
     assert opened == [str(safe)]
     assert result.data["name"] == "relatorio.pdf"
     assert result.data["status"] == "OPEN_CONFIRMED"
+
+
+def test_open_named_file_confirms_window_and_verifies(tmp_path, monkeypatch):
+    target = tmp_path / "nota.txt"
+    target.write_text("x")
+    monkeypatch.setattr("core.actions.files._window_snapshot", lambda: {})
+    opened = []
+    monkeypatch.setattr("os.startfile", lambda path: opened.append(path))
+    monkeypatch.setattr(
+        "core.actions.files._confirm_file_window",
+        lambda t, before: {"hwnd": 5, "process": "notepad.exe", "window_title": t.name, "new_window": True, "title_changed": True},
+    )
+
+    result = files_open_named_action(str(target))
+
+    assert result.success is True
+    assert opened == [str(target)]
+    assert result.data["name"] == "nota.txt"
+
+
+def test_open_named_file_refuses_unsafe_extension(tmp_path):
+    target = tmp_path / "instalador.exe"
+    target.write_bytes(b"MZ")
+
+    result = files_open_named_action(str(target))
+
+    assert result.success is False
+    assert result.data["blocked_executable"] is True
+
+
+def test_open_named_file_reports_missing_file(tmp_path):
+    result = files_open_named_action(str(tmp_path / "nao-existe.txt"))
+
+    assert result.success is False
 
 
 def test_open_latest_never_claims_success_without_window_proof(tmp_path, monkeypatch):

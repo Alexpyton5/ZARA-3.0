@@ -2429,7 +2429,7 @@ class IPCHandler:
                 if base is None:
                     return "A pasta conhecida não está disponível neste computador."
                 params["path"] = str(base)
-            elif intent.action in {"files_write", "files_text_summary", "files_rename"}:
+            elif intent.action in {"files_write", "files_text_summary", "files_rename", "files_create_folder", "files_open_named"}:
                 base = folder_path(params.pop("folder"))
                 name = params.pop("name")
                 if base is None:

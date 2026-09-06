@@ -43,6 +43,14 @@ def detect_file_intent(text: str) -> FileIntent | None:
     ):
         return FileIntent("files_open_latest", {"folder": "downloads"})
 
+    # ZARA-ABRIR-ARQUIVO-NOMEADO-001: so existia abrir o ULTIMO baixado; abrir
+    # um arquivo especifico por nome (capacidade "abrir arquivo" da missao)
+    # nao tinha caminho nenhum.
+    match = re.fullmatch(rf"abr[ae]\s+(?:o\s+arquivo\s+)?{_BASENAME}\s+em\s+{_FOLDER}", raw, re.IGNORECASE)
+    if match:
+        name = _clean_name(match.group(1))
+        return FileIntent("files_open_named", {"name": name, "folder": _FOLDERS[match.group(2).casefold()]}) if name else None
+
     match = re.fullmatch(rf"(?:liste|mostre)\s+(?:os\s+)?arquivos\s+(?:em|de)\s+{_FOLDER}", raw, re.IGNORECASE)
     if match:
         return FileIntent("files_list", {"folder": _FOLDERS[match.group(1).casefold()]})

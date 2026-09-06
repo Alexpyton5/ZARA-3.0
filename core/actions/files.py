@@ -186,6 +186,51 @@ def files_open_latest_action(path: str) -> ActionResult:
 
 
 @action(
+    name="files_open_named",
+    category="files",
+    description="Open one specific safe, non-secret file by name and verify its associated window",
+    parameters={
+        "type": "object",
+        "properties": {"path": {"type": "string", "description": "Exact file path to open"}},
+        "required": ["path"],
+    },
+)
+def files_open_named_action(path: str) -> ActionResult:
+    """Open a named file the same safe/verified way as files_open_latest, but by exact path."""
+    try:
+        target = Path(path).resolve()
+        blocked = _sensitive_path_error(target)
+        if blocked is not None:
+            return blocked
+        if not target.exists():
+            return ActionResult(success=False, error=f"Não encontrei o arquivo: {target.name}.")
+        if not target.is_file():
+            return ActionResult(success=False, error=f"Não é um arquivo: {target.name}.")
+        if target.suffix.casefold() not in _SAFE_OPEN_EXTENSIONS:
+            return ActionResult(
+                success=False,
+                error=f"Não abro arquivos do tipo {target.suffix or '(sem extensão)'} por segurança.",
+                data={"status": "UNSAFE_EXTENSION", "blocked_executable": True},
+            )
+        before = _window_snapshot()
+        os.startfile(str(target))  # type: ignore[attr-defined]
+        proof = _confirm_file_window(target, before)
+        if proof is None:
+            return ActionResult(
+                success=False,
+                error=f"Enviei {target.name} para o aplicativo associado, mas não consegui confirmar a janela.",
+                data={"status": "POSTCONDITION_FAILED", "name": target.name},
+            )
+        return ActionResult(
+            success=True,
+            output=f"Abri {target.name} e verifiquei a janela.",
+            data={"status": "OPEN_CONFIRMED", "name": target.name, **proof},
+        )
+    except Exception as e:
+        return ActionResult(success=False, error=str(e))
+
+
+@action(
     name="files_read",
     category="files",
     description="Read file contents",

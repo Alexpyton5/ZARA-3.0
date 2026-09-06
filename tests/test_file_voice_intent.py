@@ -14,6 +14,8 @@ from core.ipc_handlers import IPCHandler
     ("phrase", "action", "mutating"),
     [
         ("liste os arquivos em Downloads", "files_list", False),
+        ("abra o arquivo nota.txt em Downloads", "files_open_named", False),
+        ("abra relatorio.pdf em Documentos", "files_open_named", False),
         ("abra o último arquivo que baixei", "files_open_latest", False),
         ("procure ZARA nos arquivos em Documentos", "files_search", False),
         ("resuma o arquivo nota.txt em Downloads", "files_text_summary", False),
@@ -44,6 +46,7 @@ def test_closed_file_intents(phrase, action, mutating):
         "execute powershell em Downloads",
         "crie uma pasta chamada ../evil em Downloads",
         r"crie pasta ..\..\Windows em Downloads",
+        "abra ../evil.txt em Downloads",
     ],
 )
 def test_file_intents_reject_delete_traversal_and_arbitrary_commands(phrase):
@@ -108,6 +111,23 @@ async def test_create_folder_routes_known_path_and_confirms(tmp_path, monkeypatc
         path=str(tmp_path / "TesteZaraMissao"),
         confirm=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_open_named_file_routes_known_path(tmp_path, monkeypatch):
+    execute = AsyncMock(return_value=ActionResult(
+        success=True,
+        output="Abri nota.txt e verifiquei a janela.",
+        data={"status": "OPEN_CONFIRMED", "name": "nota.txt"},
+    ))
+    monkeypatch.setattr("core.action_registry.execute_action", execute)
+    monkeypatch.setattr("core.actions.os_ops._resolve_safe_folder", lambda folder: tmp_path)
+    handler = IPCHandler(AsyncMock())
+
+    reply = await handler._try_file_intent("abra o arquivo nota.txt em Downloads")
+
+    assert reply == "Abri nota.txt e verifiquei a janela."
+    execute.assert_awaited_once_with("files_open_named", path=str(tmp_path / "nota.txt"))
 
 
 def test_text_and_voice_share_file_executor():

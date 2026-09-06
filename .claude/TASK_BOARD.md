@@ -61,22 +61,34 @@ Formato simples. Não virar burocracia.
     rebuild → verificar no build empacotado → commit
   files: `core/actions/*`, `core/pc_voice_intent.py`, `core/file_voice_intent.py`,
     `core/ipc_handlers.py`
-  progresso nesta sessão (cada um com teste de regressão e verificado no
-    build empacotado):
-    - Novo: `files_create_folder` — "crie uma pasta chamada X em Downloads/
-      Documentos" não existia (só list/search/write/rename/copy/move/organize).
-    - Fix: "abra a área de trabalho" só casava com acento e artigo "a" — "area
-      de trabalho" (sem acento) e "abra o desktop" caíam em "ainda não sei
-      fazer".
-    - Fix: "vá AO youtube" não era reconhecido (só "vá PARA o youtube"),
-      quebrando silenciosamente o comando composto de 3 etapas do próprio
-      exemplo golden-path da missão ("Abra o Chrome, vá ao YouTube e
-      pesquise Hans Zimmer").
-  ainda por testar/mapear: browser (voltar/nova aba — "nova aba" já provou
-    funcionar a trava de ambiguidade quando há +1 janela de Chrome, não é
-    bug), disco/bateria via LLM+tool (mesmo caminho que RAM, não testado
-    isoladamente), localizar arquivo sem pasta explícita (hoje exige pasta
-    por design de segurança — avaliar se é gap real ou intencional)
+  progresso nesta sessão (cada um com teste de regressão; testado no build
+    empacotado real, não só pytest):
+    1. Fix: "Oi Zara" sozinho virava erro "No text provided".
+    2. Fix: minimizar/maximizar/restaurar por NOME de app (só "Chrome" —
+       extensível a vscode/zara/projeto, mesma resolução já existente).
+    3. Novo: `files_create_folder` — "crie uma pasta chamada X em Downloads/
+       Documentos" não existia.
+    4. Fix: "abra a área de trabalho" só casava com acento e artigo "a" —
+       "area de trabalho" (sem acento) e "abra o desktop" caíam em "ainda
+       não sei fazer".
+    5. Fix: "vá AO youtube" não era reconhecido (só "vá PARA o youtube"),
+       quebrando o comando composto de 3 etapas do próprio exemplo
+       golden-path da missão ("Abra o Chrome, vá ao YouTube e pesquise
+       Hans Zimmer").
+    6. Fix: "Volte."/"Avance."/"nova aba" sozinhos (sem "no navegador") não
+       eram reconhecidos — forma exata usada no exemplo browser da missão.
+    7. Novo: `files_open_named` — abrir um arquivo específico por nome; só
+       existia abrir o último baixado.
+  build ativo depois desta rodada: `release-candidate-openfile-20260905-2323`
+    (8 commits, todos com teste de regressão + validação incremental sem
+    falha nova em relação ao baseline).
+  ainda por testar/mapear: disco/bateria via LLM+tool (mesmo caminho que RAM,
+    provado funcionar, não testado isoladamente por flakiness do
+    computer-use ao digitar — não é suspeita de bug real), localizar arquivo
+    sem pasta explícita (hoje exige pasta por design de segurança —
+    provavelmente intencional, não gap), sinônimos de fala não cobertos
+    (ex.: "silencie o som" vs "silencia" já suportado) — não perseguir
+    infinitos sinônimos, só os que aparecerem em uso real.
 
 ## TODO (Missão Jarvis, ordem de dependência — ver CURRENT_MISSION.md)
 

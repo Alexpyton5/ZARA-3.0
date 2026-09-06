@@ -54,7 +54,29 @@ Formato simples. Não virar burocracia.
 
 ## IN PROGRESS
 
-—
+- ID: T-JARVIS-P0-02
+  owner: Chief of Staff (sessão principal)
+  scope: PC control amplo (janelas, sistema, arquivos, browser) — avançando
+    incrementalmente: achar gap real via teste → corrigir → regressão →
+    rebuild → verificar no build empacotado → commit
+  files: `core/actions/*`, `core/pc_voice_intent.py`, `core/file_voice_intent.py`,
+    `core/ipc_handlers.py`
+  progresso nesta sessão (cada um com teste de regressão e verificado no
+    build empacotado):
+    - Novo: `files_create_folder` — "crie uma pasta chamada X em Downloads/
+      Documentos" não existia (só list/search/write/rename/copy/move/organize).
+    - Fix: "abra a área de trabalho" só casava com acento e artigo "a" — "area
+      de trabalho" (sem acento) e "abra o desktop" caíam em "ainda não sei
+      fazer".
+    - Fix: "vá AO youtube" não era reconhecido (só "vá PARA o youtube"),
+      quebrando silenciosamente o comando composto de 3 etapas do próprio
+      exemplo golden-path da missão ("Abra o Chrome, vá ao YouTube e
+      pesquise Hans Zimmer").
+  ainda por testar/mapear: browser (voltar/nova aba — "nova aba" já provou
+    funcionar a trava de ambiguidade quando há +1 janela de Chrome, não é
+    bug), disco/bateria via LLM+tool (mesmo caminho que RAM, não testado
+    isoladamente), localizar arquivo sem pasta explícita (hoje exige pasta
+    por design de segurança — avaliar se é gap real ou intencional)
 
 ## TODO (Missão Jarvis, ordem de dependência — ver CURRENT_MISSION.md)
 
@@ -66,13 +88,6 @@ Formato simples. Não virar burocracia.
     limpar.
   files: provavelmente prompt/contexto do orchestrator/model router
   DoD: resposta cita só o que foi perguntado
-
-- ID: T-JARVIS-P0-02
-  owner: Backend Lead (time novo — a criar quando a tarefa exigir)
-  scope: PC control amplo (janelas, sistema, arquivos, browser) conectado ao
-    pipeline de texto já validado em P0-01
-  files: `core/actions/*`, `core/action_registry.py`, `core/ipc_handlers.py`
-  DoD: cada ação da Fase 2 da missão com verificação real, não só `success`
 
 - ID: T-BACKLOG-F1.1 (preservado, não descartado)
   owner: Voice Lead → `voice-lead` (time novo)

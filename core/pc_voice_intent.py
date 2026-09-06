@@ -345,6 +345,18 @@ class PcVoiceIntentDetector:
              self._browser_native, "browser_back", "back"),
             (r'\b(?:avanc?[ae]r?|avanç[ae]r?)\s+(?:no|pelo|na)\s+(?:navegador|p[áa]gina|chrome)\b',
              self._browser_native, "browser_forward", "forward"),
+            # ZARA-VOLTE-SOZINHO-001: a sequencia do golden path da missao e
+            # "Abra o navegador. Va para o YouTube. Pesquise X. Volte. Abra
+            # nova aba." -- "Volte." sozinho (sem "no navegador") e exatamente
+            # como "minimiza" sozinho ja funciona pra janela ativa. Navegacao
+            # de historico e sempre reversivel (tem avancar), entao aplicar na
+            # aba atual sem exigir contexto extra e seguro.
+            (r'^(?:zara[,\s]+)?volt[ae]r?\s*[.!?]*$',
+             self._browser_native, "browser_back", "back"),
+            (r'^(?:zara[,\s]+)?avan[çc][ae]r?\s*[.!?]*$',
+             self._browser_native, "browser_forward", "forward"),
+            (r'^(?:zara[,\s]+)?(?:abr[ae]r?\s+)?(?:uma\s+)?(?:nova\s+(?:guia|aba)|(?:guia|aba)\s+nova)\s*[.!?]*$',
+             self._browser_native, "browser_new_tab", "new_tab"),
             (r'^(?:zara[,\s]+)?(?:feche|fecha)\s+(?:essa|esta|a)\s+(?:guia|aba)\s*[.!?]*$',
              self._browser_native, "browser_close_tab", "close"),
             (r'^(?:zara[,\s]+)?(?:(?:o\s+que\s+diz)|(?:resuma|resume)|(?:qual\s+[ée]\s+o\s+assunto\s+d[ae]))\s+(?:essa|esta|a)\s+p[áa]gina\s*[.!?]*$',

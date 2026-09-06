@@ -243,6 +243,12 @@ def test_youtube_semantic_control_has_no_coordinate_fallback():
         ("abra uma nova guia", "browser_new_tab", "new_tab"),
         ("volte no navegador", "browser_back", "back"),
         ("avance no navegador", "browser_forward", "forward"),
+        # ZARA-VOLTE-SOZINHO-001: golden path da missao usa "Volte." sozinho,
+        # sem "no navegador" -- igual "minimiza" ja funciona sem "a janela".
+        ("volte", "browser_back", "back"),
+        ("volta", "browser_back", "back"),
+        ("avance", "browser_forward", "forward"),
+        ("nova aba", "browser_new_tab", "new_tab"),
         ("desça a página", "browser_scroll", "down"),
         ("suba um pouco", "browser_scroll", "up"),
         ("feche essa aba", "browser_close_tab", "close"),

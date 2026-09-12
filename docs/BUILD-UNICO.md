@@ -1,74 +1,54 @@
-# ZARA 3.0 - Build Único (do zero)
+# ZARA CURRENT BUILD
 
-Este documento descreve o comando único que reinstala todas as dependências, roda a suite de testes e gera o instalador do zero, sem passos manuais.
+O aplicativo ativo é `frontend/ZARA CURRENT BUILD/win-unpacked/ZARA 3.0.exe`.
+`ZARA_ACTIVE_BUILD.json` identifica o pacote, o source e os hashes do Electron,
+ASAR, backend e instalador. `ABRIR-A-ZARA.bat`, `ZARA_INICIAR.bat` e os atalhos
+oficiais leem esse registro; o launcher confere os artefatos antes de abrir.
 
-## Comando
+## Construir
 
-```bash
-python build_exe.py --full
+Na raiz do projeto, com `.venv` e `frontend/node_modules` preparados:
+
+```powershell
+& .venv\Scripts\python.exe tools\build_current.py build --delta "Descricao das mudancas"
 ```
 
-## O que o comando faz
+`ZARA_BUILD_ATUAL.bat` e `build_exe.py --full` chamam esse mesmo pipeline.
+O processo comprova os caminhos/versões do toolchain, recompila o sidecar,
+executa TypeScript/Vite, compila o main/preload e empacota Electron + NSIS.
+Não reinstala dependências nem depende de `requirements.txt`; as dependências
+Python são declaradas em `pyproject.toml` e o frontend usa `package-lock.json`.
 
-1. **Limpa artefatos de build**
-   - Remove `build-sidecar/`, `dist-sidecar/`
-   - Remove `frontend/dist-electron/`, `frontend/dist-frontend/`, `frontend/dist-tests/`
-   - (Não toca em `frontend/release/` - baseline de recuperação)
+A saída é uma pasta `.current-build-staging-<data-hora>` dentro de `frontend`.
+O build anterior permanece ativo. Alterações no source durante o build ou
+divergência entre o backend empacotado e `dist-sidecar` fazem a etapa falhar.
+`--reuse-sidecar` aceita somente um sidecar cujo recibo comprova os hashes do
+binário e do source atual. `build_exe.py` isolado gera apenas esse sidecar e
+seu recibo; não escreve identidade sobre um Electron anterior.
 
-2. **Instala dependências**
-   - Atualiza o pip do virtualenv do projeto
-   - Instala dependências principais a partir de `requirements.txt`
-   - Instala dependências de desenvolvimento (`pytest`, `ruff`, `mypy`, `pytest-asyncio`)
+## Validar e ativar
 
-3. **Roda a suite de testes**
-   - Executa `pytest` para os testes Python
-   - Executa `npm test` para os testes do frontend
+Execute o pacote recém-gerado e valide o boot, IPC, navegação, funcionalidades
+alteradas e apresentação visual. Preserve o relatório JSON com `status: passed`,
+`asar_sha256` e `backend_sha256` do pacote efetivamente testado, mais as evidências
+e limites de validação. Não marque um teste não executado como aprovado.
 
-4. **Constrói o sidecar (zara-backend.exe)**
-   - Usa o virtualenv do projeto para rodar PyInstaller
-   - Gera o executável em `dist-sidecar/zara-backend.exe`
-   - Atualiza os arquivos de manifesto:
-     - `CLEAN_BUILD_ID.txt` (primeiros 8 caracteres do SHA256)
-     - `SHA256_MANIFEST.txt`
-     - `PATCH_SHA256_MANIFEST.txt`
-
-5. **Constrói o instalador Electron**
-   - Roda `npm run electron:build` no diretório frontend
-   - Gera o instalador em `frontend/release/ZARA 3.0 Setup 3.0.0.exe`
-
-## Pré-requisitos
-
-- O virtualenv do projeto (`.venv`) já deve existir e estar configurado.
-- As ferramentas de build (PyInstaller, Node.js, etc.) devem estar instaladas no virtualenv ou disponíveis no PATH.
-
-## Saída esperada
-
-Se o comando completar com sucesso, você verá:
-
-```
-============================================================
-ZARA 3.0 FULL BUILD (sidecar + installer)
-============================================================
-[BUILD] Step 1: Cleaning artifacts...
-...
-[BUILD] Step 2: Installing dependencies...
-...
-[BUILD] Step 3: Running test suite...
-...
-[BUILD] Step 4: Building sidecar...
-...
-[BUILD] Step 5: Building Electron installer...
-...
-============================================================
-FULL BUILD COMPLETE!
-Sidecar: dist-sidecar/zara-backend.exe
-Installer: frontend/release/ZARA 3.0 Setup 3.0.0.exe
-Installer size: XX.X MB
-============================================================
+```powershell
+& .venv\Scripts\python.exe tools\build_current.py verify "frontend\.current-build-staging-AAAAMMDD-HHMMSS"
+& .venv\Scripts\python.exe tools\build_current.py activate "frontend\.current-build-staging-AAAAMMDD-HHMMSS" --validation "caminho\validacao.json" --shortcuts
 ```
 
-## Notas
+A ativação exige os hashes exatos e o source sem alterações desde o build.
+Ela move o pacote para `ZARA CURRENT BUILD`, guarda o relatório e troca os
+ponteiros. Um `ZARA CURRENT BUILD` anterior é preservado em `.build-backups`.
+`frontend/release` permanece como histórico de recuperação. Nenhum processo
+do usuário é encerrado pelo pipeline ou pelos launchers.
 
-- O comando é projetado para ser executado a partir da raiz do projeto.
-- Qualquer erro durante as etapas será relatado e o comando retornará com código de saída não-zero.
-- Em caso de falha fora do controle deste script (por exemplo, problemas de licenciamento, assinatura ou rede), relate como BLOCKED com o motivo exato.
+`--shortcuts` cria o atalho **ZARA CURRENT BUILD** na Área de Trabalho e
+atualiza os atalhos ZARA existentes do usuário, inclusive o Menu Iniciar,
+para o launcher oficial. O resultado verificado é salvo em `SHORTCUTS.json`.
+Se uma ZARA antiga já estiver aberta, saia pelo menu da bandeja antes de
+iniciar a atual; a proteção de instância única pertence ao Electron.
+
+`ZARA_EMPACOTAR.bat` é um arquivo local legado não versionado e não é o comando
+oficial: ainda aponta para `requirements.txt` e `frontend/release`.

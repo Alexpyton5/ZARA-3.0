@@ -79,10 +79,20 @@ class PonteTelegram:
         executar: Callable[[str, str], Awaitable[str]],
         *,
         dono: int | None = None,
+        interceptar: Callable[[int, str], Awaitable[str | None]] | None = None,
     ):
         self.token = str(token or "").strip()
         # executar(destino, texto) -> resposta em texto
         self.executar = executar
+        # ZARA-TELEGRAM-LAB-BRIDGE-001: gancho opcional, chamado ANTES do
+        # roteamento normal, para o portão de aprovação do Lab
+        # (core.lab_v1.telegram_gate) decidir se uma mensagem do dono é um
+        # comando dele (SIM/NÃO/RESTAURAR/VOLTAR) sem precisar de um segundo
+        # consumidor de getUpdates. Devolve None quando não é um comando do
+        # Lab — aí o fluxo de sempre continua, sem mudança nenhuma. Quando
+        # ninguém passa este parâmetro (comportamento padrão), esta ponte se
+        # comporta exatamente como antes.
+        self._interceptar = interceptar
         # Aprendido na primeira mensagem: a partir daí, só este chat é aceito.
         self.dono = dono
         self._ultimo_update = 0
@@ -353,6 +363,23 @@ class PonteTelegram:
             return
         if int(chat) != int(self.dono):
             return  # não é ele; ignora em silêncio
+
+        # ZARA-TELEGRAM-LAB-BRIDGE-001: pergunta ao portão do Lab se isto é
+        # um comando dele antes de rotear como conversa/comando normal. O
+        # conteúdo da mensagem continua sendo DADO — quem decide "isto é
+        # SIM/NÃO/RESTAURAR/VOLTAR de verdade" é a allowlist fechada de
+        # `classify_command`, dentro do próprio gate, nunca esta ponte.
+        if self._interceptar is not None:
+            try:
+                resposta_do_lab = await self._interceptar(chat, texto)
+            except Exception as exc:
+                resposta_do_lab = None
+                print(f"[TELEGRAM] portao do lab falhou ao decidir: {type(exc).__name__}", flush=True)
+            if resposta_do_lab is not None:
+                if transcrito:
+                    resposta_do_lab = f'Ouvi: "{texto}"\n\n{resposta_do_lab}'
+                await self.avisar(resposta_do_lab)
+                return
 
         destino, conteudo = self.rotear(texto)
         if not conteudo:

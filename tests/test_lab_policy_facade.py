@@ -37,7 +37,10 @@ def test_default_policy_authorizes_only_plan_included_codex_and_claude_workers()
         assert decision.resource_class is ResourceClass.PLAN_INCLUDED
     astra = policy.authorize(agent('gpt-6-astra'), info(), model_available=True)
     unknown = policy.authorize(agent('future-model'), info(), model_available=True)
-    external = policy.authorize(agent('free-model', provider='nvidia'), info('nvidia'), model_available=True)
+    # `nvidia` passou a ser provedor autorizado (Nemotron gratuito, verificado por
+    # chamada real). O que este teste quer provar continua valendo: um provedor que
+    # NAO esta na politica segue recusado.
+    external = policy.authorize(agent('free-model', provider='not-a-real-provider'), info('not-a-real-provider'), model_available=True)
     # An authorized provider still does not authorize its whole catalog: `fable`
     # is a real Claude CLI alias but is not a declared Lab model, so it stays refused.
     fable = policy.authorize(agent('fable', provider='claude_cli'), info('claude_cli'), model_available=True)

@@ -143,9 +143,10 @@ async def test_ligar_telegram_initializes_private_bridge_and_approval_adapter_of
     class FakePrivateBridge:
         instances = []
 
-        def __init__(self, token, executar):
+        def __init__(self, token, executar, *, interceptar=None):
             self.token = token
             self.executar = executar
+            self.interceptar = interceptar
             self.started = False
             self.instances.append(self)
 
@@ -177,7 +178,7 @@ async def test_ligar_telegram_failure_does_not_claim_bridge_started(monkeypatch,
     monkeypatch.setattr(paths, "config_dir", lambda: tmp_path)
 
     class FailingPrivateBridge:
-        def __init__(self, _token, _executar):
+        def __init__(self, _token, _executar, *, interceptar=None):
             pass
 
         async def iniciar(self):

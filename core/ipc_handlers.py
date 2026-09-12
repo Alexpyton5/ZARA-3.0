@@ -4451,6 +4451,51 @@ class IPCHandler:
             traceback.print_exc()
             await self.send_error(msg, str(e))
 
+    def _montar_portao_lab_telegram(self, token: str):
+        """Constrói o `TelegramLabGate` como biblioteca (sem laço próprio).
+
+        ZARA-TELEGRAM-LAB-BRIDGE-001. Nunca chama `poll_once`/`run_forever`
+        daqui — quem consome `getUpdates` é só `core.telegram_ponte.
+        PonteTelegram`. Isolado numa função própria para o chamador poder
+        tratar qualquer falha (Lab não inicializado, banco indisponível) sem
+        derrubar a ponte comum do Telegram.
+        """
+        from core.lab_v1.release import ReleaseQueue
+        from core.lab_v1.store import LabStore
+        from core.lab_v1.telegram_gate import (
+            HttpTelegramTransport,
+            TelegramLabGate,
+            default_ready_candidate,
+        )
+        from core.paths import api_keys_path, data_dir
+
+        store = LabStore()
+        store.initialize()
+        return TelegramLabGate(
+            transport=HttpTelegramTransport(token),
+            state_path=data_dir() / "lab" / "telegram_gate_state.json",
+            api_keys_path=api_keys_path(),
+            candidate_source=lambda: default_ready_candidate(store),
+            queue_factory=lambda: ReleaseQueue(store),
+        )
+
+    async def _interceptar_comando_do_lab(self, chat_id: int, texto: str) -> str | None:
+        """Gancho passado à `PonteTelegram`: só responde quando `texto` é
+        exatamente um comando do Lab (SIM/NÃO/RESTAURAR/VOLTAR) vindo do
+        `telegram_owner_chat_id`. Devolve None em qualquer outro caso —
+        inclusive gate ausente/indisponível — para a ponte seguir seu
+        caminho normal sem regressão nenhuma.
+        """
+        gate = getattr(self, "_lab_telegram_gate", None)
+        if gate is None:
+            return None
+        try:
+            # síncrono e pode tocar disco/DB do Lab; não bloquear o loop.
+            return await asyncio.to_thread(gate.handle_message, chat_id, texto)
+        except Exception as exc:
+            print(f"[TELEGRAM] portao do lab nao respondeu: {type(exc).__name__}", flush=True)
+            return None
+
     async def _ligar_telegram(self) -> None:
         """Alex comandando a equipe pelo celular. ZARA-TELEGRAM-001.
 
@@ -4473,7 +4518,24 @@ class IPCHandler:
                         json.loads(arquivo.read_text(encoding="utf-8")).get("telegram_bot_token") or ""
                     ).strip()
                 if token:
-                    ponte = PonteTelegram(token, self._executar_do_celular)
+                    # ZARA-TELEGRAM-LAB-BRIDGE-001: o portão de aprovação do
+                    # Lab (core.lab_v1.telegram_gate) não sobe mais como
+                    # processo/escutador próprio dentro da ZARA — dois
+                    # consumidores de getUpdates no mesmo token brigam pela
+                    # mesma fila. Ele vira biblioteca chamada por ESTA ponte,
+                    # que continua sendo a única a fazer polling. Qualquer
+                    # falha ao montar o gate fica isolada aqui: o bot comum
+                    # sobe do mesmo jeito, só sem o atalho de aprovação.
+                    if getattr(self, "_lab_telegram_gate", None) is None:
+                        try:
+                            self._lab_telegram_gate = self._montar_portao_lab_telegram(token)
+                        except Exception as exc:
+                            self._lab_telegram_gate = None
+                            print(f"[TELEGRAM] portao do lab nao subiu, bot comum segue: {type(exc).__name__}", flush=True)
+                    ponte = PonteTelegram(
+                        token, self._executar_do_celular,
+                        interceptar=self._interceptar_comando_do_lab,
+                    )
                     if await ponte.iniciar():
                         self._telegram = ponte
                         from core.telegram_approval_adapter import TelegramApprovalAdapter

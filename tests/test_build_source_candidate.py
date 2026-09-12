@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from tools.build_source_candidate import (
+    CandidateBuildError,
+    _bind_review,
+    _overlay_candidate,
+    _relative,
+    _require_build_space,
+    _require_review,
+)
+
+
+def test_overlay_uses_only_authorized_candidate_bytes(tmp_path: Path):
+    source = tmp_path / "sandbox" / "source"; staged = tmp_path / "sandbox" / "desktop-workspace"
+    (source / "core").mkdir(parents=True); staged.mkdir(parents=True)
+    (source / "core" / "safe.py").write_text("answer = 2\n", encoding="utf-8")
+    (staged / "core").mkdir(); (staged / "core" / "safe.py").write_text("answer = 1\n", encoding="utf-8")
+    receipt = _overlay_candidate(source, staged, ["core/safe.py"])
+    assert receipt[0]["path"] == "core/safe.py"
+    assert (staged / "core" / "safe.py").read_text(encoding="utf-8") == "answer = 2\n"
+
+
+@pytest.mark.parametrize("path", ["../core/x.py", "C:/core/x.py", "", "core/../../x.py"])
+def test_overlay_path_cannot_escape_candidate(path):
+    with pytest.raises(CandidateBuildError):
+        _relative(path)
+
+
+def test_overlay_requires_a_real_candidate_file(tmp_path: Path):
+    source = tmp_path / "source"; staged = tmp_path / "staged"
+    source.mkdir(); staged.mkdir()
+    with pytest.raises(CandidateBuildError):
+        _overlay_candidate(source, staged, ["core/missing.py"])
+
+
+def test_builder_requires_a_passing_independent_review_with_evidence():
+    with pytest.raises(CandidateBuildError):
+        _require_review({"verdict": "PASS"})
+    review = {"verdict": "PASS", "reviewer_run_id": "real-review-run",
+              "evidence_refs": {"artifact_hashes": ["hash"], "test_receipt_ids": ["receipt"]}}
+    _require_review(review)
+
+
+def test_builder_binds_every_overlay_byte_to_the_independent_review():
+    review = {"verdict": "PASS", "reviewer_run_id": "real-review-run",
+              "evidence_refs": {"artifact_hashes": ["one", "two"], "test_receipt_ids": ["receipt"]}}
+    overlays = [{"path": "core/a.py", "sha256": "one"}, {"path": "tests/test_a.py", "sha256": "two"}]
+    _bind_review(review, overlays)
+    with pytest.raises(CandidateBuildError, match="INDEPENDENT_REVIEW_HASH_MISMATCH"):
+        _bind_review(review, list(reversed(overlays)))
+
+
+def test_sidecar_spec_does_not_embed_external_hermes_runtime_files():
+    build_script = (Path(__file__).parents[1] / "build_exe.py").read_text(encoding="utf-8")
+    assert "hermes_runner.py" not in build_script
+    assert "hermes_pin.json" not in build_script
+
+
+def test_builder_refuses_target_with_less_than_two_gib_free(tmp_path: Path, monkeypatch):
+    disk_usage = type("DiskUsage", (), {"free": 2 * 1024 * 1024 * 1024 - 1})()
+    monkeypatch.setattr("tools.build_source_candidate.shutil.disk_usage", lambda _path: disk_usage)
+    with pytest.raises(CandidateBuildError, match="CANDIDATE_BUILD_DISK_SPACE_BELOW_2GB"):
+        _require_build_space(tmp_path)

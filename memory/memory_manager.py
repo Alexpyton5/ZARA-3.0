@@ -495,6 +495,11 @@ class MemoryManager:
 
         return await asyncio.to_thread(_record)
 
+    async def remove_conversation_episode(self, episode_id: str) -> bool:
+        """Compensate a conversation write when its voice turn is interrupted."""
+        from memory.episodic_memory import delete_episode
+        return await asyncio.to_thread(delete_episode, episode_id)
+
     def load(self) -> dict:
         return load_memory()
 

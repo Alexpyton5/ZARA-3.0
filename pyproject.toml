@@ -74,6 +74,7 @@ markers = [
     "safe: pure logic, no hardware, no browser, no real filesystem/OS calls",
     "sandbox: temp dirs, fake processes, isolated test browser/session, mocked APIs",
     "live: touches real hardware (volume, brightness, windows, apps, browser, mic, audio, real network). Skipped unless ALLOW_LIVE_TESTS=1.",
+    "real_env: reads/writes the owner's real ZARA3 data tree (%LOCALAPPDATA%\\ZARA3). Opts out of the automatic ZARA3_HOME isolation in tests/conftest.py. Use only when the real environment IS the thing under test.",
 ]
 
 [tool.ruff]

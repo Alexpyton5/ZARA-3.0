@@ -85,6 +85,9 @@ class ModelConfig:
     supports_tools: bool = False
     auto_eligible: bool = True
     zero_cost_eligible: bool = True
+    # Cost truth is separate from routing eligibility. UNKNOWN never enters
+    # COST_SAFE even when an older compatibility path marks it zero-cost.
+    cost_status: str = "UNKNOWN_COST"
 
 
 MODEL_REGISTRY: list[ModelConfig] = [
@@ -105,6 +108,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         speed_bias=12,
         supports_tools=True,
         zero_cost_eligible=True,
+        cost_status="LOCAL_FREE",
     ),
     ModelConfig(
         id="ollama_qwen3_4b",
@@ -122,6 +126,7 @@ MODEL_REGISTRY: list[ModelConfig] = [
         speed_bias=16,
         supports_tools=True,
         zero_cost_eligible=True,
+        cost_status="LOCAL_FREE",
     ),
     # NVIDIA NIM — free prototype endpoints / trial limits apply.
     ModelConfig(
@@ -381,6 +386,9 @@ INTENT_PATTERNS = {
 
 
 class ModelRouter:
+    ACTIVE_BRAIN_DEFAULT = "gpt-5.6-luna"
+    MANUAL_ONLY_BRAINS = frozenset({"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"})
+
     """Zero-cost-first model router with runtime health awareness."""
 
     def __init__(self):
@@ -565,8 +573,10 @@ class ModelRouter:
         r.last_error = text[:500]
         r.updated_at = now
 
-    def _routable(self, model: ModelConfig, include_paid: bool = False) -> bool:
+    def _routable(self, model: ModelConfig, include_paid: bool = False, *, policy: str = "smart") -> bool:
         if not model.auto_eligible:
+            return False
+        if policy == "cost_safe" and model.cost_status not in {"LOCAL_FREE", "FREE_PROVEN"}:
             return False
         if not include_paid and not model.zero_cost_eligible:
             return False
@@ -600,10 +610,11 @@ class ModelRouter:
         policy: str = "smart",
         require_tools: bool = False,
         require_streaming: bool = True,
+        cost_safe: bool = False,
     ) -> list[ModelConfig]:
         ranked: list[tuple[int, ModelConfig]] = []
         for model in MODEL_REGISTRY:
-            if not self._routable(model, include_paid=False):
+            if not self._routable(model, include_paid=False, policy="cost_safe" if cost_safe else policy):
                 continue
             if require_tools and not model.supports_tools:
                 continue
@@ -623,14 +634,21 @@ class ModelRouter:
         same_provider = [m for _, m in ranked[1:] if m.provider == primary.provider]
         return [primary, *other_provider, *same_provider]
 
+    def cost_safe_candidates(self, task_types: list[TaskType], *, require_tools: bool = False,
+                             require_streaming: bool = True) -> list[ModelConfig]:
+        """Automatic workers with factual no-additional-cost evidence only."""
+        return self.rank_models(task_types, policy="economy", require_tools=require_tools,
+                                require_streaming=require_streaming, cost_safe=True)
+
     def get_best_model(
         self,
         task_types: list[TaskType],
         require_tools: bool = False,
         require_streaming: bool = True,
         policy: str = "smart",
+        cost_safe: bool = False,
     ) -> ModelConfig | None:
-        ranked = self.rank_models(task_types, policy, require_tools, require_streaming)
+        ranked = self.rank_models(task_types, policy, require_tools, require_streaming, cost_safe)
         return ranked[0] if ranked else None
 
     def get_fallback_chain(

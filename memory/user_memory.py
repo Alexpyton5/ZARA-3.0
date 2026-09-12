@@ -94,6 +94,15 @@ class UserMemoryCore:
         rid = uuid.uuid4().hex[:16]
         with self._lock:
             with self._connect() as conn:
+                # Serialize Lab promotion across processes, including crash/replay before outbox acknowledgement.
+                conn.execute("BEGIN IMMEDIATE")
+                if source == "zara_lab" and ref:
+                    existing = conn.execute(
+                        "SELECT * FROM user_facts WHERE source='zara_lab' AND ref=? ORDER BY created_at LIMIT 1",
+                        (ref,),
+                    ).fetchone()
+                    if existing is not None:
+                        return dict(existing)
                 conn.execute(
                     "INSERT INTO user_facts (id, category, fact, confidence, status, source, ref, "
                     "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",

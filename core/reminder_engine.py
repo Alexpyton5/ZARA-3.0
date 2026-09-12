@@ -351,6 +351,48 @@ def parse_natural_due(text: str, now: datetime | None = None) -> float | None:
     now = now or datetime.now()
     t = text.lower().strip()
 
+    def _absolute_due(match) -> float | None:
+        hh = int(match.group('hour'))
+        mm = int(match.group('minute') or 0)
+        period = (match.group('period') or '').casefold()
+        day = int(match.group('day'))
+        month = int(match.group('month'))
+        year = int(match.group('year'))
+        if year < 100:
+            year += 2000
+        if period in {'tarde', 'noite'} and hh < 12:
+            hh += 12
+        elif period in {'manha', 'manhã'} and hh == 12:
+            hh = 0
+        if not 0 <= hh <= 23 or not 0 <= mm <= 59:
+            return None
+        try:
+            due = datetime(year, month, day, hh, mm)
+        except ValueError:
+            return None
+        return due.timestamp() if due > now else None
+
+    # Horário antes da data: "às 10 horas da manhã no dia 18-09-2026".
+    absolute = re.search(
+        r"(?:para\s+)?(?:às|as)?\s*(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*"
+        r"(?:h|horas?)?(?:\s+da\s+(?P<period>manhã|manha|tarde|noite))?\s+"
+        r"(?:no\s+dia\s+|em\s+)?(?P<day>\d{1,2})[-/](?P<month>\d{1,2})[-/]"
+        r"(?P<year>\d{2,4})",
+        t,
+    )
+    if absolute:
+        return _absolute_due(absolute)
+
+    # Data antes do horário: "18-09-2026 às 10".
+    absolute = re.search(
+        r"(?P<day>\d{1,2})[-/](?P<month>\d{1,2})[-/](?P<year>\d{2,4})\s+"
+        r"(?:às|as|a)?\s*(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*"
+        r"(?:h|horas?)?(?:\s+da\s+(?P<period>manhã|manha|tarde|noite))?",
+        t,
+    )
+    if absolute:
+        return _absolute_due(absolute)
+
     # daqui a N minutos/horas
     m = re.search(r"daqui a (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", t)
     if m:

@@ -23,11 +23,25 @@ from dataclasses import dataclass
 from core.reminder_engine import ReminderEngine, parse_natural_due
 
 _INTRO = re.compile(
-    r"^\s*(?:zara[\s,]*)?(?:me\s+)?(?:lembre|lembra|lembrar)\s+(?:de\s+|me\s+)?(?:de\s+)?",
+    r"(?:^\s*(?:zara[\s,]*)?(?:me\s+)?(?:lembre|lembra|lembrar)\s+"
+    r"(?:de\s+|me\s+)?(?:de\s+)?|"
+    r"\b(?:crie|agende|quero\s+(?:criar|agendar))\s+(?:um\s+)?lembrete(?:\s+para)?\s+)",
     re.IGNORECASE,
 )
 
 _TIME_PATTERNS = [
+    # data absoluta com horário antes: "às 10 horas no dia 18-09-2026"
+    re.compile(
+        r"(?:para\s+)?(?:às|as)?\s*\d{1,2}(?::\d{2})?\s*(?:h|horas?)?"
+        r"(?:\s+da\s+(?:manhã|manha|tarde|noite))?\s+(?:no\s+dia\s+|em\s+)?"
+        r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}", re.IGNORECASE,
+    ),
+    # data absoluta com horário depois: "18-09-2026 às 10"
+    re.compile(
+        r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\s+(?:às|as|a)?\s*\d{1,2}"
+        r"(?::\d{2})?\s*(?:h|horas?)?(?:\s+da\s+(?:manhã|manha|tarde|noite))?",
+        re.IGNORECASE,
+    ),
     # daqui a N minutos/horas
     re.compile(r"daqui a (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", re.IGNORECASE),
     # amanhã às H(:MM)? / hoje às H(:MM)? (aceita amanha/amanhã sem acento)
@@ -83,8 +97,9 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
             raw=raw,
         )
 
-    # precisa comecar com "lembre de ..." (apos opcional "zara")
-    m = _INTRO.match(raw)
+    # Um pedido pode trazer contexto antes do imperativo, como no turno físico
+    # "... crie um lembrete ...". Só imperativos explícitos entram aqui.
+    m = _INTRO.search(raw)
     if not m:
         return IntentResult(kind="not_reminder", raw=raw)
 
@@ -112,6 +127,14 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
     # separa a mensagem do componente temporal
     message = (body[:time_match.start()] + " " + body[time_match.end():]).strip()
     message = re.sub(r"\s+", " ", message).strip(" ,;:-")
+    message = re.sub(
+        r"^(?:para\s+|onde\s+(?:voce|você)\s+(?:ira|irá)\s+)", "", message,
+        flags=re.IGNORECASE,
+    ).strip(" ,;:-.")
+    prefix = raw[:m.start()]
+    spouse = re.search(r"nome\s+da\s+minha\s+esposa\s+[ée]\s+([\wÀ-ÿ'-]+)", prefix, re.IGNORECASE)
+    if spouse:
+        message = re.sub(r"\bela\b", spouse.group(1), message, flags=re.IGNORECASE)
     if not message:
         return IntentResult(kind="not_reminder", raw=raw)
 
@@ -123,7 +146,7 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
 
     if engine is not None:
         try:
-            reminder = engine.create(message, due, timezone="local", source="voice")
+            reminder = engine.create(message, due, timezone="local", source="zara_desktop")
         except Exception as exc:
             # BUG-001: create/commit/readback nao provado -> falha explicita
             return IntentResult(

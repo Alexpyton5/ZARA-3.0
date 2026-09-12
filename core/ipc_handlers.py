@@ -11,6 +11,7 @@ import re
 import sys
 import time
 import traceback
+import unicodedata
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
@@ -256,6 +257,85 @@ def _log_intent_telemetry(event: str, path: str, text: str) -> None:
         f"[INTENT_TELEMETRY] event={event} path={path} text={text!r}",
         flush=True,
     )
+
+
+# --- NIGHT-07: o guarda honesto tambem alimenta o Lab -----------------------
+#
+# Ate aqui o Lab so aprendia com falha de EXECUTOR (`stage=executor`). O caso
+# mais comum de "a ZARA nao sabe fazer isso" -- o guarda honesto acima
+# respondendo RESPOSTA_NAO_SEI -- gravava telemetria e parava ali: nunca
+# chegava a `_remember_action_failure`, logo nunca virava CapabilityGap.
+# Isto liga a origem que faltava reusando a MESMA funcao, o mesmo servico e o
+# mesmo tipo de gap; nao existe segundo mecanismo de captura.
+#
+# O freio e a parte importante desta mudanca. Sem teto, cada frase nao
+# entendida viraria um gap novo, e um gap novo COM `source_path` conhecido faz
+# `EvolutionEngine.observe_and_plan` despachar uma missao SELF_IMPROVEMENT
+# (core/lab_v1/evolution.py:137-148 e :234-248) -- provider real, custo real,
+# por frase mal ouvida. Por isso, nesta ordem:
+#
+#   1. DEDUP por frase normalizada -> mesmo `gap_id`, upsert, uma linha so.
+#   2. TETO diario de frases NOVAS -> o volume de gaps por dia e finito.
+#   3. `source_path` so depois de N repeticoes -- e e o `source_path` que
+#      transforma o gap em missao dirigida. Sem ele o gap fica registrado e
+#      INERTE, que e o estado padrao de toda frase nova.
+#   4. Depois de escalonar, a frase para de reescrever o gap. O
+#      `observation_id` do EvolutionEngine e hash do CONTEUDO dos gaps
+#      (evolution.py:150-153 e :235-236): reescrever o mesmo gap com um
+#      contador novo mudaria o hash e valeria UMA MISSAO NOVA para a mesma
+#      frase. Escalonou uma vez, escreveu uma vez, fim.
+#
+# Rollback: apagar este bloco, o metodo `_remember_unhandled_intent`, as duas
+# chamadas a ele (voz em `_process_voice_message`, texto em
+# `handle_send_message`) e o `dedup_key` em `LabV1Service.capture_runtime_failure`.
+# A cadeia de resposta ao Alex nao muda em nenhum dos dois caminhos.
+
+UNHANDLED_INTENT_STAGE = "unhandled_intent"
+
+# Onde o intent DEVERIA ter sido reconhecido, por evidencia e nao por chute:
+# os verbos deste guarda sao os mesmos que `core/pc_voice_intent.py` mapeia
+# para action (minimizar em :487, brilho/escurecer em :477, mudo/silenciar em
+# :425). O executor nao falhou -- ninguem chegou a chama-lo, porque nenhum
+# padrao daquele arquivo casou. O arquivo tambem esta no inventario que o
+# EvolutionEngine varre (`core/**/*.py`), condicao para o gap virar missao.
+UNHANDLED_INTENT_SOURCE_PATH = "core/pc_voice_intent.py"
+
+# Repeticoes da MESMA frase normalizada antes de a lacuna virar missao real.
+# 1 ocorrencia e ruido (STT errando uma palavra, frase pela metade); 2 ainda
+# pode ser a mesma tentativa repetida por teimosia no mesmo minuto; 3 e padrao
+# de uso -- o Alex quer aquilo e a ZARA nao tem. Valor conservador de
+# proposito: erra para o lado de NAO gastar provider.
+UNHANDLED_INTENT_MISSION_THRESHOLD = 3
+
+# Teto de frases NOVAS persistidas por dia. Gap nao escalonado nao dispara
+# missao, mas entra na evidencia que vai no prompt do worker
+# (evolution.py:225) -- ou seja, custa token quando alguma missao roda. Dez
+# frases novas por dia cobre com folga um dia real de uso do Alex e mantem o
+# blob de evidencia pequeno.
+UNHANDLED_INTENT_MAX_NEW_GAPS_PER_DAY = 10
+
+# Teto de escalonamentos por dia. Cada escalonamento vale, no pior caso, UMA
+# missao SELF_IMPROVEMENT nova (o gap passa a ter `source_path`, e o
+# `observation_id` do EvolutionEngine muda uma vez). Dois por dia e o limite
+# duro de gasto que esta mudanca pode provocar sozinha.
+UNHANDLED_INTENT_MAX_ESCALATIONS_PER_DAY = 2
+
+_UNHANDLED_INTENT_NOISE_RE = re.compile(r"[^a-z0-9 ]+")
+
+
+def _normalize_unhandled_phrase(text: str) -> str:
+    """Chave estavel da frase, identica vinda de voz ou de texto.
+
+    O STT devolve "abaixa o brilho pela metade" e o teclado devolve
+    "Abaixa o brilho pela metade." -- a mesma lacuna. Sem dobrar acento,
+    caixa e pontuacao, os dois canais criariam DOIS gaps para a mesma coisa e
+    a paridade voz/texto seria mentira no banco. Descartar tudo que nao e
+    letra/digito/espaco tambem tira do identificador qualquer caminho de
+    arquivo ou token que tenha caido na frase por acidente.
+    """
+    folded = unicodedata.normalize("NFKD", str(text or "").casefold())
+    ascii_only = "".join(char for char in folded if not unicodedata.combining(char))
+    return " ".join(_UNHANDLED_INTENT_NOISE_RE.sub(" ", ascii_only).split())[:120]
 
 
 # --- ETAPA 3 do plano de raciocinio livre -----------------------------------
@@ -534,6 +614,18 @@ except ImportError as e:
     LabCoordinator = None  # type: ignore[assignment]
     LabWorkerRuntime = None  # type: ignore[assignment]
 
+try:
+    # ZARA-LAB-V1-001: new multi-agent runtime, separate DB, separate IPC
+    # surface. Frozen builds may lack it while it is still being assembled --
+    # this must degrade to a clear "indisponível" error, never crash the
+    # sidecar's stdin dispatch loop.
+    from core.lab_v1.service import LabV1Service
+    LAB_V1_AVAILABLE = True
+except ImportError as e:
+    print(f"[IPC Handlers] ZARA Lab V1 module unavailable: {e}")
+    LAB_V1_AVAILABLE = False
+    LabV1Service = None  # type: ignore[assignment]
+
 
 @dataclass
 class IPCMessage:
@@ -564,7 +656,7 @@ class IPCHandler:
         self.memory: MemoryManager | None = None
         # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): resposta por voz tem
         # que ser rápida por padrão -- não é mais preciso pedir "modo rápido".
-        self.current_engine: str = "auto_fast"
+        self.current_engine: str = "gpt-5.6-luna"
         # ZARA-TELEGRAM-GRUPO-001: ponte do grupo, em paralelo com a privada.
         self._telegram_grupo = None
         self._telegram_adapter = None
@@ -589,6 +681,10 @@ class IPCHandler:
         self._gemini_wake_armed_until: float = 0.0
         # ZARA-VOICE-LATENCY-OBSERVABILITY-001: start of the current voice turn.
         self._voice_turn_started: float = 0.0
+        # Monotonic semantic fence. Provider threads may finish after barge-in,
+        # but only the currently active generation may publish or speak.
+        self._voice_turn_generation: int = 0
+        self._active_voice_turn_id: int | None = None
         # ZARA-VOICE-ECO-001: ultima resposta falada, para nao se ouvir.
         self._last_spoken_text: str = ""
         # ZARA-CONFIRMACAO-VAZIA-001: a ultima frase dele que ela REALMENTE
@@ -596,6 +692,10 @@ class IPCHandler:
         self._ultimo_pedido_entendido: str = ""
         self.lab = None
         self._lab_background_tasks: set[asyncio.Task] = set()
+        # ZARA-LAB-V1-001: lazy on purpose -- instantiated on first handler
+        # call, not during async init. Keeps old Lab boot path untouched.
+        self.lab_v1 = None
+        self._lab_v1_background_tasks: set[asyncio.Task] = set()
         self.reminder_engine = None  # initialized in async init
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self.user_memory = None      # initialized in async init
@@ -712,13 +812,136 @@ class IPCHandler:
         self._operational_context_updated_at = 0.0
         self._operational_context_turns = 0
 
-    def _remember_action_failure(self, action: str, stage: str, reason: object) -> None:
+    def _remember_action_failure(
+        self,
+        action: str,
+        stage: str,
+        reason: object,
+        *,
+        source_path: str | None = None,
+        dedup_key: str | None = None,
+    ) -> None:
+        action_id = str(action or "unknown")
+        failure_stage = str(stage or "unknown")
+        bounded_reason = _sanitize_observation(reason) or "motivo não informado"
         self._last_action_failure = {
-            "action": str(action or "unknown"),
-            "stage": str(stage or "unknown"),
-            "reason": _sanitize_observation(reason) or "motivo não informado",
+            "action": action_id,
+            "stage": failure_stage,
+            "reason": bounded_reason,
             "at": datetime.now().isoformat(),
         }
+        # Capability gates are policy/refusal decisions, not observed product
+        # defects. Persist an actual missing executor, an execution failure, or
+        # a phrase no deterministic handler claimed (NIGHT-07) -- that last one
+        # arrives already rate-limited by `_remember_unhandled_intent`.
+        if failure_stage not in {"registry", "executor", UNHANDLED_INTENT_STAGE}:
+            return
+        service = getattr(self, "lab_v1", None)
+        if service is None or not hasattr(service, "capture_runtime_failure"):
+            return
+        resolved_source = str(source_path or "")
+        if not resolved_source and failure_stage == "executor":
+            try:
+                from core.action_registry import get_registry
+                executor = get_registry()._actions.get(action_id)
+                module = str(getattr(executor, "__module__", ""))
+                if module.startswith("core."):
+                    resolved_source = module.replace(".", "/") + ".py"
+            except Exception:
+                resolved_source = ""
+        channel = "voice" if getattr(self, "_active_voice_turn_id", None) is not None else "conversation"
+        run_id = ("voice:" + str(self._active_voice_turn_id)
+                  if getattr(self, "_active_voice_turn_id", None) is not None else None)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(service.capture_runtime_failure(
+            action_id, source_path=resolved_source, stage=failure_stage,
+            status="EXECUTOR_FAILED" if failure_stage == "executor" else "CAPABILITY_MISSING",
+            reason=bounded_reason, channel=channel, run_id=run_id, dedup_key=dedup_key))
+        tasks = getattr(self, "_lab_v1_background_tasks", None)
+        if tasks is not None:
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
+
+    def _unhandled_intent_budget(self) -> dict[str, Any]:
+        """Estado do freio, criado sob demanda.
+
+        Sob demanda porque varios testes (e o proprio caminho de recuperacao)
+        constroem o handler por `__new__`, sem `__init__`. Contadores e frases
+        ja escalonadas NAO zeram na virada do dia de proposito: uma frase que o
+        Alex tenta toda manha continua somando ate virar missao. Quem zera sao
+        so os tetos diarios.
+        """
+        state = getattr(self, "_unhandled_intent_state", None)
+        today = datetime.now().strftime("%Y-%m-%d")
+        if state is None:
+            state = {"day": today, "counts": {}, "escalated": set(),
+                     "new_today": 0, "escalations_today": 0}
+            self._unhandled_intent_state = state
+        if state["day"] != today:
+            state["day"] = today
+            state["new_today"] = 0
+            state["escalations_today"] = 0
+        return state
+
+    def _remember_unhandled_intent(self, text: str) -> None:
+        """Guarda honesto -> CapabilityGap, com teto. Ver bloco NIGHT-07 acima.
+
+        Chamado dos DOIS caminhos, com a mesma frase e o mesmo resultado:
+        voz em `_process_voice_message`, texto em `handle_send_message`.
+        Nao muda a resposta dada ao Alex em nenhum dos dois -- ela continua
+        sendo `RESPOSTA_NAO_SEI`.
+        """
+        phrase = _normalize_unhandled_phrase(text)
+        if not phrase:
+            return
+        state = self._unhandled_intent_budget()
+        counts = state["counts"]
+        if phrase in state["escalated"]:
+            # Ja registrada COM `source_path`: ja e elegivel a missao dirigida.
+            # Reescrever o gap mudaria o `detail`, e o `observation_id` do
+            # EvolutionEngine e hash do conteudo dos gaps -- cada reescrita
+            # viraria uma missao nova para a MESMA frase. So conta e sai.
+            counts[phrase] = counts.get(phrase, 0) + 1
+            print(f"[VOICE_TRACE] stage=CAPABILITY_GAP result=ALREADY_ESCALATED "
+                  f"occurrences={counts[phrase]}", flush=True)
+            return
+        if phrase not in counts and state["new_today"] >= UNHANDLED_INTENT_MAX_NEW_GAPS_PER_DAY:
+            print("[VOICE_TRACE] stage=CAPABILITY_GAP result=BUDGET_EXHAUSTED "
+                  "scope=new_gaps_today", flush=True)
+            return
+        if phrase not in counts:
+            state["new_today"] += 1
+        occurrences = counts.get(phrase, 0) + 1
+        counts[phrase] = occurrences
+        escalate = (occurrences >= UNHANDLED_INTENT_MISSION_THRESHOLD
+                    and state["escalations_today"] < UNHANDLED_INTENT_MAX_ESCALATIONS_PER_DAY)
+        if escalate:
+            state["escalated"].add(phrase)
+            state["escalations_today"] += 1
+        elif occurrences > 1:
+            # Nada mudou de estado: a lacuna ja esta registrada e continua
+            # inerte. Reescrever o mesmo gap so para trocar o contador gasta
+            # IO e mexe no `detail` que o EvolutionEngine hasheia. So conta.
+            print(f"[VOICE_TRACE] stage=CAPABILITY_GAP result=COUNTED "
+                  f"occurrences={occurrences}", flush=True)
+            return
+        print(f"[VOICE_TRACE] stage=CAPABILITY_GAP "
+              f"result={'ESCALATED' if escalate else 'RECORDED'} "
+              f"occurrences={occurrences} stage_origin={UNHANDLED_INTENT_STAGE}", flush=True)
+        self._remember_action_failure(
+            f"{UNHANDLED_INTENT_STAGE}:{phrase[:80]}",
+            UNHANDLED_INTENT_STAGE,
+            f"nenhum handler deterministico reconheceu a frase "
+            f"(ocorrencia {occurrences}): {phrase}",
+            # Sem `source_path` o gap fica registrado e inerte: o
+            # EvolutionEngine so monta missao dirigida para gap cujo caminho
+            # existe no inventario (evolution.py:137-148).
+            source_path=UNHANDLED_INTENT_SOURCE_PATH if escalate else "",
+            dedup_key=f"{UNHANDLED_INTENT_STAGE}:{phrase}",
+        )
 
     async def _build_self_knowledge_snapshot(self, *, probe_hardware: bool = False) -> dict[str, Any]:
         """Observe current runtime state without exposing keys or inventing availability."""
@@ -756,6 +979,14 @@ class IPCHandler:
         def component(status: str, detail: str) -> dict[str, str]:
             return {"status": status, "detail": detail}
 
+        voice_ready = bool(self.voice_active or self.voice_pipeline or self.gemini_live_voice)
+        voice_detail = (
+            f"modo {self.voice_mode}"
+            if self.voice_active
+            else "pipeline disponível, inativo"
+            if (self.voice_pipeline or self.gemini_live_voice)
+            else "pipeline não preparado"
+        )
         components = {
             "codex": component("NOT_CONFIGURED", "sem canal direto dentro do runtime da ZARA"),
             "mentor": component(
@@ -763,10 +994,21 @@ class IPCHandler:
                 "Context Sync local carregado" if getattr(self, "mentor_context", "") else "sem contexto local carregado",
             ),
             "lab": component("AVAILABLE" if self.lab else "OFFLINE", "coordenador inicializado" if self.lab else "coordenador não inicializado"),
-            "voice": component(
-                "AVAILABLE" if (self.voice_active or self.voice_pipeline or self.gemini_live_voice) else ("NOT_CONFIGURED" if VOICE_AVAILABLE else "UNSUPPORTED"),
-                f"modo {self.voice_mode}" if self.voice_active else "pipeline disponível, inativo" if (self.voice_pipeline or self.gemini_live_voice) else "pipeline não preparado",
+            "lab_v1": component(
+                "AVAILABLE" if LAB_V1_AVAILABLE else "OFFLINE",
+                "runtime V1 disponível (inicialização sob demanda)" if LAB_V1_AVAILABLE else "módulo Lab V1 não encontrado neste build",
             ),
+            "voice": {
+                **component(
+                    "AVAILABLE" if voice_ready else ("NOT_CONFIGURED" if VOICE_AVAILABLE else "UNSUPPORTED"),
+                    voice_detail,
+                ),
+                "active": bool(self.voice_active),
+                "mode": str(self.voice_mode or "off"),
+                "gemini_live_ready": self.gemini_live_voice is not None,
+                "local_pipeline_ready": self.voice_pipeline is not None,
+                "tts_ready": self.tts_manager is not None,
+            },
         }
 
         spec_map = {spec.name: spec for spec in specs}
@@ -890,9 +1132,34 @@ class IPCHandler:
             if resposta:
                 return resposta
 
-        from core.self_knowledge import detect_self_knowledge_topic, render_self_knowledge
+        from core.self_knowledge import (
+            detect_self_knowledge_topic,
+            is_self_knowledge_followup,
+            render_self_knowledge,
+        )
 
         topic = detect_self_knowledge_topic(text)
+        if topic is None and is_self_knowledge_followup(text):
+            if self.conversation_history is not None:
+                try:
+                    recent = await asyncio.to_thread(self.conversation_history.list_recent, 8)
+                except Exception:
+                    recent = []
+                current = _canonical_request(text).casefold()
+                skipped_current = False
+                for item in reversed(recent):
+                    if str(item.get("role") or "") != "user":
+                        continue
+                    content = str(item.get("content") or "")
+                    if not skipped_current and _canonical_request(content).casefold() == current:
+                        skipped_current = True
+                        continue
+                    topic = detect_self_knowledge_topic(content)
+                    # “Isso” may refer only to the immediately preceding user
+                    # turn. Never search farther back and resurrect stale state.
+                    break
+            if topic is None:
+                return "Não encontrei o assunto de “isso” no turno anterior. Diga o que você quer que eu verifique."
         if topic is None:
             return None
         snapshot = await self._build_self_knowledge_snapshot(probe_hardware=topic == "capabilities")
@@ -942,20 +1209,9 @@ class IPCHandler:
         )
 
     def _load_runtime_preferences(self) -> None:
-        """Load non-secret runtime preferences from the existing config file."""
-        try:
-            from core.paths import api_keys_path
-            path = api_keys_path()
-            if not path.exists():
-                return
-            with open(path, encoding="utf-8") as f:
-                config = json.load(f)
-            engine = str(config.get("ai_engine") or "auto_smart").strip()
-            if engine in {"auto", "auto_router"}:
-                engine = "auto_smart"
-            self.current_engine = engine or "auto_fast"
-        except Exception as exc:
-            print(f"[IPC] Could not load runtime preferences: {exc}")
+        # Front selection lives in the canonical Lab store. Legacy api_keys.json
+        # preferences cannot authorize a paid or premium conversational route.
+        self.current_engine = "gpt-5.6-luna"
 
     def _persist_engine_preference(self, engine: str) -> None:
         try:
@@ -1060,6 +1316,15 @@ class IPCHandler:
             except Exception as exc:
                 self.lab = None
                 print(f"[IPC] ZARA Lab optional module unavailable: {exc}")
+
+        if LAB_V1_AVAILABLE and LabV1Service:
+            try:
+                self.lab_v1 = LabV1Service()
+                self.lab_v1.on_release_ready = lambda result: self.send_event('lab-release-ready', {
+                    'state': 'READY_TO_ACTIVATE', 'session_id': result['session_id']})
+                await self.lab_v1.start_background()
+            except Exception:
+                print('[IPC] Lab autonomy supervisor unavailable; core IPC remains active')
 
         if VOICE_AVAILABLE:
             await self._prepare_voice_components()
@@ -1449,8 +1714,8 @@ class IPCHandler:
         if self._PONTE_SNIFF_RE.search(text):
             return True
         try:
-            from core.self_knowledge import detect_self_knowledge_topic
-            if detect_self_knowledge_topic(text) is not None:
+            from core.self_knowledge import detect_self_knowledge_topic, is_self_knowledge_followup
+            if detect_self_knowledge_topic(text) is not None or is_self_knowledge_followup(text):
                 return True
 
             from core.file_voice_intent import detect_file_intent
@@ -1473,39 +1738,28 @@ class IPCHandler:
         live = self.gemini_live_voice
         return bool(live is not None and getattr(live, "turn_echo_suspect", False))
 
-    def _voice_can_answer_directly(self, user_text: str) -> bool:
-        """A Kore pode responder este turno direto, sem passar pelo executor?
-
-        ZARA-VOICE-FLUIDEZ-001. Chamado pelo transporte do Gemini Live antes de
-        tocar o audio gerado, entao precisa ser sincrono e barato.
-
-        So devolve True quando as DUAS coisas valem:
-          1. o turno esta autorizado pelo wake gate (mesma regra de
-             _on_gemini_live_turn, so que em leitura pura — nao arma nem
-             desarma a janela de continuacao aqui);
-          2. o turno e CONVERSA, nunca ACAO.
-        """
+    def _voice_is_authorized_conversation(self, user_text: str) -> bool:
+        """Pure wake/echo/action classification; it never authorizes remote audio."""
         spoken = str(user_text or "").strip()
-        if not spoken:
-            return False
-        # ZARA-VOICE-ECO-001 tem de ser conferido AQUI, nao so em
-        # _on_gemini_live_turn. Naquele ponto a resposta direta ja teria saido
-        # pelo alto-falante: a ZARA responderia ao proprio eco em voz alta e
-        # realimentaria o loop que Alex relatou.
-        if self._looks_like_own_echo(spoken):
+        if not spoken or self._looks_like_own_echo(spoken):
             return False
         wake = _WAKE_PREFIX_RE.match(spoken)
         if wake:
             command = str(wake.group(1) or "").strip()
             if not command:
-                return False  # so "Zara": arma o gate, nao responde nada
+                return False
         elif time.monotonic() <= self._gemini_wake_armed_until:
             command = spoken
         else:
-            return False  # sem wake a ZARA nao fala, nem para conversar
+            return False
         if self._STOP_WORD_RE.fullmatch(command):
-            return False  # "pare" e barge-in, tratado a parte
+            return False
         return not self._voice_turn_needs_executor(command)
+
+    def _voice_can_answer_directly(self, user_text: str) -> bool:
+        # Keep Gemini's microphone/STT stream, but suppress its conversational
+        # answer. The selected front brain owns every accepted conversation.
+        return False
 
     # ZARA-SILENCIO-VISIVEL-001 -------------------------------------------
     #
@@ -1602,7 +1856,7 @@ class IPCHandler:
                 await self.gemini_live_voice.interrupt_speech()
             await self._on_gemini_live_interrupt()
             return
-        await self._append_conversation_message("user", command, "gemini_live_stt")
+        user_history = await self._append_conversation_message("user", command, "gemini_live_stt")
         await self.send_event('message', {
             'role': 'user', 'content': command, 'engine': 'gemini_live_stt',
             'timestamp': datetime.now().isoformat(),
@@ -1614,35 +1868,20 @@ class IPCHandler:
         # nao transforma conversa de fundo em comando.
         self._gemini_wake_armed_until = time.monotonic() + self._JANELA_DE_CONVERSA
 
-        # ZARA-VOICE-FLUIDEZ-001 — turno de CONVERSA.
-        # A Kore ja falou, em streaming, enquanto o turno acontecia. Aqui so
-        # resta registrar o que foi dito. `model_text` e usado como
-        # TRANSCRICAO do que a voz realmente falou, nunca como prova de que
-        # alguma acao aconteceu — turno de conversa, por definicao, nao
-        # executou nada.
-        if direct:
-            print("[VOICE_TRACE] stage=ROUTE result=DIRECT_CONVERSATION", flush=True)
-            said = str(model_text or "").strip()
-            if said:
-                self._last_spoken_text = said  # ZARA-VOICE-ECO-001
-                await self._append_conversation_message(
-                    "assistant", said, "gemini_live_direct"
-                )
-                await self.send_event('message', {
-                    'role': 'assistant', 'content': said,
-                    'engine': 'gemini_live_direct',
-                    'timestamp': datetime.now().isoformat(),
-                })
-            print("[VOICE_TRACE] stage=FINAL_RESPONSE result=SPOKEN_BY_LIVE", flush=True)
-            return
-
+        # Ignore a late direct=True callback from an older transport turn.
+        # Its generated answer is not the owner-selected front brain.
         # Turno de ACAO: o rascunho remoto morre aqui, como sempre.
         print("[VOICE_TRACE] stage=ROUTE result=EXECUTOR", flush=True)
         del model_text  # Remote draft is never trusted as proof of a PC action.
-        await self._process_voice_message(command)
+        user_history_id = user_history.get('id') if isinstance(user_history, dict) else None
+        if user_history_id:
+            await self._process_voice_message(command, user_history_id=user_history_id)
+        else:
+            await self._process_voice_message(command)
 
     async def _on_gemini_live_interrupt(self) -> None:
         """Reflect a real server-side barge-in in ZARA's session state."""
+        self._invalidate_voice_turn()
         self._voice_speaking = False
         # ZARA-VOZ-UNICA-002: Alex mandou parar. A cascata de vozes precisa
         # saber disso, senão ela entende "a Kore não falou" e recomeça o mesmo
@@ -1705,7 +1944,7 @@ class IPCHandler:
         })
         await self.send_event('state-change', 'THINKING')
 
-        await self._append_conversation_message("user", text, self.current_engine)
+        user_history = await self._append_conversation_message("user", text, self.current_engine)
         await self.send_event('message', {
             'role': 'user',
             'content': text,
@@ -1714,7 +1953,11 @@ class IPCHandler:
         })
 
         # Process the recognized text through the message handler
-        await self._process_voice_message(text)
+        user_history_id = user_history.get('id') if isinstance(user_history, dict) else None
+        if user_history_id:
+            await self._process_voice_message(text, user_history_id=user_history_id)
+        else:
+            await self._process_voice_message(text)
 
     async def _enrich_with_memory(self, text: str) -> str:
         """Prepend ONLY relevant user memories (top-K) to the user message.
@@ -1812,6 +2055,8 @@ class IPCHandler:
             # ZARA-APRENDIZADO-001: a fala logo depois de uma ação é a nota
             # dela. "não é isso" ensina mais que qualquer outra coisa.
             self._ouvir_reacao_do_alex(str(content or ""))
+            if self.lab_v1 is not None:
+                await self.lab_v1.capture_feedback(str(content or ""), channel=engine or "conversation")
         if not self.conversation_history:
             return None
         try:
@@ -1833,7 +2078,7 @@ class IPCHandler:
         None so the normal brain handles it. Never an LLM decision.
         """
         try:
-            if not self.reminder_engine or not (text or "").strip():
+            if not (text or "").strip():
                 return None
             from core.reminder_intent import detect_reminder_intent
             res = detect_reminder_intent(text, self.reminder_engine)
@@ -1852,6 +2097,8 @@ class IPCHandler:
                 return res.reply
             return None
         except Exception:
+            if self._REMINDER_SNIFF_RE.search(text or ""):
+                return "Não consegui processar esse lembrete. Ele NÃO está agendado."
             return None
 
     # ZARA-NAO-VERIFICADO-001 ---------------------------------------------
@@ -2207,7 +2454,7 @@ class IPCHandler:
         partial execution when one requested step is unsupported.
         """
         raw = str(text or "").strip()
-        if not raw or not re.search(r"[,;]|\be\s+depois\b|\bdepois\b", raw, re.IGNORECASE):
+        if not raw or not re.search(r"[,;]|\be\b|\bdepois\b", raw, re.IGNORECASE):
             return None
         raw = re.sub(r"^\s*zara\s*[,;:]?\s*", "", raw, flags=re.IGNORECASE)
         parts = [
@@ -2219,7 +2466,7 @@ class IPCHandler:
             )
             if part.strip(" .!?")
         ]
-        if not 2 <= len(parts) <= 5:
+        if not 1 <= len(parts) <= 5:
             return None
 
         from core.pc_voice_intent import PcVoiceIntentDetector
@@ -2276,6 +2523,11 @@ class IPCHandler:
             expanded_parts.append(part)
         parts = expanded_parts
 
+        if len(parts) < 2:
+            return None
+        if len(parts) > 5:
+            return "Não executei: o pedido excede o limite de cinco etapas por comando."
+
         detected = [detector.detect(part) for part in parts]
         pc_count = sum(1 for item in detected if item.is_pc_intent)
         if pc_count == 0:
@@ -2294,18 +2546,16 @@ class IPCHandler:
         for index, part in enumerate(parts, start=1):
             reply = await self._try_pc_intent(part)
             outcomes.append(f"{index}) {reply or 'Etapa não executada.'}")
+            if self._jarvis_reply_status(reply) != 'OK':
+                outcomes.append("As etapas seguintes não foram executadas porque esta etapa não foi confirmada.")
+                break
         return "Resultado por etapa: " + " ".join(outcomes)
 
     @staticmethod
     def _jarvis_reply_status(reply: str | None) -> str:
         """Classify a primitive readback without turning dispatch into success."""
-        clean = str(reply or "").strip()
-        folded = clean.casefold()
-        if not clean or folded.startswith(("não ", "nao ", "esse comando", "para executar")):
-            return "FALHOU"
-        if folded in {"que horas?", "quando?"} or "qual horário" in folded or "qual horario" in folded:
-            return "PENDENTE"
-        return "OK"
+        from core.reply_status import _jarvis_reply_status
+        return _jarvis_reply_status(reply)
 
     async def _try_jarvis_multi_action(self, text: str) -> str | None:
         """Execute a bounded cross-domain plan using the existing primitives.
@@ -2476,11 +2726,14 @@ class IPCHandler:
             self._remember_action_failure(intent.action, "executor", exc)
             return f"Não consegui executar a ação de arquivo. {type(exc).__name__}."
 
-    async def _process_voice_message(self, text: str):
+    async def _process_voice_message(self, text: str, *, user_history_id: str | None = None):
         """Process voice message through orchestrator/model router"""
         text = _canonical_request(text)
         if not text:
             return
+        voice_turn_id = self._begin_voice_turn()
+        front_run_id: str | None = None
+        memory_episode_id: str | None = None
         # ZARA-VOICE-LATENCY-OBSERVABILITY-001
         # F1.2 requires measuring before optimizing. This clock starts when the
         # recognized command enters the pipeline and is read again at the final
@@ -2503,6 +2756,25 @@ class IPCHandler:
             self._cronometro = Cronometro(text, origem="voz")
         except Exception:
             self._cronometro = None
+        try:
+            _voz = self.gemini_live_voice
+            _fim_fala = _voz.ultimo_fim_de_fala() if _voz is not None else None
+            _transcricao = _voz.ultima_transcricao_pronta() if _voz is not None else None
+            if self._cronometro is not None:
+                self._cronometro._speech_end_at = _fim_fala
+                self._cronometro._transcript_ready_at = _transcricao
+            if _fim_fala is not None and _transcricao is not None:
+                self._marcar_valor_no_cronometro("speech_end_ms", 0.0)
+                self._marcar_valor_no_cronometro(
+                    "transcript_ready_ms",
+                    max(0.0, (_transcricao - _fim_fala) * 1000.0),
+                )
+                self._marcar_valor_no_cronometro(
+                    "speech_end_to_transcript_ms",
+                    max(0.0, (_transcricao - _fim_fala) * 1000.0),
+                )
+        except Exception:
+            pass
         # ZARA-LATENCIA-SEGUNDA-VIAGEM-001 — A PRIMEIRA VIAGEM, QUE NINGUEM MEDIA.
         #
         # Este ponto do codigo so e alcancado depois do turn_complete do turno
@@ -2537,7 +2809,7 @@ class IPCHandler:
                     'role': 'assistant', 'content': jarvis_reply, 'engine': 'jarvis_plan',
                     'timestamp': datetime.now().isoformat(),
                 })
-                await self._speak_response(jarvis_reply)
+                await self._speak_response(jarvis_reply, voice_turn_id=voice_turn_id)
                 return
             # ZARA-REMINDER-VOICE-BINDING-001: intent determinístico primeiro.
             reminder_reply = await self._try_reminder_intent(text)
@@ -2549,7 +2821,7 @@ class IPCHandler:
                     'engine': 'reminder',
                     'timestamp': datetime.now().isoformat(),
                 })
-                await self._speak_response(reminder_reply)
+                await self._speak_response(reminder_reply, voice_turn_id=voice_turn_id)
                 return
             memory_reply = await self._try_operational_memory_intent(text)
             if memory_reply:
@@ -2560,7 +2832,7 @@ class IPCHandler:
                     'engine': 'operational_memory',
                     'timestamp': datetime.now().isoformat(),
                 })
-                await self._speak_response(memory_reply)
+                await self._speak_response(memory_reply, voice_turn_id=voice_turn_id)
                 return
             self_reply = await self._try_self_knowledge(text)
             if self_reply:
@@ -2571,7 +2843,7 @@ class IPCHandler:
                     'engine': 'self_knowledge',
                     'timestamp': datetime.now().isoformat(),
                 })
-                await self._speak_response(self_reply)
+                await self._speak_response(self_reply, voice_turn_id=voice_turn_id)
                 return
             file_reply = await self._try_file_intent(text)
             if file_reply:
@@ -2580,7 +2852,7 @@ class IPCHandler:
                     'role': 'assistant', 'content': file_reply, 'engine': 'file_control',
                     'timestamp': datetime.now().isoformat(),
                 })
-                await self._speak_response(file_reply)
+                await self._speak_response(file_reply, voice_turn_id=voice_turn_id)
                 return
             # ZARA-COMPUTER-CONTROL-VOLUME-001: PC intent antes do LLM.
             print(
@@ -2603,7 +2875,7 @@ class IPCHandler:
                     'selo': self._selo_do_ultimo_resultado(),
                     'timestamp': datetime.now().isoformat(),
                 })
-                await self._speak_response(pc_reply)
+                await self._speak_response(pc_reply, voice_turn_id=voice_turn_id)
                 print(
                     f"[VOICE_TRACE] stage=FINAL_RESPONSE result=PASS route=pc_control "
                     f"total_ms={self._voice_elapsed_ms():.0f}",
@@ -2612,43 +2884,93 @@ class IPCHandler:
                 return
             if _looks_like_unhandled_local_action(text):
                 _log_intent_telemetry("refused_local_action", "voice", text)
+                # NIGHT-07: a recusa honesta e a evidencia mais valiosa que a
+                # ZARA produz -- o Lab so aprendia com falha de executor.
+                self._remember_unhandled_intent(text)
                 reply = RESPOSTA_NAO_SEI
                 await self._append_conversation_message("assistant", reply, "local_action_guard")
                 await self.send_event('message', {
                     'role': 'assistant', 'content': reply, 'engine': 'local_action_guard',
                     'timestamp': datetime.now().isoformat(),
                 })
-                await self._speak_response(reply)
+                await self._speak_response(reply, voice_turn_id=voice_turn_id)
                 return
             # ETAPA 1 (raciocinio livre): guarda a frase original, antes do
             # enriquecimento de memoria, so para o log de telemetria abaixo.
             _telemetry_raw_text = text
             # ZARA-USER-MEMORY-CONTEXT-001: enriquece com memorias relevantes
-            text = await self._enrich_with_memory(text)
-            if self.orchestrator:
-                if _has_broad_action_language_signal(_telemetry_raw_text):
-                    _log_intent_telemetry("escaped_to_orchestrator", "voice", _telemetry_raw_text)
-                response = await self.orchestrator.process_message(text, engine=self.current_engine)
-                engine_used = self.orchestrator.last_engine_used or self.current_engine
-            else:
-                raise RuntimeError("No model backend is available")
+            _brain_started = time.perf_counter()
+            if self._cronometro is not None:
+                self._cronometro._brain_request_start_at = _brain_started
+                _speech_end = getattr(self._cronometro, "_speech_end_at", None)
+                if _speech_end is not None:
+                    self._marcar_valor_no_cronometro(
+                        "brain_request_start_ms",
+                        max(0.0, (_brain_started - _speech_end) * 1000.0),
+                    )
+                    self._marcar_valor_no_cronometro(
+                        "speech_end_to_brain_start_ms",
+                        max(0.0, (_brain_started - _speech_end) * 1000.0),
+                    )
+            front_result = await self._front_conversation_reply(
+                text, voice_turn_id=voice_turn_id, channel='VOICE'
+            )
+            _brain_output = time.perf_counter()
+            if self._cronometro is not None:
+                self._cronometro._brain_first_output_at = _brain_output
+                _speech_end = getattr(self._cronometro, "_speech_end_at", None)
+                if _speech_end is not None:
+                    self._marcar_valor_no_cronometro(
+                        "brain_first_output_ms",
+                        max(0.0, (_brain_output - _speech_end) * 1000.0),
+                    )
+                self._marcar_valor_no_cronometro(
+                    "brain_start_to_first_output_ms",
+                    max(0.0, (_brain_output - _brain_started) * 1000.0),
+                )
+            front_run_id = str(front_result.get('run_id') or '') or None
+            if not self._voice_turn_is_current(voice_turn_id):
+                print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
+                return
+            if not front_result.get('success'):
+                error = front_result.get('error', 'O modelo selecionado nao respondeu.')
+                await self._append_conversation_message(
+                    "system", "Backend indisponível para esta solicitação.",
+                    front_result.get('engine') or self.current_engine,
+                )
+                await self.send_event('message', {
+                    **front_result, 'role': 'assistant', 'content': error,
+                    'timestamp': datetime.now().isoformat(),
+                })
+                return
+            response, engine_used = front_result['response'], front_result['engine']
 
             # Store in memory
             if self.memory:
-                await self.memory.add_conversation(text, str(response), engine_used)
+                memory_episode_id = await self.memory.add_conversation(text, str(response), engine_used)
+                if not self._voice_turn_is_current(voice_turn_id):
+                    print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
+                    return
 
             await self._append_conversation_message("assistant", str(response), engine_used)
+            if not self._voice_turn_is_current(voice_turn_id):
+                print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
+                return
 
             # Send response as message event
             await self.send_event('message', {
+                **front_result,
                 'role': 'assistant',
                 'content': response,
                 'engine': engine_used,
                 'timestamp': datetime.now().isoformat()
             })
+            if not self._voice_turn_is_current(voice_turn_id):
+                print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
+                return
 
             # Speak response via TTS
-            await self._speak_response(response)
+            await self._speak_response(response, voice_turn_id=voice_turn_id)
 
         except Exception as e:
             print(f"[Voice] Process message error: {e}")
@@ -2663,11 +2985,29 @@ class IPCHandler:
                 'timestamp': datetime.now().isoformat()
             })
         finally:
-            if self.voice_active and self.voice_pipeline:
-                self.voice_pipeline.resume_listening(require_wake_word=True)
-                await self.send_event('state-change', 'LISTENING')
-            else:
-                await self.send_event('state-change', 'STANDBY')
+            if not self._voice_turn_is_current(voice_turn_id):
+                if user_history_id and self.conversation_history:
+                    try:
+                        await asyncio.to_thread(self.conversation_history.delete, user_history_id)
+                    except Exception as cleanup_error:
+                        print(f"[Voice] Stale Home history cleanup failed: {type(cleanup_error).__name__}")
+                if memory_episode_id and self.memory:
+                    try:
+                        await self.memory.remove_conversation_episode(memory_episode_id)
+                    except Exception as cleanup_error:
+                        print(f"[Voice] Stale memory cleanup failed: {type(cleanup_error).__name__}")
+                if front_run_id and self.lab_v1:
+                    try:
+                        await self.lab_v1.discard_front_run(front_run_id)
+                    except Exception as cleanup_error:
+                        print(f"[Voice] Stale FrontBrain cleanup failed: {type(cleanup_error).__name__}")
+            if self._voice_turn_is_current(voice_turn_id):
+                if self.voice_active and self.voice_pipeline:
+                    self.voice_pipeline.resume_listening(require_wake_word=True)
+                    await self.send_event('state-change', 'LISTENING')
+                else:
+                    await self.send_event('state-change', 'STANDBY')
+                self._finish_voice_turn(voice_turn_id)
 
     def _schedule_reminder_fire(self, reminder) -> None:
         """Move a scheduler-thread callback safely onto the IPC event loop."""
@@ -2987,10 +3327,28 @@ class IPCHandler:
         except Exception:
             pass  # medir nunca pode atrapalhar
 
-    async def _speak_response(self, text: str):
+    def _begin_voice_turn(self) -> int:
+        self._voice_turn_generation += 1
+        self._active_voice_turn_id = self._voice_turn_generation
+        return self._voice_turn_generation
+
+    def _invalidate_voice_turn(self) -> None:
+        self._voice_turn_generation += 1
+        self._active_voice_turn_id = None
+
+    def _voice_turn_is_current(self, turn_id: int) -> bool:
+        return self._active_voice_turn_id == turn_id
+
+    def _finish_voice_turn(self, turn_id: int) -> None:
+        if self._active_voice_turn_id == turn_id:
+            self._active_voice_turn_id = None
+
+    async def _speak_response(self, text: str, *, voice_turn_id: int | None = None):
         """Speak response using TTS, loading the local model only on first use."""
         value = str(text or "").strip()
         if not value:
+            return
+        if voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id):
             return
 
         live_voice_available = bool(self.gemini_live_voice and self.gemini_live_voice.active)
@@ -3001,6 +3359,8 @@ class IPCHandler:
             except Exception as exc:
                 self._tts_initialized = False
                 print(f"[Voice] TTS lazy initialization failed: {exc}")
+        if voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id):
+            return
 
         # Never feed ZARA's own local TTS back into Vosk.  The microphone
         # worker keeps draining audio but recognition remains paused until the
@@ -3038,6 +3398,20 @@ class IPCHandler:
             # actually spoke and measure it. Observability only: the cascade
             # order and every behaviour below are unchanged.
             _tts_started = time.perf_counter()
+            if _crono := getattr(self, "_cronometro", None):
+                _crono._tts_start_at = _tts_started
+                _speech_end = getattr(_crono, "_speech_end_at", None)
+                if _speech_end is not None:
+                    self._marcar_valor_no_cronometro(
+                        "tts_start_ms",
+                        max(0.0, (_tts_started - _speech_end) * 1000.0),
+                    )
+                _brain_output = getattr(_crono, "_brain_first_output_at", None)
+                if _brain_output is not None:
+                    self._marcar_valor_no_cronometro(
+                        "brain_first_output_to_tts_start_ms",
+                        max(0.0, (_tts_started - _brain_output) * 1000.0),
+                    )
             print("[VOICE_TRACE] stage=TTS_START result=START", flush=True)
             # ZARA-LATENCIA-MEDIDA-001: aqui a ação já aconteceu. Tudo que vier
             # depois é a segunda viagem — o custo de FALAR uma frase que já
@@ -3048,6 +3422,8 @@ class IPCHandler:
             spoken = False
             engine_used = "none"
             # ZARA-VOZ-UNICA-002: cada fala começa com a folha limpa.
+            if voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id):
+                return
             self._fala_interrompida = False
             if live_voice_available and self.gemini_live_voice:
                 spoken = await self.gemini_live_voice.speak(value)
@@ -3068,7 +3444,8 @@ class IPCHandler:
             # causa: interromper faz a Kore devolver "não falei", e a cascata
             # entendia isso como falha e tentava a próxima voz. Parar é uma
             # ordem, não uma falha.
-            if getattr(self, "_fala_interrompida", False):
+            if (getattr(self, "_fala_interrompida", False)
+                    or (voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id))):
                 print("[VOICE_TRACE] stage=TTS_ABORT result=INTERROMPIDO_POR_ALEX", flush=True)
                 return
             # Edge neural (gratuita, sem cota) assume quando a Kore nao fala.
@@ -3141,6 +3518,22 @@ class IPCHandler:
                             self.gemini_live_voice.marcos_da_segunda_viagem().items()
                         ):
                             self._marcar_valor_no_cronometro(_nome, _valor)
+                        _audio_at = self.gemini_live_voice.ultimo_audio_entregue()
+                        if _audio_at is not None:
+                            self._marcar_valor_no_cronometro(
+                                "tts_start_to_first_audio_ms",
+                                max(0.0, (_audio_at - _tts_started) * 1000.0),
+                            )
+                            _speech_end = getattr(_crono, "_speech_end_at", None)
+                            if _speech_end is not None:
+                                self._marcar_valor_no_cronometro(
+                                    "first_audio_played_ms",
+                                    max(0.0, (_audio_at - _speech_end) * 1000.0),
+                                )
+                                self._marcar_valor_no_cronometro(
+                                    "speech_end_to_first_audio_ms",
+                                    max(0.0, (_audio_at - _speech_end) * 1000.0),
+                                )
                 except Exception:
                     pass  # medir nunca pode atrapalhar
                 _crono.fechar(rota="voz", voz=engine_used, falou=spoken)
@@ -3167,21 +3560,24 @@ class IPCHandler:
         except Exception as e:
             print(f"[Voice] TTS error: {e}")
         finally:
+            stale_turn = voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id)
             self._voice_speaking = False
             self._finish_assistant_output()
-            if self.voice_active and self.voice_pipeline:
+            if not stale_turn and self.voice_active and self.voice_pipeline:
                 self.voice_pipeline.resume_listening(require_wake_word=True)
-            await self.send_event('voice-level', {
-                'level': 0.0,
-                'tone': 0.5,
-                'speaking': False,
-                'state': 'STANDBY'
-            })
-            await self.send_event('state-change', 'STANDBY')
+            if not stale_turn:
+                await self.send_event('voice-level', {
+                    'level': 0.0,
+                    'tone': 0.5,
+                    'speaking': False,
+                    'state': 'STANDBY'
+                })
+                await self.send_event('state-change', 'STANDBY')
 
     async def handle_message(self, msg: IPCMessage):
         """Route message to appropriate handler"""
-        if self._smoke_test and msg.type not in {
+        from core.lab_v1.canary import allowed as lab_canary_allowed
+        if self._smoke_test and not lab_canary_allowed(msg.type) and msg.type not in {
             'engine-list', 'action-list', 'system-metrics', 'system-info',
             'voice-status', 'config-get', 'reminder-list',
             'memory-user-search', 'memory-user-list', 'project-memory-get',
@@ -3215,6 +3611,18 @@ class IPCHandler:
             'lab-send': self.handle_lab_send,
             'lab-proposal-create': self.handle_lab_proposal_create,
             'lab-proposal-decide': self.handle_lab_proposal_decide,
+            # ZARA-LAB-V1-001: new multi-agent runtime, additive alongside the
+            # channels above. The old Lab keeps working untouched.
+            'lab-v1-snapshot': self.handle_lab_v1_snapshot,
+            'lab-v1-create-session': self.handle_lab_v1_create_session,
+            'lab-v1-submit': self.handle_lab_v1_submit,
+            'lab-v1-autopilot': self.handle_lab_v1_autopilot,
+            'lab-v1-autonomy-configure': self.handle_lab_v1_autonomy_configure,
+            'lab-v1-cancel-mission': self.handle_lab_v1_cancel_mission,
+            'lab-v1-providers': self.handle_lab_v1_providers,
+            'lab-v1-create-agent': self.handle_lab_v1_create_agent,
+            'lab-v1-archive-agent': self.handle_lab_v1_archive_agent,
+            'lab-v1-rebind-role': self.handle_lab_v1_rebind_role,
             'reminder-create': self.handle_reminder_create,
             'reminder-list': self.handle_reminder_list,
             'reminder-cancel': self.handle_reminder_cancel,
@@ -3378,30 +3786,261 @@ class IPCHandler:
         except Exception as exc:
             await self.send_error(msg, str(exc))
 
-    async def handle_engine_change(self, msg: IPCMessage):
-        engine = str(msg.payload.get('engine') if msg.payload else '').strip()
-        if not engine:
-            await self.send_error(msg, "Engine not specified")
+    # ------------------------------------------------------------
+    # ZARA Lab V1 -- new multi-agent runtime (ZARA-LAB-V1-001)
+    # ------------------------------------------------------------
+
+    _LAB_V1_TEXT_LIMIT = 12000
+
+    async def _ensure_lab_v1(self, msg: IPCMessage):
+        """Lazily construct the LabV1Service facade, or ACK a clear failure.
+
+        Returns the service instance, or None after already sending the
+        "indisponível" error -- callers must return immediately when None.
+        """
+        if not LAB_V1_AVAILABLE or LabV1Service is None:
+            await self.send_error(msg, "ZARA Lab V1 indisponível")
+            return None
+        if self.lab_v1 is None:
+            try:
+                self.lab_v1 = LabV1Service()
+            except Exception as exc:
+                print(f"[IPC] ZARA Lab V1 failed to initialize: {exc}")
+                traceback.print_exc()
+                self.lab_v1 = None
+                await self.send_error(msg, "ZARA Lab V1 indisponível")
+                return None
+        return self.lab_v1
+
+    async def handle_lab_v1_snapshot(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
             return
+        payload = msg.payload or {}
+        session_id = payload.get('session_id')
+        team_id = payload.get('team_id')
+        if session_id is not None and not isinstance(session_id, str):
+            await self.send_error(msg, "session_id inválido")
+            return
+        if team_id is not None and not isinstance(team_id, str):
+            await self.send_error(msg, "team_id inválido")
+            return
+        try:
+            result = await svc.snapshot(session_id, team_id)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
 
-        if engine in {'auto', 'auto_router'}:
-            engine = 'auto_smart'
+    async def handle_lab_v1_create_session(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        objective = str(payload.get('objective') or '').strip()[:self._LAB_V1_TEXT_LIMIT]
+        team_id = payload.get('team_id')
+        if not objective:
+            await self.send_error(msg, "Objetivo vazio")
+            return
+        if team_id is not None and not isinstance(team_id, str):
+            await self.send_error(msg, "team_id inválido")
+            return
+        try:
+            result = await svc.create_session(objective, team_id=team_id)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
 
-        if engine not in {'auto_smart', 'auto_economy'}:
-            if not self.model_router:
-                await self.send_error(msg, "Model router unavailable")
+    async def handle_lab_v1_submit(self, msg: IPCMessage):
+        # Do not ACK QUEUED before a policy-approved mission exists.
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            await self.send_response(msg.request_id, svc.workforce_refusal())
+
+    async def handle_lab_v1_autopilot(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        intent = payload.get('intent')
+        if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= self._LAB_V1_TEXT_LIMIT:
+            await self.send_error(msg, 'Objetivo invalido')
+            return
+        result = await svc.start_autopilot(intent.strip())
+        entry_canary = self._smoke_test and os.environ.get('ZARA_LAB_ENTRY_CANARY') == '1'
+        if result.get('success') and not entry_canary:
+            task = asyncio.create_task(svc.run_autopilot(result['session_id']))
+            self._lab_v1_background_tasks.add(task)
+            task.add_done_callback(self._lab_v1_background_tasks.discard)
+        # The ACK follows persistence, never claims that the mission has finished.
+        await self.send_response(msg.request_id, result)
+
+    async def handle_lab_v1_cancel_mission(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            session_id = str((msg.payload or {}).get('session_id') or '')
+            await self.send_response(msg.request_id, await svc.cancel_autopilot(session_id))
+
+    async def handle_lab_v1_autonomy_configure(self, msg: IPCMessage):
+        if self._smoke_test:
+            await self.send_error(msg, 'Autonomia desabilitada no canary isolado')
+            return
+        svc = await self._ensure_lab_v1(msg)
+        enabled = (msg.payload or {}).get('enabled')
+        if type(enabled) is not bool:
+            await self.send_error(msg, 'Estado de autonomia invalido')
+            return
+        if svc is not None:
+            await self.send_response(msg.request_id, await svc.configure_autonomy(enabled))
+
+    async def handle_lab_v1_providers(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        try:
+            result = await svc.providers()
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_create_agent(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, "Payload inválido")
+            return
+        name = str(payload.get('name') or '').strip()[:self._LAB_V1_TEXT_LIMIT]
+        provider_id = str(payload.get('provider_id') or '').strip()
+        model = str(payload.get('model') or '').strip()
+        if not name or not provider_id or not model:
+            await self.send_error(msg, "Nome, provedor e modelo são obrigatórios")
+            return
+        instructions = str(payload.get('instructions') or '')[:self._LAB_V1_TEXT_LIMIT]
+        # Only forward keys LabV1Service.create_agent actually accepts
+        # (core/lab_v1/service.py): name, provider_id, model, role, team_id,
+        # lifecycle, instructions, fallback_agent_id. Unknown extras are
+        # dropped rather than passed through, so a stray renderer field can
+        # never turn into a TypeError deep in the service.
+        kwargs: dict[str, Any] = {
+            'name': name,
+            'provider_id': provider_id,
+            'model': model,
+            'instructions': instructions,
+        }
+        role = payload.get('role')
+        if isinstance(role, str) and role.strip():
+            kwargs['role'] = role.strip()
+        lifecycle = payload.get('lifecycle')
+        if isinstance(lifecycle, str) and lifecycle.strip():
+            kwargs['lifecycle'] = lifecycle.strip()
+        team_id = payload.get('team_id')
+        if isinstance(team_id, str) and team_id.strip():
+            kwargs['team_id'] = team_id.strip()
+        fallback_agent_id = payload.get('fallback_agent_id')
+        if isinstance(fallback_agent_id, str) and fallback_agent_id.strip():
+            kwargs['fallback_agent_id'] = fallback_agent_id.strip()
+        try:
+            result = await svc.create_agent(**kwargs)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_archive_agent(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        agent_id = str(payload.get('agent_id') or '').strip()
+        if not agent_id:
+            await self.send_error(msg, "agent_id ausente")
+            return
+        try:
+            result = await svc.archive_agent(agent_id)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_rebind_role(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        team_id = str(payload.get('team_id') or '').strip()
+        role = str(payload.get('role') or '').strip()
+        agent_id = str(payload.get('agent_id') or '').strip()
+        reason = str(payload.get('reason') or '').strip()[:self._LAB_V1_TEXT_LIMIT]
+        if not team_id or not role or not agent_id:
+            await self.send_error(msg, "team_id, role e agent_id são obrigatórios")
+            return
+        try:
+            result = await svc.rebind_role(team_id, role, agent_id, reason)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_engine_change(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        engine = (msg.payload or {}).get('engine')
+        try:
+            result = await svc.select_front_brain(engine)
+            if not result.get('success'):
+                await self.send_error(msg, result.get('error', 'Modelo indisponivel.'))
                 return
-            available_ids = {model.id for model in self.model_router.get_available_models()}
-            # Native Gemini Live is a voice transport, not a text-chat engine.
-            available_ids.discard('gemini_live')
-            if engine not in available_ids:
-                await self.send_error(msg, f"Engine unavailable or API key missing: {engine}")
-                return
+            self.current_engine = result['engine']
+            await self.send_response(msg.request_id, result)
+        except Exception:
+            await self.send_error(msg, 'Nao foi possivel salvar a selecao do modelo.')
 
-        self.current_engine = engine
-        self._persist_engine_preference(engine)
-        print(f"[IPC] Engine changed to: {engine}")
-        await self.send_response(msg.request_id, {'success': True, 'engine': engine})
+    def _front_runtime_capability_context(self, channel):
+        """Small factual contract shared by every conversational input channel."""
+        normalized_channel = str(channel or 'UNKNOWN').strip().upper()
+        return '\n'.join((
+            '[ZARA_RUNTIME_CONTEXT]',
+            'identity=ZARA',
+            'runtime=ZARA_DESKTOP',
+            f'channel={normalized_channel}',
+            'session_id=session_zara_front_v1',
+            'local_dispatcher=AVAILABLE',
+            f'reminders={"AVAILABLE" if self.reminder_engine is not None else "UNAVAILABLE"}',
+            f'memory={"AVAILABLE" if self.memory is not None else "UNAVAILABLE"}',
+            f'conversation_history={"AVAILABLE" if self.conversation_history is not None else "UNAVAILABLE"}',
+            f'voice_active={str(bool(self.voice_active)).upper()}',
+            f'voice_mode={str(self.voice_mode or "off").upper()}',
+            f'gemini_live_transport={"AVAILABLE" if self.gemini_live_voice is not None else "UNAVAILABLE"}',
+            f'local_voice_pipeline={"AVAILABLE" if self.voice_pipeline is not None else "UNAVAILABLE"}',
+            f'lab_coordinator={"AVAILABLE" if self.lab is not None else "UNAVAILABLE"}',
+            f'lab_v1_runtime={"AVAILABLE" if LAB_V1_AVAILABLE else "UNAVAILABLE"}',
+            'runtime_context_overrides_stale_conversation_claims=TRUE',
+            'channel_changes_identity=FALSE',
+            '[/ZARA_RUNTIME_CONTEXT]',
+        ))
+
+    async def _front_conversation_reply(self, text, requested_model=None, voice_turn_id=None,
+                                        channel='TEXT'):
+        if self.lab_v1 is None:
+            if not LAB_V1_AVAILABLE or LabV1Service is None:
+                raise RuntimeError('Conversa ZARA indisponivel.')
+            self.lab_v1 = LabV1Service()
+        enriched = await self._enrich_with_memory(text)
+        context = (str(enriched)[:6000] if enriched != text else '')
+        context += '\n' + str(getattr(self, 'mentor_context', '') or '')[:4000]
+        context += '\n' + self._front_runtime_capability_context(channel)
+        history = None
+        if self.conversation_history is not None:
+            history = await asyncio.to_thread(self.conversation_history.list_recent, 20)
+        result_is_current = None
+        if voice_turn_id is not None:
+            result_is_current = lambda: self._voice_turn_is_current(voice_turn_id)
+        result = await self.lab_v1.front_reply(
+            text, requested_model=requested_model, history=history, context=context,
+            result_is_current=result_is_current,
+        )
+        if result.get('engine'):
+            self.current_engine = result['engine']
+        return result
 
     async def handle_send_message(self, msg: IPCMessage):
         payload = msg.payload or {}
@@ -3436,6 +4075,7 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': jarvis_reply,
                 'engine': 'jarvis_plan',
+                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -3447,6 +4087,7 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': reminder_reply,
                 'engine': 'reminder',
+                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -3457,6 +4098,7 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': memory_reply,
                 'engine': 'operational_memory',
+                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -3468,6 +4110,7 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': self_reply,
                 'engine': 'self_knowledge',
+                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -3478,6 +4121,7 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': file_reply,
                 'engine': 'file_control',
+                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -3505,6 +4149,7 @@ class IPCHandler:
                 'response': pc_reply,
                 'engine': 'pc_control',
                 'selo': selo,
+                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -3516,12 +4161,25 @@ class IPCHandler:
             # Nao muda nada no comando do dia a dia; flag desligada (padrao)
             # e byte a byte o comportamento de antes.
             fallback_reply = await _tentar_raciocinio_livre_texto(self, text)
+            if fallback_reply is None:
+                # NIGHT-07, mesma chamada do caminho de voz. Fica DEPOIS da
+                # Etapa 3 e so quando ela nao respondeu: com a flag desligada
+                # (padrao, e o que roda em producao) isto e byte a byte o
+                # mesmo ponto do caminho de voz; com a flag ligada, uma frase
+                # que a Etapa 3 roteou nao e lacuna e nao vira gap.
+                self._remember_unhandled_intent(text)
             reply = fallback_reply if fallback_reply is not None else RESPOSTA_NAO_SEI
             engine_usado = 'raciocinio_livre_texto' if fallback_reply is not None else 'local_action_guard'
             await self._append_conversation_message("assistant", reply, engine_usado)
             await self.send_response(msg.request_id, {
                 'response': reply,
                 'engine': engine_usado,
+                # The optional legacy LLM classifier has no FrontBrain Run
+                # receipt. Keep it explicitly unproven so Home fails closed.
+                'response_origin': (
+                    'unproven_legacy' if fallback_reply is not None
+                    else 'local_deterministic'
+                ),
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -3531,26 +4189,21 @@ class IPCHandler:
         # telemetria abaixo.
         _telemetry_raw_text = text
 
-        # ZARA-USER-MEMORY-CONTEXT-001: enriquece com memorias relevantes (top-K)
-        text = await self._enrich_with_memory(text)
-
-        # CONTEXT SYNC: prepend mentor context if available
-        if getattr(self, 'mentor_context', '') and self.mentor_context.strip():
-            text = f"[CONTEXTO DO MENTOR - Carregado do mentor_context_latest.md]\n{self.mentor_context}\n\n---\nMensagem de Alex:\n{text}"
-
         try:
-            history = payload.get('history', [])
-            if self.orchestrator:
-                if _has_broad_action_language_signal(_telemetry_raw_text):
-                    _log_intent_telemetry("escaped_to_orchestrator", "text", _telemetry_raw_text)
-                response = await self.orchestrator.process_message(
-                    text, engine=engine, history=history
+            front_result = await self._front_conversation_reply(
+                text, payload.get('engine'), channel='TEXT'
+            )
+            if not front_result.get('success'):
+                await self._append_conversation_message(
+                    "system", "Backend indisponível para esta solicitação.",
+                    front_result.get('engine') or engine,
                 )
-                engine_used = self.orchestrator.last_engine_used or engine
-            else:
-                raise RuntimeError("No model backend is available")
+                await self.send_response(msg.request_id, front_result)
+                await self.send_event('state-change', 'ERROR')
+                return
 
-            response = str(response)
+            response = str(front_result['response'])
+            engine_used = front_result['engine']
 
             # Store the turn in episodic memory, not in compact fact memory.
             if self.memory:
@@ -3558,10 +4211,7 @@ class IPCHandler:
 
             await self._append_conversation_message("assistant", response, engine_used)
 
-            await self.send_response(msg.request_id, {
-                'response': response,
-                'engine': engine_used
-            })
+            await self.send_response(msg.request_id, {**front_result, 'response': response})
             await self.send_event('state-change', 'STANDBY')
 
             # Text chat already returns this response to the invoking renderer.
@@ -3578,6 +4228,7 @@ class IPCHandler:
 
     async def handle_interrupt(self, msg: IPCMessage):
         print("[IPC] Interrupt requested")
+        self._invalidate_voice_turn()
         if self.tts_manager:
             self.tts_manager.interrupt()
         if self.gemini_live_voice and self.gemini_live_voice.active:
@@ -4144,16 +4795,10 @@ class IPCHandler:
     async def _conversar(self, texto: str) -> str:
         """A ZARA respondendo como ela mesma. ZARA-TELEGRAM-CONVERSA-001."""
         try:
-            enriquecido = await self._enrich_with_memory(texto)
-        except Exception:
-            enriquecido = texto
-
-        try:
-            if self.orchestrator:
-                resposta = await self.orchestrator.process_message(
-                    enriquecido, engine="auto_smart", history=[]
-                )
-                return str(resposta).strip() or "Tô aqui."
+            result = await self._front_conversation_reply(texto, channel='TELEGRAM')
+            if result.get('success'):
+                return str(result.get('response') or '').strip() or "Tô aqui."
+            return str(result.get('error') or 'O cérebro selecionado não respondeu agora.')
         except Exception as exc:
             print(f"[TELEGRAM] conversa falhou: {type(exc).__name__}", flush=True)
 
@@ -4261,87 +4906,15 @@ class IPCHandler:
         return self._ocioso_ha_quantos_segundos() >= self._LONGE_APOS
 
     async def _ligar_vigia_das_respostas(self) -> None:
-        """Avisa Alex quando o Claude ou o Codex terminam de responder.
+        """Keep the owner-revoked legacy cross-app announcer disabled.
 
-        ZARA-VIGIA-001. Sem isto ele fica olhando a tela para saber se chegou
-        resposta — o desgaste que a ponte inteira existe para acabar.
+        Existing conversation/history is preserved. Boot and reconnect must not
+        start window scraping, unsolicited speech, or forwarding to Telegram.
         """
-        try:
-            if getattr(self, "_vigia", None) is not None:
-                return
-            from core.vigia_das_respostas import VigiaDasRespostas
-
-            def pode_avisar() -> bool:
-                # Nunca por cima da fala dela nem da fala do Alex.
-                voz = self.gemini_live_voice
-                if voz is not None and getattr(voz, "speaking_now", False):
-                    return False
-                return not self._voice_speaking
-
-            async def avisar(texto: str, conteudo: str = "") -> None:
-                # ZARA-TELEGRAM-001: o aviso vai para os dois lugares. Se ele
-                # estiver longe do computador, é no celular que ele precisa
-                # saber que chegou resposta.
-                #
-                # ZARA-VIGIA-CONTEUDO-001. Alex: "porque nao ta aparecendo o que
-                # voces tao conversando aqui la no telegram?". Porque ela só
-                # dizia "o Codex respondeu" — o aviso, nunca a resposta. No
-                # computador isso basta, ele vira a cabeça e lê. No celular não:
-                # saber que existe uma resposta que ele não pode ler é pior do
-                # que não ser avisado.
-                #
-                # A voz continua curta de propósito. Ouvir a resposta inteira
-                # sem pedir é justamente o que o botão vermelho existe para
-                # evitar; ler no celular é escolha dele, no tempo dele.
-                await self._speak_response(texto)
-                ponte = getattr(self, "_telegram", None)
-                if ponte is None:
-                    return
-
-                # ZARA-VIGIA-LONGE-001
-                #
-                # Alex: "suas respostas tao saindo aqui e la ainda no telegram".
-                #
-                # Mandar o texto inteiro para o celular resolveu um problema
-                # ("porque nao aparece o que voces tao conversando la?") e criou
-                # outro: com ele sentado lendo a resposta na tela, o celular
-                # apitava a mesma coisa. Aviso repetido vira aviso ignorado.
-                #
-                # O critério não é uma opção a mais para ele configurar: é o
-                # teclado e o mouse dele. Mexendo no computador, ele já está
-                # lendo — vai só o aviso curto. Longe, vai o texto inteiro,
-                # porque a tela não serve para nada nesse caso.
-                # ZARA-RESPOSTA-VOLTA-POR-ONDE-VEIO-001
-                #
-                # A regra de "só manda se ele estiver longe" estava certa para
-                # aviso que ninguém pediu, e ERRADA para resposta a pergunta.
-                #
-                # O que aconteceu, no histórico de hoje às 20h43: ele escreveu
-                # "ta ai" pelo Telegram, a ZARA entregou para mim e respondeu a
-                # ele "te aviso quando responder". Eu respondi — no computador.
-                # A resposta ficou presa aqui porque ele estava perto do PC, e
-                # do lado dele foi silêncio. Ele passou vinte minutos perguntando
-                # à ZARA o que tinha acontecido comigo.
-                #
-                # Ele mesmo resumiu: "voce quebrou meu fluxo de trabalho, sem
-                # voce nao consegui fazer nada".
-                #
-                # A regra certa é a mais velha do mundo: **resposta volta por
-                # onde a pergunta veio**. Se ele perguntou pelo celular, a
-                # resposta vai ao celular, esteja ele onde estiver. A distância
-                # só decide o que fazer com aviso que ele NÃO pediu.
-                esperando = bool(getattr(self, "_pergunta_veio_do_celular", False))
-                if conteudo and (esperando or self._alex_esta_longe()):
-                    await ponte.avisar(f"{texto}\n\n{conteudo}".strip())
-                    self._pergunta_veio_do_celular = False
-                else:
-                    await ponte.avisar(texto)
-
-            self._vigia = VigiaDasRespostas(avisar, pode_avisar=pode_avisar)
-            await self._vigia.iniciar()
-        except Exception as exc:
+        existing = getattr(self, "_vigia", None)
+        if existing is not None:
+            await existing.parar()
             self._vigia = None
-            print(f"[IPC] vigia das respostas nao ligou: {exc}", flush=True)
 
     # ZARA-JANELA-DE-CONVERSA-001 -----------------------------------------
     #
@@ -4505,11 +5078,16 @@ class IPCHandler:
         })
 
     async def handle_config_get(self, msg: IPCMessage):
-        config = {
-            'current_engine': self.current_engine,
-            'voice_active': self.voice_active,
-        }
-        await self.send_response(msg.request_id, config)
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        try:
+            snapshot = await svc.front_snapshot()
+            self.current_engine = snapshot['current']
+            await self.send_response(msg.request_id, {
+                'current_engine': self.current_engine, 'voice_active': self.voice_active})
+        except Exception:
+            await self.send_error(msg, 'Nao foi possivel ler o modelo selecionado.')
 
     async def handle_self_status(self, msg: IPCMessage):
         """Return structured runtime truth for UI/LAB consumers."""
@@ -4521,7 +5099,9 @@ class IPCHandler:
         key = payload.get('key')
         value = payload.get('value')
         if key == 'engine':
-            self.current_engine = value
+            await self.handle_engine_change(IPCMessage(type='engine-change', request_id=msg.request_id,
+                                                       payload={'engine': value}))
+            return
         elif key and str(key).endswith('_api_key'):
             try:
                 from core.paths import api_keys_path
@@ -4545,62 +5125,15 @@ class IPCHandler:
         await self.send_response(msg.request_id, {'success': True})
 
     async def handle_engine_list(self, msg: IPCMessage):
-        """Return zero-cost text engines and AUTO policies without exposing keys."""
-        engines: list[dict[str, Any]] = [
-            {
-                # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): padrão agora.
-                # Primeiro na lista de propósito -- é a opção recomendada.
-                'id': 'auto_fast',
-                'name': 'AUTO • RÁPIDO',
-                'provider': 'zara',
-                'free_tier': 'Prioriza o motor mais rápido disponível + fallback R$0',
-                'status': 'READY',
-            },
-            {
-                'id': 'auto_smart',
-                'name': 'AUTO • INTELIGENTE',
-                'provider': 'zara',
-                'free_tier': 'Qualidade + tarefa + saúde + fallback R$0',
-                'status': 'READY',
-            },
-            {
-                'id': 'auto_economy',
-                'name': 'AUTO • ECONÔMICO',
-                'provider': 'zara',
-                'free_tier': 'Prioriza modelos leves/rápidos e preserva cotas',
-                'status': 'READY',
-            },
-        ]
-        health: list[dict[str, Any]] = []
-        if self.model_router:
-            health = self.model_router.configured_model_status(include_paid=False)
-            for model in self.model_router.get_available_models(include_paid=False):
-                engines.append({
-                    'id': model.id,
-                    'name': model.name,
-                    'provider': model.provider.value,
-                    'free_tier': model.free_tier_limit,
-                    'status': self.model_router.health_for(model.id).get('state', 'AVAILABLE'),
-                })
-
-        if self.current_engine in {'auto', 'auto_router'}:
-            self.current_engine = 'auto_fast'
-        available_ids = {engine['id'] for engine in engines}
-        if self.current_engine not in available_ids:
-            self.current_engine = 'auto_fast'
-
-        await self.send_response(msg.request_id, {
-            'current': self.current_engine,
-            'engines': engines,
-            'health': health,
-            'last_engine_used': self.orchestrator.last_engine_used if self.orchestrator else None,
-            'voice': {
-                'id': 'gemini_live',
-                'name': 'Gemini 3.1 Flash Live',
-                'voice': 'Kore',
-                'available': bool(os.environ.get('GEMINI_API_KEY')),
-            },
-        })
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        try:
+            snapshot = await svc.front_snapshot()
+            self.current_engine = snapshot['current']
+            await self.send_response(msg.request_id, snapshot)
+        except Exception:
+            await self.send_error(msg, 'Nao foi possivel consultar os modelos.')
 
     async def handle_action_list(self, msg: IPCMessage):
         """Return all registered actions with specs"""

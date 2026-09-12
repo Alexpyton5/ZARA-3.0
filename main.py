@@ -92,6 +92,14 @@ async def run_ipc_handler():
 def main() -> int:
     """Main entry point."""
     configure_utf8_stdio()
+    if os.environ.get('ZARA_SMOKE_TEST') == '1':
+        import tempfile
+        sandbox = Path(os.environ.get('ZARA3_HOME', '')).resolve()
+        temporary_root = Path(tempfile.gettempdir()).resolve()
+        if (not os.environ.get('ZARA3_HOME') or not sandbox.is_relative_to(temporary_root)
+                or not (sandbox / '.zara-smoke-runtime').is_file()):
+            print('[ERROR] Smoke mode requires a marked temporary ZARA3_HOME directory')
+            return 1
     print("=" * 60)
     print("  ZARA 3.0 — NEURAL INTERFACE")
     print("  Python Sidecar Starting...")

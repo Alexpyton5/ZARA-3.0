@@ -290,6 +290,7 @@ class GeminiLiveVoice:
         # --- Roteamento e ordem de turno (ZARA-VOICE-FLUIDEZ-001 / -ORDEM-001) ---
         self._turn_direct = False        # o audio deste turno pode tocar?
         self._turn_route_decided = False # ja decidimos o roteamento do turno?
+        self._turn_routed_early = False  # executor started at first model frame
         self._utterance_open = False     # Alex esta no meio de uma fala?
         self._routed_turn_task: asyncio.Task | None = None
         # --- Anti-loop de eco (ZARA-VOICE-ECO-002) ---
@@ -318,6 +319,7 @@ class GeminiLiveVoice:
         # crus; quem transforma em ms e quem le. Observabilidade apenas: nenhum
         # deles muda comportamento.
         self._t_fim_fala_usuario: float | None = None   # VAD do servidor fechou
+        self._t_transcricao_pronta: float | None = None # texto final pronto para rota
         self._t_fala_pedida: float | None = None        # mandamos FALE_EXATAMENTE
         self._t_primeiro_byte_tts: float | None = None  # 1o audio da Kore chegou
         self._t_audio_entregue: float | None = None     # 1o audio foi para o player
@@ -567,9 +569,15 @@ class GeminiLiveVoice:
             await asyncio.wait_for(done.wait(), timeout=timeout)
             return True
         except TimeoutError:
+            # Release the sender too; a missing turn_complete must not deadlock
+            # every later utterance. A timed-out queued request is skipped.
+            done.set()
+            if self._speech_done is done:
+                await self.interrupt_speech()
             return False
         finally:
-            self._play_generated_audio = False
+            if self._speech_done is done:
+                self._play_generated_audio = False
 
     # ZARA-LATENCIA-SEGUNDA-VIAGEM-001 — leitura dos marcos ---------------
     #
@@ -585,6 +593,14 @@ class GeminiLiveVoice:
         recem-aberta, ou fala nova que ja zerou o marco.
         """
         return self._t_fim_fala_usuario
+
+    def ultima_transcricao_pronta(self) -> float | None:
+        """perf_counter em que a transcricao ficou pronta para a rota canonica."""
+        return self._t_transcricao_pronta
+
+    def ultimo_audio_entregue(self) -> float | None:
+        """perf_counter do primeiro frame Kore entregue ao player."""
+        return self._t_audio_entregue
 
     def marcos_da_segunda_viagem(self) -> dict[str, int]:
         """Quanto custou a ida e volta ao Google para a Kore ler o resultado."""
@@ -633,6 +649,16 @@ class GeminiLiveVoice:
     async def interrupt_speech(self) -> None:
         """Stop only the current generated reply and keep the live session usable."""
         self._play_generated_audio = False
+        # Late audio from a direct conversational turn must not restart playback.
+        self._turn_direct = False
+        self._turn_route_decided = True
+        if self._speech_queue is not None:
+            while not self._speech_queue.empty():
+                try:
+                    _, pending_done = self._speech_queue.get_nowait()
+                    pending_done.set()
+                except asyncio.QueueEmpty:
+                    break
         await asyncio.to_thread(self._flush_output)
         self._mark_assistant_output_finished()
         if self._speech_done is not None:
@@ -1108,6 +1134,8 @@ class GeminiLiveVoice:
             return
         while not self._stop.is_set():
             text, done = await self._speech_queue.get()
+            if done.is_set():
+                continue
             # O turn_complete / interrupted que chegar a seguir libera ESTE
             # pedido, e nenhum outro (ZARA-VOICE-ORDEM-001).
             self._speech_done = done
@@ -1123,6 +1151,9 @@ class GeminiLiveVoice:
                 ),
                 turn_complete=True,
             )
+            # Only one generated speech request owns the live connection at a time.
+            # Otherwise a queued notification can cut off the current sentence.
+            await done.wait()
 
     async def _receive_loop(self, session: Any, sd: Any) -> None:
         while not self._stop.is_set():
@@ -1217,6 +1248,19 @@ class GeminiLiveVoice:
                         )
                     if not self._turn_route_decided and not self._play_generated_audio:
                         self._decide_turn_route()
+                    # The selected FrontBrain is the only conversational brain.
+                    # Once the first model frame proves that input transcription
+                    # is complete, dispatch it immediately instead of waiting for
+                    # Gemini to finish an answer whose audio will be discarded.
+                    if (
+                        not self._play_generated_audio
+                        and self._turn_route_decided
+                        and not self._turn_direct
+                        and not self._turn_rejected_as_echo
+                        and not self._turn_routed_early
+                        and self._input_text.strip()
+                    ):
+                        self._route_executor_early()
                     for part in getattr(model_turn, "parts", []) or []:
                         inline = getattr(part, "inline_data", None)
                         audio_data = getattr(inline, "data", None) if inline else None
@@ -1290,11 +1334,13 @@ class GeminiLiveVoice:
         self._utterance_open = True
         self._turn_route_decided = False
         self._turn_direct = False
+        self._turn_routed_early = False
         self._turn_rejected_as_echo = False
         # ZARA-LATENCIA-SEGUNDA-VIAGEM-001: fala nova, relogio novo. Sem isto o
         # "fim da fala" ficaria preso no primeiro turno da sessao e todo turno
         # seguinte reportaria uma espera absurda e falsa.
         self._t_fim_fala_usuario = None
+        self._t_transcricao_pronta = None
         # ZARA-VOICE-ECO-002: congela AQUI se esta fala nasceu por cima da voz
         # da ZARA. Congelar no inicio e o que torna o sinal confiavel — quando
         # o turno terminar ela ja parou de falar e a informacao teria sumido.
@@ -1350,6 +1396,7 @@ class GeminiLiveVoice:
         self._utterance_open = False
         self._turn_route_decided = False
         self._turn_direct = False
+        self._turn_routed_early = False
         self._turn_echo_suspect = False
         self._turn_echo_references = ()
         self._turn_rejected_as_echo = False
@@ -1358,6 +1405,7 @@ class GeminiLiveVoice:
         user_text = self._input_text.strip()
         model_text = self._output_text.strip()
         direct = self._turn_direct
+        routed_early = self._turn_routed_early
         echo_references = tuple(dict.fromkeys(
             (*self._turn_echo_references, *self._echo_reference_texts())
         ))
@@ -1376,7 +1424,7 @@ class GeminiLiveVoice:
             )
             await self._emit_level(0.0, False)
             return
-        if user_text or model_text:
+        if (user_text or model_text) and not routed_early:
             # Do not block the receive loop: deterministic action routing may
             # ask this same Live session to speak the verified result.
             #
@@ -1400,6 +1448,25 @@ class GeminiLiveVoice:
             await self._emit_state("IDLE")
         else:
             await self._emit_state("LISTENING")
+
+    def _route_executor_early(self) -> None:
+        """Start the canonical voice route before the discarded draft completes."""
+        user_text = self._input_text.strip()
+        if not user_text or self._turn_routed_early:
+            return
+        self._t_transcricao_pronta = time.perf_counter()
+        self._turn_routed_early = True
+        self._cancel_superseded_routed_turn()
+        task = asyncio.create_task(
+            self._call(self.on_turn, user_text, "", False),
+            name="zara-gemini-live-routed-turn",
+        )
+        self._routed_turn_task = task
+        task.add_done_callback(
+            lambda t: setattr(self, "_routed_turn_task", None)
+            if self._routed_turn_task is t else None
+        )
+        print("[VOICE_TRACE] stage=EARLY_EXECUTOR_ROUTE result=PASS", flush=True)
 
     def _ensure_output_stream(self, sd: Any) -> None:
         if self._output_stream is not None:

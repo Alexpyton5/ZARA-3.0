@@ -119,8 +119,9 @@ def terminal_bg_action(command: str, cwd: str = ".", name: str = "") -> ActionRe
 
         return ActionResult(
             success=True,
-            output=f"Started background process (PID: {proc.pid})",
-            data={"pid": proc.pid, "name": name or command[:50]}
+            output=f"STARTED: background process (PID: {proc.pid})",
+            data={"status": "STARTED", "pid": proc.pid, "name": name or command[:50]},
+            verificado=False,
         )
     except Exception as e:
         return ActionResult(success=False, error=str(e))

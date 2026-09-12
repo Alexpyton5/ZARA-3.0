@@ -625,6 +625,13 @@ class PcVoiceIntentDetector:
         # Resolve explicit volume before the intentionally broad music phrase
         # "coloque <faixa>"; otherwise "coloque o volume em 30%" is mistaken
         # for a YouTube title.
+        if re.fullmatch(r'(?:zara[,\s]+)?(?:d[êe]\s+play|(?:inicie|comece)\s+a\s+reprodu[çc][ãa]o)(?:\s+(?:no|do)\s+v[íi]deo)?\s*[.!?]*', text_lower):
+            return PcVoiceResult(is_pc_intent=True, action="youtube_resume", param="resume", physical_effect=1)
+        if re.fullmatch(r'(?:se\s+(?:tiver|houver)\s+an[úu]ncios?\s+)?pule(?:\s+(?:os?\s+)?an[úu]ncios?)?\s*[.!?]*', text_lower) and 'an' in text_lower:
+            return PcVoiceResult(is_pc_intent=True, action="youtube_skip_ad", param="skip", physical_effect=1)
+        if re.fullmatch(r'(?:diminua|diminui|reduza|abaixe)\s+(?:o\s+)?brilho\s+(?:ao|no)\s+m[áa]ximo\s*[.!?]*', text_lower):
+            return PcVoiceResult(is_pc_intent=True, action="os_brightness_absolute", param="0", physical_effect=1)
+
         explicit_volume = re.fullmatch(
             r'(?:zara[,\s]+)?(?:coloque|coloca|defina|ponha|deixe|set)?\s*(?:o\s+)?volume\s+(?:em\s+)?(\d{1,3})\s*%?\s*[.!?]*',
             text_lower,

@@ -29,6 +29,18 @@ def detect_self_knowledge_topic(text: str) -> str | None:
         return component_match.group(1)
     if re.search(r"\b(qual|quais).*(provider|provedor)|\bproviders? disponiveis\b", value):
         return "providers"
+    if re.search(
+        r"\b(?:sistema|motor|pipeline|modo|voz)\b.*\b(?:voz|gemini(?: live)?|vosk|kokoro)\b"
+        r"|\b(?:gemini(?: live)?|vosk|kokoro)\b.*\b(?:voz|sistema|motor|pipeline|modo)\b",
+        value,
+    ):
+        return "voice"
+    if re.search(
+        r"\b(?:zara )?lab\b.*\b(?:funcional|funcionando|pronto|disponivel|estado|status|implementado)\b"
+        r"|\b(?:funcional|funcionando|pronto|disponivel|estado|status|implementado)\b.*\b(?:zara )?lab\b",
+        value,
+    ):
+        return "lab_status"
     if re.search(r"\bqual (modelo|motor)\b|\bmodelo (esta|voce esta) usando\b", value):
         return "model"
     if re.search(r"\b(onde voce esta instalada|qual (e )?(seu )?(root|source|runtime)|onde fica sua instalacao)\b", value):
@@ -42,6 +54,18 @@ def detect_self_knowledge_topic(text: str) -> str | None:
     if re.search(r"\bquem e voce\b|\bo que e a? ?zara\b|\bse apresente\b", value):
         return "identity"
     return None
+
+
+def is_self_knowledge_followup(text: str) -> bool:
+    """Recognize a narrow request to re-check the immediately preceding topic."""
+    value = _plain(text)
+    return bool(
+        re.fullmatch(
+            r"(?:voce )?(?:consegue|pode|da para) "
+            r"(?:checar|verificar|confirmar|conferir) (?:isto|isso)(?: para mim)?[?!.]?",
+            value,
+        )
+    )
 
 
 def _component(snapshot: dict[str, Any], name: str) -> dict[str, Any]:
@@ -92,6 +116,40 @@ def render_self_knowledge(topic: str, snapshot: dict[str, Any]) -> str:
         return (
             f"Estou executando em modo {mode}. Source/root: {runtime.get('source_root')}. "
             f"Runtime: {runtime.get('executable')}. Dados locais: {runtime.get('data_root')}."
+        )
+
+    if topic == "voice":
+        voice = _component(snapshot, "voice")
+        active = bool(voice.get("active"))
+        mode = str(voice.get("mode") or "off")
+        live_ready = bool(voice.get("gemini_live_ready"))
+        local_ready = bool(voice.get("local_pipeline_ready"))
+        tts_ready = bool(voice.get("tts_ready"))
+        if active and mode == "gemini_live":
+            transport = "o transporte de áudio ativo é Gemini Live com Kore"
+        elif active and mode == "local":
+            transport = "o transporte de áudio local está ativo"
+        else:
+            transport = "o microfone está inativo agora"
+        return (
+            "Estado observado agora: " + transport + ". "
+            f"Gemini Live preparado: {'sim' if live_ready else 'não'}; "
+            f"pipeline local preparado: {'sim' if local_ready else 'não'}; "
+            f"TTS preparado: {'sim' if tts_ready else 'não'}. "
+            "Depois do reconhecimento de fala, a resposta usa o cérebro selecionado na Home; "
+            "Gemini Live é transporte de voz, não uma segunda inteligência conversacional."
+        )
+
+    if topic == "lab_status":
+        lab = _component(snapshot, "lab")
+        lab_v1 = _component(snapshot, "lab_v1")
+        return (
+            "Estado observado agora: "
+            + _state_line("coordenador Lab", lab)
+            + "; "
+            + _state_line("runtime Lab V1", lab_v1)
+            + ". Este snapshot confirma disponibilidade e inicialização; "
+            "não prova que todo o Lab esteja totalmente funcional sem o teste end-to-end correspondente."
         )
 
     if topic in {"codex", "mentor", "lab"}:

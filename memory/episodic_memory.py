@@ -180,6 +180,13 @@ class EpisodicMemory:
             connection.commit()
         return count
 
+    def delete(self, episode_id: str) -> bool:
+        """Delete one exact episode, used to roll back an interrupted turn."""
+        with self._lock, closing(self._connect()) as connection:
+            cursor = connection.execute("DELETE FROM episodes WHERE id=?", (str(episode_id),))
+            connection.commit()
+            return cursor.rowcount == 1
+
 
 _default_store = EpisodicMemory()
 
@@ -191,6 +198,11 @@ def record_episode(content: str, *, kind: str = "session_summary", metadata: dic
     except Exception as exc:
         print(f"[EpisodicMemory] Could not save episode: {exc}")
         return None
+
+
+def delete_episode(episode_id: str) -> bool:
+    """Remove one episode by its opaque identifier."""
+    return _default_store.delete(episode_id)
 
 
 def episodic_context(query: str, limit: int = 3, max_chars: int = 700) -> str:

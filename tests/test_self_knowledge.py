@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from core.ipc_handlers import IPCHandler, IPCMessage
-from core.self_knowledge import detect_self_knowledge_topic
+from core.self_knowledge import detect_self_knowledge_topic, is_self_knowledge_followup
 
 
 @pytest.mark.parametrize(
@@ -21,6 +21,9 @@ from core.self_knowledge import detect_self_knowledge_topic
         ("Onde você está instalada?", "runtime"),
         ("O que você consegue fazer?", "capabilities"),
         ("Por que a última ação falhou?", "failure"),
+        ("O sistema novo de voz da ZARA já foi implementado ou ainda usa Gemini?", "voice"),
+        ("Você já está com o novo motor de voz ativado ou ainda usa Gemini Live?", "voice"),
+        ("O ZARA Lab já está totalmente funcional?", "lab_status"),
     ],
 )
 def test_detects_only_supported_self_knowledge_questions(question, topic):
@@ -30,6 +33,105 @@ def test_detects_only_supported_self_knowledge_questions(question, topic):
 def test_does_not_capture_unrelated_general_questions():
     assert detect_self_knowledge_topic("O que é Python?") is None
     assert detect_self_knowledge_topic("Quem é Ada Lovelace?") is None
+
+
+def test_detects_only_explicit_verification_followup():
+    assert is_self_knowledge_followup("Você consegue checar isto para mim?") is True
+    assert is_self_knowledge_followup("Consegue confirmar isso?") is True
+    assert is_self_knowledge_followup("Cheque o preço disso para mim") is False
+
+
+def test_live_voice_routes_status_and_verification_through_local_handler(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZARA3_HOME", str(tmp_path))
+    handler = IPCHandler(AsyncMock())
+
+    assert handler._voice_turn_needs_executor(
+        "o sistema novo de voz já foi implementado ou ainda usa Gemini Live?"
+    ) is True
+    assert handler._voice_turn_needs_executor("você consegue checar isto para mim?") is True
+    assert handler._voice_turn_needs_executor("o ZARA Lab já está totalmente funcional?") is True
+
+
+@pytest.mark.asyncio
+async def test_voice_and_lab_status_are_runtime_backed_without_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZARA3_HOME", str(tmp_path))
+    handler = IPCHandler(AsyncMock())
+    handler.voice_active = True
+    handler.voice_mode = "gemini_live"
+    handler.voice_pipeline = object()
+    handler.gemini_live_voice = object()
+    handler.tts_manager = object()
+    handler.lab = object()
+
+    voice_reply = await handler._try_self_knowledge(
+        "O sistema novo de voz da ZARA já foi implementado ou ainda usa Gemini?"
+    )
+    lab_reply = await handler._try_self_knowledge("O ZARA Lab já está totalmente funcional?")
+
+    assert "Gemini Live" in voice_reply
+    assert "cérebro selecionado" in voice_reply
+    assert "Vosk + Kokoro permanece pendente" not in voice_reply
+    assert "Estado observado agora" in lab_reply
+    assert "não prova que todo o Lab esteja totalmente funcional" in lab_reply
+    assert "falta aplicar o patch" not in lab_reply
+
+
+@pytest.mark.asyncio
+async def test_verification_followup_rechecks_previous_self_topic(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZARA3_HOME", str(tmp_path))
+    handler = IPCHandler(AsyncMock())
+    handler.voice_pipeline = object()
+    handler.conversation_history.append(
+        "user", "Você ainda usa o sistema antigo de voz com Gemini?", engine="luna"
+    )
+    handler.conversation_history.append(
+        "assistant", "resposta antiga inventada", engine="luna"
+    )
+    handler.conversation_history.append(
+        "user", "Você consegue checar isto para mim?", engine="luna"
+    )
+
+    reply = await handler._try_self_knowledge("Você consegue checar isto para mim?")
+
+    assert "Estado observado agora" in reply
+    assert "pipeline local" in reply
+    assert "não está confirmado" not in reply
+
+
+@pytest.mark.asyncio
+async def test_verification_followup_without_previous_topic_does_not_claim_check(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZARA3_HOME", str(tmp_path))
+    handler = IPCHandler(AsyncMock())
+
+    reply = await handler._try_self_knowledge("Você consegue checar isto para mim?")
+
+    assert "não encontrei o assunto" in reply.casefold()
+
+
+@pytest.mark.asyncio
+async def test_verification_followup_never_reopens_older_topic(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZARA3_HOME", str(tmp_path))
+    handler = IPCHandler(AsyncMock())
+    handler.conversation_history.append(
+        "user", "Você ainda usa o sistema antigo de voz com Gemini?", engine="luna"
+    )
+    handler.conversation_history.append(
+        "assistant", "resposta sobre voz", engine="self_knowledge"
+    )
+    handler.conversation_history.append(
+        "user", "Qual é a previsão do tempo?", engine="luna"
+    )
+    handler.conversation_history.append(
+        "assistant", "resposta sobre clima", engine="luna"
+    )
+    handler.conversation_history.append(
+        "user", "Você consegue checar isto para mim?", engine="luna"
+    )
+
+    reply = await handler._try_self_knowledge("Você consegue checar isto para mim?")
+
+    assert "não encontrei o assunto" in reply.casefold()
+    assert "pipeline local" not in reply
 
 
 @pytest.mark.asyncio

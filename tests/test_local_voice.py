@@ -20,8 +20,13 @@ def faster_whisper_model_exists(config):
         model_path = model_dir / config.faster_whisper_model_size
         return model_path.exists()
 
-def test_voice_pipeline_without_api_keys():
-    """Test that VoicePipeline initializes without API keys and uses local STT."""
+def test_voice_pipeline_without_api_keys(modelos_de_voz_reais):
+    """Test that VoicePipeline initializes without API keys and uses local STT.
+
+    Needs the real (read-only) Vosk model tree; `modelos_de_voz_reais` lends it
+    into the isolated ZARA3_HOME so the pipeline can load a real model without
+    the test ever writing to the owner's data tree.
+    """
     # Backup and unset API key environment variables
     backup = {}
     for key in ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PORCUPINE_ACCESS_KEY']:
@@ -103,6 +108,10 @@ def test_tts_manager_without_api_keys():
 
 
 if __name__ == '__main__':
-    test_voice_pipeline_without_api_keys()
+    # Rodando fora do pytest não existe fixture: aqui os modelos reais já são
+    # os do ambiente real, então basta chamar com o caminho deles.
+    from core.paths import user_data_dir
+
+    test_voice_pipeline_without_api_keys(user_data_dir() / "models")
     test_tts_manager_without_api_keys()
     print("All tests passed.")

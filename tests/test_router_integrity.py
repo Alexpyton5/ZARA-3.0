@@ -185,9 +185,8 @@ def test_050_blocked_drive_format_is_not_an_executable_route():
 
 def test_050_mcp_actions_are_not_mapped_or_lazy_loadable():
     """MCP morto não pode importar os_ops nem expor capabilities."""
-    from core.action_mapping import _ACTION_TO_MODULE
-
-    assert not {name for name in _ACTION_TO_MODULE if name.startswith("mcp_")}
+    # The registry replaced the former lazy action_mapping module.
+    assert not {name for name in get_registry()._specs if name.startswith("mcp_")}
 
     before = set(get_registry()._specs)
     assert load_capability("mcp_connect") is False

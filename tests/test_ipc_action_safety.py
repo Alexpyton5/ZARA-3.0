@@ -105,7 +105,7 @@ def test_action_ipc_propagates_failed_action_truth(
         )
     )
 
-    response = sent[-1].response
+    response = next(message.response for message in reversed(sent) if message.request_id == "truth" and message.response is not None)
     assert response["success"] is False
     assert response["error"] == "EXECUTOR_PROBE_FAILED"
     assert response["verificado"] is False
@@ -118,7 +118,8 @@ def test_background_terminal_returns_started_without_verification(monkeypatch, t
 
     monkeypatch.setattr(terminal_actions.subprocess, "Popen", lambda *_args, **_kwargs: FakeProcess())
 
-    result = terminal_actions.terminal_bg_action("echo safe", cwd=str(tmp_path))
+    # Unit-test the executor with a fake process. Confirmation gates are covered separately.
+    result = terminal_actions.terminal_bg_action.__wrapped__("echo safe", cwd=str(tmp_path))
 
     assert result.success is True
     assert result.verificado is False

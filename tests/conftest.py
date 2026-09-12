@@ -18,6 +18,8 @@ não existem, que é onde o mesmo erro voltaria.
 from __future__ import annotations
 
 import os
+import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -176,3 +178,120 @@ def _nunca_escrever_nos_dados_do_alex(monkeypatch, tmp_path):
         staticmethod(lambda: tmp_path / "telegram_lido.json"),
         raising=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# INCIDENTE_2026-09-10 (NIGHT-03B): uma suíte de não-regressão construiu um
+# `LabV1Service()` real. O serviço resolve o caminho do banco sozinho, em
+# `_get_runtime` (core/lab_v1/service.py:716-728): `LabStore()` sem argumento
+# cai em `data_dir()/lab/zara_lab_v1.db`, e o boot ainda escreve a linha
+# `@last_boot` na tabela `lab_boot_reconciliation`. Resultado: o banco REAL do
+# Lab do Alex ganhou uma tabela e uma linha durante `pytest -q`.
+#
+# Mesma classe dos incidentes de volume/cronômetro/telegram: a defesa arquivo a
+# arquivo não escala, porque o teste que esquece é sempre o próximo. O caminho
+# real é resolvido por `core/paths.user_data_dir()`, que já respeita
+# `ZARA3_HOME` — então a defesa certa é redirecionar a árvore INTEIRA de dados
+# por padrão, uma vez, para todo teste.
+#
+# Duas camadas:
+#   1. `ZARA3_HOME` → tmp_path por teste (isolamento por padrão, automático).
+#   2. guarda em `sqlite3.connect`: qualquer conexão a um .db dentro da árvore
+#      real vira erro claro — pega até caminho hardcoded que ignore ZARA3_HOME.
+#
+# Opt-in explícito: `@pytest.mark.live` ou `@pytest.mark.real_env`.
+# ---------------------------------------------------------------------------
+
+
+def _real_home() -> Path:
+    """Árvore de dados real do Alex, resolvida ANTES de qualquer override de teste."""
+    base = os.environ.get("ZARA3_HOME")
+    if base:
+        return Path(base).resolve()
+    root = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share")
+    return (Path(root) / "ZARA3").resolve()
+
+
+_REAL_ZARA3_HOME = _real_home()
+_REAL_SQLITE_CONNECT = sqlite3.connect
+
+
+def _dentro_da_arvore_real(database) -> bool:
+    if isinstance(database, (int, bytes)):
+        return False
+    text = str(database)
+    if text == ":memory:" or text.startswith("file::memory:"):
+        return False
+    if text.startswith("file:"):
+        text = text[5:].split("?", 1)[0]
+    try:
+        candidate = Path(text).expanduser().resolve()
+    except (OSError, ValueError):
+        return False
+    return candidate == _REAL_ZARA3_HOME or _REAL_ZARA3_HOME in candidate.parents
+
+
+@pytest.fixture(autouse=True)
+def _isolar_a_arvore_de_dados_real(request, monkeypatch, tmp_path_factory):
+    """Nenhum teste escreve nos dados reais do Alex sem pedir explicitamente.
+
+    Marque `@pytest.mark.live` ou `@pytest.mark.real_env` no teste que
+    realmente precisa do ambiente real — ele fica de fora das duas camadas, e
+    `live` já é pulado por padrão em `pytest_collection_modifyitems`.
+
+    A home isolada NÃO fica dentro de `tmp_path`: testes que listam o próprio
+    `tmp_path` (ex.: `test_files_list_skips_sensitive_children...`) passariam a
+    enxergar uma pasta que o teste não criou.
+    """
+    if request.node.get_closest_marker("live") or request.node.get_closest_marker("real_env"):
+        yield
+        return
+
+    home = tmp_path_factory.mktemp("zara3-home")
+    monkeypatch.setenv("ZARA3_HOME", str(home))
+
+    def guarded_connect(database, *args, **kwargs):
+        if _dentro_da_arvore_real(database):
+            raise RuntimeError(
+                f"Teste tentou abrir um banco DENTRO dos dados reais do Alex: {database}\n"
+                "ZARA3_HOME já está redirecionado para uma pasta temporária deste teste, "
+                "então este caminho veio de um valor fixo/capturado antes do redirecionamento. "
+                "Se o teste precisa mesmo do ambiente real, marque @pytest.mark.real_env."
+            )
+        return _REAL_SQLITE_CONNECT(database, *args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", guarded_connect)
+    yield
+
+
+@pytest.fixture
+def modelos_de_voz_reais():
+    """Empresta os modelos reais (Vosk/Kokoro) para dentro da home isolada.
+
+    `models/` é asset somente-leitura, não dado do Alex: um teste de pipeline de
+    voz precisa do modelo de verdade, mas continua sem poder escrever em
+    `data/`, `memory/`, `logs/` ou `config/` reais. Devolve o caminho do
+    `models/` visível para o teste, ou pula o teste se a máquina não tiver os
+    modelos instalados.
+    """
+    real = _REAL_ZARA3_HOME / "models"
+    if not real.is_dir():
+        pytest.skip(f"Modelos de voz reais não encontrados em {real}")
+
+    home = Path(os.environ["ZARA3_HOME"])
+    link = home / "models"
+    if link.exists():
+        return link
+    try:
+        os.symlink(real, link, target_is_directory=True)
+    except OSError:
+        # Sem Modo Desenvolvedor/admin o symlink falha; junção NTFS não exige.
+        import subprocess
+
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(real)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            pytest.skip(f"Não consegui ligar os modelos reais: {result.stderr.strip()}")
+    return link

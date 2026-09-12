@@ -42,8 +42,10 @@ def _handler() -> IPCHandler:
     "Zara, o que voce acha disso?",
     "Zara, obrigado",
 ])
-def test_conversa_pode_ser_respondida_direto(frase):
-    assert _handler()._voice_can_answer_directly(frase) is True
+def test_conversa_e_autorizada_sem_liberar_audio_do_gemini(frase):
+    handler = _handler()
+    assert handler._voice_is_authorized_conversation(frase) is True
+    assert handler._voice_can_answer_directly(frase) is False
 
 
 @pytest.mark.parametrize("frase", [
@@ -58,7 +60,7 @@ def test_conversa_pode_ser_respondida_direto(frase):
     "Zara, me lembra de tomar remedio as 8",
 ])
 def test_acao_nunca_e_respondida_direto(frase):
-    assert _handler()._voice_can_answer_directly(frase) is False
+    assert _handler()._voice_is_authorized_conversation(frase) is False
 
 
 def test_acao_nao_reconhecida_nunca_vira_conversa_livre():
@@ -68,8 +70,8 @@ def test_acao_nao_reconhecida_nunca_vira_conversa_livre():
     ficaria livre para dizer que abriu sem executar nada.
     """
     handler = _handler()
-    assert handler._voice_can_answer_directly("Zara, abra o powershell") is False
-    assert handler._voice_can_answer_directly("Zara, abra o regedit") is False
+    assert handler._voice_is_authorized_conversation("Zara, abra o powershell") is False
+    assert handler._voice_is_authorized_conversation("Zara, abra o regedit") is False
 
 
 def test_classificador_nao_cria_lembrete(monkeypatch):
@@ -83,7 +85,7 @@ def test_classificador_nao_cria_lembrete(monkeypatch):
 
     monkeypatch.setattr(reminder_intent, "detect_reminder_intent", explode)
     handler = _handler()
-    assert handler._voice_can_answer_directly("Zara, me lembra de ligar pro medico") is False
+    assert handler._voice_is_authorized_conversation("Zara, me lembra de ligar pro medico") is False
 
 
 # --------------------------------------------------------------------------
@@ -91,15 +93,15 @@ def test_classificador_nao_cria_lembrete(monkeypatch):
 # --------------------------------------------------------------------------
 
 def test_sem_wake_nao_responde_nem_conversa():
-    assert _handler()._voice_can_answer_directly("conversa ao fundo na sala") is False
+    assert _handler()._voice_is_authorized_conversation("conversa ao fundo na sala") is False
 
 
 def test_so_a_palavra_zara_nao_gera_resposta():
-    assert _handler()._voice_can_answer_directly("Zara") is False
+    assert _handler()._voice_is_authorized_conversation("Zara") is False
 
 
 def test_pare_nunca_vira_conversa():
-    assert _handler()._voice_can_answer_directly("Zara, pare") is False
+    assert _handler()._voice_is_authorized_conversation("Zara, pare") is False
 
 
 def test_eco_da_propria_voz_nunca_vira_resposta_direta():
@@ -113,20 +115,20 @@ def test_eco_da_propria_voz_nunca_vira_resposta_direta():
         "O livro foi ao medico porque estava com as paginas amareladas"
     )
     eco = "o livro foi ao medico porque estava com as paginas amareladas"
-    assert handler._voice_can_answer_directly(eco) is False
+    assert handler._voice_is_authorized_conversation(eco) is False
 
 
 def test_pergunta_legitima_apos_resposta_nao_e_confundida_com_eco():
     handler = _handler()
     handler._last_spoken_text = "Agora sao vinte e duas horas"
-    assert handler._voice_can_answer_directly("Zara, e amanha que horas eu acordo") is True
+    assert handler._voice_is_authorized_conversation("Zara, e amanha que horas eu acordo") is True
 
 
 def test_classificador_nao_arma_nem_desarma_a_janela_de_continuacao():
-    """_voice_can_answer_directly e leitura pura do estado de wake."""
+    """A classificação local é leitura pura do estado de wake."""
     handler = _handler()
     handler._gemini_wake_armed_until = 0.0
-    handler._voice_can_answer_directly("Zara, me conta uma piada")
+    handler._voice_is_authorized_conversation("Zara, me conta uma piada")
     assert handler._gemini_wake_armed_until == 0.0
 
 
@@ -135,15 +137,13 @@ def test_classificador_nao_arma_nem_desarma_a_janela_de_continuacao():
 # --------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_turno_de_conversa_nao_passa_pelo_executor():
+async def test_turno_de_conversa_ignora_resposta_gemini_e_usa_front_brain():
     handler = _handler()
     await handler._on_gemini_live_turn(
         "Zara, tudo bem?", "Tudo otimo, Alex.", direct=True
     )
-    handler._process_voice_message.assert_not_awaited()
-    handler._append_conversation_message.assert_any_await(
-        "assistant", "Tudo otimo, Alex.", "gemini_live_direct"
-    )
+    handler._process_voice_message.assert_awaited_once_with("tudo bem?")
+    assert not any("Tudo otimo, Alex." in str(call) for call in handler._append_conversation_message.await_args_list)
 
 
 @pytest.mark.asyncio
@@ -153,6 +153,59 @@ async def test_turno_de_acao_continua_indo_para_o_executor():
         "Zara, diminua o volume", "ja diminui pra voce", direct=False
     )
     handler._process_voice_message.assert_awaited_once_with("diminua o volume")
+
+
+@pytest.mark.asyncio
+async def test_executor_starts_before_discarded_gemini_draft_finishes():
+    routed = asyncio.Event()
+    release_turn_complete = asyncio.Event()
+
+    async def on_turn(user_text, model_text, direct):
+        assert user_text == "Zara, que dia é hoje?"
+        assert model_text == ""
+        assert direct is False
+        routed.set()
+
+    voice = _voice(lambda _text: False)
+    voice.on_turn = on_turn
+
+    class SlowDiscardedDraft:
+        async def receive(self):
+            yield SimpleNamespace(server_content=SimpleNamespace(
+                input_transcription=SimpleNamespace(text="Zara, que dia é hoje?")
+            ))
+            yield SimpleNamespace(server_content=SimpleNamespace(
+                model_turn=SimpleNamespace(parts=[])
+            ))
+            await release_turn_complete.wait()
+            yield SimpleNamespace(server_content=SimpleNamespace(turn_complete=True))
+            voice._stop.set()
+
+    receive_task = asyncio.create_task(voice._receive_loop(SlowDiscardedDraft(), sd=None))
+    await asyncio.wait_for(routed.wait(), timeout=0.2)
+    assert receive_task.done() is False
+    assert voice.ultimo_fim_de_fala() is not None
+    assert voice.ultima_transcricao_pronta() is not None
+    assert voice.ultima_transcricao_pronta() >= voice.ultimo_fim_de_fala()
+
+    release_turn_complete.set()
+    await asyncio.wait_for(receive_task, timeout=0.2)
+
+
+@pytest.mark.asyncio
+async def test_early_executor_route_is_not_duplicated_at_turn_complete():
+    on_turn = AsyncMock()
+    voice = _voice(lambda _text: False)
+    voice.on_turn = on_turn
+    voice._input_text = "Zara, que horas são?"
+    voice._turn_route_decided = True
+
+    voice._route_executor_early()
+    await asyncio.sleep(0)
+    await voice._finish_turn()
+    await asyncio.sleep(0)
+
+    on_turn.assert_awaited_once_with("Zara, que horas são?", "", False)
 
 
 @pytest.mark.asyncio
@@ -167,12 +220,12 @@ async def test_rascunho_do_modelo_nunca_e_falado_em_turno_de_acao():
 
 
 @pytest.mark.asyncio
-async def test_conversa_direta_alimenta_o_guarda_de_eco():
+async def test_resposta_gemini_suprimida_nao_alimenta_guarda_de_eco():
     handler = _handler()
     await handler._on_gemini_live_turn(
         "Zara, me conta uma piada", "Por que o livro foi ao medico?", direct=True
     )
-    assert handler._last_spoken_text == "Por que o livro foi ao medico?"
+    assert handler._last_spoken_text == ""
 
 
 # --------------------------------------------------------------------------
@@ -300,18 +353,18 @@ def _handler_com_eco(suspeito: bool) -> IPCHandler:
 def test_fala_humana_diferente_durante_saida_usa_continuacao():
     """Temporalidade so habilita comparacao; nao bloqueia todo barge-in."""
     handler = _handler_com_eco(True)
-    assert handler._voice_can_answer_directly("nao, quero saber de sabado") is True
+    assert handler._voice_is_authorized_conversation("nao, quero saber de sabado") is True
 
 
 def test_seguimento_depois_que_ela_para_continua_valendo():
     handler = _handler_com_eco(False)
-    assert handler._voice_can_answer_directly("e o que mais?") is True
+    assert handler._voice_is_authorized_conversation("e o que mais?") is True
 
 
 def test_wake_explicito_atravessa_a_propria_fala():
     """Barge-in nao pode morrer junto com o anti-eco."""
     handler = _handler_com_eco(True)
-    assert handler._voice_can_answer_directly("Zara, e o que voce acha disso") is True
+    assert handler._voice_is_authorized_conversation("Zara, e o que voce acha disso") is True
 
 
 @pytest.mark.asyncio
@@ -432,7 +485,7 @@ def test_frase_humana_diferente_durante_fala_e_aceita_imediatamente():
     handler = _handler_com_eco(True)
     handler._begin_assistant_output("A previsao para amanha e de chuva")
 
-    assert handler._voice_can_answer_directly("nao quero saber de sabado") is True
+    assert handler._voice_is_authorized_conversation("nao quero saber de sabado") is True
 
 
 @pytest.mark.asyncio
@@ -469,7 +522,7 @@ def test_apos_fala_usuario_normal_nao_espera_a_janela_de_protecao():
     handler._finish_assistant_output()
     assert time.monotonic() < handler._assistant_output_protect_until
 
-    assert handler._voice_can_answer_directly("nao quero saber de sabado") is True
+    assert handler._voice_is_authorized_conversation("nao quero saber de sabado") is True
 
 
 def test_mesmo_topico_com_intencao_humana_diferente_nao_e_overfilter():
@@ -479,7 +532,7 @@ def test_mesmo_topico_com_intencao_humana_diferente_nao_e_overfilter():
         "A previsao de sabado indica chuva forte durante a manha"
     )
 
-    assert handler._voice_can_answer_directly(
+    assert handler._voice_is_authorized_conversation(
         "nao, eu perguntei se sabado faz sol"
     ) is True
 
@@ -492,7 +545,7 @@ def test_repeticao_identica_depois_da_janela_e_fala_humana():
     handler._assistant_output_protect_until = 0.0
     handler._recent_assistant_outputs.clear()
 
-    assert handler._voice_can_answer_directly(
+    assert handler._voice_is_authorized_conversation(
         "a previsao para sabado indica chuva forte"
     ) is True
 

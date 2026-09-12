@@ -23,10 +23,14 @@ def test_wake_word_local_enabled_via_api_keys(tmp_path, monkeypatch):
     assert cfg.wake_word_enabled is True
 
 
-def test_wake_word_local_detection_via_mock_vosk(tmp_path, monkeypatch):
+def test_wake_word_local_detection_via_mock_vosk(tmp_path, monkeypatch, modelos_de_voz_reais):
     """
     Simulate audio with the word \"zara\" and verify detection by the mocked Vosk gate.
     We mock vosk.Model and vosk.KaldiRecognizer to avoid needing the actual model files.
+
+    The recognizer is mocked, but the gate still refuses to arm when the model
+    directory does not exist — `modelos_de_voz_reais` lends the real read-only
+    model tree into the isolated ZARA3_HOME just for that existence check.
     """
     # Arrange: enable local wake word mode
     api_keys_file = tmp_path / "api_keys.json"

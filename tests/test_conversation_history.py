@@ -62,6 +62,16 @@ def test_clear_physically_removes_transcript_database(tmp_path: Path) -> None:
     assert store.list_recent() == []
 
 
+def test_delete_removes_only_the_exact_interrupted_message(tmp_path: Path) -> None:
+    store = ConversationHistory(tmp_path / "history.sqlite3")
+    interrupted = store.append("user", "turno interrompido")
+    retained = store.append("user", "turno válido")
+
+    assert store.delete(interrupted["id"]) is True
+    assert store.delete(interrupted["id"]) is False
+    assert [message["id"] for message in store.list_recent()] == [retained["id"]]
+
+
 def test_ipc_constructor_initializes_home_history_that_survives_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

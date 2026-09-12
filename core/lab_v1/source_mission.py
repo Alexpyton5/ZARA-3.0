@@ -5,22 +5,25 @@ copy, run actual pytest and build a hashed source candidate. No fixed repair.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
 import hashlib
 import json
-from pathlib import Path
 import re
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
 
-from core.lab_v1.domain import Artifact, Message, MessageKind, Task, RoleName
+from core.lab_v1.domain import Artifact, Message, MessageKind, RoleName, Task
 from core.lab_v1.execution_scope import ScopeViolation
 from core.lab_v1.mission_controller import MissionStep, Receipt, Verification
 from core.lab_v1.real_work_contract import (
-    REVIEW_RATIONALE_LIMIT, ReviewResponseContractError,
-    validate_planner_task, reject_planner_solution_material, factual_participant_report,
-    validate_reviewer_result, validate_production_proof,
+    REVIEW_RATIONALE_LIMIT,
+    ReviewResponseContractError,
+    factual_participant_report,
+    reject_planner_solution_material,
+    validate_planner_task,
+    validate_production_proof,
+    validate_reviewer_result,
 )
 from core.lab_v1.runtime import _extract_json
-
 
 _MAX_SOURCE_REPAIRS = 3
 
@@ -89,10 +92,15 @@ def source_requested(intent, kind):
 
 def prepare_source(engine, sandbox, intent):
     workspace = Path(engine.policy.document.get('workspace') or Path(__file__).resolve().parents[2]).resolve()
-    from core.lab_v1.source_scope import select_source_scope
+    from core.lab_v1.source_scope import SCOPE_NOT_IDENTIFIED_MESSAGE, select_source_scope
     paths = select_source_scope(workspace, intent)
     if not paths:
-        raise ValueError('SOURCE_SCOPE_NOT_IDENTIFIED: a concrete observed module is required')
+        # Prefix kept for the existing regression assertion
+        # (tests/test_lab_source_mission.py::test_source_scope_failure_does_not_persist_orphan_session
+        # matches on the 'SOURCE_SCOPE_NOT_IDENTIFIED' substring); the text after
+        # it is what the owner actually sees, since he is not a programmer and
+        # the previous message ("a concrete observed module is required") was not.
+        raise ValueError('SOURCE_SCOPE_NOT_IDENTIFIED: ' + SCOPE_NOT_IDENTIFIED_MESSAGE)
     paths = list(dict.fromkeys(paths))[:8]
     for path in paths:
         if 'hermes' in path.casefold() or not (workspace / path).is_file():

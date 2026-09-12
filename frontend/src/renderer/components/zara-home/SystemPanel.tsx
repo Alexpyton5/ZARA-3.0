@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Cpu, MemoryStick, HardDrive, MonitorCog, BatteryFull, Thermometer, Wifi,
   Database, Trash2, Power, ListChecks, RotateCw, Activity, Search, ShieldCheck, Shield, KeyRound, Gauge, SlidersHorizontal, Leaf, ChevronRight,
 } from 'lucide-react';
+import { useHomeFeedback } from './useHomeFeedback';
 import type { BatteryData, PowerPlansData, SystemMetricsData, WifiStatusData } from './types';
 
 interface SystemPanelProps {
@@ -36,15 +37,15 @@ function ActionCard({
   );
 }
 
-function ActionRow({ icon, label, sub }: { icon: ReactNode; label: string; sub: string }) {
+function ActionRow({ icon, label, sub, onClick }: { icon: ReactNode; label: string; sub: string; onClick?: () => void }) {
   return (
-    <div className="zh-action-row">
+    <button type="button" className="zh-action-row" onClick={onClick}>
       <span className="zh-action-icon">{icon}</span>
       <span className="zh-action-text">
         <span className="zh-action-label">{label}</span>
         <span className="zh-action-sub">{sub}</span>
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -54,40 +55,26 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
   const [diagnosticSummary, setDiagnosticSummary] = useState<string | null>(null);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
 
-  function handleAnalisarAgora() {
-    const selfStatus = window.zaraIPC?.system?.selfStatus;
-    if (!selfStatus || diagnosticLoading) return;
+  const feedback = useHomeFeedback();
+  const [samples, setSamples] = useState<number[]>([]);
+  useEffect(() => {
+    if (metrics.cpu !== null) setSamples(values => [...values.slice(-39), metrics.cpu!]);
+  }, [metrics.cpu]);
+  function settings(id: 'storage'|'temporary'|'startup'|'update'|'security'|'firewall'|'privacy'|'power') {
+    void feedback.run(() => window.zaraIPC?.desktop?.openSettings?.(id), 'Configurações abertas no Windows.');
+  }
+  async function handleAnalisarAgora() {
+    if (diagnosticLoading) return;
     setDiagnosticLoading(true);
-    selfStatus()
-      .then((snapshot: { capabilities?: Array<{ status?: string }> } | null) => {
-        const capabilities = snapshot?.capabilities;
-        if (!Array.isArray(capabilities) || capabilities.length === 0) {
-          setDiagnosticSummary('Diagnóstico indisponível agora.');
-          return null;
-        }
-        const available = capabilities.filter((c) => c.status === 'AVAILABLE').length;
-        setDiagnosticSummary(`${available}/${capabilities.length} capacidades disponíveis agora.`);
-        return null;
-      })
-      .catch(() => setDiagnosticSummary('Diagnóstico indisponível agora.'))
-      .finally(() => setDiagnosticLoading(false));
-
-    // Lembrar: acrescenta a contagem real de fatos guardados, sem novo
-    // painel -- reusa o mesmo card de diagnóstico. Canal já testado nesta
-    // madrugada (ver .ceo/NIGHT_LOG.md); sem consumidor até este ponto.
-    const listMemory = window.zaraIPC?.userMemory?.list;
-    if (listMemory) {
-      listMemory()
-        .then((res: { success?: boolean; facts?: unknown[] }) => {
-          if (res?.success && Array.isArray(res.facts)) {
-            setDiagnosticSummary((prev) => `${prev ?? ''} ${res.facts!.length} fatos na memória.`.trim());
-          }
-        })
-        .catch(() => {
-          // Silencioso: a memoria e um extra sobre o diagnostico principal,
-          // nao pode derrubar o resumo de capacidades se falhar.
-        });
-    }
+    try {
+      const readings = [metrics.cpu, metrics.ram, metrics.disk];
+      if (readings.every(value => value === null)) { setDiagnosticSummary('Métricas indisponíveis. Verifique a conexão com a ZARA.'); return; }
+      const findings = [];
+      if ((metrics.cpu ?? 0) >= 80) findings.push('CPU elevada. Consulte os processos.');
+      if ((metrics.ram ?? 0) >= 80) findings.push('Memória ocupada. Feche aplicativos sem uso.');
+      if ((metrics.disk ?? 0) >= 90) findings.push('Disco quase cheio. Revise o armazenamento.');
+      setDiagnosticSummary(findings.join(' ') || 'CPU, memória e disco sem uso elevado nesta leitura.');
+    } finally { setDiagnosticLoading(false); }
   }
 
   function handleVerProcessos() {
@@ -155,9 +142,9 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
         <div className="zh-system-col zh-system-col--maintenance">
           <h2><Database size={14} strokeWidth={1.8} /> Manutenção</h2>
           <div className="zh-action-grid">
-            <ActionCard icon={<Database size={16} strokeWidth={1.7} />} label="Liberar espaço" sub="Indisponível" />
-            <ActionCard icon={<Trash2 size={16} strokeWidth={1.7} />} label="Limpar temporários" sub="Indisponível" />
-            <ActionCard icon={<Power size={16} strokeWidth={1.7} />} label="Gerenciar inicialização" sub="Indisponível" />
+            <ActionCard icon={<Database size={16} strokeWidth={1.7} />} label="Liberar espaço" sub="Ver armazenamento" onClick={() => settings('storage')} />
+            <ActionCard icon={<Trash2 size={16} strokeWidth={1.7} />} label="Limpar temporários" sub="Revisar no Windows" onClick={() => settings('temporary')} />
+            <ActionCard icon={<Power size={16} strokeWidth={1.7} />} label="Gerenciar inicialização" sub="Gerenciar aplicativos" onClick={() => settings('startup')} />
             <ActionCard
               icon={<ListChecks size={16} strokeWidth={1.7} />}
               label="Ver processos"
@@ -165,77 +152,60 @@ export function SystemPanel({ metrics, battery, wifi, power }: SystemPanelProps)
               onClick={handleVerProcessos}
               disabled={processLoading}
             />
-            <ActionCard icon={<RotateCw size={16} strokeWidth={1.7} />} label="Atualizar sistema" sub="Indisponível" />
-            <ActionCard icon={<Activity size={16} strokeWidth={1.7} />} label="Diagnóstico ZARA" sub="Indisponível" />
+            <ActionCard icon={<RotateCw size={16} strokeWidth={1.7} />} label="Atualizar sistema" sub="Windows Update" onClick={() => settings('update')} />
+            <ActionCard icon={<Activity size={16} strokeWidth={1.7} />} label="Diagnóstico ZARA" sub="Verificar agora" onClick={() => void handleAnalisarAgora()} />
           </div>
         </div>
 
         <div className="zh-system-col zh-system-col--security">
           <h2><Shield size={14} strokeWidth={1.8} /> Segurança</h2>
-          <ActionRow icon={<Search size={14} strokeWidth={1.7} />} label="Verificação rápida" sub="Indisponível" />
-          <ActionRow icon={<ShieldCheck size={14} strokeWidth={1.7} />} label="Verificação completa" sub="Indisponível" />
-          <ActionRow icon={<Shield size={14} strokeWidth={1.7} />} label="Firewall" sub="Indisponível" />
-          <ActionRow icon={<KeyRound size={14} strokeWidth={1.7} />} label="Permissões" sub="Indisponível" />
-          <ActionRow icon={<Activity size={14} strokeWidth={1.7} />} label="Ameaças" sub="Indisponível" />
+          <ActionRow icon={<Search size={14} strokeWidth={1.7} />} label="Verificação rápida" sub="Abrir Segurança" onClick={() => settings('security')} />
+          <ActionRow icon={<ShieldCheck size={14} strokeWidth={1.7} />} label="Verificação completa" sub="Revisar no Windows" onClick={() => settings('security')} />
+          <ActionRow icon={<Shield size={14} strokeWidth={1.7} />} label="Firewall" sub="Abrir proteção" onClick={() => settings('firewall')} />
+          <ActionRow icon={<KeyRound size={14} strokeWidth={1.7} />} label="Permissões" sub="Gerenciar apps" onClick={() => settings('privacy')} />
+          <ActionRow icon={<Activity size={14} strokeWidth={1.7} />} label="Ameaças" sub="Consultar proteção" onClick={() => settings('security')} />
         </div>
 
         <div className="zh-system-col zh-system-col--energy">
           <h2><Gauge size={14} strokeWidth={1.8} /> Energia</h2>
-          {power.supported && power.plans.length > 0 ? (
-            power.plans.map((plan, index) => {
-              const Icon = ENERGY_ICONS[index % ENERGY_ICONS.length];
-              return (
-                <button
-                  key={plan.guid}
-                  className="zh-energy-card"
-                  type="button"
-                  disabled={power.pending || plan.active}
-                  onClick={() => power.setPlan(plan.guid)}
-                  aria-pressed={plan.active}
-                >
-                  <Icon size={15} strokeWidth={1.7} />
-                  <span className="zh-energy-text">
-                    <strong>{plan.name}</strong>
-                    <span>{plan.active ? 'Plano ativo' : 'Clique para ativar'}</span>
-                  </span>
-                  <span className="zh-energy-dot" data-active={plan.active ? 'true' : undefined} />
-                </button>
-              );
-            })
-          ) : (
-            <ActionRow icon={<Gauge size={14} strokeWidth={1.7} />} label="Planos de energia" sub="Indisponível" />
-          )}
+          {[
+            { name: 'Performance', match: /high|alto|desempenho|performance/i, guid: '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c' },
+            { name: 'Equilibrado', match: /balanced|equilibr/i, guid: '381b4222-f694-41f0-9685-ff5bb260df2e' },
+            { name: 'Economia', match: /saver|econom/i, guid: 'a1841308-3541-4fab-bc81-f71556f20b4a' },
+          ].map((mode, index) => {
+            const plan = power.plans.find(plan => plan.guid.toLowerCase() === mode.guid || mode.match.test(plan.name));
+            const Icon = ENERGY_ICONS[index];
+            return <button key={mode.name} className="zh-energy-card" type="button" disabled={power.pending} onClick={() => plan ? power.setPlan(plan.guid) : settings('power')} aria-pressed={Boolean(plan?.active)}>
+              <Icon size={23} strokeWidth={1.5} /><span className="zh-energy-text"><strong>{mode.name}</strong><span>{plan?.active ? 'Plano ativo' : plan ? 'Clique para ativar' : 'Configurar no Windows'}</span></span>
+              <span className="zh-energy-dot" data-active={plan?.active ? 'true' : undefined} />
+            </button>;
+          })}
         </div>
 
         <div className="zh-system-col zh-diagnostic-col">
           <h2><Activity size={14} strokeWidth={1.8} /> Diagnóstico inteligente</h2>
-          <svg className="zh-diagnostic-wave" viewBox="0 0 200 40" aria-hidden="true">
-            <path
-              className="zh-diagnostic-wave-ghost"
-              d="M0 26 C 18 26, 24 12, 40 12 S 62 30, 80 30 S 104 8, 122 8 S 146 26, 164 26 S 184 16, 200 16"
-            />
-            <path
-              className="zh-diagnostic-wave-line"
-              d="M0 24 C 18 24, 24 10, 40 10 S 62 28, 80 28 S 104 6, 122 6 S 146 24, 164 24 S 184 14, 200 14"
-            />
+          <svg className="zh-diagnostic-wave" viewBox="0 0 200 70" preserveAspectRatio="none" aria-label="Histórico de uso da CPU">
+            <path className="zh-diagnostic-wave-ghost" d="M0 65H200" />
+            {samples.length > 1 && <path className="zh-diagnostic-wave-line" d={samples.map((value, index) => `${index ? 'L' : 'M'}${index * 200 / (samples.length - 1)},${65 - value * .6}`).join(' ')} />}
           </svg>
           <p className="zh-diagnostic-title">Por que meu PC está lento?</p>
           <p className={diagnosticSummary ? undefined : 'zh-not-connected'}>
             {diagnosticLoading
               ? 'Analisando…'
-              : diagnosticSummary ?? 'ZARA pode analisar as próprias capacidades agora.'}
+              : diagnosticSummary ?? 'ZARA pode analisar e sugerir melhorias.'}
           </p>
           <button
             className="zh-diagnostic-btn"
             type="button"
             onClick={handleAnalisarAgora}
-            disabled={diagnosticLoading || !window.zaraIPC?.system?.selfStatus}
+            disabled={diagnosticLoading}
           >
             Analisar agora
             <ChevronRight size={14} strokeWidth={2} />
           </button>
         </div>
       </div>
+      {(feedback.feedback || power.error) && <div className="zh-system-feedback" role={power.error ? 'alert' : 'status'}>{feedback.feedback || power.error}</div>}
     </section>
   );
 }

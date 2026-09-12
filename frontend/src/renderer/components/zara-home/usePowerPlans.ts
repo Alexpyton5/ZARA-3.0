@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PowerPlan, PowerPlansData } from './types';
+import { errorMessage } from './homeActions';
 
 /**
  * Usa `window.zaraIPC.action.execute('os_power_plan_list'|'os_power_plan_set', ...)`
@@ -16,7 +17,12 @@ export function usePowerPlans(): PowerPlansData {
   const [plans, setPlans] = useState<PowerPlan[]>([]);
   const [supported, setSupported] = useState(false);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const operation = useRef(false);
+  const mounted = useRef(true);
   const [refreshToken, setRefreshToken] = useState(0);
+
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
     const execute = window.zaraIPC?.action?.execute;
@@ -52,18 +58,24 @@ export function usePowerPlans(): PowerPlansData {
 
   function setPlan(guid: string) {
     const execute = window.zaraIPC?.action?.execute;
-    if (!execute || pending) return;
+    if (!execute || operation.current) return;
+    operation.current = true;
+    setError('');
     setPending(true);
     execute('os_power_plan_set', { name: guid })
-      .catch(() => {
-        // Falhou — o refresh a seguir mostra o estado real (o plano
-        // anterior, não o que tentamos setar), sem fingir sucesso.
+      .then(response => {
+        if (!response?.success || !response.result?.success) throw new Error(response?.error || response?.result?.error || 'A alteração do plano não foi confirmada.');
+      })
+      .catch(cause => {
+        if (mounted.current) setError(errorMessage(cause, 'Não foi possível alterar o plano de energia.'));
       })
       .finally(() => {
+        operation.current = false;
+        if (!mounted.current) return;
         setPending(false);
         setRefreshToken((token) => token + 1);
       });
   }
 
-  return { supported, plans, pending, setPlan };
+  return { supported, plans, pending, error, setPlan };
 }

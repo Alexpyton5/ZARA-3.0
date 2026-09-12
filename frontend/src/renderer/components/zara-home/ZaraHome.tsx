@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Wifi, Shield, Cloud, Zap, Link2 } from 'lucide-react';
 import '../../styles/zara-home.css';
 import { Sidebar } from './Sidebar';
@@ -7,7 +7,7 @@ import { TextCommandInput } from './TextCommandInput';
 import { ForYouCard } from './ForYouCard';
 import { CommunicationsCard } from './CommunicationsCard';
 import { ActiveProjectCard } from './ActiveProjectCard';
-import { ToolsCard } from './ToolsCard';
+import { LabHomeCard } from './LabHomeCard';
 import { SystemPanel } from './SystemPanel';
 import { WindowControls } from './WindowControls';
 import { ZaraCore } from './ZaraCore';
@@ -18,23 +18,15 @@ import { useBattery } from './useBattery';
 import { useWifiStatus } from './useWifiStatus';
 import { usePowerPlans } from './usePowerPlans';
 import { useClock } from './useClock';
+import { HomeDrawer } from './HomeDrawer';
+import { LabRoom } from '../zara-lab-v2/LabRoom';
 import auroraBackground from '../../../assets/zara-home/aurora-master-refined.png';
 
-/**
- * Home real da ZARA (Titanium Emerald), renderizada como componentes React
- * de verdade — não um iframe apontando para um build estático separado.
- *
- * Composição (linhas/colunas) alinhada à referência real do Sites:
- * topo = coluna principal (saudação + comando + Para você + Comunicações)
- * ao lado de uma coluna direita ESTREITA (Projeto ativo + Ferramentas);
- * Core grande e centralizado entre as duas; Sistema como FAIXA HORIZONTAL
- * de largura total no rodapé (não empilhado dentro da coluna direita).
- *
- * Ver ZARA_HOME_UI_INTEGRATION.md para a auditoria completa de onde cada
- * cor/asset veio e o que ainda está NOT_CONNECTED_YET.
- */
+/** MASTER composition with connected data and the Lab product direction. */
 export function ZaraHome() {
   const [activeNav, setActiveNav] = useState('Hoje');
+  const closePanel = useCallback(() => setActiveNav('Hoje'), []);
+  const navigate = useCallback((section: string) => setActiveNav(section), []);
   const coreState = useZaraCoreState();
   const metrics = useSystemMetrics();
   const battery = useBattery();
@@ -54,7 +46,7 @@ export function ZaraHome() {
         style={{ backgroundImage: `url(${auroraBackground})` }}
         aria-hidden="true"
       />
-      <Sidebar active={activeNav} onSelect={setActiveNav} userName={userName} />
+      <Sidebar active={activeNav} onSelect={navigate} userName={userName} />
 
       <div className="zh-status-row" aria-label="Status">
         <Shield size={15} strokeWidth={1.8} aria-label="Segurança — não conectada" data-unavailable="true" />
@@ -97,30 +89,31 @@ export function ZaraHome() {
         <div className="zh-top-bar">
           <Header userFirstName={userName.split(' ')[0] ?? userName} />
           <div className="zh-top-bar-center">
-            <TextCommandInput />
+            <TextCommandInput onSent={() => navigate('Conversas')} />
           </div>
           <div />
         </div>
 
         <div className="zh-content-top">
           <main className="zh-main">
-            <ForYouCard />
-            <CommunicationsCard />
+            <ForYouCard onNavigate={navigate} />
+            <CommunicationsCard onNavigate={navigate} />
           </main>
 
           <div className="zh-core-column">
             <ZaraCore state={coreState} />
-            <VoiceDock coreState={coreState} />
+            <VoiceDock coreState={coreState} onNavigate={navigate} />
           </div>
 
           <aside className="zh-right">
-            <ActiveProjectCard />
-            <ToolsCard />
+            <ActiveProjectCard onNavigate={navigate} />
+            <LabHomeCard onNavigate={navigate} />
           </aside>
         </div>
 
         <SystemPanel metrics={metrics} battery={battery} wifi={wifi} power={power} />
       </div>
+      {activeNav === 'ZARA Lab' ? <LabRoom onClose={closePanel} /> : activeNav !== 'Hoje' && <HomeDrawer key={activeNav} section={activeNav} onClose={closePanel} onNavigate={navigate} />}
     </div>
   );
 }

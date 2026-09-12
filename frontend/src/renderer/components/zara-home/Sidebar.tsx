@@ -3,7 +3,8 @@ import {
   House, MessageCircle, Folder, File, LayoutGrid, Workflow,
   BrainCircuit, FlaskConical, Monitor, Cpu, Settings,
 } from 'lucide-react';
-import zaraLogo from '../../../assets/zara-home/zara-logo-transparent.png';
+import profileAndroid from '../../../assets/zara-home/profile-android.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
 
 // Itens 1:1 com o MASTER (ordem exata, incluindo "Dispositivos").
 const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [
@@ -27,13 +28,6 @@ interface SidebarProps {
   userPhotoUrl?: string | null;
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
-}
-
 export function Sidebar({ active, onSelect, userName, userPhotoUrl }: SidebarProps) {
   return (
     <aside className="zh-sidebar" aria-label="Navegação principal">
@@ -47,6 +41,8 @@ export function Sidebar({ active, onSelect, userName, userPhotoUrl }: SidebarPro
             key={label}
             className="zh-nav-item"
             data-active={label === active}
+            type="button"
+            aria-current={label === active ? 'page' : undefined}
             onClick={() => onSelect(label)}
           >
             <Icon size={17} strokeWidth={1.6} aria-hidden="true" />
@@ -54,9 +50,9 @@ export function Sidebar({ active, onSelect, userName, userPhotoUrl }: SidebarPro
           </button>
         ))}
       </nav>
-      <button className="zh-user-card" type="button">
+      <button className="zh-user-card" type="button" onClick={() => onSelect('Configurações')} aria-label={`Configurações de ${userName}`}>
         <span className="zh-avatar">
-          {userPhotoUrl ? <img src={userPhotoUrl} alt={`Foto de ${userName}`} /> : initials(userName)}
+          <img src={userPhotoUrl || profileAndroid} alt={userPhotoUrl ? `Foto de ${userName}` : "Avatar ZARA"} />
         </span>
         <span className="zh-user-meta">
           <strong>{userName}</strong>

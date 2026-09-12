@@ -7,6 +7,8 @@
 export type CoreState =
   | 'idle'
   | 'listening'
+  | 'transcribing'
+  | 'verifying'
   | 'understanding'
   | 'thinking'
   | 'planning'
@@ -44,5 +46,6 @@ export interface PowerPlansData {
   supported: boolean;
   plans: PowerPlan[];
   pending: boolean;
+  error: string;
   setPlan: (guid: string) => void;
 }

@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import whatsapp from '../../../assets/zara-home/brands/whatsapp.svg';
 import telegram from '../../../assets/zara-home/brands/telegram.svg';
+import { useHomeFeedback } from './useHomeFeedback';
 
 function InstagramGlyph() {
   // Glifo oficial do Instagram: câmera arredondada sobre o gradiente oficial
@@ -36,10 +37,10 @@ function GmailGlyph() {
 }
 
 const CHANNELS = [
-  { name: 'WhatsApp', icon: whatsapp, value: '12', badgeClass: 'zh-comm-badge--wa', tint: null },
-  { name: 'Telegram', icon: telegram, value: '3', badgeClass: 'zh-comm-badge--tg', tint: null },
-  { name: 'Instagram', Glyph: InstagramGlyph, value: '5', badgeClass: 'zh-comm-badge--ig', tint: null },
-  { name: 'Gmail', Glyph: GmailGlyph, value: '7', badgeClass: 'zh-comm-badge--gmail', tint: null },
+  { name: 'WhatsApp', id: 'whatsapp' as const, icon: whatsapp, badgeClass: 'zh-comm-badge--wa' },
+  { name: 'Telegram', id: 'telegram' as const, icon: telegram, badgeClass: 'zh-comm-badge--tg' },
+  { name: 'Instagram', id: 'instagram' as const, Glyph: InstagramGlyph, badgeClass: 'zh-comm-badge--ig' },
+  { name: 'Gmail', id: 'gmail' as const, Glyph: GmailGlyph, badgeClass: 'zh-comm-badge--gmail' },
 ];
 
 /**
@@ -47,16 +48,16 @@ const CHANNELS = [
  * Contagens são valores de demonstração estáticos do MASTER até que o
  * backend exponha contagens reais por canal.
  */
-export function CommunicationsCard() {
+export function CommunicationsCard({ onNavigate }: { onNavigate: (section: string) => void }) {
+  const { feedback, pending, run } = useHomeFeedback();
   return (
     <section className="zh-section zh-glass-panel" aria-label="Comunicações">
       <h2>Comunicações</h2>
       <div className="zh-comm-row">
-        {CHANNELS.map(({ name, icon, Glyph, tint, value, badgeClass }) => (
-          <div className="zh-comm-item" key={name}>
+        {CHANNELS.map(({ name, id, icon, Glyph, badgeClass }) => (
+          <button className="zh-comm-item" key={name} type="button" disabled={pending} onClick={() => void run(() => window.zaraIPC?.desktop?.openExternal?.(id), `${name} aberto no navegador.`)} aria-label={`Abrir ${name}`} title={`${name} • contagem de mensagens não conectada`}>
             <div
               className={`zh-comm-badge${badgeClass ? ` ${badgeClass}` : ''}`}
-              style={tint ? { background: tint } : undefined}
               aria-label={name}
             >
               {icon ? (
@@ -65,13 +66,14 @@ export function CommunicationsCard() {
                 Glyph && <Glyph />
               )}
             </div>
-            <span className="zh-comm-value">{value}</span>
-          </div>
+            <span className="zh-comm-value" aria-label="Contagem não conectada">—</span>
+          </button>
         ))}
-        <button className="zh-comm-more" type="button" aria-label="Mais comunicações">
+        <button className="zh-comm-more" type="button" aria-label="Mais comunicações" onClick={() => onNavigate('Comunicações')}>
           <ChevronRight size={16} strokeWidth={2} />
         </button>
       </div>
+      {feedback && <p className="zh-card-feedback" role="status">{feedback}</p>}
     </section>
   );
 }

@@ -1,131 +1,125 @@
-import { useEffect, useState } from 'react';
-import { Grid3x3, Folder, AudioLines, HelpCircle, History, MoreHorizontal } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { LayoutGrid, Folder, AudioLines, HelpCircle, Clock3, MoreHorizontal } from 'lucide-react';
 import type { CoreState } from './types';
-import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore } from '../../lib/aecAudio';
+import { iniciarAudioAec, pararAudioAec, tocarKore, cortarKore, koreTocando, observarKore } from '../../lib/aecAudio';
+import { errorMessage } from './homeActions';
 
 interface VoiceDockProps {
   coreState: CoreState;
+  onNavigate: (section: string) => void;
 }
 
-/**
- * Botão central do dock = Modo Voz. Chama `window.zaraIPC.voice.start()` /
- * `.stop()` — os MESMOS canais que o resto da ZARA (HUD, Orb) já usa para
- * ligar o pipeline de voz real (Gemini Live). Não substitui nem duplica
- * nada da voz; só oferece outro botão para o canal existente.
- *
- * ZARA-HOME-AUDIO-BRIDGE-001: a Home nova (React) nunca chamava
- * `aecAudio.ts` nem assinava `on.voiceOutputAudio` — o botão dizia "ouvindo"
- * mas nenhum áudio de microfone saía do renderer, e a fala da Kore não tinha
- * onde tocar. `iniciarAudioAec`/`pararAudioAec`/`tocarKore`/`cortarKore` já
- * existiam prontos (mesma técnica usada pelo HUD antigo), só não estavam
- * plugados nesta árvore de componentes.
- */
-export function VoiceDock({ coreState }: VoiceDockProps) {
+/** The Home owns one AEC capture and the existing Kore playback subscription. */
+export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
   const [listening, setListening] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const [playing, setPlaying] = useState(false);
+  const operation = useRef(false);
+  const mounted = useRef(true);
+  const ownsSession = useRef(false);
   const voiceAvailable = Boolean(window.zaraIPC?.voice?.start && window.zaraIPC?.voice?.stop);
 
-  // A saída de voz (Kore) precisa estar pronta para tocar mesmo antes do
-  // Alex clicar em "ouvir" — barge-in e respostas de texto também falam.
   useEffect(() => {
-    const subscribe = window.zaraIPC?.on?.voiceOutputAudio;
-    if (!subscribe) return;
-    const unsubscribe = subscribe((data) => {
-      if (data?.stop) {
-        cortarKore();
-        return;
+    mounted.current = true;
+    const unsubscribePlayback = observarKore(setPlaying);
+    const unsubscribe = window.zaraIPC?.on?.voiceOutputAudio?.((data) => {
+      try {
+        if (data?.stop) cortarKore();
+        else if (data?.pcm) tocarKore(data.pcm, data.sampleRate || 24000);
+      } catch {
+        if (mounted.current) setError('Não foi possível reproduzir este trecho de áudio.');
       }
-      if (data?.pcm) {
-        tocarKore(data.pcm, data.sampleRate || 24000);
+    });
+    const unsubscribeState = window.zaraIPC?.on?.stateChange?.((state) => {
+      if (['OFFLINE', 'STOPPED', 'DISCONNECTED'].includes(state.toUpperCase())) {
+        pararAudioAec();
+        ownsSession.current = false;
+        if (mounted.current) setListening(false);
       }
     });
     return () => {
+      mounted.current = false;
+      unsubscribePlayback();
       unsubscribe?.();
-      cortarKore();
+      unsubscribeState?.();
+      pararAudioAec();
+      if (ownsSession.current) void window.zaraIPC?.voice?.stop?.().catch(() => undefined);
+      ownsSession.current = false;
     };
   }, []);
 
   async function toggleVoice() {
-    if (!voiceAvailable) return;
-    // ZARA-HOME-BARGE-IN-001: enquanto ela fala, o mesmo botao interrompe em
-    // vez de alternar o microfone -- corta o audio de verdade (nao so o
-    // estado visual) e avisa o backend, igual ao "Zara, pare" por voz.
-    if (coreState === 'speaking') {
-      cortarKore();
-      try {
-        await window.zaraIPC?.message?.interrupt?.();
-      } catch {
-        // Audio ja foi cortado no cliente; erro no aviso ao backend nao
-        // precisa travar o botao.
-      }
-      return;
-    }
+    if (!voiceAvailable || operation.current) return;
+    operation.current = true;
+    setPending(true);
+    setError('');
     try {
-      if (listening) {
-        await window.zaraIPC!.voice!.stop!();
+      if (coreState === 'speaking' || koreTocando()) {
+        cortarKore();
+        const response = await window.zaraIPC?.message?.interrupt?.();
+        if (response?.success === false) throw new Error(response.error || 'A interrupção não foi confirmada.');
+      } else if (listening) {
+        // Stop capture immediately, even when the backend has disconnected.
         pararAudioAec();
         setListening(false);
+        const response = await window.zaraIPC!.voice!.stop!();
+        if (response?.success === false) throw new Error(response.error || 'A parada da voz não foi confirmada.');
+        ownsSession.current = false;
       } else {
-        await window.zaraIPC!.voice!.start!();
-        const resultado = await iniciarAudioAec((pcmBase64) => {
-          window.zaraIPC?.voice?.sendMicChunk?.(pcmBase64);
-        });
-        if (!resultado.ok) {
-          // Backend ligou o pipeline mas o navegador negou o microfone --
-          // desliga dos dois lados em vez de fingir que está ouvindo.
+        const response = await window.zaraIPC!.voice!.start!();
+        if (response?.success !== true) throw new Error(response?.error || 'O serviço de voz não pôde iniciar.');
+        ownsSession.current = true;
+        if (!mounted.current) {
           await window.zaraIPC!.voice!.stop!();
-          setListening(false);
+          ownsSession.current = false;
+          return;
+        }
+        // Vosk owns its microphone in Python; Gemini uses renderer AEC.
+        if (response.mode !== 'local' && response.audio_transport !== 'local') {
+          const result = await iniciarAudioAec((pcm) => window.zaraIPC?.voice?.sendMicChunk?.(pcm));
+          if (!result.ok) throw new Error('Microfone indisponível. Verifique o dispositivo e a permissão de áudio.');
+        }
+        if (!mounted.current) {
+          pararAudioAec();
+          await window.zaraIPC!.voice!.stop!();
+          ownsSession.current = false;
           return;
         }
         setListening(true);
       }
-    } catch {
+    } catch (cause) {
       pararAudioAec();
-      setListening(false);
+      if (ownsSession.current) {
+        await window.zaraIPC?.voice?.stop?.().catch(() => undefined);
+        ownsSession.current = false;
+      }
+      if (mounted.current) {
+        setListening(false);
+        setError(errorMessage(cause, 'Não foi possível iniciar a voz.'));
+      }
+    } finally {
+      operation.current = false;
+      if (mounted.current) setPending(false);
     }
   }
 
-  const label = !voiceAvailable
-    ? 'Abrir modo voz — não conectado'
-    : coreState === 'speaking' ? 'Interromper'
-    : listening ? 'Parar modo voz' : 'Abrir modo voz';
+  const label = pending ? 'Conectando voz…' : !voiceAvailable ? 'Modo voz indisponível'
+    : coreState === 'speaking' || playing ? 'Interromper fala' : listening ? 'Parar modo voz' : 'Abrir modo voz';
 
   return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div className="zh-dock-wrap">
       <nav className="zh-dock zh-glass-panel" aria-label="Dock ZARA">
-        <button className="zh-dock-btn" type="button" aria-label="Aplicativos">
-          <Grid3x3 size={17} strokeWidth={1.7} />
-        </button>
-        <button className="zh-dock-btn" type="button" aria-label="Arquivos">
-          <Folder size={17} strokeWidth={1.7} />
-        </button>
+        <button className="zh-dock-btn" type="button" aria-label="Aplicativos" title="Aplicativos" onClick={() => onNavigate('Aplicativos')}><LayoutGrid size={25} strokeWidth={1.7} /></button>
+        <button className="zh-dock-btn" type="button" aria-label="Arquivos" title="Arquivos e memórias" onClick={() => onNavigate('Arquivos')}><Folder size={27} strokeWidth={1.7} /></button>
         <span className="zh-dock-separator" aria-hidden="true" />
-        <button
-          className="zh-dock-voice"
-          type="button"
-          aria-label={label}
-          data-listening={listening}
-          data-offline={!voiceAvailable}
-          disabled={!voiceAvailable}
-          onClick={toggleVoice}
-        >
-          <AudioLines size={20} strokeWidth={2} />
-        </button>
+        <button className="zh-dock-voice" type="button" aria-label={label} title={label} data-listening={listening} data-state={error ? 'error' : pending ? 'connecting' : coreState} data-offline={!voiceAvailable} aria-pressed={listening} aria-busy={pending} disabled={!voiceAvailable || pending} onClick={() => void toggleVoice()}><AudioLines size={29} strokeWidth={1.7} /></button>
         <span className="zh-dock-separator" aria-hidden="true" />
-        <button className="zh-dock-btn" type="button" aria-label="Ajuda">
-          <HelpCircle size={17} strokeWidth={1.7} />
-        </button>
-        <button className="zh-dock-btn" type="button" aria-label="Histórico">
-          <History size={17} strokeWidth={1.7} />
-        </button>
-        <button className="zh-dock-btn" type="button" aria-label="Mais opções">
-          <MoreHorizontal size={17} strokeWidth={1.7} />
-        </button>
+        <button className="zh-dock-btn" type="button" aria-label="Ajuda" title="Ajuda" onClick={() => onNavigate('Ajuda')}><HelpCircle size={25} strokeWidth={1.7} /></button>
+        <button className="zh-dock-btn" type="button" aria-label="Histórico" title="Histórico" onClick={() => onNavigate('Histórico')}><Clock3 size={25} strokeWidth={1.7} /></button>
+        <button className="zh-dock-btn" type="button" aria-label="Mais opções" title="Mais opções" onClick={() => onNavigate('Mais opções')}><MoreHorizontal size={27} strokeWidth={1.7} /></button>
       </nav>
-      {coreState === 'offline' && (
-        <span className="zh-not-connected" style={{ marginTop: 6 }}>
-          Voz não conectada
-        </span>
-      )}
+      {error && <div className="zh-dock-feedback" role="alert">{error}</div>}
     </div>
   );
 }

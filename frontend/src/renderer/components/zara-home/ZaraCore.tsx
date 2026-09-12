@@ -1,9 +1,12 @@
+import type { CSSProperties } from 'react';
 import type { CoreState } from './types';
-import zaraLogo from '../../../assets/zara-home/zara-logo-transparent.png';
+import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
 import coreGlass from '../../../assets/zara-home/core-glass.png';
 
 const LABELS: Record<CoreState, string> = {
   idle: 'Em espera',
+  transcribing: 'Transcrevendo',
+  verifying: 'Verificando',
   listening: 'Ouvindo',
   understanding: 'Entendendo',
   thinking: 'Pensando',
@@ -29,6 +32,11 @@ interface ZaraCoreProps {
 export function ZaraCore({ state }: ZaraCoreProps) {
   return (
     <div className="zh-core-wrap" role="region" aria-label={`ZARA Core: ${state}`}>
+      <div className="zh-core-orbits" aria-hidden="true">
+        {[-90, -58, 0, 40, 65, 90, 125, 150, 180, 210].map(angle => (
+          <i key={angle} className="zh-orbit-point" style={{ '--angle': `${angle}deg` } as CSSProperties} />
+        ))}
+      </div>
       <div className="zh-core-platform" aria-hidden="true">
         <span className="zh-platform-contact" />
         <span className="zh-platform-ring zh-platform-ring--4" />

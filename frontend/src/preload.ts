@@ -4,6 +4,21 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ReminderEvent } from './reminderEvents'
 
+type FrontMessageResponse = {
+  response_origin?: 'front_brain_run' | 'front_brain_policy' | 'local_deterministic'
+  success?: boolean
+  response?: string
+  error?: string
+  engine?: string
+  run_id?: string
+  model_requested?: string
+  model_reported?: string | null
+  provider?: string
+  provenance_status?: 'UNREPORTED' | 'MATCHED' | 'MISMATCH_REJECTED'
+  rerouted?: boolean
+  [key: string]: unknown
+}
+
 // Define the API we want to expose to the renderer
 const zaraAPI = {
   // Engine management
@@ -15,7 +30,7 @@ const zaraAPI = {
   // Messaging
   message: {
     send: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) =>
-      ipcRenderer.invoke('send-message', payload),
+      ipcRenderer.invoke('send-message', payload) as Promise<FrontMessageResponse>,
     interrupt: () => ipcRenderer.invoke('interrupt'),
   },
 
@@ -45,6 +60,14 @@ const zaraAPI = {
   projectMemory: {
     get: (key: string) => ipcRenderer.invoke('project-memory-get', { key }),
     list: () => ipcRenderer.invoke('project-memory-list'),
+    context: () => ipcRenderer.invoke('project-memory-context'),
+  },
+
+  desktop: {
+    openApp: (id: 'vscode' | 'figma' | 'postman' | 'docker') => ipcRenderer.invoke('desktop-open-app', id),
+    openExternal: (id: 'whatsapp' | 'telegram' | 'instagram' | 'gmail' | 'figma') => ipcRenderer.invoke('desktop-open-external', id),
+    openSettings: (id: 'storage' | 'temporary' | 'startup' | 'update' | 'security' | 'firewall' | 'privacy' | 'power') => ipcRenderer.invoke('desktop-open-settings', id),
+    openFolder: (id: 'home' | 'documents' | 'downloads' | 'desktop') => ipcRenderer.invoke('desktop-open-folder', id),
   },
 
   // Actions
@@ -87,6 +110,22 @@ const zaraAPI = {
     send: (payload: { author: string; target: string; content: string }) => ipcRenderer.invoke('lab-send', payload),
     createProposal: (payload: { title: string; summary: string; risk: string; owner: string }) => ipcRenderer.invoke('lab-proposal-create', payload),
     decideProposal: (payload: { id: string; decision: 'APPROVE' | 'REJECT' }) => ipcRenderer.invoke('lab-proposal-decide', payload),
+  },
+
+  // ZARA-LAB-V1-001: new multi-agent runtime. Additive sibling of `lab`
+  // above -- the old channels are untouched.
+  labV1: {
+    snapshot: (sessionId?: string, teamId?: string) => ipcRenderer.invoke('lab-v1-snapshot', { session_id: sessionId, team_id: teamId }),
+    createSession: (objective: string, teamId?: string) => ipcRenderer.invoke('lab-v1-create-session', { objective, team_id: teamId }),
+    submit: (sessionId: string, text: string) => ipcRenderer.invoke('lab-v1-submit', { session_id: sessionId, text }),
+    autopilot: (intent: string) => ipcRenderer.invoke('lab-v1-autopilot', { intent }),
+    configureAutonomy: (enabled: boolean) => ipcRenderer.invoke('lab-v1-autonomy-configure', { enabled }),
+    cancelMission: (sessionId: string) => ipcRenderer.invoke('lab-v1-cancel-mission', { session_id: sessionId }),
+    providers: () => ipcRenderer.invoke('lab-v1-providers'),
+    // Matches LabV1Service.create_agent's real signature (core/lab_v1/service.py).
+    createAgent: (payload: { name: string; provider_id: string; model: string; role?: string; team_id?: string; lifecycle?: string; instructions?: string; fallback_agent_id?: string }) => ipcRenderer.invoke('lab-v1-create-agent', payload),
+    archiveAgent: (agentId: string) => ipcRenderer.invoke('lab-v1-archive-agent', { agent_id: agentId }),
+    rebindRole: (payload: { team_id: string; role: string; agent_id: string; reason?: string }) => ipcRenderer.invoke('lab-v1-rebind-role', payload),
   },
 
   reminders: {

@@ -4,7 +4,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, session, shell, Tray, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
 import { join } from 'path'
 import { spawn, execFileSync, ChildProcess } from 'child_process'
-import { existsSync, writeFileSync } from 'fs'
+import { existsSync, readdirSync, writeFileSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
 
 let pythonProcess: ChildProcess | null = null
@@ -457,6 +457,13 @@ async function executeActionWithConfirmation(
 function handlePythonEvent(msg: any): void {
   if (!msg?.type) return
   switch (msg.type) {
+    case 'lab-release-ready':
+      // Only the governed backend release queue emits this after package canary.
+      // Its detached worker waits for this process to exit, activates and relaunches.
+      if (app.isPackaged && process.env.ZARA_SMOKE_TEST !== '1' && msg.data?.state === 'READY_TO_ACTIVATE') {
+        sairDeVerdade()
+      }
+      break
     case 'state-change':
       mainWindow?.webContents.send('state-change', msg.state)
       break
@@ -508,6 +515,68 @@ function diagnosticHtml(message: string): string {
   return `<!doctype html><html><body style="margin:0;min-height:100vh;background:#020604;color:#d8ffe9;font-family:Segoe UI,sans-serif;padding:32px;box-sizing:border-box"><h2 style="color:#55ffad">ZARA — falha ao carregar a interface</h2><p>A janela Electron abriu corretamente, porém o renderer não pôde ser carregado.</p><pre style="white-space:pre-wrap;border:1px solid #1a6b4a;padding:16px;border-radius:8px;background:#06100b">${safe}</pre></body></html>`
 }
 
+// Home shortcuts accept semantic IDs only. Renderer text never becomes a
+// command, arbitrary path or URL, and launching is not reported as verification.
+type DesktopResult = { success: boolean; output?: string; error?: string }
+const desktopLinks: Record<string, string> = {
+  whatsapp: 'https://web.whatsapp.com/',
+  telegram: 'https://web.telegram.org/',
+  instagram: 'https://www.instagram.com/',
+  gmail: 'https://mail.google.com/',
+  figma: 'https://www.figma.com/',
+}
+const desktopSettings: Record<string, string> = {
+  storage: 'ms-settings:storagesense', temporary: 'ms-settings:storagesense',
+  startup: 'ms-settings:startupapps', update: 'ms-settings:windowsupdate',
+  security: 'windowsdefender:', firewall: 'windowsdefender://network',
+  privacy: 'ms-settings:privacy', power: 'ms-settings:powersleep',
+}
+
+async function openDesktopLink(targets: Record<string, string>, id: unknown): Promise<DesktopResult> {
+  const target = typeof id === 'string' && Object.hasOwn(targets, id) ? targets[id] : null
+  if (!target) return { success: false, error: 'Destino não reconhecido.' }
+  try {
+    await shell.openExternal(target)
+    return { success: true, output: 'Solicitação de abertura enviada ao Windows.' }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Não foi possível abrir o destino.' }
+  }
+}
+
+function resolveDesktopApp(id: unknown): string | null {
+  if (typeof id !== 'string' || !['vscode', 'figma', 'postman', 'docker'].includes(id)) return null
+  const local = process.env.LOCALAPPDATA || join(app.getPath('home'), 'AppData', 'Local')
+  const programs = process.env.ProgramFiles || 'C:\\Program Files'
+  const candidates: Record<string, string[]> = {
+    vscode: [join(local, 'Programs', 'Microsoft VS Code', 'Code.exe'), join(programs, 'Microsoft VS Code', 'Code.exe')],
+    figma: [join(local, 'Figma', 'Figma.exe')],
+    postman: [join(local, 'Postman', 'Postman.exe'), join(programs, 'Postman', 'Postman.exe')],
+    docker: [join(programs, 'Docker', 'Docker', 'Docker Desktop.exe')],
+  }
+  // Squirrel-based installations keep the executable in a version directory.
+  if (id === 'figma' || id === 'postman') {
+    const name = id === 'figma' ? 'Figma' : 'Postman'
+    const directory = join(local, name)
+    try {
+      const versions = readdirSync(directory, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && /^app-\d[\d.]*$/.test(entry.name))
+        .map(entry => entry.name).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+      for (const version of versions) candidates[id].push(join(directory, version, `${name}.exe`))
+    } catch { /* An absent installation is a normal state. */ }
+  }
+  return candidates[id].find(candidate => existsSync(candidate)) || null
+}
+
+async function openDesktopPath(path: string | null): Promise<DesktopResult> {
+  if (!path) return { success: false, error: 'Aplicativo não encontrado neste computador.' }
+  try {
+    const error = await shell.openPath(path)
+    return error ? { success: false, error } : { success: true, output: 'Solicitação de abertura enviada ao Windows.' }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Não foi possível abrir o destino.' }
+  }
+}
+
 // ZARA-BANDEJA-001 ---------------------------------------------------------
 
 function mostrarAJanela(): void {
@@ -555,6 +624,8 @@ function definirInicioAutomatico(ligado: boolean): void {
  * pergunta já foi respondida, e a resposta passa a ser dele.
  */
 function ligarSozinhaNaPrimeiraVez(): void {
+  // Isolated package QA must never register its temporary build at login.
+  if (process.env.ZARA_SMOKE_TEST === '1') return
   try {
     const carimbo = join(app.getPath('userData'), 'inicio-automatico-decidido')
     if (existsSync(carimbo)) return
@@ -613,10 +684,10 @@ function createWindow(): void {
 
   const iconPath = getWindowIconPath()
   mainWindow = new BrowserWindow({
-    width: 1500,
-    height: 950,
-    minWidth: 1200,
-    minHeight: 800,
+    width: 1671,
+    height: 941,
+    minWidth: 1100,
+    minHeight: 620,
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#020604',
@@ -720,6 +791,7 @@ function setupIPC(): void {
   ipcMain.handle('memory-user-forget', (_event, payload) => sendToPython('memory-user-forget', payload))
   ipcMain.handle('project-memory-get', (_event, payload) => sendToPython('project-memory-get', payload))
   ipcMain.handle('project-memory-list', () => sendToPython('project-memory-list'))
+  ipcMain.handle('project-memory-context', () => sendToPython('project-memory-context'))
   ipcMain.handle('action-execute', executeActionWithConfirmation)
   ipcMain.handle('action-list', () => sendToPython('action-list'))
   ipcMain.handle('system-metrics', () => sendToPython('system-metrics'))
@@ -737,10 +809,33 @@ function setupIPC(): void {
   ipcMain.handle('lab-proposal-create', (_event, payload) => sendToPython('lab-proposal-create', payload))
   ipcMain.handle('lab-proposal-decide', (_event, payload) => sendToPython('lab-proposal-decide', payload))
 
+  // ZARA-LAB-V1-001: new multi-agent runtime. Additive passthroughs, same
+  // sendToPython plumbing as the Lab handlers above -- the old ones are untouched.
+  ipcMain.handle('lab-v1-snapshot', (_event, payload) => sendToPython('lab-v1-snapshot', payload))
+  ipcMain.handle('lab-v1-create-session', (_event, payload) => sendToPython('lab-v1-create-session', payload))
+    ipcMain.handle('lab-v1-submit', (_event, payload) => sendToPython('lab-v1-submit', payload))
+    ipcMain.handle('lab-v1-autopilot', (_event, payload) => sendToPython('lab-v1-autopilot', payload))
+    ipcMain.handle('lab-v1-autonomy-configure', (_event, payload) => sendToPython('lab-v1-autonomy-configure', payload))
+    ipcMain.handle('lab-v1-cancel-mission', (_event, payload) => sendToPython('lab-v1-cancel-mission', payload))
+  ipcMain.handle('lab-v1-providers', () => sendToPython('lab-v1-providers'))
+  ipcMain.handle('lab-v1-create-agent', (_event, payload) => sendToPython('lab-v1-create-agent', payload))
+  ipcMain.handle('lab-v1-archive-agent', (_event, payload) => sendToPython('lab-v1-archive-agent', payload))
+  ipcMain.handle('lab-v1-rebind-role', (_event, payload) => sendToPython('lab-v1-rebind-role', payload))
+
   // Persistent local reminders
   ipcMain.handle('reminder-create', (_event, payload) => sendToPython('reminder-create', payload))
   ipcMain.handle('reminder-list', (_event, state?: string) => sendToPython('reminder-list', state ? { state } : {}))
   ipcMain.handle('reminder-cancel', (_event, id: string) => sendToPython('reminder-cancel', { id }))
+
+  ipcMain.handle('desktop-open-app', (_event, id: unknown) => openDesktopPath(resolveDesktopApp(id)))
+  ipcMain.handle('desktop-open-external', (_event, id: unknown) => openDesktopLink(desktopLinks, id))
+  ipcMain.handle('desktop-open-settings', (_event, id: unknown) => openDesktopLink(desktopSettings, id))
+  ipcMain.handle('desktop-open-folder', (_event, id: unknown) => {
+    if (id !== 'home' && id !== 'documents' && id !== 'downloads' && id !== 'desktop') {
+      return { success: false, error: 'Pasta não reconhecida.' }
+    }
+    return openDesktopPath(app.getPath(id))
+  })
 
   ipcMain.handle('window-minimize', () => mainWindow?.minimize())
   ipcMain.handle('window-maximize', () => {

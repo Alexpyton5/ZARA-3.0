@@ -19,20 +19,28 @@ export function useSystemMetrics(): SystemMetricsData {
     if (!fetchMetrics) return;
 
     let cancelled = false;
+    let pending = false;
 
     async function poll() {
+      if (pending) return;
+      pending = true;
       try {
         const result = await fetchMetrics!();
         if (cancelled || !result) return;
         const cpu = typeof result.cpu === 'number' ? result.cpu
           : typeof result?.cpu?.total === 'number' ? result.cpu.total : null;
-        const ram = typeof result.memory_percent === 'number' ? result.memory_percent
+        const ram = typeof result.ram === 'number' ? result.ram
+          : typeof result.memory_percent === 'number' ? result.memory_percent
           : typeof result?.memory?.percent === 'number' ? result.memory.percent : null;
-        const disk = typeof result.disk_percent === 'number' ? result.disk_percent
+        const disk = typeof result.disk === 'number' ? result.disk
+          : typeof result.disk_percent === 'number' ? result.disk_percent
           : typeof result?.disk?.percent === 'number' ? result.disk.percent : null;
-        setData({ cpu, ram, disk });
+        const valid = (value: number | null) => value !== null && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+        setData({ cpu: valid(cpu), ram: valid(ram), disk: valid(disk) });
       } catch {
-        // Canal existe mas falhou — mantém null, não inventa valor.
+        if (!cancelled) setData({ cpu: null, ram: null, disk: null });
+      } finally {
+        pending = false;
       }
     }
 

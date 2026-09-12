@@ -58,6 +58,17 @@ let abrindo = false
 let saidaCtx: AudioContext | null = null
 let proximoInicio = 0
 let tocando: AudioBufferSourceNode[] = []
+const ouvintesSaida = new Set<(active: boolean) => void>()
+
+export function koreTocando(): boolean { return tocando.length > 0 }
+export function observarKore(listener: (active: boolean) => void): () => void {
+  ouvintesSaida.add(listener)
+  listener(koreTocando())
+  return () => { ouvintesSaida.delete(listener) }
+}
+function notificarSaida(): void {
+  for (const listener of ouvintesSaida) listener(koreTocando())
+}
 
 /** Reamostra para 16 kHz int16, com média dos vizinhos para não criar alias. */
 function paraInt16em16k(entrada: Float32Array, taxaOrigem: number): Int16Array {
@@ -117,6 +128,7 @@ export async function iniciarAudioAec(
     const aecAtivo = trilha?.getSettings?.().echoCancellation === true
 
     const ctx = new AudioContext()
+    await ctx.resume()
     const url = URL.createObjectURL(
       new Blob([CODIGO_WORKLET], { type: 'application/javascript' }),
     )
@@ -205,6 +217,7 @@ export function tocarKore(pcmBase64: string, taxa: number): void {
   if (!pcmBase64) return
   if (!saidaCtx) saidaCtx = new AudioContext()
   const ctx = saidaCtx
+  if (ctx.state === 'suspended') void ctx.resume().catch(() => cortarKore())
 
   const bruto = window.atob(pcmBase64)
   const amostras = Math.floor(bruto.length / 2)
@@ -227,13 +240,16 @@ export function tocarKore(pcmBase64: string, taxa: number): void {
   // Enfileira em sequência. Sem isso os blocos tocam sobrepostos e a voz sai
   // picotada; uma folga curta absorve a variação de chegada pela rede.
   const agora = ctx.currentTime
-  if (proximoInicio < agora) proximoInicio = agora + 0.04
+  if (proximoInicio <= agora) proximoInicio = agora + 0.10
   fonte.start(proximoInicio)
   proximoInicio += buffer.duration
 
   tocando.push(fonte)
+  notificarSaida()
   fonte.onended = () => {
     tocando = tocando.filter((f) => f !== fonte)
+    fonte.disconnect()
+    notificarSaida()
   }
 }
 
@@ -251,4 +267,5 @@ export function cortarKore(): void {
   }
   tocando = []
   proximoInicio = 0
+  notificarSaida()
 }

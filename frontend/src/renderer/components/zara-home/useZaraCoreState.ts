@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CoreState } from './types';
 
 const KNOWN_STATES: ReadonlySet<string> = new Set<CoreState>([
-  'idle', 'listening', 'understanding', 'thinking', 'planning', 'executing',
+  'transcribing', 'verifying', 'idle', 'listening', 'understanding', 'thinking', 'planning', 'executing',
   'awaiting_authorization', 'speaking', 'success', 'error', 'offline',
 ]);
 
@@ -24,7 +24,9 @@ export function useZaraCoreState(): CoreState {
     if (!subscribe) return;
 
     const unsubscribe = subscribe((raw: string) => {
-      const normalized = String(raw || '').toLowerCase();
+      const incoming = String(raw || '').toLowerCase();
+      const aliases: Record<string, string> = { standby: 'idle', acting: 'executing', disconnected: 'offline' };
+      const normalized = aliases[incoming] || incoming;
       setState(KNOWN_STATES.has(normalized) ? (normalized as CoreState) : 'idle');
     });
 

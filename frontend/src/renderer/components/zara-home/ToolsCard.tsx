@@ -1,6 +1,7 @@
 import vscode from '../../../assets/zara-home/brands/vscode.svg';
 import postman from '../../../assets/zara-home/brands/postman.svg';
 import docker from '../../../assets/zara-home/brands/docker.svg';
+import { useHomeFeedback } from './useHomeFeedback';
 
 function FigmaGlyph() {
   // Logo oficial do Figma (5 formas nas cores da marca)
@@ -16,10 +17,10 @@ function FigmaGlyph() {
 }
 
 const TOOLS = [
-  { name: 'VS Code', icon: vscode },
-  { name: 'Figma', Glyph: FigmaGlyph },
-  { name: 'Postman', icon: postman },
-  { name: 'Docker', icon: docker },
+  { name: 'VS Code', id: 'vscode' as const, icon: vscode },
+  { name: 'Figma', id: 'figma' as const, Glyph: FigmaGlyph },
+  { name: 'Postman', id: 'postman' as const, icon: postman },
+  { name: 'Docker', id: 'docker' as const, icon: docker },
 ];
 
 /**
@@ -27,10 +28,7 @@ const TOOLS = [
  * "Abrir"). Abrir app usa action.execute real do IPC.
  */
 export function ToolsCard() {
-  async function open(name: string) {
-    if (!window.zaraIPC?.action?.execute) return;
-    await window.zaraIPC.action.execute('os_app', { app: name.toLowerCase().replace(/\s+/g, '_') });
-  }
+  const { feedback, pending, run } = useHomeFeedback();
 
   return (
     <section className="zh-section zh-glass-panel" aria-label="Ferramentas">
@@ -41,7 +39,9 @@ export function ToolsCard() {
             className="zh-tool-tile"
             type="button"
             key={tool.name}
-            onClick={() => open(tool.name)}
+            onClick={() => void run(() => window.zaraIPC?.desktop?.openApp?.(tool.id), `Abertura de ${tool.name} solicitada.`)}
+            disabled={pending}
+            aria-label={`Abrir ${tool.name}`}
           >
             {tool.icon ? (
               <img src={tool.icon} alt="" />
@@ -53,6 +53,7 @@ export function ToolsCard() {
           </button>
         ))}
       </div>
+      {feedback && <p className="zh-card-feedback" role="status">{feedback}</p>}
     </section>
   );
 }

@@ -1,0 +1,18 @@
+[mcp_servers.codex]
+command = "C:/Users/alexp/AppData/Local/Programs/nodejs/node-v24.18.0-win-x64/codex.cmd"
+args = ["mcp-server"]
+
+[mcp_servers.desktop-commander]
+command = "C:/Users/alexp/AppData/Local/Programs/nodejs/node-v24.18.0-win-x64/npx.cmd"
+args = [
+    "--yes",
+    "@wonderwhy-er/desktop-commander@0.2.30",
+    "--no-onboarding",
+]
+
+[mcp_servers.graphify]
+command = "C:/Users/alexp/.local/bin/graphify-mcp.exe"
+args = [
+    "--graph",
+    "C:/Users/alexp/Downloads/ZARA 3.0 CLEAN 002/graphify-out/graph.json",
+]

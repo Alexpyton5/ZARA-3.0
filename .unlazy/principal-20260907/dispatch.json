@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "waves": {
+    "discovery": {
+      "leaves": [
+        "leaf-1",
+        "leaf-2"
+      ],
+      "state": "complete",
+      "openedAt": "2026-09-07T21:51:29.390Z",
+      "started": {
+        "leaf-1": {
+          "handle": "/root/autonomy_map",
+          "at": "2026-09-07T21:52:11.402Z"
+        },
+        "leaf-2": {
+          "handle": "/root/build_evidence",
+          "at": "2026-09-07T21:52:11.476Z"
+        }
+      },
+      "returned": {
+        "leaf-1": {
+          "at": "2026-09-07T23:43:13.328Z"
+        },
+        "leaf-2": {
+          "at": "2026-09-07T23:43:13.406Z"
+        }
+      },
+      "sealedAt": "2026-09-07T21:52:11.566Z",
+      "completedAt": "2026-09-07T23:43:13.406Z"
+    },
+    "frontend": {
+      "leaves": [
+        "leaf-3"
+      ],
+      "state": "complete",
+      "openedAt": "2026-09-07T21:55:13.876Z",
+      "started": {
+        "leaf-3": {
+          "handle": "/root/front_selector",
+          "at": "2026-09-07T21:55:41.349Z"
+        }
+      },
+      "returned": {
+        "leaf-3": {
+          "at": "2026-09-08T00:18:37.851Z"
+        }
+      },
+      "sealedAt": "2026-09-07T21:55:41.427Z",
+      "completedAt": "2026-09-08T00:18:37.851Z"
+    },
+    "review": {
+      "leaves": [
+        "leaf-4"
+      ],
+      "state": "complete",
+      "openedAt": "2026-09-07T23:43:13.555Z",
+      "started": {
+        "leaf-4": {
+          "handle": "/root/hostile_front_review",
+          "at": "2026-09-07T23:43:45.852Z"
+        }
+      },
+      "returned": {
+        "leaf-4": {
+          "at": "2026-09-08T00:18:37.937Z"
+        }
+      },
+      "sealedAt": "2026-09-07T23:43:45.927Z",
+      "completedAt": "2026-09-08T00:18:37.937Z"
+    }
+  }
+}

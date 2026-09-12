@@ -39,7 +39,10 @@ from datetime import datetime
 PROJECT_ROOT = Path(__file__).parent.absolute()
 BUILD_DIR = PROJECT_ROOT / "build-sidecar"
 DIST_DIR = PROJECT_ROOT / "dist-sidecar"
-VENV_DIR = PROJECT_ROOT / ".venv"
+# Candidate packaging may use the already-provisioned project environment
+# without copying it into a disposable source workspace.  Output paths remain
+# derived from PROJECT_ROOT, so this never redirects a normal build.
+VENV_DIR = Path(os.environ.get("ZARA_BUILD_VENV_DIR", str(PROJECT_ROOT / ".venv"))).resolve()
 VENV_PYTHON = VENV_DIR / "Scripts" / "python.exe"
 VENV_PIP = VENV_DIR / "Scripts" / "pip.exe"
 
@@ -114,6 +117,7 @@ HIDDEN_IMPORTS = [
     "pvporcupine",
     "kokoro_onnx",
     "edge_tts",     # voz neural gratuita da cascata de TTS
+    "_miniaudio",
     "miniaudio",    # decodifica o MP3 da Edge em streaming (latencia baixa)
     "sounddevice",
     "PIL",          # Correcao: main.py exige PIL (find_spec); nao pode ser excluido
@@ -186,6 +190,8 @@ def clean_sidecar_dirs():
     """Clean ONLY sidecar build artifacts (never touches Electron artifacts)."""
     print("[BUILD] Cleaning sidecar artifacts...")
     for dir_path in [BUILD_DIR, DIST_DIR, PROJECT_ROOT / "__pycache__"]:
+        if dir_path.resolve().parent != PROJECT_ROOT.resolve():
+            raise ValueError("Build cleanup escaped project directory")
         if dir_path.exists():
             shutil.rmtree(dir_path)
             print(f"[BUILD] Removed: {dir_path}")
@@ -197,6 +203,8 @@ def clean_frontend_dirs():
     frontend_dir = PROJECT_ROOT / "frontend"
     for dir_name in ["dist-electron", "dist-frontend", "dist-tests"]:
         dir_path = frontend_dir / dir_name
+        if dir_path.resolve().parent != PROJECT_ROOT.resolve():
+            raise ValueError("Build cleanup escaped project directory")
         if dir_path.exists():
             shutil.rmtree(dir_path)
             print(f"[BUILD] Removed: {dir_path}")
@@ -256,16 +264,10 @@ def create_pyinstaller_spec() -> Path:
     import sounddevice as _sd
     _sd_path = Path(_sd.__file__).parent
     _portaudio = list(_sd_path.glob("_sounddevice_data/portaudio-binaries/**/*.dll"))
-    sounddevice_binaries = [(str(p), "sounddevice/_sounddevice_data/portaudio-binaries") for p in _portaudio]
-    # miniaudio e extensao nativa: decodifica o MP3 da Edge em streaming.
-    # collect_dynamic_libs("miniaudio") retorna vazio — coletar manualmente se existir.
-    try:
-        import miniaudio as _ma
-        _ma_path = Path(_ma.__file__).parent
-        _ma_native = list(_ma_path.glob("*.dll")) + list(_ma_path.glob("**/*.dll"))
-        miniaudio_binaries = [(str(p), "miniaudio") for p in _ma_native]
-    except Exception:
-        miniaudio_binaries = []
+    sounddevice_binaries = [(str(p), "_sounddevice_data/portaudio-binaries") for p in _portaudio]
+    # _miniaudio is one native extension, not every DLL in site-packages.
+    # PyInstaller follows the import and collects its linked dependencies.
+    miniaudio_binaries = []
     binaries = (
         vosk_binaries + porcupine_binaries + sounddevice_binaries + miniaudio_binaries
     )
@@ -346,110 +348,42 @@ def update_sidecar_manifests(exe_path: Path) -> str:
 
     # Update CLEAN_BUILD_ID.txt (first 8 chars)
     clean_build_id = hash_hex[:8]
-    Path('CLEAN_BUILD_ID.txt').write_text(clean_build_id + '\n')
+    (PROJECT_ROOT / 'CLEAN_BUILD_ID.txt').write_text(clean_build_id + '\n')
     print(f"[BUILD] Updated CLEAN_BUILD_ID.txt: {clean_build_id}")
 
     # Update SHA256_MANIFEST.txt
     manifest_path = exe_path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
     manifest_content = f"{hash_hex}  {manifest_path}\n"
-    Path('SHA256_MANIFEST.txt').write_text(manifest_content, newline='\n')
+    (PROJECT_ROOT / 'SHA256_MANIFEST.txt').write_text(manifest_content, newline='\n')
     print("[BUILD] Updated SHA256_MANIFEST.txt")
 
     # Update PATCH_SHA256_MANIFEST.txt (same as SHA256_MANIFEST.txt for now)
-    Path('PATCH_SHA256_MANIFEST.txt').write_text(manifest_content, newline='\n')
+    (PROJECT_ROOT / 'PATCH_SHA256_MANIFEST.txt').write_text(manifest_content, newline='\n')
     print("[BUILD] Updated PATCH_SHA256_MANIFEST.txt")
 
     return hash_hex
 
 
 def generate_build_info(sidecar_sha256: str) -> None:
-    """Generate BUILD_INFO.json with complete build metadata."""
-    try:
-        # Collect git info
-        git_branch = subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=PROJECT_ROOT, text=True, stderr=subprocess.DEVNULL
-        ).strip()
-        git_commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=PROJECT_ROOT, text=True, stderr=subprocess.DEVNULL
-        ).strip()
-        git_dirty = subprocess.check_output(
-            ["git", "status", "--porcelain"],
-            cwd=PROJECT_ROOT, text=True, stderr=subprocess.DEVNULL
-        ).strip()
-    except subprocess.CalledProcessError:
-        git_branch = "unknown"
-        git_commit = "unknown"
-        git_dirty = "unknown"
+    """Record this sidecar only; Electron identity is written after packaging.
 
-    try:
-        python_version = subprocess.check_output(
-            [str(VENV_PYTHON), "--version"],
-            text=True, stderr=subprocess.DEVNULL
-        ).strip().replace("Python ", "")
-    except subprocess.CalledProcessError:
-        python_version = "unknown"
+    A sidecar build must never label the previous app.asar as newly built or
+    overwrite the active Electron package's BUILD_INFO.json.
+    """
+    from tools.build_current import source_identity
 
-    try:
-        node_version = subprocess.check_output(
-            ["node", "--version"],
-            text=True, stderr=subprocess.DEVNULL
-        ).strip().replace("v", "")
-    except subprocess.CalledProcessError:
-        node_version = "unknown"
-
-    # Get sidecar EXE size
     exe_path = DIST_DIR / f"{APP_NAME}.exe"
-    exe_size = exe_path.stat().st_size if exe_path.exists() else 0
-
-    # Build timestamp
-    build_timestamp = datetime.now().isoformat()
-    build_id = f"release-candidate-{datetime.now().strftime('%Y%m%d-%H%M')}"
-
-    # Write to frontend/release/win-unpacked/
-    release_dir = PROJECT_ROOT / "frontend" / "release" / "win-unpacked"
-
-    def _sha256_of(path: Path) -> str:
-        if not path.exists():
-            return "unknown"
-        h = hashlib.sha256()
-        with path.open('rb') as f:
-            for chunk in iter(lambda: f.read(4096), b''):
-                h.update(chunk)
-        return h.hexdigest()
-
-    # Per .claude/rules/build-release.md, a candidate's manifest must also
-    # identify the packaged Electron EXE and app.asar, when they exist.
-    packaged_exe_path = release_dir / "ZARA 3.0.exe"
-    packaged_asar_path = release_dir / "resources" / "app.asar"
-    exe_sha256 = _sha256_of(packaged_exe_path)
-    asar_sha256 = _sha256_of(packaged_asar_path)
-
-    # Construct BUILD_INFO
-    build_info = {
-        "BUILD_ID": build_id,
-        "BUILD_TIMESTAMP": build_timestamp,
-        "GIT_BRANCH": git_branch,
-        "GIT_COMMIT": git_commit,
-        "GIT_DIRTY": bool(git_dirty),
-        "PYTHON_VERSION": python_version,
-        "NODE_VERSION": node_version,
+    info = {
+        "BUILD_ID": f"sidecar-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+        "BUILD_TIMESTAMP": datetime.now().astimezone().isoformat(),
         "SIDECAR_SHA256": sidecar_sha256,
-        "SIDECAR_SIZE_BYTES": exe_size,
-        "EXE_SHA256": exe_sha256,
-        "ASAR_SHA256": asar_sha256,
-        "DELTA": "unknown - fill in manually before offering candidate for physical test",
-        "PROJECT_ROOT": str(PROJECT_ROOT),
+        "SIDECAR_SIZE_BYTES": exe_path.stat().st_size,
+        "SOURCE_SHA256": source_identity(backend_only=True)["sha256"],
+        "PYTHON_PATH": str(VENV_PYTHON),
     }
-
-    if release_dir.exists():
-        build_info_path = release_dir / "BUILD_INFO.json"
-        with build_info_path.open('w') as f:
-            json.dump(build_info, f, indent=2)
-        print(f"[BUILD] Generated BUILD_INFO.json: {build_info_path}")
-    else:
-        print(f"[BUILD] WARNING: Release directory not found: {release_dir}")
+    info_path = DIST_DIR / "BUILD_INFO.json"
+    info_path.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
+    print(f"[BUILD] Generated sidecar receipt: {info_path}")
 
 
 def build(clean_first=True) -> int:
@@ -500,96 +434,14 @@ def build(clean_first=True) -> int:
 
 
 def build_full() -> int:
-    """Full build: reinstala dependencias, roda testes e gera instalador do zero."""
-    print("=" * 60)
-    print("ZARA 3.0 FULL BUILD (sidecar + installer)")
-    print("=" * 60)
+    """Build a complete new package without changing the active application."""
+    from tools.build_current import build_package
 
     try:
-        # Step 1: Clean
-        print("[BUILD] Step 1: Cleaning artifacts...")
-        clean_sidecar_dirs()
-        clean_frontend_dirs()
-
-        # Step 2: Install dependencies
-        print("[BUILD] Step 2: Installing dependencies...")
-        # Use the project's venv pip to install dependencies
-        # First, upgrade pip
-        result = run_venv_pip(["install", "--upgrade", "pip"])
-        if result.returncode != 0:
-            print("[BUILD] WARNING: Failed to upgrade pip, continuing anyway...")
-
-        # Install main dependencies from requirements.txt
-        req_file = PROJECT_ROOT / "requirements.txt"
-        if req_file.exists():
-            result = run_venv_pip(["install", "-r", str(req_file)])
-            if result.returncode != 0:
-                print("[BUILD] ERROR: Failed to install main dependencies from requirements.txt")
-                return 1
-        else:
-            print("[BUILD] ERROR: requirements.txt not found")
-            return 1
-
-        # Install dev dependencies (from pyproject.toml optional-dependencies dev)
-        dev_deps = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "ruff>=0.4.0", "mypy>=1.9.0"]
-        result = run_venv_pip(["install"] + dev_deps)
-        if result.returncode != 0:
-            print("[BUILD] ERROR: Failed to install dev dependencies")
-            return 1
-
-        # Step 3: Run tests
-        print("[BUILD] Step 3: Running test suite...")
-        # Python tests
-        result = run_venv_cmd(["-m", "pytest"])
-        if result.returncode != 0:
-            print("[BUILD] ERROR: Python tests failed")
-            print(result.stdout)
-            print(result.stderr)
-            return 1
-        # Node tests
-        # NOTE: frontend/package.json "test" script is a stub (no real suite
-        # configured yet) - it always exits 0, so treating it as a pass/fail
-        # gate here was a false-green. Run it for visibility but do not gate
-        # the build on it until a real frontend test suite exists.
-        frontend_dir = PROJECT_ROOT / "frontend"
-        result = run_cmd(["npm", "test"], cwd=frontend_dir)
-        print("[BUILD] NOTE: frontend 'npm test' is a stub, not a real gate (see frontend/package.json)")
-
-        # Step 4: Build sidecar (without cleaning again)
-        print("[BUILD] Step 4: Building sidecar...")
-        if build(clean_first=False) != 0:
-            return 1
-
-        # Step 5: Build installer (Electron)
-        print("[BUILD] Step 5: Building Electron installer...")
-        result = run_cmd(["npm", "run", "electron:build"], cwd=frontend_dir)
-        if result.returncode != 0:
-            print("[BUILD] ERROR: Electron build failed")
-            return 1
-
-        # Step 6: Verify installer exists
-        installer_path = frontend_dir / "release" / "ZARA 3.0 Setup 3.0.0.exe"
-        if not installer_path.exists():
-            # Try to find the installer with a glob (in case version changed)
-            installers = list((frontend_dir / "release").glob("ZARA 3.0 Setup *.exe"))
-            if not installers:
-                print(f"[BUILD] ERROR: Installer not found in {frontend_dir / 'release'}")
-                return 1
-            installer_path = installers[0]
-            print(f"[BUILD] Found installer: {installer_path.name}")
-
-        # Step 7: Update sidecar manifests (already done in build() function)
-        # Step 8: Report success
-        print("=" * 60)
-        print("FULL BUILD COMPLETE!")
-        print(f"Sidecar: {DIST_DIR / f'{APP_NAME}.exe'}")
-        print(f"Installer: {installer_path}")
-        print(f"Installer size: {installer_path.stat().st_size / 1024 / 1024:.1f} MB")
-        print("=" * 60)
+        build_package("Complete rebuild from current source")
         return 0
-
-    except Exception as e:
-        print(f"[BUILD] Unexpected error: {e}")
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"[BUILD] Failed: {exc}")
         return 1
 
 

@@ -8,6 +8,107 @@
 
 > Este arquivo é a fonte única de contexto operacional da ZARA. Relatórios antigos foram preservados em `_quarentena/docs-legacy/2026-09-05/` para auditoria histórica, mas não devem ser usados como descrição atual sem reconciliação com o código e os artefatos de teste mais recentes.
 
+## 0. Atualização 2026-09-06 — ZARA CURRENT BUILD ativada (transferência Astra → Claude)
+
+**HEAD atual:** `7e3624c44cdbce5a4f1114229884cc7deb41d346` (branch inalterada, dirty=true).
+**Build ativo:** `zara-current-20260906-055925`, `frontend\ZARA CURRENT BUILD\win-unpacked\ZARA 3.0.exe`.
+Identidade em `ZARA_ACTIVE_BUILD.json` (STATUS `active-validated`), validação real em
+`artifacts/visual-qa/packaged-validation.json`, ledger de verificação em `GATES.md`.
+
+Nesta sessão a Home foi reconstruída/consolidada (`zara-home.css`, ~2.580 linhas de overrides
+eliminadas), o Core recebeu logo vetorial novo, o card "Ferramentas" foi substituído por
+**LabHomeCard** (mostra propostas/tarefas reais persistidas do ZARA Lab, nunca fabricadas) e o
+controle de voz central foi reduzido para não invadir a faixa Sistema. `HomeDrawer.tsx` liga a
+sidebar/Dock a paineis reais (Conversas, Projetos, Arquivos, Aplicativos, Automações, Memórias,
+Lab, Sistema, Configurações), com Escape e restauração de foco confirmados neste build.
+
+Isso corrige/atualiza as seguintes linhas da tabela da Seção 4, que estavam desatualizadas:
+- "Para você/Comunicações — placeholder" → o card "Para você" e "Comunicações" seguem mostrando
+  `—` quando não há dado real (correto, não é regressão), mas a navegação por trás deles
+  (`Conversas`) agora abre histórico real do backend.
+- "ZARA Lab" (não existia como linha própria): real, mas **não** é multiagente completo — é
+  leitura+fila (`lab.send` com ACK `QUEUED`, nunca "concluído") sobre o backend existente.
+
+Validado nesta sessão via Electron empacotado real (CDP/Playwright contra o processo
+empacotado, não o dev server): preload (`window.zaraIPC`) presente com o canal completo,
+`system.metrics()` retornando CPU/RAM/disco reais da máquina, Home carregando com saudação e
+dados reais, navegação "Conversas" abrindo histórico real (inclusive uma resposta honesta de
+falha, "Não consegui confirmar" — não um sucesso fabricado), sem erros de console, testado em
+1671×941 / 1366×768 / 1280×720 sem clipping. Voz **não** foi testada fisicamente nesta sessão
+(NOT_LIVE_VERIFIED — mic/STT/TTS/latência continuam sem prova física).
+
+A instalação antiga (NSIS per-user) em `%LOCALAPPDATA%\Programs\zara-frontend` foi **desinstalada**
+a pedido do Alex ("não quero cópia antiga no sistema... um só build"), não apenas deixada
+desatualizada — era instalação por usuário, sem UAC, então o uninstaller registrado rodou normal.
+Os atalhos reais (Desktop, Menu Iniciar, `ABRIR-A-ZARA.bat`, `ZARA_INICIAR.bat`) apontam para
+`tools/launch_current.ps1`, que resolve `ZARA_ACTIVE_BUILD.json` e confere hashes antes de abrir —
+esse é hoje o único caminho de entrada da ZARA no sistema.
+
+## 0.1 Atualização 2026-09-06 — ZARA LAB REAL V1 (runtime multiagente real)
+
+Existe agora um runtime multiagente real em `core/lab_v1/`, separado e sem tocar no
+`core/lab_coordinator.py` legado (que continua funcionando e dono do `lab/zara_lab.db`).
+V1 é dono de `lab/zara_lab_v1.db`.
+
+**A invariante do desenho:** PROVIDER ≠ MODEL ≠ AGENT ≠ ROLE ≠ TEAM ≠ SESSION. Um
+handoff só re-vincula o *cargo* a outro agente; time, missão, mensagens, tarefas e
+decisões não são recriados. É isso que faz o retorno do Astra ser uma troca de binding,
+não uma reconstrução.
+
+**Provider real:** `claude_cli`, o Claude Code CLI oficial em modo não-interativo
+(`-p --output-format json --model … --restricted`). `--restricted` é obrigatório e
+remove Bash/PowerShell/execução de código: agentes do Lab conversam e raciocinam, mas
+não controlam o PC — o executor continua sendo o ToolRouter existente da ZARA. Os
+agentes rodam com cwd num diretório neutro (`data/lab/agent-workspace`), senão o CLI
+carrega o CLAUDE.md do projeto e o custo por chamada sobe ~4x.
+
+**Matriz de provedores (honesta, sondada de verdade):** `claude_cli` AVAILABLE;
+`codex_cli` OFFLINE (CLI não instalado — é por aqui que Astra entra no futuro, sem
+mudar o domínio); `anthropic_api` AUTH_REQUIRED (sem chave configurada).
+
+**Time ZARA Core:** Artemis (Opus, CEO, designação ACTING enquanto Astra está sem cota)
+e Vulcan (Sonnet, BUILDER, fallback do CEO).
+
+**Provado por execução real** (`tools/lab_v1_acceptance.py`, evidência em
+`artifacts/lab-v1/acceptance.json`, 14/15 portões em `GATES.md`): mensagem do Alex
+persistida; CEO real (`claude-opus-5`, custo real, `cost_basis=KNOWN`) delegando tarefa
+a um agente distinto; Builder real (`claude-sonnet-5`) executando a própria chamada;
+resultado voltando à mesma sessão; 21 eventos observados; zero campos de
+chain-of-thought armazenados; promoção idempotente de um fato para a memória existente
+(`UserMemoryCore`, com `ref` rastreável); restart em processo novo recuperando tudo;
+e failover — CEO marcado indisponível, Handoff gravado, cargo re-vinculado ao fallback,
+**mesma sessão**, zero mensagens/tarefas perdidas.
+
+**IPC/UI:** sete canais `lab-v1-*` ligados nos quatro pontos (main/preload/global.d.ts/
+consumidor). O painel ZARA Lab mostra equipe, provedores com estado textual, objetivo,
+conversa, tarefas, handoffs e custo (`—` quando desconhecido, nunca "grátis").
+`lab-v1-submit` responde `QUEUED` — recebido e persistido, nunca "concluído".
+
+**O que o Lab V1 NÃO é:** não há scheduler novo, Intelligent Router adaptativo, executor
+autônomo, learned routing, council completo nem formação automática de equipes. Delegação
+é limitada por `max_delegations` e uma única rodada de consolidação.
+
+**Isolamento de teste (obrigatório).** O acceptance runner NUNCA toca a base de
+produção. Ele cria banco e memória próprios sob `ZARA3_LAB_SANDBOX`; o failover, os
+handoffs e o restart acontecem só nesse mundo de teste. O relatório grava a impressão
+digital da produção antes e depois (time, bindings, designação, sessões, tarefas,
+mensagens e SHA-256 do arquivo) e o portão G14 falha se qualquer dimensão mudar. Não
+depende de "o teste normalmente chega ao fim": não existe caminho do runner para a
+produção, então uma exceção ou um Ctrl-C também não contamina.
+
+**Self-delegation é recusada.** Se o delegador e o alvo resolverem para o mesmo
+AgentInstance (uma pessoa ocupando dois cargos é legítimo), o runtime NÃO faz uma
+segunda chamada paga fingindo delegação. Retorna `delegation_refusal="SELF_DELEGATION"`
+com `delegation_candidate_agent_ids` para o chamador escolher outro membro, registra o
+CapabilityGap e avisa o Alex por mensagem. Isso importa porque uma segunda chamada ao
+mesmo agente produziria um Run com custo real e modelo real — exatamente a forma que os
+portões multiagente procuram — e passaria por prova de dois agentes sem ser.
+
+**Não promovido a build.** `zara-current-20260906-055925` continua sendo a CURRENT BUILD
+e é o que o atalho do Alex abre. O Lab V1 foi validado em Electron real com preload e IPC
+reais, mas **não** empacotado: faltou espaço em disco (2,86 GB livres). Ver G13 em
+`GATES.md`.
+
 ## 1. Veredito executivo
 
 A ZARA 3.0 é um aplicativo desktop Windows baseado em **Electron + React/TypeScript** no frontend e um **sidecar Python** no backend. O processo Electron cria a janela, expõe uma ponte IPC mínima via preload, inicia o sidecar e encaminha mensagens, voz, ações, confirmação e estado. O Python mantém o registro de ações, intenção determinística, roteamento de ferramentas, gates de risco/permissão, persistência de memória e integrações de voz/modelos.

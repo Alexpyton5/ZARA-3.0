@@ -22,6 +22,9 @@ frontend/dist-frontend/
 frontend/dist-electron/
 frontend/dist-tests/
 frontend/release/
+frontend/ZARA CURRENT BUILD/
+frontend/.current-build-staging-*/
+frontend/.build-backups/
 frontend/.test-dist/
 build-sidecar/
 dist-sidecar/

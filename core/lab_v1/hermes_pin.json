@@ -1,0 +1,13 @@
+{
+  "distribution": "hermes-agent",
+  "version": "0.21.0",
+  "files": {
+    "tools/file_operations.py": "6d73656f815759fd37e864481710e7dc749ad21d1c6c75689460073f0c664554",
+    "tools/file_operations_common.py": "d346c6d2e710a0fbf74bb25151b3864adba0e716db0ec9e8fa87fdbc180c6a7d",
+    "tools/file_operations_lint.py": "8bb10170f92b5108f87195421a08c03dc0ea27eca0aaff344476cf7f44497e0c",
+    "tools/file_operations_search.py": "0dd5c95cb0d3fae9f4699707880e88871d6455623a2bd8d8d3b1158805c7a959",
+    "tools/environments/local.py": "edd67afa83729a7570e3039da58b9593f75a4e9949fca1f2ab535c28c0a8ef38",
+    "tools/environments/base.py": "1c949700ba864cff60964f839ccae14460c730beb89d0779380b3efded7f0db8",
+    "agent/file_safety.py": "467c90cc6c15b6b58f46b1571a2093005adbb69c57e11253acd3cf9123734050"
+  }
+}

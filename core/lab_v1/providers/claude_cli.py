@@ -90,18 +90,45 @@ def _pick_model_reported(model_usage: dict[str, Any], requested_model: str) -> s
 
 
 def _classify_cli_failure(returncode: int, stdout: str, stderr: str) -> tuple[Availability, str]:
-    """Failure path when the process ran but did not report success.
+    """Failure path when the process produced no parseable JSON envelope at all.
 
-    Non-zero exit or unparseable JSON both land here as ERROR with a short
-    reason — the runtime does not need to know exit codes, only whether it
-    is worth failing over.
+    This is the last resort: it only runs when `stdout` was not a JSON object
+    the CLI meant for us to read (crash before printing the envelope, killed
+    mid-write, etc). There is no structured `result` field to read here by
+    definition, so this is the one place raw stdout/stderr text is used
+    directly — and BUG(2026-09-11): this used to also run whenever
+    `proc.returncode != 0`, even when a perfectly good JSON envelope was
+    present (quota/rate-limit/auth failures from this CLI exit non-zero
+    while still printing a full `{"is_error": true, "result": "..."}` body).
+    That short-circuit meant the real reason in `data["result"]` was never
+    read; instead we classified from a 300-char slice of raw stdout/stderr,
+    which for a large envelope is mostly JSON punctuation and metadata that
+    precedes the actual reason. Caller now only reaches this function when
+    `data` truly failed to parse — see `complete()`.
     """
     detail = (stderr or stdout or "").strip()
-    if len(detail) > 300:
-        detail = detail[:300] + "..."
     if not detail:
         detail = f"Processo terminou com codigo {returncode}."
     return classify_error_text(detail), detail
+
+
+def _extract_failure_reason(data: dict[str, Any]) -> str:
+    """Pull the real failure reason out of a parsed CLI JSON envelope.
+
+    `result` is where the CLI actually puts the human-readable reason
+    (quota text, rate-limit text, auth text, or whatever else went wrong).
+    `subtype`/`error` are the fallbacks the envelope has been observed to use
+    when `result` itself is absent. Never truncated here — truncating before
+    classification is exactly the bug being fixed (the real reason can start
+    well past any fixed character cutoff in a large envelope), and truncating
+    after classification would still throw away part of "a mensagem real
+    preservada" that the caller is required to keep.
+    """
+    for key in ("result", "error", "subtype"):
+        value = data.get(key)
+        if value:
+            return str(value)
+    return "erro desconhecido"
 
 
 class ClaudeCliAdapter(ProviderAdapter):
@@ -233,18 +260,39 @@ class ClaudeCliAdapter(ProviderAdapter):
 
         stdout = proc.stdout or ""
         try:
-            data = json.loads(stdout) if stdout.strip() else {}
+            parsed = json.loads(stdout) if stdout.strip() else {}
         except json.JSONDecodeError:
-            data = {}
+            parsed = {}
+        data: dict[str, Any] = parsed if isinstance(parsed, dict) else {}
 
-        if proc.returncode != 0 or not data:
+        # BUG FIX (2026-09-11): the CLI exits non-zero on quota/rate-limit/auth
+        # failures *while still printing a full JSON envelope* with
+        # `is_error: true` and the real reason in `result`. The old code
+        # checked `proc.returncode != 0` first and returned from a 300-char
+        # slice of raw stdout/stderr before ever looking at `data`, so the
+        # real reason (often past char 300 in a large envelope) was never
+        # read. The envelope, when present and marked as an error, is now
+        # always authoritative over the exit code.
+        if data and data.get("is_error"):
+            error_text = _extract_failure_reason(data)
+            availability = classify_error_text(error_text)
+            if availability is Availability.ERROR:
+                # The provider explicitly confirmed this call failed
+                # (`is_error: true`) but the reason text does not match any
+                # known category in `classify_error_text`. That is a
+                # provider-confirmed failure of an uncategorized kind, not
+                # "we have no idea what happened" (crash / unparseable
+                # output) -- the closed taxonomy in core.lab_v1.domain has a
+                # dedicated state for exactly this: PROVIDER_ERROR.
+                availability = Availability.PROVIDER_ERROR
+            return ProviderResult(ok=False, availability=availability, error=error_text)
+
+        if not data or proc.returncode != 0:
+            # No usable JSON envelope (crash/killed before printing one), or
+            # the process exited non-zero without ever setting `is_error` --
+            # nothing structured to read, fall back to raw text.
             availability, detail = _classify_cli_failure(proc.returncode, stdout, proc.stderr or "")
             return ProviderResult(ok=False, availability=availability, error=detail)
-
-        if data.get("is_error"):
-            error_text = str(data.get("result") or data.get("subtype") or "erro desconhecido")
-            availability = classify_error_text(error_text)
-            return ProviderResult(ok=False, availability=availability, error=error_text[:300])
 
         usage = data.get("usage") or {}
         model_usage = data.get("modelUsage") or {}

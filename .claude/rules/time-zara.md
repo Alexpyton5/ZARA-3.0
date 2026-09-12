@@ -30,7 +30,7 @@ cobra prova, e rejeita relatório que promova evidência.
 
 | Papel | Agente | Área de escrita |
 |---|---|---|
-| 1. CEO_MENTOR | sessão principal | nada de source; `.zara-dev/tasks/` |
+| 1. CEO_MENTOR | sessão principal | `.zara-dev/tasks/`; **`core/lab_v1/**` (motor do Lab), delegado por tarefa nomeada com lista fechada de arquivos — ver `DECISIONS.md` 2026-09-11**; nenhum outro source |
 | 2. ENGENHEIRO_VOZ | `zara-engenheiro-voz` | `core/voice_stt.py`, `core/voice_tts.py`, `core/gemini_live_voice.py` |
 | 3. ENGENHEIRO_AUDIO | `zara-engenheiro-audio` | `frontend/src/renderer/lib/aecAudio.ts`, `core/windows_audio.py` |
 | 4. ENGENHEIRO_EXECUCAO | `zara-engenheiro-execucao` | `core/ipc_handlers.py`, `core/pc_voice_intent.py`, `core/file_voice_intent.py`, `core/reminder_intent.py`, `core/action_registry.py`, `core/action_confirmation.py`, `core/actions/*.py` |

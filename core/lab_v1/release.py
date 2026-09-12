@@ -453,11 +453,23 @@ class SourcePromotion:
         self.journal = journal
         return dict(info, SOURCE_PROMOTION_JOURNAL=str(self.journal_path))
 
+    #: States from which a rollback may still restore the pre-promotion
+    #: known-good. ``ACTIVATED`` is the automatic post-activation window (see
+    #: ``ReleaseQueue.promote``); ``HEALTH_PASSED``/``COMMITTED`` are added for
+    #: ZARA-TELEGRAM-RESTAURAR-001: Alex asking, well after a promotion
+    #: succeeded, to undo it because he does not like the result or it broke
+    #: something the automatic health check did not catch. The journal already
+    #: names its own known-good and its own package-level ``build_journal``, so
+    #: rolling back from any of these three states restores exactly the same
+    #: target this promotion would have restored to had health failed instead
+    #: — no second reversal mechanism, only a later call to this same one.
+    ROLLBACK_ELIGIBLE_STATES = frozenset({'ACTIVATED', 'HEALTH_PASSED', 'COMMITTED'})
+
     def rollback(self, build_journal=None):
         """Restore package, pointers, sidecar and source from one known-good."""
         build = self.build
         journal = self.journal or json.loads(self.journal_path.read_text(encoding='utf-8'))
-        if journal.get('state') != 'ACTIVATED':
+        if journal.get('state') not in self.ROLLBACK_ELIGIBLE_STATES:
             raise ValueError('No promoted source release to roll back')
         journal.update(state='ROLLING_BACK')
         build.write_json(self.journal_path, journal)
@@ -654,3 +666,24 @@ def reconcile_promotions(build=None):
     build = _build_module(build)
     return [SourcePromotion.from_journal(path, build=build).reconcile()
             for path in _promotion_journals(build)]
+
+
+def most_recent_promotion(build=None):
+    """Read-only: the journal of the last source promotion ever attempted.
+
+    ZARA-TELEGRAM-RESTAURAR-001: a deliberate "restaurar"/"voltar" request from
+    the owner, asked at any later time, has exactly one honest target — the
+    most recent promotion — never a menu of historical checkpoints. Filenames
+    are timestamp-ordered (``source-YYYYMMDD-HHMMSS-ffffff``), so the same
+    lexicographic sort ``_promotion_journals`` already uses is chronological.
+    """
+    build = _build_module(build)
+    journals = _promotion_journals(build)
+    if not journals:
+        return None
+    path = journals[-1]
+    try:
+        document = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {'journal': str(path), 'state': 'UNREADABLE'}
+    return {'journal': str(path), 'state': document.get('state')}

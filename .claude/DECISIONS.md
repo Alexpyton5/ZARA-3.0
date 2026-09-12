@@ -72,6 +72,18 @@ Só decisão estável/importante. Não é log de rotina — isso fica no git.
   com `--config.directories.output=<pasta-nova>` explícito — nunca o script
   `npm run electron:build` cru.
 
+- **2026-09-11 (decisão do regente técnico, sob delegação explícita do Alex)** —
+  `core/lab_v1/**` (o motor do ZARA Lab: missão, plano, workforce, providers,
+  release/promoção, sandbox, patch protocol) **não tinha dono declarado** no mapa
+  de áreas de `time-zara.md`. Isso travou trabalho real: agentes recusaram tarefas
+  legítimas por não saber se podiam escrever ali, e com razão.
+  Decisão: `core/lab_v1/**` passa a ser **área do CEO_MENTOR/regente técnico**, que
+  delega por tarefa nomeada com lista fechada de arquivos. Continua valendo um
+  escritor por arquivo — duas tarefas simultâneas nunca recebem o mesmo arquivo.
+  Quem receber tarefa nomeada citando esta decisão está autorizado a escrever nos
+  arquivos de `core/lab_v1/` que a tarefa listar, e só neles.
+  Não altera a área de nenhum dos 9 papéis existentes.
+
 ## Separação de memória (não duplicar estado)
 
 - `.claude/` = como o Claude trabalha (este modelo de operação).

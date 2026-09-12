@@ -191,6 +191,10 @@ class TextProviderFailure(RuntimeError):
         self.availability = availability
 
 
+_QUOTA_WAIT_STATES = frozenset({'QUOTA_EXHAUSTED', 'RATE_LIMITED'})
+_QUOTA_BACKOFF_MAX_S = 3600
+
+
 class MissionController:
     """State and lease mutations are atomic with Session/Task/event updates.
 
@@ -495,13 +499,16 @@ class MissionController:
             due = next((s for s in doc['steps'] if s['status'] == 'PROVIDER_FAILED'
                         and s.get('retry_at', float('inf')) <= self.clock()), None)
             if not due: return False
-            if doc['used']['retries'] >= doc['limits']['max_retries'] or due.get('resource_failures', 0) >= 3:
+            waiting_on_quota = due.get('quota_waits', 0) > 0 and due.get('resource_failures', 0) < 3
+            if not waiting_on_quota and (doc['used']['retries'] >= doc['limits']['max_retries']
+                                         or due.get('resource_failures', 0) >= 3):
                 doc['state'], doc['blocker'] = 'BLOCKED_NEEDS_OWNER', 'RESOURCE_RETRY_LIMIT'
                 self._save(conn, doc, 'mission.resource_exhausted')
                 return False
             if due['capability'] != 'model.text' or due['receipt']:
                 return False
-            doc['used']['retries'] += 1
+            if not waiting_on_quota:
+                doc['used']['retries'] += 1
             if doc.get('waiting_since') is not None:
                 doc['deadline'] += max(0, self.clock() - doc.pop('waiting_since'))
             due.update(status='PENDING', attempt_id=None)
@@ -642,8 +649,17 @@ class MissionController:
                     self._block(conn, doc, 'PROVIDER_' + exc.availability)
                     if doc.get('resource_waiting') and exc.availability in (
                             'BUSY', 'RATE_LIMITED', 'QUOTA_EXHAUSTED', 'PROVIDER_ERROR', 'OFFLINE', 'ERROR'):
-                        step['resource_failures'] = step.get('resource_failures', 0) + 1
-                        step['retry_at'] = self.clock() + min(900, 60 * 2 ** (step['resource_failures'] - 1))
+                        # Cota esgotada nao e falha intermitente: e uma espera com hora
+                        # para acabar (o plano do dono renova). Contar isso como tentativa
+                        # queimada mata a missao muito antes da cota voltar. Entao ela
+                        # espera mais e nao consome o orcamento de falha real.
+                        if exc.availability in _QUOTA_WAIT_STATES:
+                            step['quota_waits'] = step.get('quota_waits', 0) + 1
+                            step['retry_at'] = self.clock() + min(
+                                _QUOTA_BACKOFF_MAX_S, 300 * 2 ** (step['quota_waits'] - 1))
+                        else:
+                            step['resource_failures'] = step.get('resource_failures', 0) + 1
+                            step['retry_at'] = self.clock() + min(900, 60 * 2 ** (step['resource_failures'] - 1))
                         complete = {s['id'] for s in doc['steps'] if s['status'] == 'DONE'}
                         ready = any(s['status'] == 'PENDING' and set(s['depends_on']) <= complete for s in doc['steps'])
                         doc['state'] = 'RUNNING' if ready else 'WAITING_RESOURCE'

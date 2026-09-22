@@ -78,8 +78,7 @@ HIDDEN_IMPORTS = [
     "core.reminder_intent",
     "core.url_security",
     "core.realtime_web",
-    # Memory
-    "memory.memory_manager",
+    "core.lab_v1.providers.opencode",
     "memory.episodic_memory",
     "memory.memory_context",
     "memory.project_memory",
@@ -220,6 +219,10 @@ def create_pyinstaller_spec() -> Path:
     porcupine_datas = collect_data_files("pvporcupine")
     kokoro_datas = collect_data_files("kokoro_onnx")
     language_tags_datas = collect_data_files("language_tags")
+    # ZARA-TTS-DATA-001: jsonschema_specifications lista o diretorio schemas/
+    # no import (via referencing/__rmatmul__). Sem estes dados o backend morre
+    # com FileNotFoundError e o app inteiro perde voz, Lab e cerebros.
+    jsonschema_spec_datas = collect_data_files("jsonschema_specifications")
     genai_datas = collect_data_files("google.genai")
     # ZARA-VOICE-KORE-PACKAGING-001
     # sounddevice carrega o PortAudio de _sounddevice_data/portaudio-binaries/.
@@ -237,9 +240,19 @@ def create_pyinstaller_spec() -> Path:
     # perde o nome que o Alex deu - falha silenciosa, so visivel no build.
     identity_md = PROJECT_ROOT / "IDENTITY.md"
     identity_datas = [(str(identity_md), ".")] if identity_md.exists() else []
+    # ZARA-CONFIG-SEED-001: o exe le config de LOCALAPPDATA; sem a copia
+    # congelada a semente do primeiro boot nao tem de onde ler (chave NVIDIA
+    # e preferencias de voz invisiveis ao empacotado para sempre).
+    config_seed_names = ("api_keys.json", "feature_flags.json")
+    config_datas = [
+        (str(PROJECT_ROOT / "config" / name), "config")
+        for name in config_seed_names
+        if (PROJECT_ROOT / "config" / name).exists()
+    ]
     datas = (
-        porcupine_datas + kokoro_datas + language_tags_datas + genai_datas
-        + sounddevice_datas + certifi_datas + identity_datas
+        porcupine_datas + kokoro_datas + language_tags_datas + jsonschema_spec_datas
+        + genai_datas + sounddevice_datas + certifi_datas + identity_datas
+        + config_datas
     )
 
     # google-genai runtime modules ONLY (exclui google.genai.tests.* que inchava o build).
@@ -299,12 +312,21 @@ def run_pyinstaller(spec_path: Path) -> bool:
         print("[BUILD] Nao instale por iniciativa propria; reporte ao Mentor.")
         return False
 
-    result = run_venv_cmd([
-        "-m", "PyInstaller", "--clean", "--noconfirm",
+    command = [
+        str(VENV_PYTHON), "-m", "PyInstaller", "--clean", "--noconfirm",
         "--distpath", str(DIST_DIR),
         "--workpath", str(BUILD_DIR / "work"),
         str(spec_path),
-    ])
+    ]
+    print(f"[BUILD] $ {' '.join(command)}", flush=True)
+    # PyInstaller pode levar vários minutos. Não capture a saída inteira:
+    # mostrar o progresso em tempo real evita a falsa aparência de travamento
+    # e deixa o erro de arquivo bloqueado visível no ponto exato.
+    try:
+        result = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
+    except OSError as exc:
+        print(f"[BUILD] ERROR: nao foi possivel iniciar PyInstaller: {exc}", flush=True)
+        return False
 
     if result.returncode != 0:
         print("[BUILD] ERROR: PyInstaller failed")

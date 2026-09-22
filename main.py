@@ -35,6 +35,7 @@ def setup_environment():
     data_dir()
     logs_dir()
     memory_dir()
+    _seed_user_config()
 
     # Advisory single-writer guard: warn (never kill) if another live ZARA
     # process already owns this data dir. Fail-open by design.
@@ -52,6 +53,39 @@ def setup_environment():
         return lock
     except Exception:
         return None
+
+
+def _seed_user_config():
+    """Semeia o config do usuario a partir do pacote (apenas no empacotado).
+
+    O build congela dentro do EXE uma copia de config/api_keys.json e
+    feature_flags.json. O exe le config de LOCALAPPDATA (nunca escreve dentro
+    de resources) — sem a semente, a chave NVIDIA e as preferencias de voz do
+    projeto sao invisiveis ao empacotado para sempre (voz errada silenciosa,
+    Lab sem chaves). Semeia UMA vez: se o usuario ja tem config, ele manda
+    (nunca sobrescrevo).
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        from core.paths import config_dir
+
+        target_dir = config_dir()
+        bundled = Path(getattr(sys, "_MEIPASS", "")) / "config"
+        seeded_any = False
+        for name in ("api_keys.json", "feature_flags.json"):
+            target = target_dir / name
+            if target.exists():
+                continue
+            source = bundled / name
+            if not source.exists():
+                continue
+            target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+            seeded_any = True
+        if seeded_any:
+            print("[ZARA] Config do usuario semeado a partir do pacote (primeira execucao).")
+    except Exception:
+        pass
 
 
 def check_dependencies() -> bool:

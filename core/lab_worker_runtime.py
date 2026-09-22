@@ -63,14 +63,13 @@ class LabWorkerRuntime:
 
     def _keys(self) -> dict[str, str]:
         path = config_dir() / "api_keys.json"
-        if not path.exists():
-            return {}
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-        if not isinstance(raw, dict):
-            return {}
+        raw: dict[str, Any] = {}
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                raw = loaded if isinstance(loaded, dict) else {}
+            except Exception:
+                raw = {}
         mapping = {
             "GROQ_API_KEY": "groq_api_key",
             "NVIDIA_API_KEY": "nvidia_api_key",
@@ -79,6 +78,11 @@ class LabWorkerRuntime:
         out: dict[str, str] = {}
         for env_name, cfg_name in mapping.items():
             value = str(raw.get(cfg_name) or "").strip()
+            if not value:
+                # Config vazio: o env do usuario e a mesma fonte legitima —
+                # o empacotado herda o env do usuario, e sem este fallback o
+                # Lab reporta workers nao configurados com a chave salva.
+                value = os.environ.get(env_name, "").strip()
             if value:
                 out[env_name] = value
         return out
@@ -95,7 +99,19 @@ class LabWorkerRuntime:
 
     @staticmethod
     def _tool(name: str) -> str | None:
-        return shutil.which(name)
+        found = shutil.which(name)
+        if found:
+            return found
+        # PATH pode divergir no empacotado; candidatos explicitos na pasta
+        # nodejs conhecida (mesma do harness).
+        base = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "nodejs"
+        if base.exists():
+            for node_dir in sorted(base.glob("node-v*-win-x64"), reverse=True):
+                for suffix in (".cmd", ".exe"):
+                    candidate = node_dir / f"{name}{suffix}"
+                    if candidate.exists():
+                        return str(candidate)
+        return None
 
     def status(self) -> dict[str, dict[str, Any]]:
         keys = self._keys()

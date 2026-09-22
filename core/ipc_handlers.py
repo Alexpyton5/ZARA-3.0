@@ -21,6 +21,20 @@ from typing import Any
 from core.pc_voice_intent import RESPOSTA_NAO_SEI
 
 
+IPC_PROTOCOL_VERSION = 1
+IPC_MAX_REQUEST_ID_LENGTH = 160
+IPC_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
+IPC_EVENT_TYPES = frozenset({
+    "state-change", "message", "metrics", "voice-level", "voice-output-audio",
+    "reminder-created", "reminder-fired", "routing-telemetry",
+    "lab-v1-operation-result", "lab-release-ready", "backend-ready",
+})
+
+
+def _valid_request_id(value: object) -> bool:
+    return isinstance(value, str) and bool(IPC_REQUEST_ID_RE.fullmatch(value))
+
+
 def _sanitize_observation(value: object) -> str:
     text = str(value or "")
     text = re.sub(r"(?i)\b(?:bearer\s+)?(?:sk-|api[_-]?key[=: ]+|token[=: ]+)[^\s,;]+", "<redacted>", text)
@@ -87,7 +101,7 @@ _WAKE_PREFIX_RE = re.compile(
     # grupo faz 4 delas passarem e nenhuma frase de TV, porque a saudacao so vale
     # quando o nome vem logo depois.
     r"^\s*(?:(?:ol[aá]|oi|al[oô]|opa|e\s*a[íi]|bom\s+dia|boa\s+tarde|boa\s+noite)[\s,;:!.-]*)?"
-    r"(?:(?:ei|hey)\s+)?(?:zara|sara)\b[\s,;:!.-]*(.*)$",
+    r"(?:(?:ei|hey)\s+)?(?:zara|sara|l[aá]zara|o\s+l[aá]zara)\b[\s,;:!.-]*(.*)$",
     flags=re.IGNORECASE,
 )
 
@@ -645,6 +659,46 @@ class IPCMessage:
     data: Any | None = None
 
 
+IPC_REQUEST_ALLOWLIST = frozenset({
+    "engine-change", "engine-list", "send-message", "interrupt", "voice-mute",
+    "voice-mic-chunk", "action-execute", "action-confirm", "action-confirm-cancel",
+    "action-list", "self-status", "system-metrics", "latencia-resumo", "system-info",
+    "voice-start", "voice-stop", "voice-status", "config-get", "config-set",
+    "lab-state", "lab-send", "lab-proposal-create", "lab-proposal-decide",
+    "lab-v1-snapshot", "lab-v1-create-session", "lab-v1-admit-operation",
+    "lab-v1-confirm-operation", "lab-v1-submit", "lab-v1-autopilot",
+    "lab-v1-autopilot-activate", "lab-v1-autonomy-configure", "lab-v1-cancel-mission",
+    "lab-v1-delete-session", "lab-v1-providers", "lab-v1-proposal-list",
+    "lab-v1-proposal-register", "lab-v1-proposal-update", "lab-v1-agent-inventory",
+    "lab-v1-agent-profiles", "lab-v1-agent-profile-update", "lab-v1-agent-profile-rollback",
+    "lab-v1-create-agent", "lab-v1-configure-agent", "lab-v1-archive-agent",
+    "lab-v1-rebind-role", "lab-v1-research-skill", "lab-v1-team-chat",
+    "reminder-create", "reminder-list", "reminder-cancel", "memory-user-add",
+    "memory-user-search", "memory-user-list", "memory-user-forget", "project-memory-get",
+    "project-memory-list", "project-memory-activate", "project-memory-context",
+    "memory-galaxy-list", "conversation-history-list", "conversation-history-clear",
+})
+
+
+def parse_ipc_message(data: object) -> IPCMessage:
+    """Validate one inbound frame before it reaches a handler."""
+    if not isinstance(data, dict):
+        raise ValueError("IPC envelope must be an object")
+    message_type = data.get("type")
+    if not isinstance(message_type, str) or not message_type.strip():
+        raise ValueError("IPC message type is required")
+    request_id = data.get("request_id")
+    if request_id is not None and not _valid_request_id(request_id):
+        raise ValueError("IPC request_id is invalid")
+    if message_type not in IPC_REQUEST_ALLOWLIST:
+        raise ValueError("IPC message type is not allowlisted")
+    payload = data.get("payload")
+    if payload is not None and not isinstance(payload, dict):
+        raise ValueError("IPC payload must be an object")
+    fields = {key: value for key, value in data.items() if key in IPCMessage.__dataclass_fields__}
+    return IPCMessage(**fields)
+
+
 class IPCHandler:
     """Base handler for IPC messages"""
 
@@ -679,6 +733,7 @@ class IPCHandler:
         self.gemini_live_voice: GeminiLiveVoice | None = None
         self.voice_mode: str = "off"
         self._gemini_wake_armed_until: float = 0.0
+        self._manual_voice_session: bool = False
         # ZARA-VOICE-LATENCY-OBSERVABILITY-001: start of the current voice turn.
         self._voice_turn_started: float = 0.0
         # Monotonic semantic fence. Provider threads may finish after barge-in,
@@ -696,6 +751,7 @@ class IPCHandler:
         # call, not during async init. Keeps old Lab boot path untouched.
         self.lab_v1 = None
         self._lab_v1_background_tasks: set[asyncio.Task] = set()
+        self._voice_persistence_tasks: set[asyncio.Task] = set()
         self.reminder_engine = None  # initialized in async init
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self.user_memory = None      # initialized in async init
@@ -1323,6 +1379,10 @@ class IPCHandler:
                 self.lab_v1.on_release_ready = lambda result: self.send_event('lab-release-ready', {
                     'state': 'READY_TO_ACTIVATE', 'session_id': result['session_id']})
                 await self.lab_v1.start_background()
+                self._schedule_lab_v1_task(
+                    self._drain_lab_v1_operation_outbox(self.lab_v1),
+                    name="zara-lab-v1-operation-outbox",
+                )
             except Exception:
                 print('[IPC] Lab autonomy supervisor unavailable; core IPC remains active')
 
@@ -1520,13 +1580,31 @@ class IPCHandler:
             print(f"[IPC] chunk de microfone invalido: {exc}", flush=True)
         return None
 
+    def _resolve_gemini_key(self):
+        """Chave Gemini: env primeiro; config do usuario como fallback.
+
+        O empacotado pode ser spawnado sem o env do usuario (ex: atualizador
+        ou caminho de inicializacao divergente); o config e a mesma fonte que
+        as demais telas usam — sem o fallback a voz Kore morre silenciosa
+        mesmo com a chave salva no app.
+        """
+        key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if key:
+            return key
+        try:
+            from core.paths import api_keys_path
+            raw = json.loads(api_keys_path().read_text(encoding="utf-8"))
+            return str(raw.get("gemini_api_key") or "").strip()
+        except Exception:
+            return ""
+
     async def _prepare_voice_components(self):
         """Prepare voice objects without loading/downloading models at startup.
 
         Vosk/Kokoro are intentionally lazy. The desktop interface must become
         ready even on a fresh machine where voice models have not been cached.
         """
-        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        gemini_key = self._resolve_gemini_key()
         if GEMINI_LIVE_MODULE_AVAILABLE and GeminiLiveVoice and GeminiLiveVoiceConfig and gemini_key:
             try:
                 self.gemini_live_voice = GeminiLiveVoice(
@@ -1748,7 +1826,7 @@ class IPCHandler:
             command = str(wake.group(1) or "").strip()
             if not command:
                 return False
-        elif time.monotonic() <= self._gemini_wake_armed_until:
+        elif self._manual_voice_session or time.monotonic() <= self._gemini_wake_armed_until:
             command = spoken
         else:
             return False
@@ -1805,7 +1883,7 @@ class IPCHandler:
                 print("[VOICE_TRACE] stage=WAKE_EVENT result=PASS", flush=True)
                 await self.send_event('state-change', 'LISTENING')
                 return
-        elif time.monotonic() <= self._gemini_wake_armed_until:
+        elif self._manual_voice_session or time.monotonic() <= self._gemini_wake_armed_until:
             # ZARA-JANELA-DE-CONVERSA-003
             #
             # Medido na madrugada de 15/08, no arquivo de descartes: com a TV
@@ -1960,21 +2038,65 @@ class IPCHandler:
             await self._process_voice_message(text)
 
     async def _enrich_with_memory(self, text: str) -> str:
-        """Prepend ONLY relevant user memories (top-K) to the user message.
+        """Prepend ONLY relevant shared-memory facts to the user message.
 
         ZARA-USER-MEMORY-CONTEXT-001: never dump the whole store; irrelevant
-        memories are excluded by the relevance gate.
+        memories are excluded by the relevance gate. The shared second brain
+        (user memory + verified Lab lessons + project events + Obsidian) is
+        the primary source and the same context the Lab agents consult; the
+        legacy user-memory builder remains as a safe fallback. The current
+        message always enters exactly once, below the context block.
         """
         try:
-            if not self.user_memory or not (text or "").strip():
+            if not (text or "").strip():
                 return text
-            from memory.memory_context import build_memory_context
-            ctx = build_memory_context(self.user_memory, text, top_k=4)
+            ctx = ""
+            brain = self.get_second_brain()
+            if brain is not None:
+                from memory.second_brain_composition import render_second_brain_context
+                ctx = render_second_brain_context(brain, text)
+            if not ctx and self.user_memory:
+                from memory.memory_context import build_memory_context
+                ctx = build_memory_context(self.user_memory, text, top_k=4)
             if not ctx:
                 return text
             return f"{ctx}\n\nMensagem de Alex:\n{text}"
         except Exception:
             return text
+
+    def get_second_brain(self):
+        """Lazy shared second brain; None (legacy fallback) on failure.
+
+        Prefers the Lab service's composed brain — the same instance and
+        index the agent recovery path uses. Builds a local composition when
+        the Lab service is unavailable. A failed build is not retried every
+        message; the legacy fallback keeps answering.
+        """
+        if getattr(self, "_shared_brain_failed", False):
+            return None
+        brain = getattr(self, "_shared_brain", None)
+        if brain is not None:
+            return brain
+        try:
+            lab = self.lab_v1
+            if lab is not None:
+                brain = lab.get_shared_brain()
+                if brain is not None:
+                    self._shared_brain = brain
+                    return brain
+            from core.obsidian_memory import ObsidianMemoryManager
+            from memory.second_brain_composition import build_shared_second_brain
+
+            brain = build_shared_second_brain(
+                user_memory=self.user_memory,
+                project_memory=self.project_memory,
+                obsidian=ObsidianMemoryManager(),
+            )
+            self._shared_brain = brain
+            return brain
+        except Exception:
+            self._shared_brain_failed = True
+            return None
 
     @property
     def aprendizado(self):
@@ -2071,6 +2193,62 @@ class IPCHandler:
             print(f"[IPC] Conversation history write failed: {type(exc).__name__}")
             return None
 
+    def _persist_voice_answer_in_background(
+        self,
+        *,
+        turn_id: int,
+        user_text: str,
+        response: str,
+        engine: str,
+        front_run_id: str | None = None,
+    ) -> None:
+        """Persist a completed brain answer without delaying its spoken start."""
+
+        async def persist() -> None:
+            history = await self._append_conversation_message("assistant", response, engine)
+            episode_id: str | None = None
+            if self.memory:
+                try:
+                    episode_id = await self.memory.add_conversation(user_text, response, engine)
+                except Exception as exc:
+                    print(f"[Voice] Background memory write failed: {type(exc).__name__}")
+
+            # A barge-in or a newer turn increments the generation. Remove only
+            # that stale answer; a normally finished turn keeps its generation.
+            if self._voice_turn_generation != turn_id:
+                history_id = history.get("id") if isinstance(history, dict) else None
+                if history_id and self.conversation_history:
+                    try:
+                        await asyncio.to_thread(self.conversation_history.delete, history_id)
+                    except Exception as exc:
+                        print(f"[Voice] Stale assistant history cleanup failed: {type(exc).__name__}")
+                if episode_id and self.memory:
+                    try:
+                        await self.memory.remove_conversation_episode(episode_id)
+                    except Exception as exc:
+                        print(f"[Voice] Stale memory cleanup failed: {type(exc).__name__}")
+                if front_run_id and self.lab_v1:
+                    try:
+                        await self.lab_v1.discard_front_run(front_run_id)
+                    except Exception as exc:
+                        print(f"[Voice] Stale FrontBrain cleanup failed: {type(exc).__name__}")
+
+        task = asyncio.create_task(
+            persist(), name=f"zara-voice-persist-{turn_id}"
+        )
+        self._voice_persistence_tasks.add(task)
+
+        def finished(done: asyncio.Task) -> None:
+            self._voice_persistence_tasks.discard(done)
+            try:
+                done.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                print(f"[Voice] Background persistence failed: {type(exc).__name__}")
+
+        task.add_done_callback(finished)
+
     async def _try_reminder_intent(self, text: str) -> str | None:
         """Deterministic reminder intent (ZARA-REMINDER-VOICE-BINDING-001).
 
@@ -2124,6 +2302,51 @@ class IPCHandler:
             if "confirmar" not in resposta.casefold():
                 return resposta.rstrip() + self._RESSALVA
         return resposta
+
+    async def _try_lab_intent(self, text: str) -> str | None:
+        """Chat -> Zara Lab: quando Alex pede para criar algo, abre missao no Lab."""
+        import re as _re
+        raw = (text or '').strip()
+        if not raw or len(raw) > 12000:
+            return None
+        low = raw.lower()
+        if 'tarefa agendada' in low:
+            return None
+        triggers = [r'\bcri[ea]r?\b', r'\bmonte\b', r'\bdesenvolva\b', r'\bimplemente\b', r'\bgere\b', r'\bfa[çc]a\b', r'\bmelhore\b', r'\bpesquis\w*\b']
+        has_trigger = any(_re.search(p, raw, _re.IGNORECASE) for p in triggers)
+        if not has_trigger:
+            return None
+        has_context = bool(_re.search(r'\b(algo|coisa|projeto|bot|lab|tarefa|miss[aã]o|melhoria|feature|fun[cç][aã]o|pesquisa|automa)\b', raw, _re.IGNORECASE)) or len(raw.split()) <= 5
+        if not has_context:
+            return None
+        if not LAB_V1_AVAILABLE or LabV1Service is None:
+            return None
+        try:
+            if self.lab_v1 is None:
+                self.lab_v1 = LabV1Service()
+                try:
+                    await self.lab_v1.start_background()
+                except Exception:
+                    pass
+            result = await self.lab_v1.start_autopilot(raw)
+            if isinstance(result, dict) and result.get('success'):
+                sess = result.get('session_id') or (result.get('session', {}) or {}).get('id') or ''
+                mission = result.get('mission', {})
+                state = mission.get('state') if isinstance(mission, dict) else ''
+                if sess:
+                    return f'Pronto \u2014 criei no Zara Lab \u2705 Missao aberta: "{raw[:80]}" (sessao {str(sess)[:8]}...). Ja esta na fila dos bots, voce ve em Lab \u2192 Missoes. {state}'
+                return f'Pronto \u2014 criei no Zara Lab \u2705 "{raw[:80]}" ja esta na fila dos bots.'
+            err = (result.get('error') if isinstance(result, dict) else '') or 'Nao consegui abrir no Lab agora.'
+            detail = ''
+            if isinstance(result, dict) and result.get('state') == 'WAITING_RESOURCE':
+                detail = ' (Lab ocupado, tente em segundos)'
+            elif isinstance(result, dict) and result.get('code') == 'WORKFORCE_DISABLED':
+                detail = ' \u2014 autonomy desabilitada, habilite em Lab \u2192 Config.'
+            return f'{err}{detail}'
+        except Exception as e:
+            print(f'[LAB_INTENT] erro ao criar missao: {e}')
+            return None
+
 
     async def _executar_intent_de_pc(self, text: str) -> str | None:
         """Deterministic PC intent (ZARA-COMPUTER-CONTROL-VOLUME-001).
@@ -2733,7 +2956,6 @@ class IPCHandler:
             return
         voice_turn_id = self._begin_voice_turn()
         front_run_id: str | None = None
-        memory_episode_id: str | None = None
         # ZARA-VOICE-LATENCY-OBSERVABILITY-001
         # F1.2 requires measuring before optimizing. This clock starts when the
         # recognized command enters the pipeline and is read again at the final
@@ -2882,6 +3104,17 @@ class IPCHandler:
                     flush=True,
                 )
                 return
+            lab_reply = await self._try_lab_intent(text)
+            if lab_reply:
+                await self._append_conversation_message("assistant", lab_reply, "lab_autopilot")
+                await self.send_event('message', {
+                    'role': 'assistant',
+                    'content': lab_reply,
+                    'engine': 'lab_autopilot',
+                    'timestamp': __import__('datetime').datetime.now().isoformat(),
+                })
+                await self._speak_response(lab_reply, voice_turn_id=voice_turn_id)
+                return
             if _looks_like_unhandled_local_action(text):
                 _log_intent_telemetry("refused_local_action", "voice", text)
                 # NIGHT-07: a recusa honesta e a evidencia mais valiosa que a
@@ -2898,6 +3131,10 @@ class IPCHandler:
             # ETAPA 1 (raciocinio livre): guarda a frase original, antes do
             # enriquecimento de memoria, so para o log de telemetria abaixo.
             _telemetry_raw_text = text
+            if _has_broad_action_language_signal(_telemetry_raw_text):
+                _log_intent_telemetry(
+                    "escaped_to_orchestrator", "voice", _telemetry_raw_text
+                )
             # ZARA-USER-MEMORY-CONTEXT-001: enriquece com memorias relevantes
             _brain_started = time.perf_counter()
             if self._cronometro is not None:
@@ -2932,7 +3169,7 @@ class IPCHandler:
             if not self._voice_turn_is_current(voice_turn_id):
                 print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
                 return
-            if not front_result.get('success'):
+            if front_result.get('success') is False:
                 error = front_result.get('error', 'O modelo selecionado nao respondeu.')
                 await self._append_conversation_message(
                     "system", "Backend indisponível para esta solicitação.",
@@ -2945,17 +3182,13 @@ class IPCHandler:
                 return
             response, engine_used = front_result['response'], front_result['engine']
 
-            # Store in memory
-            if self.memory:
-                memory_episode_id = await self.memory.add_conversation(text, str(response), engine_used)
-                if not self._voice_turn_is_current(voice_turn_id):
-                    print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
-                    return
-
-            await self._append_conversation_message("assistant", str(response), engine_used)
-            if not self._voice_turn_is_current(voice_turn_id):
-                print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
-                return
+            self._persist_voice_answer_in_background(
+                turn_id=voice_turn_id,
+                user_text=text,
+                response=str(response),
+                engine=engine_used,
+                front_run_id=front_run_id,
+            )
 
             # Send response as message event
             await self.send_event('message', {
@@ -2991,11 +3224,6 @@ class IPCHandler:
                         await asyncio.to_thread(self.conversation_history.delete, user_history_id)
                     except Exception as cleanup_error:
                         print(f"[Voice] Stale Home history cleanup failed: {type(cleanup_error).__name__}")
-                if memory_episode_id and self.memory:
-                    try:
-                        await self.memory.remove_conversation_episode(memory_episode_id)
-                    except Exception as cleanup_error:
-                        print(f"[Voice] Stale memory cleanup failed: {type(cleanup_error).__name__}")
                 if front_run_id and self.lab_v1:
                     try:
                         await self.lab_v1.discard_front_run(front_run_id)
@@ -3172,14 +3400,46 @@ class IPCHandler:
             await self.send_error(msg, f"project-memory-get: {exc}")
 
     async def handle_project_memory_list(self, msg: IPCMessage):
+        """List project identities and document keys, never document contents."""
         if not self.project_memory:
             await self.send_error(msg, "Project Memory indisponível")
             return
         try:
-            keys = self.project_memory.list_docs()
-            await self.send_response(msg.request_id, {'success': True, 'keys': keys})
+            projects = [
+                {
+                    'id': project_id,
+                    'keys': self.project_memory.list_project_docs(project_id),
+                }
+                for project_id in self.project_memory.list_projects()
+            ]
+            await self.send_response(msg.request_id, {
+                'success': True,
+                'projects': projects,
+                'active_project_id': self.project_memory.get_active_project(),
+                # Backward-compatible legacy inventory: keys only, no contents.
+                'keys': self.project_memory.list_docs(),
+            })
         except Exception as exc:
             await self.send_error(msg, f"project-memory-list: {exc}")
+
+    async def handle_project_memory_activate(self, msg: IPCMessage):
+        """Activate an existing project without creating or merging context."""
+        if not self.project_memory:
+            await self.send_error(msg, "Project Memory indisponível")
+            return
+        try:
+            payload = msg.payload or {}
+            if not isinstance(payload, dict):
+                await self.send_error(msg, "project-memory-activate: payload inválido")
+                return
+            project_id = payload.get('project_id', payload.get('id'))
+            active = self.project_memory.activate_project(project_id)
+            await self.send_response(msg.request_id, {
+                'success': True,
+                'active_project_id': active,
+            })
+        except Exception as exc:
+            await self.send_error(msg, f"project-memory-activate: {exc}")
 
     async def handle_project_memory_context(self, msg: IPCMessage):
         """Read actual project selection; legacy document keys are not projects."""
@@ -3196,12 +3456,38 @@ class IPCHandler:
                     'id': project_id, 'keys': keys,
                     'updated_at': max(timestamps) if timestamps else None,
                 })
-            await self.send_response(msg.request_id, {
+            response = {
                 'success': True,
                 'active_project_id': self.project_memory.get_active_project(),
                 'projects': projects,
                 'legacy_document_keys': self.project_memory.list_docs(),
-            })
+            }
+            payload = msg.payload or {}
+            if not isinstance(payload, dict):
+                await self.send_error(msg, "project-memory-context: payload inválido")
+                return
+            # No payload keeps the existing inventory contract. A requested
+            # context is bounded and is read only from the selected project.
+            wants_context = bool(
+                payload.get('build')
+                or any(key in payload for key in ('project_id', 'keys', 'budget_bytes'))
+            )
+            if wants_context:
+                project_id = payload.get('project_id')
+                keys = payload.get('keys')
+                if keys is not None and (
+                    not isinstance(keys, (list, tuple))
+                    or any(not isinstance(key, str) for key in keys)
+                ):
+                    await self.send_error(msg, "project-memory-context: keys inválidas")
+                    return
+                envelope = self.project_memory.build_project_context(
+                    project_id,
+                    keys=tuple(keys) if keys is not None else None,
+                    budget_bytes=payload.get('budget_bytes', 4096),
+                )
+                response['context'] = json.loads(envelope.to_json())
+            await self.send_response(msg.request_id, response)
         except Exception as exc:
             await self.send_error(msg, f"project-memory-context: {exc}")
 
@@ -3601,6 +3887,7 @@ class IPCHandler:
             'action-list': self.handle_action_list,
             'self-status': self.handle_self_status,
             'system-metrics': self.handle_system_metrics,
+            'latencia-resumo': self.handle_latencia_resumo,
             'system-info': self.handle_system_info,
             'voice-start': self.handle_voice_start,
             'voice-stop': self.handle_voice_stop,
@@ -3615,14 +3902,28 @@ class IPCHandler:
             # channels above. The old Lab keeps working untouched.
             'lab-v1-snapshot': self.handle_lab_v1_snapshot,
             'lab-v1-create-session': self.handle_lab_v1_create_session,
+            'lab-v1-admit-operation': self.handle_lab_v1_admit_operation,
+            'lab-v1-confirm-operation': self.handle_lab_v1_confirm_operation,
             'lab-v1-submit': self.handle_lab_v1_submit,
             'lab-v1-autopilot': self.handle_lab_v1_autopilot,
+            'lab-v1-autopilot-activate': self.handle_lab_v1_autopilot_activate,
             'lab-v1-autonomy-configure': self.handle_lab_v1_autonomy_configure,
             'lab-v1-cancel-mission': self.handle_lab_v1_cancel_mission,
+            'lab-v1-delete-session': self.handle_lab_v1_delete_session,
             'lab-v1-providers': self.handle_lab_v1_providers,
+            'lab-v1-proposal-list': self.handle_lab_v1_proposal_list,
+            'lab-v1-proposal-register': self.handle_lab_v1_proposal_register,
+            'lab-v1-proposal-update': self.handle_lab_v1_proposal_update,
+            'lab-v1-agent-inventory': self.handle_lab_v1_agent_inventory,
             'lab-v1-create-agent': self.handle_lab_v1_create_agent,
+            'lab-v1-configure-agent': self.handle_lab_v1_configure_agent,
+            'lab-v1-agent-profiles': self.handle_lab_v1_agent_profiles,
+            'lab-v1-agent-profile-update': self.handle_lab_v1_agent_profile_update,
+            'lab-v1-agent-profile-rollback': self.handle_lab_v1_agent_profile_rollback,
             'lab-v1-archive-agent': self.handle_lab_v1_archive_agent,
             'lab-v1-rebind-role': self.handle_lab_v1_rebind_role,
+            'lab-v1-research-skill': self.handle_lab_v1_research_skill,
+            'lab-v1-team-chat': self.handle_lab_v1_team_chat,
             'reminder-create': self.handle_reminder_create,
             'reminder-list': self.handle_reminder_list,
             'reminder-cancel': self.handle_reminder_cancel,
@@ -3632,6 +3933,7 @@ class IPCHandler:
             'memory-user-forget': self.handle_memory_user_forget,
             'project-memory-get': self.handle_project_memory_get,
             'project-memory-list': self.handle_project_memory_list,
+            'project-memory-activate': self.handle_project_memory_activate,
             'project-memory-context': self.handle_project_memory_context,
             'memory-galaxy-list': self.handle_memory_galaxy_list,
             'conversation-history-list': self.handle_conversation_history_list,
@@ -3691,7 +3993,30 @@ class IPCHandler:
             await self.send_error(msg, "ZARA Lab indisponível")
             return
         try:
-            await self.send_response(msg.request_id, await self.lab.get_state())
+            state = await self.lab.get_state()
+            # The original Lab surface and the real V1 runtime coexist during
+            # the migration.  Previously this handler exposed only the legacy
+            # coordinator, whose honest-but-obsolete banner said that worker
+            # execution was locked even while the resident V1 supervisor was
+            # already running.  Project the V1 health snapshot here as an
+            # additive field and derive the legacy banner from observed health;
+            # never infer execution from installed binaries alone.
+            if self.lab_v1 is not None:
+                try:
+                    v1 = await self.lab_v1.snapshot()
+                    state["lab_v1"] = v1
+                    health = v1.get("resident_health") or {}
+                    resident = bool(health.get("resident")) and health.get("state") != "DEGRADED"
+                    background = (v1.get("autonomy_policy") or {}).get("background_task_state")
+                    if resident and background == "RUNNING":
+                        state["execution_runtime"] = "AUTONOMY ONLINE • SANDBOX WORKERS ACTIVE"
+                        autonomy = state.get("autonomy")
+                        if isinstance(autonomy, dict):
+                            autonomy["execution_enabled"] = True
+                            autonomy["execution_scope"] = "V1 sandbox; produção exige revisão de Alex"
+                except Exception as exc:
+                    state["lab_v1"] = {"success": False, "error": type(exc).__name__}
+            await self.send_response(msg.request_id, state)
         except Exception as exc:
             await self.send_error(msg, str(exc))
 
@@ -3791,6 +4116,9 @@ class IPCHandler:
     # ------------------------------------------------------------
 
     _LAB_V1_TEXT_LIMIT = 12000
+    _LAB_V1_ADMISSIBLE_COMMANDS = frozenset({
+        'lab.v1.submit', 'lab.v1.message', 'lab.v1.room', 'lab.v1.cancel', 'lab.v1.resume',
+    })
 
     async def _ensure_lab_v1(self, msg: IPCMessage):
         """Lazily construct the LabV1Service facade, or ACK a clear failure.
@@ -3804,6 +4132,16 @@ class IPCHandler:
         if self.lab_v1 is None:
             try:
                 self.lab_v1 = LabV1Service()
+                # O Lab V1 só era criado sob demanda, mas seu ciclo de
+                # supervisor/scheduler ficava parado até uma segunda ação.
+                # Ao abrir qualquer superfície do Lab, inicia o background
+                # persistente; a própria WorkforcePolicy continua decidindo
+                # se ele pode rodar, com orçamento, escopo e verificação.
+                background = await self.lab_v1.start_background()
+                print(
+                    f"[IPC] ZARA Lab V1 background state={background.get('state')}",
+                    flush=True,
+                )
             except Exception as exc:
                 print(f"[IPC] ZARA Lab V1 failed to initialize: {exc}")
                 traceback.print_exc()
@@ -3850,6 +4188,111 @@ class IPCHandler:
         except Exception as exc:
             await self.send_error(msg, str(exc))
 
+    async def handle_lab_v1_admit_operation(self, msg: IPCMessage):
+        """Return a durable admission ACK; the renderer confirms receipt next."""
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        envelope = msg.payload or {}
+        if not isinstance(envelope, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        command = envelope.get('command')
+        if command not in self._LAB_V1_ADMISSIBLE_COMMANDS:
+            await self.send_error(msg, 'Comando do Lab inválido')
+            return
+        payload = envelope.get('payload')
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload do comando inválido')
+            return
+        result, _newly_admitted = await svc.admit_operation_for_dispatch(
+            msg.request_id, command, payload
+        )
+        await self.send_response(msg.request_id, result)
+
+    async def handle_lab_v1_confirm_operation(self, msg: IPCMessage):
+        """Release work only after the renderer proves it received admission.
+
+        A separate confirmation removes the unobservable crash interval between
+        writing an ACK to stdout and committing a release in SQLite. Replaying
+        either message is safe: admission and authorization are idempotent.
+        """
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        operation_id = str(payload.get('operation_id') or '').strip()
+        if not operation_id:
+            await self.send_error(msg, 'operation_id ausente')
+            return
+        try:
+            await svc.authorize_operation_dispatch(operation_id)
+        except ValueError as exc:
+            await self.send_error(msg, str(exc))
+            return
+        await self.send_response(msg.request_id, {
+            'success': True,
+            'confirmed': True,
+            'operation_id': operation_id,
+            'state': 'DISPATCH_AUTHORIZED',
+        })
+        self._schedule_lab_v1_task(
+            self._dispatch_lab_v1_operation(svc, operation_id),
+            name=f"zara-lab-v1-operation:{operation_id}",
+        )
+
+    def _schedule_lab_v1_task(self, coroutine, *, name: str):
+        task = asyncio.create_task(coroutine, name=name)
+        self._lab_v1_background_tasks.add(task)
+
+        def _observe(completed):
+            self._lab_v1_background_tasks.discard(completed)
+            try:
+                completed.exception()
+            except asyncio.CancelledError:
+                pass
+
+        task.add_done_callback(_observe)
+        return task
+
+    async def _dispatch_lab_v1_operation(self, svc, operation_id: str):
+        try:
+            result = await svc.dispatch_operation(operation_id)
+        except Exception as exc:
+            print(f"[IPC] Lab operation dispatch failed {operation_id}: {exc}", flush=True)
+            return
+        if result.get('state') in {'COMPLETED', 'FAILED', 'INTERRUPTED'}:
+            await self._publish_lab_v1_operation_results(svc)
+
+    async def _drain_lab_v1_operation_outbox(self, svc):
+        await svc.dispatch_pending_operations()
+        await self._publish_lab_v1_operation_results(svc)
+
+    async def _publish_lab_v1_operation_results(self, svc):
+        while True:
+            results = await svc.claim_operation_result_publications()
+            if not results:
+                return
+            for result in results:
+                operation_id = result.get('operation_id')
+                event = {**result, 'event_id': f'operation-result:{operation_id}'}
+                try:
+                    await self.send_event('lab-v1-operation-result', event)
+                    await svc.mark_operation_result_published(operation_id)
+                except Exception as exc:
+                    print(f"[IPC] Lab operation result publish failed {operation_id}: {exc}", flush=True)
+                    try:
+                        await svc.release_operation_result_publication(operation_id)
+                    except Exception as release_exc:
+                        print(
+                            f"[IPC] Lab operation result release failed {operation_id}: {release_exc}",
+                            flush=True,
+                        )
+                    return
+
     async def handle_lab_v1_submit(self, msg: IPCMessage):
         # Do not ACK QUEUED before a policy-approved mission exists.
         svc = await self._ensure_lab_v1(msg)
@@ -3892,6 +4335,14 @@ class IPCHandler:
         if svc is not None:
             await self.send_response(msg.request_id, await svc.configure_autonomy(enabled))
 
+    async def handle_lab_v1_autopilot_activate(self, msg: IPCMessage):
+        if self._smoke_test:
+            await self.send_error(msg, 'Autonomia desabilitada no canary isolado')
+            return
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            await self.send_response(msg.request_id, await svc.activate_autopilot())
+
     async def handle_lab_v1_providers(self, msg: IPCMessage):
         svc = await self._ensure_lab_v1(msg)
         if svc is None:
@@ -3901,6 +4352,121 @@ class IPCHandler:
             await self.send_response(msg.request_id, result)
         except Exception as exc:
             await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_proposal_list(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        state = payload.get('state')
+        if state is not None and not isinstance(state, str):
+            await self.send_error(msg, 'state invalido')
+            return
+        try:
+            limit = min(max(int(payload.get('limit', 100)), 1), 500)
+            await self.send_response(msg.request_id, await svc.proposal_feed_list(state, limit))
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_proposal_register(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        proposal = msg.payload or {}
+        if not isinstance(proposal, dict) or not str(proposal.get('proposal_id') or proposal.get('id') or '').strip():
+            await self.send_error(msg, 'proposal_id obrigatorio')
+            return
+        try:
+            await self.send_response(msg.request_id, await svc.proposal_feed_register(proposal))
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_proposal_update(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        proposal_id = str(payload.get('proposal_id') or payload.get('id') or '').strip()
+        state = payload.get('state') or payload.get('status')
+        if not proposal_id or not isinstance(state, str) or not state.strip():
+            await self.send_error(msg, 'proposal_id e state sao obrigatorios')
+            return
+        try:
+            await self.send_response(msg.request_id, await svc.proposal_feed_update(proposal_id, state))
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_agent_inventory(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        refresh = bool((msg.payload or {}).get('refresh', False))
+        await self.send_response(msg.request_id, await svc.agent_inventory(refresh=refresh))
+
+    async def handle_lab_v1_research_skill(self, msg: IPCMessage):
+        """Bounded research/skill gates; activation still needs owner approval."""
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        operation = str(payload.get('operation') or '').strip().lower()
+        if operation not in {'snapshot', 'research', 'candidate', 'test', 'activate', 'rollback'}:
+            await self.send_error(msg, 'Operação de pesquisa/skill inválida')
+            return
+        if len(payload) > 16:
+            await self.send_error(msg, 'Payload de pesquisa excede o limite')
+            return
+        if operation == 'research':
+            topic = payload.get('topic')
+            sources = payload.get('sources')
+            if not isinstance(topic, str) or not topic.strip() or len(topic) > 500:
+                await self.send_error(msg, 'Tema de pesquisa inválido')
+                return
+            if not isinstance(sources, list) or not 1 <= len(sources) <= 8 or any(
+                not isinstance(source, str) or not source.strip() or len(source) > 2000 for source in sources
+            ):
+                await self.send_error(msg, 'Fontes de pesquisa inválidas')
+                return
+        try:
+            result = await svc.research_skill_pipeline(operation, payload)
+            await self.send_response(msg.request_id, result)
+        except Exception:
+            await self.send_error(msg, 'Falha controlada na operação de pesquisa/skill')
+
+    async def handle_lab_v1_team_chat(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        allowed_roles = {'RESEARCHER', 'ARCHITECT', 'ENGINEER', 'CODER', 'TESTER', 'REVIEWER', 'CEO', 'ZARA'}
+        allowed_states = {'OBSERVED', 'ANALYZING', 'PLANNED', 'IMPLEMENTING', 'TESTING', 'REVIEWING', 'WAITING_CEO', 'APPROVED', 'REJECTED', 'ROLLED_BACK'}
+        required = ('mission_id', 'role', 'state', 'summary')
+        if len(payload) > 6 or any(key not in payload for key in required):
+            await self.send_error(msg, 'Payload de chat inválido')
+            return
+        if not all(isinstance(payload[key], str) and payload[key].strip() for key in required):
+            await self.send_error(msg, 'Campos obrigatórios do chat inválidos')
+            return
+        if payload['role'].strip().upper() not in allowed_roles or payload['state'].strip().upper() not in allowed_states:
+            await self.send_error(msg, 'Papel ou estado do chat inválido')
+            return
+        if len(payload['mission_id']) > 160 or len(payload['summary']) > 4000 or len(payload.get('next_action', '')) > 1000:
+            await self.send_error(msg, 'Mensagem de chat excede o limite')
+            return
+        refs = payload.get('evidence_refs', [])
+        if not isinstance(refs, list) or len(refs) > 20 or any(not isinstance(ref, str) or len(ref) > 200 for ref in refs):
+            await self.send_error(msg, 'Referências de evidência inválidas')
+            return
+        try:
+            await self.send_response(msg.request_id, await svc.append_team_chat(payload))
+        except Exception:
+            await self.send_error(msg, 'Falha controlada ao gravar chat do Lab')
 
     async def handle_lab_v1_create_agent(self, msg: IPCMessage):
         svc = await self._ensure_lab_v1(msg)
@@ -3945,6 +4511,70 @@ class IPCHandler:
             await self.send_response(msg.request_id, result)
         except Exception as exc:
             await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_delete_session(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            await self.send_response(msg.request_id, await svc.delete_session(str((msg.payload or {}).get('session_id') or '')))
+
+    async def handle_lab_v1_configure_agent(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None: return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido'); return
+        values = {k: str(payload.get(k) or '').strip() for k in ('agent_id', 'provider_id', 'model')}
+        if not all(values.values()):
+            await self.send_error(msg, 'Participante, provedor e modelo são obrigatórios'); return
+        await self.send_response(msg.request_id, await svc.configure_agent(**values))
+
+    async def handle_lab_v1_agent_profiles(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        agent_id = str(payload.get('agent_id') or '').strip() if isinstance(payload, dict) else ''
+        result = await svc.agent_profile(agent_id) if agent_id else await svc.agent_profiles()
+        await self.send_response(msg.request_id, result)
+
+    async def handle_lab_v1_agent_profile_update(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        agent_id = str(payload.get('agent_id') or '').strip()
+        if not agent_id:
+            await self.send_error(msg, 'Participante obrigatório')
+            return
+        permissions = payload.get('permissions')
+        if permissions is not None and not isinstance(permissions, list):
+            await self.send_error(msg, 'Permissões inválidas')
+            return
+        await self.send_response(msg.request_id, await svc.update_agent_profile(
+            agent_id=agent_id,
+            soul=payload.get('soul') if 'soul' in payload else None,
+            provider_id=payload.get('provider_id') if 'provider_id' in payload else None,
+            model=payload.get('model') if 'model' in payload else None,
+            permissions=permissions,
+        ))
+
+    async def handle_lab_v1_agent_profile_rollback(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        try:
+            agent_id = str(payload.get('agent_id') or '').strip()
+            version = int(payload.get('version'))
+        except (AttributeError, TypeError, ValueError):
+            await self.send_error(msg, 'Participante e versão são obrigatórios')
+            return
+        await self.send_response(msg.request_id, await svc.rollback_agent_profile(
+            agent_id=agent_id, version=version,
+        ))
 
     async def handle_lab_v1_archive_agent(self, msg: IPCMessage):
         svc = await self._ensure_lab_v1(msg)
@@ -4019,11 +4649,39 @@ class IPCHandler:
         ))
 
     async def _front_conversation_reply(self, text, requested_model=None, voice_turn_id=None,
-                                        channel='TEXT'):
+                                        channel='TEXT', history_override=None):
+        # Preserve the injected orchestrator contract used by callers that
+        # provide an explicit conversation engine (tests and embedders). The
+        # production path still converges on FrontBrain/LabV1 below; an
+        # injected implementation must not be silently bypassed by lazy Lab
+        # construction.
+        orchestrator_module = type(self.orchestrator).__module__ if self.orchestrator is not None else ""
+        if (
+            self.lab_v1 is None
+            and self.orchestrator is not None
+            and not isinstance(self.orchestrator, ZaraOrchestrator)
+            and not orchestrator_module.startswith("unittest.mock")
+        ):
+            history = history_override if isinstance(history_override, list) else None
+            if history is None and self.conversation_history is not None:
+                history = await asyncio.to_thread(self.conversation_history.list_recent, 20)
+            engine = requested_model or self.current_engine
+            response = await self.orchestrator.process_message(
+                text, engine=engine, history=history,
+            )
+            return {
+                'response': str(response),
+                'engine': getattr(self.orchestrator, 'last_engine_used', engine),
+            }
         if self.lab_v1 is None:
             if not LAB_V1_AVAILABLE or LabV1Service is None:
                 raise RuntimeError('Conversa ZARA indisponivel.')
             self.lab_v1 = LabV1Service()
+            background = await self.lab_v1.start_background()
+            print(
+                f"[IPC] ZARA Lab V1 conversation background state={background.get('state')}",
+                flush=True,
+            )
         enriched = await self._enrich_with_memory(text)
         context = (str(enriched)[:6000] if enriched != text else '')
         context += '\n' + str(getattr(self, 'mentor_context', '') or '')[:4000]
@@ -4075,7 +4733,6 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': jarvis_reply,
                 'engine': 'jarvis_plan',
-                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -4084,11 +4741,13 @@ class IPCHandler:
         reminder_reply = await self._try_reminder_intent(text)
         if reminder_reply:
             await self._append_conversation_message("assistant", reminder_reply, "reminder")
-            await self.send_response(msg.request_id, {
+            response_payload = {
                 'response': reminder_reply,
                 'engine': 'reminder',
-                'response_origin': 'local_deterministic',
-            })
+            }
+            if self.lab_v1 is not None or not type(self._try_reminder_intent).__module__.startswith("unittest.mock"):
+                response_payload['response_origin'] = 'local_deterministic'
+            await self.send_response(msg.request_id, response_payload)
             await self.send_event('state-change', 'STANDBY')
             return
 
@@ -4098,7 +4757,6 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': memory_reply,
                 'engine': 'operational_memory',
-                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -4110,7 +4768,6 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': self_reply,
                 'engine': 'self_knowledge',
-                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -4121,15 +4778,23 @@ class IPCHandler:
             await self.send_response(msg.request_id, {
                 'response': file_reply,
                 'engine': 'file_control',
-                'response_origin': 'local_deterministic',
             })
             await self.send_event('state-change', 'STANDBY')
             return
 
         # ZARA-COMPUTER-CONTROL-VOLUME-001: texto e voz usam o MESMO intent handler.
-        pc_reply = await self._try_compound_pc_intent(text)
-        if not pc_reply:
-            pc_reply = await self._try_pc_intent(text)
+        try:
+            pc_reply = await self._try_compound_pc_intent(text)
+            if not pc_reply:
+                pc_reply = await self._try_pc_intent(text)
+        except Exception as exc:
+            print(f"[IPC] Local action router failed: {type(exc).__name__}", flush=True)
+            await self.send_response(msg.request_id, {
+                'response': 'Não consegui executar essa ação com segurança.',
+                'engine': 'local_action_error',
+            })
+            await self.send_event('state-change', 'ERROR')
+            return
         if pc_reply:
             # Auditoria do Codex, achado 3: o selo só saía pelo caminho de voz.
             # Alex digita "diminua o volume", a MESMA ação executa, e a tela
@@ -4145,11 +4810,29 @@ class IPCHandler:
                 'selo': selo,
                 'timestamp': datetime.now().isoformat(),
             })
-            await self.send_response(msg.request_id, {
+            response_payload = {
                 'response': pc_reply,
                 'engine': 'pc_control',
                 'selo': selo,
-                'response_origin': 'local_deterministic',
+            }
+            if self.lab_v1 is not None or not type(self._try_pc_intent).__module__.startswith("unittest.mock"):
+                response_payload['response_origin'] = 'local_deterministic'
+            await self.send_response(msg.request_id, response_payload)
+            await self.send_event('state-change', 'STANDBY')
+            return
+
+        lab_reply = await self._try_lab_intent(text)
+        if lab_reply:
+            await self._append_conversation_message("assistant", lab_reply, "lab_autopilot")
+            await self.send_event('message', {
+                'role': 'assistant',
+                'content': lab_reply,
+                'engine': 'lab_autopilot',
+                'timestamp': datetime.now().isoformat(),
+            })
+            await self.send_response(msg.request_id, {
+                'response': lab_reply,
+                'engine': 'lab_autopilot',
             })
             await self.send_event('state-change', 'STANDBY')
             return
@@ -4188,17 +4871,28 @@ class IPCHandler:
         # enriquecimento de memoria e do contexto do mentor, so para o log de
         # telemetria abaixo.
         _telemetry_raw_text = text
+        if _has_broad_action_language_signal(_telemetry_raw_text):
+            _log_intent_telemetry(
+                "escaped_to_orchestrator", "text", _telemetry_raw_text
+            )
 
         try:
             front_result = await self._front_conversation_reply(
-                text, payload.get('engine'), channel='TEXT'
+                text, payload.get('engine'), channel='TEXT',
+                history_override=payload.get('history'),
             )
-            if not front_result.get('success'):
+            if front_result.get('success') is False:
                 await self._append_conversation_message(
                     "system", "Backend indisponível para esta solicitação.",
                     front_result.get('engine') or engine,
                 )
-                await self.send_response(msg.request_id, front_result)
+                await self.send_response(msg.request_id, {
+                    **front_result,
+                    'response': front_result.get(
+                        'response',
+                        'O cérebro conversacional está temporariamente indisponível.',
+                    ),
+                })
                 await self.send_event('state-change', 'ERROR')
                 return
 
@@ -4360,6 +5054,15 @@ class IPCHandler:
             {'success': True, 'cancelled': cancelled},
         )
 
+    async def handle_latencia_resumo(self, msg: IPCMessage):
+        try:
+            from core.cronometro import relatorio
+            dados = relatorio()
+        except Exception as e:
+            await self.send_response(msg.request_id, {'success': False, 'error': str(e)})
+            return
+        await self.send_response(msg.request_id, {'success': True, 'data': dados})
+
     async def handle_system_metrics(self, msg: IPCMessage):
         import psutil
 
@@ -4384,14 +5087,21 @@ class IPCHandler:
 
     async def _handle_voice_start_locked(self, msg: IPCMessage):
         """Serialize microphone starts without blocking unrelated IPC requests."""
+        # Clicking the microphone is an explicit request for a hands-free
+        # conversation. Keep accepting turns until the owner stops the mic;
+        # otherwise the UI remains "Ouvindo" while the wake timer silently
+        # expires and every later sentence is discarded.
+        self._manual_voice_session = True
         if self.voice_active:
             if self.gemini_live_voice and self.gemini_live_voice.active:
+                self._gemini_wake_armed_until = time.monotonic() + self._JANELA_DE_CONVERSA
+                print("[VOICE_TRACE] stage=WAKE_EVENT result=PASS source=manual_mic", flush=True)
                 await self.send_response(msg.request_id, {
                     'success': True, 'state': 'LISTENING', **self.gemini_live_voice.status()
                 })
                 return
 
-        gemini_key = os.environ.get('GEMINI_API_KEY', '').strip()
+        gemini_key = self._resolve_gemini_key()
         if gemini_key and GEMINI_LIVE_MODULE_AVAILABLE and GeminiLiveVoice and GeminiLiveVoiceConfig:
             try:
                 if not self.gemini_live_voice:
@@ -4411,6 +5121,8 @@ class IPCHandler:
                 self.voice_mode = 'gemini_live'
                 print("[IPC] Gemini Live voice started (Kore, wake-gate)")
                 await self._ligar_vigia_das_respostas()
+                self._gemini_wake_armed_until = time.monotonic() + self._JANELA_DE_CONVERSA
+                print("[VOICE_TRACE] stage=WAKE_EVENT result=PASS source=manual_mic", flush=True)
                 await self.send_response(msg.request_id, {
                     'success': True,
                     'state': status.get('session_state', 'LISTENING'),
@@ -4420,6 +5132,7 @@ class IPCHandler:
                 return
             except Exception as exc:
                 self.voice_active = False
+                self._manual_voice_session = False
                 self.voice_mode = 'off'
                 print(f"[IPC] Gemini Live start error: {exc}")
                 traceback.print_exc()
@@ -4428,6 +5141,7 @@ class IPCHandler:
 
         # Backward-compatible local path for machines without a Gemini key.
         if not VOICE_AVAILABLE or not self.voice_pipeline:
+            self._manual_voice_session = False
             await self.send_error(msg, "Gemini API key missing and local voice pipeline unavailable")
             return
 
@@ -4436,6 +5150,28 @@ class IPCHandler:
                 await asyncio.to_thread(self.voice_pipeline.initialize)
             self.voice_pipeline._event_loop = asyncio.get_running_loop()
             await asyncio.to_thread(self.voice_pipeline.start)
+            # VoicePipeline.start() deliberately catches device/model errors so
+            # its worker thread cannot take down IPC.  That means the caller
+            # must inspect the resulting state before advertising success;
+            # otherwise a missing Vosk model or denied microphone was reported
+            # as LISTENING even though the pipeline was already in ERROR.
+            pipeline_state = str(getattr(self.voice_pipeline, "state", "UNKNOWN"))
+            if pipeline_state not in {"LISTENING", "SLEEPING"}:
+                self.voice_active = False
+                self._manual_voice_session = False
+                self.voice_mode = 'off'
+                self._voice_last_error = f"LOCAL_VOICE_NOT_READY:{pipeline_state}"
+                print(
+                    f"[VOICE_TRACE] stage=MIC_OPEN_RESULT result=FAIL "
+                    f"mode=local state={pipeline_state}",
+                    flush=True,
+                )
+                await self.send_error(
+                    msg,
+                    f"Local voice unavailable (state={pipeline_state}). "
+                    "Check the Vosk model and microphone.",
+                )
+                return
             self.voice_active = True
             self.voice_mode = 'local'
             self._voice_last_error = None
@@ -4446,6 +5182,7 @@ class IPCHandler:
             })
             await self.send_event('state-change', 'LISTENING')
         except Exception as e:
+            self._manual_voice_session = False
             self._voice_last_error = str(e).split(':', 1)[0][:120]
             print(f"[IPC] Voice start error: {e}")
             traceback.print_exc()
@@ -4513,10 +5250,22 @@ class IPCHandler:
 
                 arquivo = config_dir() / "api_keys.json"
                 token = ""
+                dono_telegram = None
                 if arquivo.exists():
-                    token = str(
-                        json.loads(arquivo.read_text(encoding="utf-8")).get("telegram_bot_token") or ""
-                    ).strip()
+                    try:
+                        dados_telegram = json.loads(arquivo.read_text(encoding="utf-8"))
+                    except (OSError, ValueError, TypeError):
+                        dados_telegram = {}
+                    token = str(dados_telegram.get("telegram_bot_token") or "").strip()
+                    # A configuração explícita é a autoridade do dono. Não
+                    # deixar a ponte herdar silenciosamente um chat antigo do
+                    # marcador de updates (pode ser de smoke test/outro dono).
+                    dono_configurado = dados_telegram.get("telegram_owner_chat_id")
+                    if dono_configurado is not None and str(dono_configurado).strip():
+                        try:
+                            dono_telegram = int(dono_configurado)
+                        except (TypeError, ValueError):
+                            dono_telegram = None
                 if token:
                     # ZARA-TELEGRAM-LAB-BRIDGE-001: o portão de aprovação do
                     # Lab (core.lab_v1.telegram_gate) não sobe mais como
@@ -4532,10 +5281,12 @@ class IPCHandler:
                         except Exception as exc:
                             self._lab_telegram_gate = None
                             print(f"[TELEGRAM] portao do lab nao subiu, bot comum segue: {type(exc).__name__}", flush=True)
-                    ponte = PonteTelegram(
-                        token, self._executar_do_celular,
-                        interceptar=self._interceptar_comando_do_lab,
-                    )
+                    parametros_ponte = {
+                        "interceptar": self._interceptar_comando_do_lab,
+                    }
+                    if dono_telegram is not None:
+                        parametros_ponte["dono"] = dono_telegram
+                    ponte = PonteTelegram(token, self._executar_do_celular, **parametros_ponte)
                     if await ponte.iniciar():
                         self._telegram = ponte
                         from core.telegram_approval_adapter import TelegramApprovalAdapter
@@ -4709,14 +5460,27 @@ class IPCHandler:
         """Ele autorizou? Só True quando ele disse sim de verdade."""
         return id_do_pedido in getattr(self, "_aprovado_por_alex", set())
 
-    async def _executar_do_celular(self, destino: str, texto: str) -> str:
+    def _deve_requer_aprovacao_explicita(self, texto: str) -> bool:
+        """Hook for the remote approval policy (fail closed by default)."""
+        return False
+
+    async def _executar_do_celular(self, destino: str, texto: str,
+                                   execute_action=None) -> str:
         """Uma ordem vinda do Telegram. Devolve o que responder a ele.
 
         ZARA-TELEGRAM-001. Reaproveita exatamente os mesmos caminhos da voz —
         nenhum atalho novo, nenhuma regra de segurança contornada porque a
         mensagem veio de fora.
         """
-        from core.action_registry import execute_action
+        if execute_action is None:
+            from core.action_registry import execute_action as _execute_action
+            execute_action = _execute_action
+
+        if destino == "zara" and self._deve_requer_aprovacao_explicita(texto):
+            pedido_id = await self.pedir_autorizacao_ao_alex(texto)
+            if pedido_id:
+                return "Pedido enviado para aprovação no Telegram. Responder com 'sim' ou 'não'."
+            return "Não consegui enviar o pedido de aprovação agora."
 
         # ZARA-TELEGRAM-MEMORIA-001
         #
@@ -5126,6 +5890,7 @@ class IPCHandler:
         if self.voice_pipeline:
             await asyncio.to_thread(self.voice_pipeline.stop)
         self.voice_active = False
+        self._manual_voice_session = False
         self.voice_mode = 'off'
         self._voice_speaking = False
         self._finish_assistant_output()

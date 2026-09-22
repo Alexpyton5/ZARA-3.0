@@ -44,6 +44,36 @@ class LabWorkerRuntime:
             pass
         return {}
 
+    def ensure_worktree(self) -> Path | None:
+        """Cria o worktree isolado do Lab (idempotente) e grava o estado.
+
+        O fluxo de criacao nunca existiu no repo (so a leitura do estado em
+        _worktree) — sem ele o worker OpenCode fica 'nao configurado' para
+        sempre em maquina nova. Worktree isolado (detach no HEAD), nunca
+        escreve na producao; reusa o existente, grava o estado uma vez.
+        """
+        existing = self._worktree()
+        if existing is not None:
+            return existing
+        try:
+            from core.paths import project_root
+
+            target = self.worker_root / "worktrees" / "LAB-WORKTREE-001"
+            if not (target / ".git").exists():
+                result = subprocess.run(
+                    ["git", "worktree", "add", "--detach", str(target)],
+                    cwd=project_root(), capture_output=True, text=True, timeout=180,
+                )
+                if result.returncode != 0:
+                    return None
+            self.workshop_state.parent.mkdir(parents=True, exist_ok=True)
+            self.workshop_state.write_text(
+                json.dumps({"worktree": str(target)}), encoding="utf-8",
+            )
+            return target
+        except Exception:
+            return None
+
     def _mark_health(self, worker: str, ok: bool, detail: str = "") -> None:
         import time
         data = self._health()

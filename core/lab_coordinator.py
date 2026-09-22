@@ -68,6 +68,11 @@ class LabCoordinator:
             if self._initialized:
                 return
             await asyncio.to_thread(self._init_db)
+            # Lab workers precisam do worktree isolado; o fluxo de criacao
+            # nunca existiu no repo (so a leitura do estado). Bootstrap
+            # idempotente no boot: cria uma vez, reusa depois.
+            if self.worker_runtime is not None and hasattr(self.worker_runtime, 'ensure_worktree'):
+                await asyncio.to_thread(self.worker_runtime.ensure_worktree)
             migration = await asyncio.to_thread(self.autonomy.migrate_approved_from_lab_db)
             if migration.get("created"):
                 await asyncio.to_thread(

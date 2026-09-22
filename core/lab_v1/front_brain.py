@@ -266,9 +266,21 @@ class FrontBrain:
             _REPOSITION_MARKS = ('funds', 'quota', 'cota', 'credit', 'crédito',
                                  'rate limit', 'nao retornou resultado',
                                  'expirou', 'sem mensagem')
-            while (not result.ok
-                   and isinstance(result.error, str)
-                   and any(mark in result.error.lower() for mark in _REPOSITION_MARKS)):
+            # Estados de conta/confiabilidade que autorizam reposicao pela
+            # availability classificada: o codex chega com codigos compactos
+            # (CODEX_USAGELIMITEXCEEDED -> QUOTA_EXHAUSTED) que nao casam nos
+            # marcadores de texto. Mismatch (outro modelo) e decisao do dono
+            # (DISABLED_BY_OWNER_POLICY) NAO reposicionam.
+            _REPOSITION_STATES = ('QUOTA_EXHAUSTED', 'RATE_LIMITED', 'AUTH_REQUIRED',
+                                  'BUSY', 'OFFLINE', 'PROVIDER_ERROR', 'ERROR')
+
+            def _reposition_allowed(_result):
+                if isinstance(_result.error, str) and any(
+                        mark in _result.error.lower() for mark in _REPOSITION_MARKS):
+                    return True
+                return getattr(_result, 'availability', None) in _REPOSITION_STATES
+
+            while (not result.ok and _reposition_allowed(result)):
                 _candidates = [fid for fid in self._opencode_models()
                                if fid not in _tried
                                and self.runtime.registry.model_status(OPENCODE_PROVIDER, fid)['availability'] == 'AVAILABLE']

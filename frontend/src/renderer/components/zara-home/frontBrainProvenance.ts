@@ -26,13 +26,25 @@ export function validateFrontBrainProvenance(response: any, selected: string): v
   if (response.response_origin !== 'front_brain_run') {
     throw new Error('A resposta não prova se veio de uma ação local ou de um modelo.');
   }
-  if (response.engine !== selected) {
+  // A factual fallback must identify the transport that actually answered.
+  const rerouted = response.fallback != null;
+  if (rerouted && (!Array.isArray(response.fallback) || response.fallback.length !== 2
+      || typeof response.fallback[0] !== 'string' || typeof response.fallback[1] !== 'string')) {
+    throw new Error('A resposta chegou sem a identificação do transporte alternativo.');
+  }
+  // Identity is compared against the *executed* run routing: with a factual
+  // fallback the executed engine IS the fallback transport, so the
+  // owner-facing choice no longer applies -- the reply must reach the UI,
+  // not reject itself. Without a fallback, a mismatch is still a rejection.
+  if (!rerouted && response.engine !== selected) {
     throw new Error(`O backend respondeu com ${String(response.engine)} em vez de ${selected}.`);
   }
   if (typeof response.run_id !== 'string' || !response.run_id
-      || response.model_requested !== selected
       || typeof response.provider !== 'string' || !response.provider) {
     throw new Error('A resposta chegou sem proveniência factual do cérebro.');
+  }
+  if (!rerouted && response.model_requested !== selected) {
+    throw new Error(`O backend respondeu com ${String(response.model_requested)} em vez de ${selected}.`);
   }
   const reported = response.model_reported;
   if (reported !== null && typeof reported !== 'string') {

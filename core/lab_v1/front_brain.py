@@ -188,8 +188,13 @@ class FrontBrain:
                 # Fallback chain when the chosen brain cannot execute. Never ask Alex.
                 # 1) Free OpenCode models (owner login) — preferred over 9Router,
                 #    whose account is not configured on this PC.
+                # Usa _model_status (o wrapper que permite o primeiro turno real
+                # apos a descoberta): o health direto do registry chama um modelo
+                # descoberto de "nunca provado" ate existir recibo de inferencia —
+                # usar o direto aqui e galinha-e-ovo e o front brain trava para
+                # sempre sem nunca provar um modelo gratuito.
                 for fid in self._opencode_models():
-                    s = self.runtime.registry.model_status(OPENCODE_PROVIDER, fid)['availability']
+                    s = self._model_status(fid)
                     if s != 'AVAILABLE':
                         continue
                     agent = next((a for a in self.store.list_agents()
@@ -283,7 +288,7 @@ class FrontBrain:
             while (not result.ok and _reposition_allowed(result)):
                 _candidates = [fid for fid in self._opencode_models()
                                if fid not in _tried
-                               and self.runtime.registry.model_status(OPENCODE_PROVIDER, fid)['availability'] == 'AVAILABLE']
+                               and self._model_status(fid) == 'AVAILABLE']
                 if not _candidates:
                     break
                 fid = _candidates[0]

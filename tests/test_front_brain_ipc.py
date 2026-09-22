@@ -108,6 +108,31 @@ def test_voice_event_carries_success_and_mismatch_provenance(handler):
     assert mismatch['provenance_status'] == 'MISMATCH_REJECTED'
 
 
+def test_voice_speaks_without_waiting_for_slow_memory_persistence(handler):
+    h, _, _ = handler
+    persistence_release = asyncio.Event()
+    persistence_started = asyncio.Event()
+
+    class SlowMemory:
+        async def add_conversation(self, *_args):
+            persistence_started.set()
+            await persistence_release.wait()
+            return 'episode-slow'
+
+    h.memory = SlowMemory()
+
+    async def run():
+        await h._process_voice_message('Responda sem esperar o disco')
+        assert h._speak_response.await_count == 1
+        await asyncio.sleep(0)
+        assert persistence_started.is_set()
+        assert any(not task.done() for task in h._voice_persistence_tasks)
+        persistence_release.set()
+        await asyncio.gather(*tuple(h._voice_persistence_tasks))
+
+    asyncio.run(run())
+
+
 def test_telegram_uses_selected_front_brain_and_canonical_history(handler):
     h, brain, adapter = handler
     h.conversation_history = Mock()
@@ -272,9 +297,14 @@ def test_real_voice_entry_barge_in_purges_all_context_but_keeps_run(
         await h._on_gemini_live_interrupt()
         release.set()
         await stale
+        if h._voice_persistence_tasks:
+            await asyncio.gather(*tuple(h._voice_persistence_tasks))
 
     asyncio.run(run())
-    h._speak_response.assert_not_awaited()
+    # The answer may already have started speaking while persistence runs;
+    # the live interrupt owns stopping playback. The stale durable context is
+    # still purged after the blocked write completes.
+    assert h._speak_response.await_count <= 1
     assert not any(message['content'] == text for message in h.conversation_history.list_recent())
     assert not any(
         message.content in {text, answer}
@@ -284,8 +314,5 @@ def test_real_voice_entry_barge_in_purges_all_context_but_keeps_run(
     assert len(runs) == 1 and brain.runtime.store.get_run(runs[0].id) is not None
     with episode_store._connect() as connection:
         assert connection.execute('SELECT COUNT(*) FROM episodes').fetchone()[0] == 0
-    assert not any(
-        call.args and call.args[0] == 'assistant'
-        and call.args[1] == answer
-        for call in h._append_conversation_message.call_args_list
-    )
+    # The background write may be attempted, but its durable row is removed
+    # above when the generation changes.

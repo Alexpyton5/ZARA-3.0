@@ -2,18 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Brain, ChevronDown, RefreshCw } from 'lucide-react';
 import { errorMessage } from './homeActions';
 
-const BRAINS = [
+const BASE_BRAINS = [
   { id: 'gpt-5.6-luna', name: 'Luna' },
   { id: 'gpt-6-astra', name: 'Astra' },
   { id: 'gpt-5.6-sol', name: 'Sol' },
   { id: 'gpt-5.6-terra', name: 'Terra' },
+  { id: 'nine_router_muse_spark_13', name: 'Muse Spark 1.3 (9Router)' },
+  { id: 'nine_router_nemotron_lightning', name: 'Nemotron Lightning (9Router)' },
+  { id: 'nine_router_mimo_v25', name: 'MiMo v2.5 (9Router)' },
 ] as const;
 
-type BrainId = typeof BRAINS[number]['id'];
-type BrainOption = { id: BrainId; name: string; status: string };
+type BrainOption = { id: string; name: string; status: string };
 
-function isBrainId(value: unknown): value is BrainId {
-  return BRAINS.some(brain => brain.id === value);
+function isKnownBrainId(value: unknown, options: BrainOption[]): value is string {
+  return typeof value === 'string' && options.some(option => option.id === value);
 }
 
 function statusLabel(status: string): string {
@@ -30,10 +32,10 @@ function statusLabel(status: string): string {
 
 /** Selection is observed from the backend; only an explicit change can write it. */
 export function useBrainSelection() {
-  const [selected, setSelected] = useState<BrainId | null>(null);
-  const [options, setOptions] = useState<BrainOption[]>(() => BRAINS.map(brain => ({ ...brain, status: 'UNKNOWN' })));
+  const [selected, setSelected] = useState<string | null>(null);
+  const [options, setOptions] = useState<BrainOption[]>(() => BASE_BRAINS.map(brain => ({ ...brain, status: 'UNKNOWN' })));
   const [loading, setLoading] = useState(true);
-  const [changing, setChanging] = useState<BrainId | null>(null);
+  const [changing, setChanging] = useState<string | null>(null);
   const [error, setError] = useState('');
   const generation = useRef(0);
   const changePending = useRef(false);
@@ -47,20 +49,29 @@ export function useBrainSelection() {
       const list = window.zaraIPC?.engine?.list;
       if (!list) throw new Error('O serviço de cérebros não está conectado.');
       const response = await list();
-      if (response?.error || response?.success === false || !isBrainId(response?.current) || !Array.isArray(response?.engines)) {
+      if (response?.error || response?.success === false || typeof response?.current !== 'string' || !Array.isArray(response?.engines)) {
         throw new Error(typeof response?.error === 'string' ? response.error : 'Não foi possível confirmar os cérebros disponíveis.');
       }
-      const engines: Array<{ id?: unknown; status?: unknown }> = response.engines;
-      const observed = BRAINS.map(brain => {
+      const engines: Array<{ id?: unknown; name?: unknown; provider?: unknown; status?: unknown }> = response.engines;
+      // Base names stay observed; additional backend transports (e.g. OpenCode)
+      // are appended as provided by the registry -- nothing is fabricated here.
+      const observed: BrainOption[] = BASE_BRAINS.map(brain => {
         const match = engines.find(candidate => candidate?.id === brain.id);
         return { ...brain, status: typeof match?.status === 'string' ? match.status : 'UNKNOWN' };
       });
+      const baseIds = new Set(observed.map(option => option.id));
+      for (const candidate of engines) {
+        if (typeof candidate?.id !== 'string' || !candidate.id || baseIds.has(candidate.id)) continue;
+        const name = typeof candidate?.name === 'string' && candidate.name ? candidate.name : candidate.id;
+        const suffix = candidate?.provider === 'opencode' ? ' (OpenCode)' : '';
+        observed.push({ id: candidate.id, name: name + suffix, status: typeof candidate?.status === 'string' ? candidate.status : 'UNKNOWN' });
+      }
       if (request !== generation.current) return;
-      setSelected(response.current);
+      setSelected(isKnownBrainId(response.current, observed) ? response.current : null);
       setOptions(observed);
     } catch (cause) {
       if (request !== generation.current) return;
-      setOptions(BRAINS.map(brain => ({ ...brain, status: 'UNKNOWN' })));
+      setOptions(BASE_BRAINS.map(brain => ({ ...brain, status: 'UNKNOWN' })));
       setError(errorMessage(cause, 'Não foi possível atualizar os cérebros.'));
     } finally {
       if (request === generation.current) setLoading(false);
@@ -73,7 +84,7 @@ export function useBrainSelection() {
   }, [refresh]);
 
   async function select(id: string) {
-    if (loading || changePending.current || !isBrainId(id) || id === selected || !options.some(brain => brain.id === id && brain.status === 'AVAILABLE')) return;
+    if (loading || changePending.current || !options.some(option => option.id === id) || id === selected || !options.some(option => option.id === id && option.status === 'AVAILABLE')) return;
     changePending.current = true;
     const request = ++generation.current;
     setChanging(id);
@@ -100,17 +111,19 @@ export function useBrainSelection() {
     if (!get) throw new Error('Não foi possível confirmar o cérebro da conversa.');
     const request = generation.current;
     const response = await get();
-    if (response?.error || response?.success === false || !isBrainId(response?.current_engine)) {
-      throw new Error(typeof response?.error === 'string' ? response.error : 'Não foi possível confirmar o cérebro da conversa. Atualize e tente novamente.');
+    if (response?.error || response?.success === false || !isKnownBrainId(response?.current_engine, options)) {
+      throw new Error(typeof response?.current_engine === 'string' && response.current_engine
+        ? 'Este modelo esta indisponivel. Atualize os cérebros e escolha outro.'
+        : 'Não foi possível confirmar o cérebro da conversa. Atualize e tente novamente.');
     }
     if (request === generation.current) setSelected(response.current_engine);
-    return response.current_engine as BrainId;
+    return response.current_engine as string;
   }
 
-  const current = options.find(brain => brain.id === selected);
+  const current = options.find(option => option.id === selected);
   const busy = loading || changing !== null;
   const available = !busy && !error && current?.status === 'AVAILABLE';
-  const status = changing ? `Confirmando troca para ${BRAINS.find(brain => brain.id === changing)?.name}…`
+  const status = changing ? `Confirmando troca para ${options.find(option => option.id === changing)?.name ?? changing}…`
     : loading ? 'Verificando disponibilidade…'
     : error ? 'Atualização necessária' : statusLabel(current?.status ?? 'UNKNOWN');
 

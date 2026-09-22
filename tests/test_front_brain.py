@@ -69,6 +69,26 @@ def test_default_and_selection_survive_restart_without_new_session(front):
     assert len(runtime.store.list_runs(first['session_id'])) == 2
 
 
+def test_discovered_authenticated_model_can_make_its_first_proving_call(tmp_path):
+    store = LabStore(tmp_path / 'lab.db')
+    store.initialize()
+    adapter = FrontFake()
+    registry = ProviderRegistry(health_path=tmp_path / 'health.json')
+    registry.register(adapter)
+    store.save_agent(AgentProfile('front-first', 'Luna', adapter.id, DEFAULT_BRAIN,
+                                  role=RoleName.MEMBER, capabilities=['model.text'], effort='low'))
+    brain = FrontBrain(LabRuntime(store, registry))
+
+    # No prior provider result exists, so the generic evidence projection is
+    # DISCOVERED_UNPROVEN. The front channel must still allow the first real
+    # invocation, whose receipt becomes the proof.
+    assert registry.model_status(adapter.id, DEFAULT_BRAIN)['availability'] == 'DISCOVERED_UNPROVEN'
+    assert brain.snapshot()['engines'][0]['status'] == 'AVAILABLE'
+    result = brain.reply('Oi')
+    assert result['success'] is True
+    assert len(adapter.calls) == 1
+
+
 def test_home_history_supplements_instead_of_replacing_persistent_history(front):
     brain, _, adapter = front
     assert brain.reply('Marcador persistente LAB-HISTORY')['success']

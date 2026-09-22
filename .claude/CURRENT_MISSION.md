@@ -2,7 +2,36 @@
 
 Atualizar conforme o trabalho progride. Não é histórico — é só o estado agora.
 
-## Objetivo atual — MISSÃO JARVIS (2026-09-05, decisão do Alex: opção B)
+## Objetivo atual — OPENCODE + VOZ + LAB 24H (2026-09-22, autopilot do Alex até 20:00)
+
+Alex saiu para trabalhar e deu comando total. Objetivos dele, na ordem:
+
+1. Cérebro da ZARA usa os modelos GRÁTIS do OpenCode, selecionáveis no app.
+2. Conversação de voz fluida.
+3. ZARA Lab totalmente funcional, se autocodificando, bots conversando 24h.
+
+**Estado (17:50):**
+- Causa raiz do "nada muda": o app roda empacotado; mudanças no fonte não
+  afetam o exe. Ver `docs/ANALISE_EQUIPE_20260922.md` (análise dos 4 agentes).
+- CORRIGIDO e empacotado (BUILD_ID `1f6215aa` em `frontend/release3/win-unpacked`):
+  OpenCode CLI com candidatos explícitos + cache fallback; config semeado no
+  primeiro boot; chave Gemini com fallback no config; reposição casa na
+  availability classificada; fallback/reposição usam `_model_status` (mata o
+  deadlock do primeiro turno).
+- PROVADO por IPC no exe real (17:43-17:46): codex luna falhou por cota →
+  repositioning engatou → MiMo free expirou → **Muse Spark 1.2 free
+  COMPLETED** — a ZARA respondeu com modelo gratuito. Engine-list mostra 8
+  cérebros OpenCode no seletor.
+- Frontend rebuildado: asar com o fix de proveniência (fallback factual
+  chega à tela) + instalador novo em `frontend/release/`.
+- Commits: 7a65f23, 40222c5, 8dde2d8, 8ca5d10, c8a9987 (branch
+  lab/autonomia-20260911). `.claude/` restaurada do git.
+
+**Pendente para o Alex (20:00):** teste físico de voz (G3 — fala e ouve) e
+aprovação visual do seletor. Voz: Gemini Live depende da chave (env User
+level SETADA; portão com fallback no config).
+
+## Objetivo anterior — MISSÃO JARVIS (2026-09-05, decisão do Alex: opção B)
 
 Alex substituiu a prioridade operacional. A interface (Titanium Emerald) está
 congelada e aprovada — não é mais missão de redesign. A missão agora é

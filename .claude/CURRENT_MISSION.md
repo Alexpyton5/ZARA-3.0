@@ -2,34 +2,38 @@
 
 Atualizar conforme o trabalho progride. Não é histórico — é só o estado agora.
 
-## Objetivo atual — OPENCODE + VOZ + LAB 24H (2026-09-22, autopilot do Alex até 20:00)
+## Objetivo atual — Plano mestre F0–F4 aprovado por Alex (2026-09-23)
 
-Alex saiu para trabalhar e deu comando total. Objetivos dele, na ordem:
+Concluir na ordem do plano enviado por Alex. Cada fase tem build e commit próprios; build apenas por `tools/build_candidate.py`; atualizar `ZARA_ACTIVE_BUILD.json`; preservar material incerto em `_quarentena/` com manifest. Voz só é aprovada fisicamente por Alex.
 
-1. Cérebro da ZARA usa os modelos GRÁTIS do OpenCode, selecionáveis no app.
-2. Conversação de voz fluida.
-3. ZARA Lab totalmente funcional, se autocodificando, bots conversando 24h.
+### Estado
 
-**Estado (17:50):**
-- Causa raiz do "nada muda": o app roda empacotado; mudanças no fonte não
-  afetam o exe. Ver `docs/ANALISE_EQUIPE_20260922.md` (análise dos 4 agentes).
-- CORRIGIDO e empacotado (BUILD_ID `1f6215aa` em `frontend/release3/win-unpacked`):
-  OpenCode CLI com candidatos explícitos + cache fallback; config semeado no
-  primeiro boot; chave Gemini com fallback no config; reposição casa na
-  availability classificada; fallback/reposição usam `_model_status` (mata o
-  deadlock do primeiro turno).
-- PROVADO por IPC no exe real (17:43-17:46): codex luna falhou por cota →
-  repositioning engatou → MiMo free expirou → **Muse Spark 1.2 free
-  COMPLETED** — a ZARA respondeu com modelo gratuito. Engine-list mostra 8
-  cérebros OpenCode no seletor.
-- Frontend rebuildado: asar com o fix de proveniência (fallback factual
-  chega à tela) + instalador novo em `frontend/release/`.
-- Commits: 7a65f23, 40222c5, 8dde2d8, 8ca5d10, c8a9987 (branch
-  lab/autonomia-20260911). `.claude/` restaurada do git.
+- **F0 — EM FECHAMENTO.** P0.2 concluído. P0.3 passou no app empacotado com leitura independente do Windows: volume 98→88→98, mudo ativado/desativado e brilho 0→5→0; estado original restaurado. Identidade do EXE/backend/ASAR verificada; `TestBuildIdentity` 2/2 passou.
+- **P0.1 — PARCIAL.** Manifesto SHA-256 registra os 819 arquivos já presentes em `_quarentena/` (57.749.157 bytes). Nada foi apagado nem classificado como descartável. A lista das “35 stubs/memórias mortas” não existe de forma reconciliada; itens incertos continuam protegidos. Nenhum espaço foi liberado.
+- **F1 — A SEGUIR.** Voz fluida e controles de PC, conforme P1.1–P1.8. Aprovação física de fala/latência segue pendente de Alex.
+- **F2–F4 — NÃO INICIADAS.** Manter a ordem definida no plano mestre; preservar o backlog WOW existente.
 
-**Pendente para o Alex (20:00):** teste físico de voz (G3 — fala e ouve) e
-aprovação visual do seletor. Voz: Gemini Live depende da chave (env User
-level SETADA; portão com fallback no config).
+### Build empacotado F0
+
+- BUILD_ID: `release-candidate-f0-wt-20260923-190251-20260923-1904`
+- EXE: `frontend/release-candidate-f0-wt-20260923-190251-20260923-1904/win-unpacked/ZARA 3.0.exe`
+- SHA-256 e recibo completo: `ZARA_ACTIVE_BUILD.json` e `frontend/.../BUILD_INFO.json`.
+- Prova de identidade: `.unlazy/f0-current-worktree/candidate-identity-report.json`.
+- Prova de controle empacotado: `_quarentena/organizacao-2026-09-23/pc-controls-probes/20260923-190841-2868/REPORT.json`.
+
+O candidato foi encerrado após o teste isolado; o build final da missão deve ser aberto para Alex quando as fases implementáveis terminarem.
+
+### Ordem oficial
+
+F0 Higiene → F1 Voz fluida → F2 Modelos grátis → F3 Zara Lab (P3.3, P3.4, P3.1, P3.2, P3.5, P3.7, P3.6) → F4 Refino técnico. A lista detalhada permanece na solicitação do proprietário e no registro `T-ZARA-MASTER-20260923` em `TASK_BOARD.md`.
+
+## Próxima ação
+
+Fechar o registro e commit próprios de F0; em seguida trabalhar em F1 sem promover prova automatizada a aprovação física.
+
+## Histórico anterior — OPENCODE + VOZ + LAB 24H (2026-09-22)
+
+O estado e as evidências anteriores foram preservados no histórico desta missão e nos relatórios `.unlazy/zara-master-20260923/`. Não apagar ou reclassificar itens do backlog.
 
 ## Objetivo anterior — MISSÃO JARVIS (2026-09-05, decisão do Alex: opção B)
 

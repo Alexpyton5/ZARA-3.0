@@ -1,0 +1,50 @@
+{
+  "files": [
+    {
+      "original_path": "coverage.json",
+      "sha256": "BC71673A06B802C4DEB6B3EAB91929F92701A8494A9B94B3B6CA551BC0DDF3DF",
+      "size_bytes": 607119,
+      "source_commit": "48339a3e8f1323d99359cd6e53bce420459bca20",
+      "classification": "preserved_pending_review"
+    },
+    {
+      "original_path": "interface nova.jpg",
+      "sha256": "85249D29565607423827028EA1CEFFB6B5BE47B7A674B84CACF80B7E89BF0648",
+      "size_bytes": 256838,
+      "source_commit": "48339a3e8f1323d99359cd6e53bce420459bca20",
+      "classification": "preserved_pending_review"
+    },
+    {
+      "original_path": "kanban.db",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "size_bytes": 0,
+      "source_commit": "48339a3e8f1323d99359cd6e53bce420459bca20",
+      "classification": "preserved_pending_review"
+    },
+    {
+      "original_path": "localhost.png",
+      "sha256": "37D46C0D6A3C500141F3D03FBC46419BC1F1CCE017AC193B47C370F4CC524FAA",
+      "size_bytes": 709716,
+      "source_commit": "48339a3e8f1323d99359cd6e53bce420459bca20",
+      "classification": "preserved_pending_review"
+    },
+    {
+      "original_path": "master.png",
+      "sha256": "9778EAD73855CCB700DCDAEB5534BE8FA6C87FB4AA64C62FF49DCAB3ED04C4EA",
+      "size_bytes": 992031,
+      "source_commit": "48339a3e8f1323d99359cd6e53bce420459bca20",
+      "classification": "preserved_pending_review"
+    },
+    {
+      "original_path": "test_history.sqlite3",
+      "sha256": "C9179F079FD550A70F37CD828D35DB26B8EAF2BBC58B18B18BB4A53490DEFF56",
+      "size_bytes": 20480,
+      "source_commit": "48339a3e8f1323d99359cd6e53bce420459bca20",
+      "classification": "preserved_pending_review"
+    }
+  ],
+  "reason": "Recovered original tracked artifacts before aligning this worktree to 855f835. Preserved because the owner requires quarantine plus manifest and forbids direct deletion.",
+  "status": "PRESERVED_NOT_CLASSIFIED_AS_DISPOSABLE",
+  "created_at": "2026-09-23T18:42:56.5695978-03:00",
+  "after_fast_forward_commit": "855f835538e047b911b727603598010a881a8373"
+}

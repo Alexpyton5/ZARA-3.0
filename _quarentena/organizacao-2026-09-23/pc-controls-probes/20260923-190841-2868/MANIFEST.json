@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "created_at": "2026-09-23T19:08:41.043989-03:00",
+  "purpose": "Isolated packaged text-to-PC-control probe with independent Windows readback.",
+  "build_id": "release-candidate-f0-wt-20260923-190251-20260923-1904",
+  "exe_path": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-f0-wt-20260923-190251-20260923-1904\\win-unpacked\\ZARA 3.0.exe",
+  "exe_sha256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
+  "profile_paths": [
+    "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\zara-data",
+    "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\electron-profile"
+  ],
+  "audio_recording_saved": false,
+  "cleanup": "none; runtime evidence and profiles remain preserved here",
+  "completed_at": "2026-09-23T19:09:08.945563-03:00",
+  "report": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\REPORT.json",
+  "logs": [
+    "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\electron.stdout.log",
+    "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\electron.stderr.log"
+  ],
+  "state_restored": true
+}

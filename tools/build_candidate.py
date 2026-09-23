@@ -12,7 +12,7 @@ node_modules e electron-builder numa tarefa de correção de bug, conforme
 .claude/rules/path-rules/frontend-electron.md.
 
 Uso:
-    python tools/build_candidate.py --base <nome-da-pasta-base> --tag <rotulo>
+    python tools/build_candidate.py --base <pasta-ou-caminho-absoluto> --tag <rotulo>
 
 Não altera nenhum candidato existente. Só cria pasta nova.
 """
@@ -55,20 +55,39 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
+def preserve_failed_candidate(candidate_dir: Path, reason: str) -> Path | None:
+    """Move a partial candidate to quarantine instead of deleting its evidence."""
+    if not candidate_dir.exists():
+        return None
+    quarantine = ROOT / "_quarentena" / "organizacao-2026-09-23" / "build-failures"
+    quarantine.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    preserved = quarantine / f"{candidate_dir.name}-{stamp}"
+    shutil.move(str(candidate_dir), str(preserved))
+    manifest = {
+        "status": "FAILED_BUILD_PRESERVED",
+        "created_at": datetime.now().astimezone().isoformat(),
+        "original_path": str(candidate_dir),
+        "preserved_path": str(preserved),
+        "reason": reason,
+    }
+    (preserved / "QUARANTINE_MANIFEST.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return preserved
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="auto",
-                    help="pasta em frontend/ usada como base, ou 'auto' para a mais recente")
+                    help="nome em frontend/ ou caminho absoluto do candidato base; 'auto' escolhe o mais recente")
     ap.add_argument("--tag", default="kore", help="rótulo curto do candidato")
     ap.add_argument("--delta", default="", help="o que mudou em relação ao base")
     args = ap.parse_args()
 
-    # 'auto' escolhe a linhagem mais recente que realmente tem os dois binarios.
-    # Sem isso, uma limpeza de disco que remova a base nomeada quebra o build
-    # inteiro depois de ja ter gasto minutos compilando o sidecar.
-    if args.base == "auto" or not (FRONTEND / args.base / "win-unpacked" / "ZARA 3.0.exe").exists():
-        if args.base != "auto":
-            print(f"[AVISO] base '{args.base}' nao existe mais. Escolhendo a mais recente.")
+    # A base pode morar fora deste worktree. Nunca troque uma base explicita
+    # ausente por outra linhagem, pois isso esconderia qual app foi empacotado.
+    if args.base == "auto":
         cands = [
             d for d in FRONTEND.glob("release*")
             if (d / "win-unpacked" / "ZARA 3.0.exe").exists()
@@ -77,10 +96,17 @@ def main() -> int:
         if not cands:
             fail("nenhuma linhagem de build utilizavel em frontend/")
         escolhida = max(cands, key=lambda d: d.stat().st_mtime)
-        args.base = escolhida.name
-        print(f"[AUTO] base escolhida: {args.base}")
+        base_dir = escolhida
+        print(f"[AUTO] base escolhida: {base_dir.name}")
+    else:
+        requested_base = Path(args.base).expanduser()
+        base_dir = requested_base if requested_base.is_absolute() else FRONTEND / requested_base
+        if not (base_dir / "win-unpacked" / "ZARA 3.0.exe").is_file():
+            fail(f"candidato base explicitamente informado nao encontrado: {base_dir}")
+        if not (base_dir / "win-unpacked" / "resources" / "backend" / "zara-backend.exe").is_file():
+            fail(f"sidecar do candidato base explicitamente informado nao encontrado: {base_dir}")
 
-    base_dir = FRONTEND / args.base
+    base_label = base_dir.name
     base_exe = base_dir / "win-unpacked" / "ZARA 3.0.exe"
     base_backend = base_dir / "win-unpacked" / "resources" / "backend" / "zara-backend.exe"
 
@@ -93,15 +119,21 @@ def main() -> int:
     if not base_backend.exists():
         fail(f"sidecar do candidato base nao encontrado: {base_backend}")
     if not DIST_SIDECAR.exists():
-        fail(
-            "dist-sidecar/zara-backend.exe nao existe. "
-            "Rode 'python build_exe.py' antes deste script."
-        )
+        sidecar_builder = ROOT / "build_exe.py"
+        if not sidecar_builder.is_file():
+            fail(f"builder oficial do sidecar nao encontrado: {sidecar_builder}")
+        print("\n[BUILD] dist-sidecar ausente; reconstruindo o sidecar a partir deste worktree...")
+        result = subprocess.run([sys.executable, str(sidecar_builder)], cwd=ROOT)
+        if result.returncode != 0:
+            fail(f"build_exe.py falhou com codigo {result.returncode}; nenhum candidato foi criado")
+        if not DIST_SIDECAR.is_file():
+            fail("build_exe.py terminou sem criar dist-sidecar/zara-backend.exe")
 
     novo_backend_sha = sha256(DIST_SIDECAR)
     base_backend_sha = sha256(base_backend)
 
-    print(f"\nbase              : {args.base}")
+    print(f"\nbase              : {base_label}")
+    print(f"base path         : {base_dir}")
     print(f"sidecar do base   : {base_backend_sha[:16]}...")
     print(f"sidecar novo      : {novo_backend_sha[:16]}...")
 
@@ -119,7 +151,12 @@ def main() -> int:
 
     print(f"\ncriando           : {build_id}")
     print("copiando o candidato base (pode levar 1-2 minutos)...")
-    shutil.copytree(base_dir, dest_dir)
+    try:
+        shutil.copytree(base_dir, dest_dir)
+    except Exception as exc:
+        preserved = preserve_failed_candidate(dest_dir, f"copytree failed: {type(exc).__name__}: {exc}")
+        suffix = f" Parcial preservado em: {preserved}" if preserved else ""
+        fail(f"falha ao copiar o candidato base: {exc}.{suffix}")
 
     # ZARA-BUILD-INTEGRIDADE-001
     # Um candidato nasceu sem ffmpeg.dll, locales/ e icudtl.dat e so falhou na
@@ -184,9 +221,10 @@ def main() -> int:
                   "resources/app.asar", "resources/backend/zara-backend.exe"]
     faltando = [n for n in essenciais if not (destino_win / n).exists()]
     if faltando:
-        shutil.rmtree(dest_dir, ignore_errors=True)
+        preserved = preserve_failed_candidate(dest_dir, "missing required packaged files: " + ", ".join(faltando))
         fail(
-            "candidato incompleto, foi descartado. Faltava: " + ", ".join(faltando)
+            "candidato incompleto, preservado em quarentena. Faltava: " + ", ".join(faltando)
+            + (f"\n        Material preservado: {preserved}" if preserved else "")
             + "\n        Se faltou resources/app.asar, o frontend precisa ser"
               " reconstruido de verdade:\n"
               "        cd frontend\n"
@@ -201,7 +239,6 @@ def main() -> int:
     dest_exe = dest_dir / "win-unpacked" / "ZARA 3.0.exe"
 
     print("trocando o sidecar pelo recem-compilado...")
-    dest_backend.unlink()
     shutil.copy2(DIST_SIDECAR, dest_backend)
 
     # Prova de que a troca aconteceu: byte a byte igual ao dist-sidecar.
@@ -214,7 +251,8 @@ def main() -> int:
     info = {
         "BUILD_ID": build_id,
         "BUILD_TIMESTAMP": datetime.now().astimezone().isoformat(),
-        "BASE_BUILD": args.base,
+        "BASE_BUILD": base_label,
+        "BASE_BUILD_PATH": str(base_dir),
         "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
         "GIT_BRANCH": git("rev-parse", "--abbrev-ref", "HEAD"),
         "GIT_COMMIT": git("rev-parse", "HEAD"),
@@ -238,27 +276,6 @@ def main() -> int:
     # silencio na cara do Alex. Texto simples nao tem esse problema.
     (ROOT / "ZARA_ACTIVE_BUILD.txt").write_text(str(dest_exe), encoding="utf-8")
 
-    # ZARA-UM-CANDIDATO-SO-001 (Alex, 2026-08-13)
-    # "toda vez que voce criar um novo apague o velho para nao confundir".
-    # A regra antiga guardava dois candidatos; foi assim que Alex passou dias
-    # testando um EXE velho sem saber. Agora sobra exatamente um, e a baseline
-    # frontend/release/ — que nao e candidato, e a copia de seguranca de onde
-    # o portao de integridade restaura arquivo faltando.
-    apagados = []
-    for velho in FRONTEND.glob("release-candidate-*"):
-        if not velho.is_dir() or velho == dest_dir:
-            continue
-        try:
-            shutil.rmtree(velho, ignore_errors=True)
-            if not velho.exists():
-                apagados.append(velho.name)
-        except Exception:
-            pass
-    if apagados:
-        print(f"\nlimpeza: {len(apagados)} candidato(s) antigo(s) apagado(s)")
-        for nome in apagados:
-            print(f"         {nome}")
-
     print("\n" + "=" * 64)
     print("CANDIDATO PRONTO")
     print("=" * 64)
@@ -266,6 +283,7 @@ def main() -> int:
     print(f"GIT_COMMIT      : {info['GIT_COMMIT'][:12]}")
     print(f"GIT_DIRTY       : {info['GIT_DIRTY']}")
     print(f"BACKEND_SHA256  : {info['BACKEND_SHA256'][:32]}...")
+    print("CANDIDATE_READY: true")
     print(f"\nALEX_OPEN_THIS_EXE:\n{info['EXE_PATH']}")
     print("=" * 64)
     return 0

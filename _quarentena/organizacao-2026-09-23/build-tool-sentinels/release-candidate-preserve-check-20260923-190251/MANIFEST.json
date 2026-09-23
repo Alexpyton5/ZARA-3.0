@@ -1,0 +1,8 @@
+﻿{
+    "preserved_path":  "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\build-tool-sentinels\\release-candidate-preserve-check-20260923-190251",
+    "purpose":  "Prove the official builder retains an existing phase candidate directory.",
+    "verified_at":  "2026-09-23T19:04:33.6760149-03:00",
+    "original_path":  "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-preserve-check-20260923-190251",
+    "created_at":  "2026-09-23T19:02:51.7229796-03:00",
+    "status":  "BUILDER_SENTINEL_PRESERVED"
+}

@@ -1,0 +1,229 @@
+{
+  "evidence": "PACKAGED_RUNTIME",
+  "build_id": "release-candidate-f0-wt-20260923-190251-20260923-1904",
+  "exe_path": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-f0-wt-20260923-190251-20260923-1904\\win-unpacked\\ZARA 3.0.exe",
+  "exe_sha256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
+  "source_commit": "855f835538e047b911b727603598010a881a8373",
+  "profile": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868",
+  "status": "PASS",
+  "original_state": {
+    "volume": 98,
+    "muted": false,
+    "brightness": 0
+  },
+  "volume": {
+    "initial_ipc": {
+      "success": true,
+      "result": {
+        "success": true,
+        "output": "Saída padrão: Altofalantes (Realtek(R) Audio), volume 98%, com som.",
+        "error": "",
+        "data": {
+          "default_output_id": "{0.0.0.00000000}.{c2b91ca3-8815-4b42-ad4c-a012f20808ad}",
+          "default_output_name": "Altofalantes (Realtek(R) Audio)",
+          "volume": 98,
+          "muted": false,
+          "media": {
+            "backend": "pycaw_session_state",
+            "active_render_sessions": []
+          },
+          "metadata_backend": "NOT_AVAILABLE",
+          "verified": true
+        },
+        "duration_ms": 857.6123999955598,
+        "verificado": true
+      },
+      "error": "",
+      "verificado": true
+    },
+    "before": 98,
+    "command": "diminua o volume",
+    "target": 88,
+    "response": {
+      "response": "Volume definido para 88%.",
+      "engine": "pc_control",
+      "selo": "verificado",
+      "response_origin": "local_deterministic"
+    },
+    "command_round_trip_ms": 286.7,
+    "windows_after": 88,
+    "changed_and_verified": true,
+    "restore_response": {
+      "response": "Volume definido para 98%.",
+      "engine": "pc_control",
+      "selo": "verificado",
+      "response_origin": "local_deterministic"
+    },
+    "restore_round_trip_ms": 192.2,
+    "restored_to_original": true,
+    "windows_final": 98
+  },
+  "mute": {
+    "before": false,
+    "command": "muta",
+    "target": true,
+    "response": {
+      "response": "Mudo ativado.",
+      "engine": "pc_control",
+      "selo": "verificado",
+      "response_origin": "local_deterministic"
+    },
+    "command_round_trip_ms": 128.9,
+    "windows_after": true,
+    "changed_and_verified": true,
+    "restore_response": {
+      "response": "Mudo desativado.",
+      "engine": "pc_control",
+      "selo": "verificado",
+      "response_origin": "local_deterministic"
+    },
+    "restore_round_trip_ms": 140.2,
+    "restored_to_original": true,
+    "windows_final": false
+  },
+  "brightness": {
+    "before": 0,
+    "target": 5,
+    "response": {
+      "response": "Brilho definido para 5%.",
+      "engine": "pc_control",
+      "selo": "verificado",
+      "response_origin": "local_deterministic"
+    },
+    "command_round_trip_ms": 4025.2,
+    "windows_after": 5,
+    "changed_and_verified": true,
+    "restore_response": {
+      "response": "Brilho definido para 0%.",
+      "engine": "pc_control",
+      "selo": "verificado",
+      "response_origin": "local_deterministic"
+    },
+    "restore_round_trip_ms": 4364.9,
+    "restored_to_original": true,
+    "windows_final": 0
+  },
+  "restoration": {},
+  "shutdown": "isolated packaged process and children stopped",
+  "lab_policy": {
+    "mission_entry_enabled": true,
+    "background_enabled": false,
+    "paid_allowed": false,
+    "agent_model_overrides": {},
+    "resource_classes": {
+      "codex_cli/gpt-5.6-luna": "PLAN_INCLUDED",
+      "codex_cli/gpt-5.6-sol": "PLAN_INCLUDED",
+      "codex_cli/gpt-5.6-terra": "PLAN_INCLUDED",
+      "codex_cli/gpt-6-astra": "UNKNOWN_COST",
+      "claude_cli/*": "PLAN_INCLUDED",
+      "nvidia/*": "UNKNOWN_COST",
+      "nvidia/nvidia/nemotron-3-super-120b-a12b": "OWNER_REPORTED_FREE",
+      "nvidia/nvidia/nemotron-3-ultra-550b-a55b": "OWNER_REPORTED_FREE",
+      "deepseek_harness/*": "UNKNOWN_COST"
+    },
+    "authorized_models": [
+      "codex_cli/gpt-5.6-luna",
+      "codex_cli/gpt-5.6-sol",
+      "codex_cli/gpt-5.6-terra",
+      "claude_cli/opus",
+      "claude_cli/sonnet",
+      "claude_cli/haiku",
+      "nvidia/nvidia/nemotron-3-super-120b-a12b",
+      "nvidia/nvidia/nemotron-3-ultra-550b-a55b"
+    ],
+    "authorized_providers": [
+      "codex_cli",
+      "claude_cli",
+      "nvidia"
+    ],
+    "authorized_roles": [
+      "CEO",
+      "BUILDER",
+      "REVIEWER",
+      "RESEARCHER",
+      "MEMBER"
+    ],
+    "max_repair_attempts": 1,
+    "cadence_seconds": 60,
+    "role_model_preference": {
+      "CEO": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
+        "sonnet",
+        "opus"
+      ],
+      "BUILDER": [
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
+        "sonnet",
+        "opus"
+      ],
+      "REVIEWER": [
+        "gpt-5.6-terra",
+        "gpt-5.6-sol",
+        "gpt-6-astra",
+        "sonnet",
+        "opus"
+      ],
+      "RESEARCHER": [
+        "gpt-5.6-luna",
+        "gpt-5.6-terra",
+        "gpt-5.6-sol",
+        "gpt-6-astra",
+        "sonnet",
+        "opus"
+      ],
+      "MEMBER": [
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
+        "sonnet",
+        "opus"
+      ]
+    },
+    "enabled": false,
+    "workspace": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002",
+    "last_tick": null,
+    "last_state": "MONITORING",
+    "next_evolution_check": 0,
+    "evolution_cadence_seconds": 86400,
+    "max_new_evolution_missions_per_day": 1,
+    "daily_date": null,
+    "daily_missions": 0,
+    "stale_legacy_sessions": [],
+    "source_observer": null,
+    "scheduler_enabled": false
+  },
+  "restoration_fallback": {
+    "volume": {
+      "observed": 98,
+      "restored": true,
+      "needed": false
+    },
+    "mute": {
+      "observed": false,
+      "restored": true,
+      "needed": false
+    },
+    "brightness": {
+      "observed": 0,
+      "restored": true,
+      "needed": false
+    }
+  },
+  "final_state": {
+    "volume": 98,
+    "muted": false,
+    "brightness": 0
+  },
+  "state_restored": true,
+  "runtime_logs": {
+    "stdout": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\electron.stdout.log",
+    "stderr": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\electron.stderr.log"
+  },
+  "manifest": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\pc-controls-probes\\20260923-190841-2868\\MANIFEST.json"
+}

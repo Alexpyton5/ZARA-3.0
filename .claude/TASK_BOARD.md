@@ -2,6 +2,20 @@
 
 Formato simples. Não virar burocracia.
 
+## MASTER MISSION IN PROGRESS
+
+- ID: T-ZARA-MASTER-20260923
+  owner: Chief of Staff (sessão principal)
+  scope: concluir o plano F0–F4 de Alex, na ordem aprovada, com build e commit separados por fase, identidade do build ativo e evidência por runtime real.
+  files: por fase, sob contrato TASK_ID; `core/ipc_handlers.py` continua sob trava do Chief.
+  critérios: build apenas por `tools/build_candidate.py`; quarentena com manifest e sem apagar; testes automáticos direcionados; ações de PC aprovadas só por postcondição do Windows; voz aprovada fisicamente só por Alex; build final aberto e identificado.
+  estado F0: P0.2 concluído; P0.3 passou no candidato empacotado, com volume, mudo e brilho alterados, lidos no Windows e restaurados; teste de identidade 2/2 passou. Candidato `release-candidate-f0-wt-20260923-190251-20260923-1904`.
+  estado P0.1: PARCIAL — manifesto SHA-256 cobre 819 arquivos já em quarentena (57.749.157 bytes); nenhum arquivo foi apagado; nenhum espaço foi liberado. A lista exata das “35 stubs/memórias mortas” não foi encontrada e os itens não foram movidos/classificados como lixo.
+  evidências: `.unlazy/f0-current-worktree/GATES.md`, `.unlazy/f0-current-worktree/candidate-identity-report.json`, `_quarentena/MANIFEST_P0.1_20260923.json`, `_quarentena/organizacao-2026-09-23/pc-controls-probes/20260923-190841-2868/REPORT.json`.
+  próxima ação: registrar e commitar F0; começar F1 e manter a aprovação física de voz pendente de Alex.
+
+O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a prioridade atual é a ordem F0–F4 de T-ZARA-MASTER-20260923.
+
 ## DONE
 
 - ID: T-JARVIS-P0-01

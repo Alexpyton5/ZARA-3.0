@@ -1,0 +1,8 @@
+﻿{
+    "verified_at":  "2026-09-23T19:04:35.7659379-03:00",
+    "base":  "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-f1-voice-interrupt-20260923-1756",
+    "root":  "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002",
+    "identity_check":  "BUILD_ID=release-candidate-f0-wt-20260923-190251-20260923-1904\nCANDIDATE_IDENTITY_PASS",
+    "sentinel_preserved_in_quarantine":  "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\organizacao-2026-09-23\\build-tool-sentinels\\release-candidate-preserve-check-20260923-190251",
+    "status":  "PASS"
+}

@@ -222,26 +222,58 @@ class TestBuildIdentity:
     """M7: Build metadata (M2 verification)."""
 
     def test_build_info_json_location(self):
-        """BUILD_INFO.json has correct location."""
-        build_info_path = PROJECT_ROOT / "frontend" / "release" / "win-unpacked" / "BUILD_INFO.json"
-        # Location should exist (or be creatable during build)
-        assert build_info_path.parent.exists(), f"Parent directory missing: {build_info_path.parent}"
+        """The active-build pointer resolves to the packaged BUILD_INFO.json."""
+        import json
+
+        pointer_path = PROJECT_ROOT / "ZARA_ACTIVE_BUILD.json"
+        assert pointer_path.is_file(), f"Active build pointer missing: {pointer_path}"
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        exe_path = Path(pointer["EXE_PATH"])
+        assert exe_path.is_file(), f"Active EXE missing: {exe_path}"
+        build_info_path = exe_path.parent / "BUILD_INFO.json"
+        assert build_info_path.is_file(), f"BUILD_INFO.json missing beside active EXE: {build_info_path}"
 
     def test_build_info_json_schema(self):
-        """BUILD_INFO.json (if present) has correct structure."""
+        """The pointer, packaged metadata, and artifact hashes identify one build."""
         import json
-        build_info_path = PROJECT_ROOT / "frontend" / "release" / "win-unpacked" / "BUILD_INFO.json"
+        import hashlib
 
-        if build_info_path.exists():
-            with open(build_info_path) as f:
-                data = json.load(f)
+        def sha256_file(path: Path) -> str:
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            return digest.hexdigest().upper()
 
-            required_fields = [
-                "BUILD_ID", "BUILD_TIMESTAMP", "GIT_BRANCH", "GIT_COMMIT",
-                "GIT_DIRTY", "PYTHON_VERSION", "NODE_VERSION", "SIDECAR_SHA256"
-            ]
-            for field in required_fields:
-                assert field in data, f"Missing field: {field}"
+        pointer_path = PROJECT_ROOT / "ZARA_ACTIVE_BUILD.json"
+        assert pointer_path.is_file(), f"Active build pointer missing: {pointer_path}"
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        for field in ("BUILD_ID", "EXE_PATH", "EXE_SHA256", "BACKEND_SHA256", "ASAR_SHA256"):
+            assert pointer.get(field), f"Active build pointer missing {field}"
+
+        exe_path = Path(pointer["EXE_PATH"])
+        build_info_path = exe_path.parent / "BUILD_INFO.json"
+        assert exe_path.is_file(), f"Active EXE missing: {exe_path}"
+        assert build_info_path.is_file(), f"BUILD_INFO.json missing: {build_info_path}"
+        data = json.loads(build_info_path.read_text(encoding="utf-8"))
+        for field in ("BUILD_ID", "BUILD_TIMESTAMP", "GIT_BRANCH", "GIT_COMMIT", "GIT_DIRTY",
+                      "EXE_PATH", "EXE_SHA256", "BACKEND_SHA256", "ASAR_SHA256", "DELTA"):
+            assert field in data, f"Packaged BUILD_INFO.json missing {field}"
+
+        assert data["BUILD_ID"] == pointer["BUILD_ID"]
+        assert Path(data["EXE_PATH"]).resolve() == exe_path.resolve()
+        backend_path = exe_path.parent / "resources" / "backend" / "zara-backend.exe"
+        asar_path = exe_path.parent / "resources" / "app.asar"
+        for path, expected in ((exe_path, pointer["EXE_SHA256"]),
+                               (backend_path, pointer["BACKEND_SHA256"]),
+                               (asar_path, pointer["ASAR_SHA256"])):
+            assert path.is_file(), f"Packaged artifact missing: {path}"
+            actual = sha256_file(path)
+            assert actual == str(expected).upper(), f"Hash mismatch for {path.name}"
+
+        pointer_txt = PROJECT_ROOT / "ZARA_ACTIVE_BUILD.txt"
+        assert pointer_txt.is_file(), f"Active build text pointer missing: {pointer_txt}"
+        assert Path(pointer_txt.read_text(encoding="utf-8").strip()).resolve() == exe_path.resolve()
 
 
 class TestIPC:

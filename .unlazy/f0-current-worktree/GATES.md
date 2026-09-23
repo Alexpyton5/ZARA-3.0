@@ -8,9 +8,9 @@ Scope: preserve the F0 evidence, produce an identity-bound candidate without del
   EVIDENCE: _quarentena/organizacao-2026-09-23/recovered-fast-forward-20260923-184256/MANIFEST.json; six recovered files listed and SHA-256 values recorded
 
 - [ ] P0.1: quarantine inventory completed without deleting or reclassifying preserved material
-  STATUS: PARTIAL — 819 existing quarantine files (57,749,157 bytes) inventoried with SHA-256 in _quarentena/MANIFEST_P0.1_20260923.json; no bytes freed. The aggregate "35 stubs/dead memories" is still not enumerated. Its members and live references are unproven, so they remain protected and unmoved.
+  STATUS: PARTIAL — refreshed SHA-256 inventory covers 1,024 preserved files (92,680,738 bytes) in _quarentena/MANIFEST_P0.1_20260923.json; prior manifest preserved as MANIFEST_P0.1_20260923.pre-refresh.json; no bytes freed. The aggregate "35 stubs/dead memories" is still not enumerated. The 8.5 GB target is not evidenced in this worktree; uncertain items remain protected.
   CHECK: `python .unlazy/f0-current-worktree/verify_quarantine_manifest.py`
-  EXPECT: `QUARANTINE_MANIFEST_PASS files=819 bytes=57749157`
+  EXPECT: `QUARANTINE_MANIFEST_PASS files=1024 bytes=92680738`
 
 - [x] G2: the official builder accepts a named external base and retains prior phase candidates
   EVIDENCE: .unlazy/f0-current-worktree/build-sentinel-report.json; `F0_BUILD_SENTINEL_PASS`; sentinel preserved under `_quarentena/`

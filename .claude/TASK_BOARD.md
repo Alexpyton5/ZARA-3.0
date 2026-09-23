@@ -10,7 +10,7 @@ Formato simples. Não virar burocracia.
   files: por fase, sob contrato TASK_ID; `core/ipc_handlers.py` continua sob trava do Chief.
   critérios: build apenas por `tools/build_candidate.py`; quarentena com manifest e sem apagar; testes automáticos direcionados; ações de PC aprovadas só por postcondição do Windows; voz aprovada fisicamente só por Alex; build final aberto e identificado.
   estado F0: fechado, exceto P0.1 parcial; P0.2 concluído; P0.3 passou no candidato empacotado, com volume, mudo e brilho alterados, lidos no Windows e restaurados; teste de identidade 2/2 passou. Candidato baseline `release-candidate-f0-wt-20260923-190251-20260923-1904`.
-  estado P0.1: PARCIAL — manifesto SHA-256 cobre 819 arquivos já em quarentena (57.749.157 bytes); nenhum arquivo foi apagado; nenhum espaço foi liberado. A lista exata das “35 stubs/memórias mortas” não foi encontrada e os itens não foram movidos/classificados como lixo.
+  estado P0.1: PARCIAL — manifesto SHA-256 atualizado cobre 1.024 arquivos preservados (92.680.738 bytes); versão anterior guardada; nenhum arquivo foi apagado/reclassificado e nenhum espaço foi liberado. A lista exata das “35 stubs/memórias mortas” não foi encontrada; a meta de 8,5 GB não foi comprovada neste worktree.
   evidências: `.unlazy/f0-current-worktree/GATES.md`, `.unlazy/f0-current-worktree/candidate-identity-report.json`, `_quarentena/MANIFEST_P0.1_20260923.json`, `_quarentena/organizacao-2026-09-23/pc-controls-probes/20260923-190841-2868/REPORT.json`.
   próxima ação: validação física de voz por Alex no candidato F1 exato; fechar gates de fallback/interrupção e medição sem promover evidência sintética a física. F2 segue bloqueada pela ordem até o gate físico.
 

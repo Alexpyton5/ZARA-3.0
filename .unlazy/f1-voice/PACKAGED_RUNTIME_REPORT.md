@@ -21,6 +21,8 @@ The exact F0 candidate received the same synthetic question and recognized it, b
 
 An exact spoken stop phrase during an automated long response caused the packaged UI to return to LISTENING, set its playback button false, and emit no PCM chunks after the stop event. The probe had 12.1 seconds of renderer audio queued before interruption. It did not capture a transcript for “Zara, pare”; the stop event preceded the synthesized phrase’s final voiced sample by about 192 ms. This is evidence of an automated interruption event in the synthetic IPC path, not proof of lexical recognition or physical audible cutoff. Raw report: `_quarentena/organizacao-2026-09-23/f1-barge-exact-20260923-203554/barge-exact-report.json`; its raw status remains `INCONCLUSIVE_OR_FAIL` because its strict timing assertion failed.
 
+The 118-test F1 source run also passed the focused fallback checks `test_failed_kore_initializes_fallback_once_and_plays_edge` and `test_partial_kore_audio_does_not_restart_phrase_in_fallback`. These prove the mocked fallback rules at TEST level; the package has no safe runtime failure-injection control, so this does not close the packaged fallback gate.
+
 ## Not proven / remaining gates
 
 - No physical microphone, physical Kore listening, room continuity, or owner approval has been observed.

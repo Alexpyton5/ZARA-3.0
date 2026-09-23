@@ -38,7 +38,7 @@ F0 Higiene → F1 Voz fluida → F2 Modelos grátis → F3 Zara Lab (P3.3, P3.4,
 
 ## Próxima ação
 
-Abrir o candidato F1 exato com microfone real para Alex validar fala e interrupção. Fechar G4/G5 com evidência automatizada comparável se possível; G6 exige aprovação física de Alex. Só então abrir F2.
+O candidato F1 exato já está aberto, com perfil normal, sem flags de microfone falso; janela e EXE foram confirmados. Alex precisa validar fala e interrupção quando voltar. Fallback empacotado e comparação numérica de latência permanecem sem prova; só então abrir F2.
 
 ## Histórico anterior — OPENCODE + VOZ + LAB 24H (2026-09-22)
 

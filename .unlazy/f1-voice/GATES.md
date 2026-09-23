@@ -8,7 +8,7 @@ All evidence must be bound to the `BUILD_ID`, EXE SHA-256, backend SHA-256, and 
 - [ ] G4 PACKAGED_RUNTIME: automated exact-phrase interruption produced a stop event and no later PCM chunks, but a controlled TTS failure/fallback test is still missing. No physical playback claim.
 - [ ] G5 MEASUREMENT: F1 synthetic IPC stimulus produced first renderer audio 5,076 ms after the last voiced sample. F0 heard the same stimulus but produced no audio, so a numeric before/after latency delta is unavailable. Physical microphone latency remains unmeasured.
 - [ ] G6 VOICE_PHYSICAL: Alex hears and approves Kore quality/continuity on the exact candidate. Owner-only.
-- [ ] G7 P1.8: exploratory NVIDIA voice result and limitations recorded.
+- [x] G7 DEFERRED BY OWNER: Alex said Gemini Live is sufficient for now; do not spend time on NVIDIA voice exploration in this mission pass.
 
 F1 cannot be reported fully complete while G4–G6 are unchecked. F2 follows only after the physical gate is resolved.
 

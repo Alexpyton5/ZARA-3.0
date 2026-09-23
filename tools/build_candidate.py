@@ -79,7 +79,14 @@ def preserve_failed_candidate(candidate_dir: Path, reason: str) -> Path | None:
     return preserved
 
 
-def rebuild_frontend_candidate(build_id: str, candidate_dir: Path) -> dict[str, str]:
+def rebuild_frontend_candidate(
+    build_id: str,
+    candidate_dir: Path,
+    *,
+    allow_existing_lint_errors: bool = False,
+    lint_baseline_commit: str = "",
+    lint_targets: list[str] | None = None,
+) -> dict[str, object]:
     """Build the checked-out renderer and Electron package into a fresh candidate."""
     if not (FRONTEND / "package-lock.json").is_file():
         fail(f"frontend/package-lock.json ausente: {FRONTEND / 'package-lock.json'}")
@@ -112,11 +119,69 @@ def rebuild_frontend_candidate(build_id: str, candidate_dir: Path) -> dict[str, 
     print(f"frontend npm ver : {npm_version}")
     print(f"electron-builder : {electron_builder.resolve()}")
 
+    lint_result_metadata: dict[str, object] = {}
     for script in ("typecheck", "lint", "build", "build:electron"):
         command = f'"{npm_cmd}" run {script}'
         print(f"\n[FRONTEND] {command}")
-        result = subprocess.run(command, cwd=FRONTEND, shell=True)
+        capture_lint = script == "lint" and allow_existing_lint_errors
+        result = subprocess.run(
+            command, cwd=FRONTEND, shell=True,
+            capture_output=capture_lint, text=capture_lint,
+        )
         if result.returncode != 0:
+            if script == "lint" and allow_existing_lint_errors:
+                output = f"{result.stdout or ''}\n{result.stderr or ''}"
+                match = re.search(r"\((\d+) errors?,\s*(\d+) warnings?\)", output)
+                if not match:
+                    fail("npm run lint falhou, mas nao consegui ler a contagem de erros/avisos")
+                error_count = int(match.group(1))
+                warning_count = int(match.group(2))
+                changed_source = sorted(
+                    p.removeprefix("frontend/").replace("\\", "/")
+                    for p in git("diff", "--name-only", f"{lint_baseline_commit}..HEAD", "--", "frontend/src").splitlines()
+                    if p.startswith("frontend/src/")
+                )
+                targets = sorted(lint_targets or [])
+                if not lint_baseline_commit or not targets:
+                    fail("lint global falhou; autorizacao de delta exige commit-base e alvos explicitamente listados")
+                if changed_source != targets:
+                    fail(
+                        "lint global falhou e os alvos informados nao cobrem exatamente "
+                        f"o delta frontend: changed={changed_source} targets={targets}"
+                    )
+                for target in targets:
+                    target_path = Path(target)
+                    if target_path.is_absolute() or ".." in target_path.parts:
+                        fail(f"alvo de lint inseguro: {target}")
+                    if not (FRONTEND / target_path).is_file():
+                        fail(f"alvo de lint ausente: {FRONTEND / target_path}")
+                eslint_cmd = FRONTEND / "node_modules" / ".bin" / "eslint.cmd"
+                if not eslint_cmd.is_file():
+                    fail("eslint.cmd ausente; nao posso validar o delta frontend isoladamente")
+                target_args = " ".join(f'"{target}"' for target in targets)
+                target_command = f'"{eslint_cmd.resolve()}" {target_args}'
+                print(
+                    f"[FRONTEND] lint global tem {error_count} erro(s) e "
+                    f"{warning_count} aviso(s); validando somente o delta listado: {targets}"
+                )
+                target_result = subprocess.run(
+                    target_command, cwd=FRONTEND, shell=True,
+                    capture_output=True, text=True,
+                )
+                if target_result.returncode != 0:
+                    fail(
+                        "lint do delta frontend falhou:\n"
+                        + (target_result.stdout or "") + (target_result.stderr or "")
+                    )
+                lint_result_metadata = {
+                    "FRONTEND_LINT_STATUS": "GLOBAL_ERRORS_OUTSIDE_DELTA; DELTA_PASS",
+                    "FRONTEND_LINT_GLOBAL_EXIT_CODE": result.returncode,
+                    "FRONTEND_LINT_GLOBAL_ERRORS": error_count,
+                    "FRONTEND_LINT_GLOBAL_WARNINGS": warning_count,
+                    "FRONTEND_LINT_BASELINE_COMMIT": lint_baseline_commit,
+                    "FRONTEND_LINT_TARGETS": targets,
+                }
+                continue
             fail(f"npm run {script} terminou com codigo {result.returncode}; candidato nao iniciado")
 
     command = (
@@ -142,6 +207,7 @@ def rebuild_frontend_candidate(build_id: str, candidate_dir: Path) -> dict[str, 
         "FRONTEND_NPM_PATH": npm_cmd,
         "FRONTEND_NPM_VERSION": npm_version,
         "FRONTEND_PACKAGE_LOCK_SHA256": sha256(FRONTEND / "package-lock.json"),
+        **lint_result_metadata,
     }
 
 
@@ -155,6 +221,12 @@ def main() -> int:
                     help="forca rebuild do backend a partir deste checkout")
     ap.add_argument("--rebuild-frontend", action="store_true",
                     help="rebuild typecheck/lint/Vite/Electron e empacota em candidato novo")
+    ap.add_argument("--allow-existing-frontend-lint-errors", action="store_true",
+                    help="aceita apenas erros do lint global fora do delta frontend explicitamente validado")
+    ap.add_argument("--frontend-baseline-commit", default="",
+                    help="commit base para comparar os arquivos frontend alterados")
+    ap.add_argument("--frontend-lint-target", action="append", default=[],
+                    help="arquivo frontend alterado para lint isolado; repetir por arquivo")
     args = ap.parse_args()
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", args.tag):
         fail("--tag aceita apenas letras minusculas, numeros e hifens")
@@ -226,7 +298,12 @@ def main() -> int:
     print(f"\ncriando           : {build_id}")
     frontend_toolchain = {}
     if args.rebuild_frontend:
-        frontend_toolchain = rebuild_frontend_candidate(build_id, dest_dir)
+        frontend_toolchain = rebuild_frontend_candidate(
+            build_id, dest_dir,
+            allow_existing_lint_errors=args.allow_existing_frontend_lint_errors,
+            lint_baseline_commit=args.frontend_baseline_commit,
+            lint_targets=args.frontend_lint_target,
+        )
     else:
         print("copiando o candidato base (pode levar 1-2 minutos)...")
         try:

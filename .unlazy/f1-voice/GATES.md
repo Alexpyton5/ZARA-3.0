@@ -11,3 +11,5 @@ All evidence must be bound to the `BUILD_ID`, EXE SHA-256, backend SHA-256, and 
 - [ ] G7 P1.8: exploratory NVIDIA voice result and limitations recorded.
 
 F1 cannot be reported fully complete while G6 is unchecked. F2 follows only after the physical gate is resolved.
+
+Frontend lint note: full lint reports 5 existing errors/62 warnings in unchanged files; the sole F1 frontend delta (`aecAudio.ts`) passes focused ESLint. See `FRONTEND_LINT_REPORT.md`; the candidate identity will retain this limitation rather than label global lint as passed.

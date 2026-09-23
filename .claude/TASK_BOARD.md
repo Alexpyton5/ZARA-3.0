@@ -9,13 +9,13 @@ Formato simples. Não virar burocracia.
   scope: concluir o plano F0–F4 de Alex, na ordem aprovada, com build e commit separados por fase, identidade do build ativo e evidência por runtime real.
   files: por fase, sob contrato TASK_ID; `core/ipc_handlers.py` continua sob trava do Chief.
   critérios: build apenas por `tools/build_candidate.py`; quarentena com manifest e sem apagar; testes automáticos direcionados; ações de PC aprovadas só por postcondição do Windows; voz aprovada fisicamente só por Alex; build final aberto e identificado.
-  estado F0: P0.2 concluído; P0.3 passou no candidato empacotado, com volume, mudo e brilho alterados, lidos no Windows e restaurados; teste de identidade 2/2 passou. Candidato `release-candidate-f0-wt-20260923-190251-20260923-1904`.
+  estado F0: fechado, exceto P0.1 parcial; P0.2 concluído; P0.3 passou no candidato empacotado, com volume, mudo e brilho alterados, lidos no Windows e restaurados; teste de identidade 2/2 passou. Candidato baseline `release-candidate-f0-wt-20260923-190251-20260923-1904`.
   estado P0.1: PARCIAL — manifesto SHA-256 cobre 819 arquivos já em quarentena (57.749.157 bytes); nenhum arquivo foi apagado; nenhum espaço foi liberado. A lista exata das “35 stubs/memórias mortas” não foi encontrada e os itens não foram movidos/classificados como lixo.
   evidências: `.unlazy/f0-current-worktree/GATES.md`, `.unlazy/f0-current-worktree/candidate-identity-report.json`, `_quarentena/MANIFEST_P0.1_20260923.json`, `_quarentena/organizacao-2026-09-23/pc-controls-probes/20260923-190841-2868/REPORT.json`.
-  próxima ação: build F1 empacotado com frontend recompilado, smoke amarrado ao hash e aprovação de voz de Alex antes de abrir F2.
+  próxima ação: validação física de voz por Alex no candidato F1 exato; fechar gates de fallback/interrupção e medição sem promover evidência sintética a física. F2 segue bloqueada pela ordem até o gate físico.
 
-  estado F1: código de voz isolado em `.unlazy/f1-voice/TASK.md`; testes direcionados 118 passaram e 22 foram pulados pelo módulo de voz com janela/hang conhecido. `SOURCE`/`TEST` apenas; pacote e aprovação física pendentes. O construtor oficial agora aceita rebuild de sidecar e frontend no mesmo candidato.
-  evidência de teste: `.unlazy/f1-voice/TEST_REPORT.md` e `.unlazy/f1-voice/GATES.md`.
+  estado F1: candidato `release-candidate-f1-voice-20260923-195354` validado por SHA. Testes direcionados 118 passaram e 22 foram pulados pelo módulo de voz com janela/hang conhecido. `PACKAGED_RUNTIME`: resposta direta no Gemini Live/Kore com PCM sintético (uma medição 5.076 ms, sem delta comparável porque F0 não respondeu); volume, mudo e brilho confirmados por leitura independente e restaurados. Interrupção parcial observada; sem prova física nem teste de falha controlada de TTS. Global frontend lint permanece com 5 erros e 62 avisos em arquivos fora da alteração F1.
+  evidência: `.unlazy/f1-voice/TEST_REPORT.md`, `.unlazy/f1-voice/GATES.md`, `.unlazy/f1-voice/PACKAGED_RUNTIME_REPORT.md`, `.unlazy/f1-voice/candidate-identity-report.json`.
 
 O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a prioridade atual é a ordem F0–F4 de T-ZARA-MASTER-20260923.
 

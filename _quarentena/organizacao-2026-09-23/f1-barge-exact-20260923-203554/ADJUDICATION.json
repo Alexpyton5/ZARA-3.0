@@ -1,0 +1,19 @@
+{
+  "raw_report": "barge-exact-report.json",
+  "raw_status_preserved": "INCONCLUSIVE_OR_FAIL",
+  "evidence_level": "AUTOMATED_PACKAGED_RUNTIME",
+  "build_id": "release-candidate-f1-voice-20260923-195354",
+  "proven": [
+    "The exact stop phrase audio was injected while renderer playback was active.",
+    "A stop event occurred after the stop audio injection began.",
+    "No PCM output chunks were observed after the stop event.",
+    "The playback control became false and voice state returned to LISTENING."
+  ],
+  "not_proven": [
+    "The stop phrase was fully transcribed; no transcript was captured.",
+    "Physical microphone recognition or audible interruption in the room.",
+    "The test assertion required the stop event to occur after the final synthesized voiced sample; it occurred about 192 ms before that sample."
+  ],
+  "queued_renderer_audio_before_interruption_ms_approx": 12110.6,
+  "notes": "This adjudication does not overwrite or promote the raw report status."
+}

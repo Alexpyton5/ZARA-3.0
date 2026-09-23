@@ -1,0 +1,44 @@
+{
+  "purpose": "Single prompt plus exact spoken stop phrase to validate F1 barge-in",
+  "evidence": "AUTOMATED_PACKAGED_RUNTIME",
+  "build_id": "release-candidate-f1-voice-20260923-195354",
+  "voice": "Microsoft Maria Desktop (pt-BR)",
+  "files": [
+    {
+      "file": "long-prompt.wav",
+      "sha256": "424AEDFB2E60E4CF0E10051D263E08127825102593B709081C56785D51663628",
+      "tail_silence_seconds": 0.2,
+      "lead_silence_seconds": 0.5
+    },
+    {
+      "file": "barge-stop.wav",
+      "sha256": "FBC8774060FE67AD6781E4F8AE619DBFC3AB0AEF8C66EDC436E41B94AF285660",
+      "tail_silence_seconds": 0.6,
+      "lead_silence_seconds": 0.1
+    },
+    {
+      "file": "long-prompt-raw.wav",
+      "sha256": "1BD5D815A51D7C739B593612EDFD73E3FACFAB5A0591CCA14AAA869EC03722E3"
+    },
+    {
+      "file": "barge-stop-raw.wav",
+      "sha256": "469D29A650203B36781F0C0445EA67FFD5B951CAAC561CF61FE001084F57EC43"
+    },
+    {
+      "file": "short-long-prompt.wav",
+      "sha256": "0C897DBB7E6F80815A796ECFE4E4F07605598DC2651AA08024E5E00247EF6E57",
+      "prompt": "Me conte uma história de trezentas palavras sobre uma astronauta perdida na Lua.",
+      "lead_silence_seconds": 0.5,
+      "tail_silence_seconds": 0.2
+    },
+    {
+      "file": "short-long-prompt-raw.wav",
+      "sha256": "BCFD3FCAED58E2B91CF69D13B3E76DBA047BA4678F506989078CB58349CB5E97"
+    },
+    {
+      "file": "ADJUDICATION.json",
+      "sha256": "4ADA79FF8A5675728312A08BDF59211B64C04AAB97BE1AE9CC87D7FE4A1153CD"
+    }
+  ],
+  "cleanup": "preserved in quarantine"
+}

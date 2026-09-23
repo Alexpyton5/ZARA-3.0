@@ -8,12 +8,21 @@ Concluir na ordem do plano enviado por Alex. Cada fase tem build e commit própr
 
 ### Estado
 
-- **F0 — EM FECHAMENTO.** P0.2 concluído. P0.3 passou no app empacotado com leitura independente do Windows: volume 98→88→98, mudo ativado/desativado e brilho 0→5→0; estado original restaurado. Identidade do EXE/backend/ASAR verificada; `TestBuildIdentity` 2/2 passou.
+- **F0 — PARCIAL.** P0.2 concluído. P0.3 passou no app empacotado com leitura independente do Windows: volume, mudo e brilho foram alterados e restaurados. P0.1 segue parcial: não houve exclusão nem espaço liberado. F1 já tem implementação e candidato devido ao trabalho anterior, mas a higiene ainda não pode ser chamada de concluída.
 - **P0.1 — PARCIAL.** Manifesto SHA-256 registra os 819 arquivos já presentes em `_quarentena/` (57.749.157 bytes). Nada foi apagado nem classificado como descartável. A lista das “35 stubs/memórias mortas” não existe de forma reconciliada; itens incertos continuam protegidos. Nenhum espaço foi liberado.
-- **F1 — EM EXECUÇÃO.** Fonte F1 isolada; validação focada: 118 passaram e 22 foram pulados por limite conhecido do módulo de janela de voz. Build empacotado e medições ainda pendentes. Aprovação física de fala/latência é exclusiva de Alex.
+- **F1 — EM EXECUÇÃO, GATES PARCIAIS.** Candidato empacotado exato `release-candidate-f1-voice-20260923-195354`. Testes focados: 118 passaram, 22 foram pulados pelo limite conhecido do módulo de janela de voz. Runtime empacotado provou resposta direta Gemini Live→Kore em estímulo sintético (5.076 ms após última amostra falada) e volume/mudo/brilho com leitura independente do Windows e restauração. F0 não emitiu áudio para o mesmo estímulo; portanto não existe delta numérico antes/depois. Interrupção automatizada parcial; fallback TTS controlado e validação física continuam pendentes. Aprovação física de fala é exclusiva de Alex.
 - **F2–F4 — NÃO INICIADAS.** Manter a ordem definida no plano mestre; preservar o backlog WOW existente.
 
-### Build empacotado F0
+### Build empacotado ativo F1
+
+- BUILD_ID: `release-candidate-f1-voice-20260923-195354`
+- EXE: `frontend/release-candidate-f1-voice-20260923-195354/win-unpacked/ZARA 3.0.exe`
+- EXE SHA-256: `67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89`
+- Backend SHA-256: `A96451320C554D88765F32F076A9D418133285FBB783926E2E1333A48AC9F3D6`
+- ASAR SHA-256: `2F8A6521C5A9F3FDCC05CF2D1144329D22FB31D824C58709D6FA6DD7A233FAE8`
+- Identidade e runtime: `.unlazy/f1-voice/candidate-identity-report.json` e `.unlazy/f1-voice/PACKAGED_RUNTIME_REPORT.md`.
+
+### Build empacotado F0 (baseline)
 
 - BUILD_ID: `release-candidate-f0-wt-20260923-190251-20260923-1904`
 - EXE: `frontend/release-candidate-f0-wt-20260923-190251-20260923-1904/win-unpacked/ZARA 3.0.exe`
@@ -29,7 +38,7 @@ F0 Higiene → F1 Voz fluida → F2 Modelos grátis → F3 Zara Lab (P3.3, P3.4,
 
 ## Próxima ação
 
-Empacotar F1 pelo construtor oficial incluindo o frontend alterado; validar o EXE exato e deixar a aprovação de voz física para Alex. Só então abrir F2.
+Abrir o candidato F1 exato com microfone real para Alex validar fala e interrupção. Fechar G4/G5 com evidência automatizada comparável se possível; G6 exige aprovação física de Alex. Só então abrir F2.
 
 ## Histórico anterior — OPENCODE + VOZ + LAB 24H (2026-09-22)
 

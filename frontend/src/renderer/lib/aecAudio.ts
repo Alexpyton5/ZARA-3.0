@@ -57,8 +57,26 @@ let abrindo = false
 
 let saidaCtx: AudioContext | null = null
 let proximoInicio = 0
+let primeiroBlocoKore = true
 let tocando: AudioBufferSourceNode[] = []
+let retomadaSaida: Promise<void> | null = null
+let filaSuspensa: Array<{ pcmBase64: string; taxa: number }> = []
+let geracaoSaida = 0
 const ouvintesSaida = new Set<(active: boolean) => void>()
+let ultimoChunkKoreEm = 0
+let chunksKoreNaFala = 0
+
+function registrarChunkKore(pcmBase64: string, taxa: number): void {
+  const agora = performance.now()
+  const intervaloMs = ultimoChunkKoreEm ? agora - ultimoChunkKoreEm : 0
+  ultimoChunkKoreEm = agora
+  chunksKoreNaFala += 1
+  const bytes = Math.floor(pcmBase64.length * 3 / 4)
+  const duracaoMs = taxa > 0 ? (bytes / 2 / taxa) * 1000 : 0
+  // Permite correlacionar a chegada dos blocos IPC com a duração que deveria
+  // estar no buffer, sem gravar o áudio ou o conteúdo da conversa.
+  console.info(`[VOICE_TRACE] stage=KORE_AUDIO_BUFFER chunk=${chunksKoreNaFala} gap_ms=${intervaloMs.toFixed(1)} duration_ms=${duracaoMs.toFixed(1)} queued_ms=${Math.max(0, (proximoInicio - (saidaCtx?.currentTime ?? 0)) * 1000).toFixed(1)}`)
+}
 
 export function koreTocando(): boolean { return tocando.length > 0 }
 export function observarKore(listener: (active: boolean) => void): () => void {
@@ -164,7 +182,17 @@ export async function iniciarAudioAec(
     no.connect(mudo)
     mudo.connect(ctx.destination)
 
+    // O clique que abriu o microfone também libera este AudioContext para
+    // reprodução. Reutilizá-lo evita criar depois um segundo contexto sem
+    // gesto do usuário, que o Chromium pode suspender e cortar a Kore.
+    const saidaAnterior = saidaCtx
     micCtx = ctx
+    saidaCtx = ctx
+    proximoInicio = ctx.currentTime
+    primeiroBlocoKore = true
+    if (saidaAnterior && saidaAnterior !== ctx) {
+      void saidaAnterior.close().catch(() => undefined)
+    }
     micOrigem = origem
     micNode = no
     return { ok: true, aecAtivo }
@@ -201,11 +229,22 @@ export function pararAudioAec(): void {
   micStream = null
 
   const ctx = micCtx
+  const ctxSaida = saidaCtx
   micCtx = null
+  saidaCtx = null
+  proximoInicio = 0
+  primeiroBlocoKore = true
   try {
     void ctx?.close()
   } catch {
     /* contexto já fechado */
+  }
+  if (ctxSaida && ctxSaida !== ctx) {
+    try {
+      void ctxSaida.close()
+    } catch {
+      /* contexto de saída já fechado */
+    }
   }
 }
 
@@ -215,9 +254,41 @@ export function pararAudioAec(): void {
  */
 export function tocarKore(pcmBase64: string, taxa: number): void {
   if (!pcmBase64) return
-  if (!saidaCtx) saidaCtx = new AudioContext()
+  registrarChunkKore(pcmBase64, taxa)
+  if (!saidaCtx) saidaCtx = micCtx ?? new AudioContext()
   const ctx = saidaCtx
-  if (ctx.state === 'suspended') void ctx.resume().catch(() => cortarKore())
+  if (ctx.state === 'suspended') {
+    // Um único resume drena a fila na ordem em que os blocos chegaram. Além
+    // de evitar chamadas concorrentes ao Chromium, a geração impede que uma
+    // fala interrompida reapareça quando o resume assíncrono termina depois.
+    filaSuspensa.push({ pcmBase64, taxa })
+    if (!retomadaSaida) {
+      const geracao = geracaoSaida
+      const retomada = ctx.resume()
+        .then(() => {
+          if (geracao !== geracaoSaida || saidaCtx !== ctx) return
+          const pendentes = filaSuspensa
+          filaSuspensa = []
+          for (const item of pendentes) agendarKore(ctx, item.pcmBase64, item.taxa)
+        })
+        .catch(() => {
+          if (geracao === geracaoSaida) cortarKore()
+        })
+        .finally(() => {
+          if (retomadaSaida === retomada) retomadaSaida = null
+        })
+      retomadaSaida = retomada
+    }
+    return
+  }
+
+  agendarKore(ctx, pcmBase64, taxa)
+}
+
+function agendarKore(ctx: AudioContext, pcmBase64: string, taxa: number): void {
+  // Um contexto pode fechar entre a chegada do IPC e o agendamento quando a
+  // sessão é encerrada. Nesse caso o bloco pertence à sessão antiga.
+  if (ctx !== saidaCtx || ctx.state === 'closed') return
 
   const bruto = window.atob(pcmBase64)
   const amostras = Math.floor(bruto.length / 2)
@@ -237,11 +308,17 @@ export function tocarKore(pcmBase64: string, taxa: number): void {
   fonte.buffer = buffer
   fonte.connect(ctx.destination)
 
-  // Enfileira em sequência. Sem isso os blocos tocam sobrepostos e a voz sai
-  // picotada; uma folga curta absorve a variação de chegada pela rede.
+  // Enfileira em sequência. A folga inicial absorve a variação de chegada;
+  // após um underrun, repeti-la acrescentaria silêncio ao atraso da rede.
   const agora = ctx.currentTime
-  if (proximoInicio <= agora) proximoInicio = agora + 0.10
+  if (proximoInicio <= agora) {
+    if (!primeiroBlocoKore && proximoInicio > 0) {
+      console.info(`[VOICE_TRACE] stage=KORE_AUDIO_BUFFER result=UNDERRUN gap_ms=${Math.max(0, (agora - proximoInicio) * 1000).toFixed(1)}`)
+    }
+    proximoInicio = agora + (primeiroBlocoKore ? 0.10 : 0.005)
+  }
   fonte.start(proximoInicio)
+  primeiroBlocoKore = false
   proximoInicio += buffer.duration
 
   tocando.push(fonte)
@@ -258,6 +335,11 @@ export function tocarKore(pcmBase64: string, taxa: number): void {
  * ela falando por cima do Alex, que é exatamente o que o barge-in impede.
  */
 export function cortarKore(): void {
+  geracaoSaida += 1
+  filaSuspensa = []
+  ultimoChunkKoreEm = 0
+  chunksKoreNaFala = 0
+  retomadaSaida = null
   for (const fonte of tocando) {
     try {
       fonte.stop()
@@ -267,5 +349,6 @@ export function cortarKore(): void {
   }
   tocando = []
   proximoInicio = 0
+  primeiroBlocoKore = true
   notificarSaida()
 }

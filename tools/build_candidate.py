@@ -21,6 +21,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -77,13 +79,85 @@ def preserve_failed_candidate(candidate_dir: Path, reason: str) -> Path | None:
     return preserved
 
 
+def rebuild_frontend_candidate(build_id: str, candidate_dir: Path) -> dict[str, str]:
+    """Build the checked-out renderer and Electron package into a fresh candidate."""
+    if not (FRONTEND / "package-lock.json").is_file():
+        fail(f"frontend/package-lock.json ausente: {FRONTEND / 'package-lock.json'}")
+    electron_builder = FRONTEND / "node_modules" / ".bin" / "electron-builder.cmd"
+    if not electron_builder.is_file():
+        fail(
+            "node_modules do frontend nao contem electron-builder.cmd. "
+            "Preserve/prepare o ambiente do projeto antes de empacotar."
+        )
+    npm_cmd = os.environ.get("ZARA_NPM_CMD") or shutil.which("npm.cmd") or shutil.which("npm")
+    node_cmd = os.environ.get("ZARA_NODE_CMD") or shutil.which("node.exe") or shutil.which("node")
+    if not npm_cmd or not node_cmd:
+        fail("Node/npm do projeto nao encontrados por caminhos explicitos.")
+    npm_cmd = str(Path(npm_cmd).resolve())
+    node_cmd = str(Path(node_cmd).resolve())
+    node_result = subprocess.run(
+        [node_cmd, "--version"], cwd=FRONTEND, capture_output=True, text=True
+    )
+    npm_result = subprocess.run(
+        f'"{npm_cmd}" --version', cwd=FRONTEND, shell=True,
+        capture_output=True, text=True,
+    )
+    if node_result.returncode != 0 or npm_result.returncode != 0:
+        fail("nao consegui confirmar as versoes do Node/npm configurados")
+    node_version = node_result.stdout.strip()
+    npm_version = npm_result.stdout.strip()
+    print(f"frontend node    : {node_cmd}")
+    print(f"frontend node ver: {node_version}")
+    print(f"frontend npm     : {npm_cmd}")
+    print(f"frontend npm ver : {npm_version}")
+    print(f"electron-builder : {electron_builder.resolve()}")
+
+    for script in ("typecheck", "lint", "build", "build:electron"):
+        command = f'"{npm_cmd}" run {script}'
+        print(f"\n[FRONTEND] {command}")
+        result = subprocess.run(command, cwd=FRONTEND, shell=True)
+        if result.returncode != 0:
+            fail(f"npm run {script} terminou com codigo {result.returncode}; candidato nao iniciado")
+
+    command = (
+        f'"{electron_builder.resolve()}" --dir '
+        f'--config.directories.output={build_id}'
+    )
+    print(f"\n[FRONTEND] {command}")
+    try:
+        result = subprocess.run(command, cwd=FRONTEND, shell=True)
+    except Exception as exc:
+        preserved = preserve_failed_candidate(candidate_dir, f"electron-builder launch failed: {type(exc).__name__}: {exc}")
+        suffix = f" Parcial preservado em: {preserved}" if preserved else ""
+        fail(f"nao consegui iniciar electron-builder: {exc}.{suffix}")
+    if result.returncode != 0:
+        preserved = preserve_failed_candidate(
+            candidate_dir, f"electron-builder exited {result.returncode}"
+        )
+        suffix = f" Parcial preservado em: {preserved}" if preserved else ""
+        fail(f"electron-builder falhou com codigo {result.returncode}.{suffix}")
+    return {
+        "FRONTEND_NODE_PATH": node_cmd,
+        "FRONTEND_NODE_VERSION": node_version,
+        "FRONTEND_NPM_PATH": npm_cmd,
+        "FRONTEND_NPM_VERSION": npm_version,
+        "FRONTEND_PACKAGE_LOCK_SHA256": sha256(FRONTEND / "package-lock.json"),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="auto",
                     help="nome em frontend/ ou caminho absoluto do candidato base; 'auto' escolhe o mais recente")
     ap.add_argument("--tag", default="kore", help="rótulo curto do candidato")
     ap.add_argument("--delta", default="", help="o que mudou em relação ao base")
+    ap.add_argument("--rebuild-sidecar", action="store_true",
+                    help="forca rebuild do backend a partir deste checkout")
+    ap.add_argument("--rebuild-frontend", action="store_true",
+                    help="rebuild typecheck/lint/Vite/Electron e empacota em candidato novo")
     args = ap.parse_args()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", args.tag):
+        fail("--tag aceita apenas letras minusculas, numeros e hifens")
 
     # A base pode morar fora deste worktree. Nunca troque uma base explicita
     # ausente por outra linhagem, pois isso esconderia qual app foi empacotado.
@@ -118,11 +192,11 @@ def main() -> int:
         fail(f"candidato base nao encontrado: {base_exe}")
     if not base_backend.exists():
         fail(f"sidecar do candidato base nao encontrado: {base_backend}")
-    if not DIST_SIDECAR.exists():
+    if args.rebuild_sidecar or not DIST_SIDECAR.exists():
         sidecar_builder = ROOT / "build_exe.py"
         if not sidecar_builder.is_file():
             fail(f"builder oficial do sidecar nao encontrado: {sidecar_builder}")
-        print("\n[BUILD] dist-sidecar ausente; reconstruindo o sidecar a partir deste worktree...")
+        print("\n[BUILD] reconstruindo o sidecar a partir deste worktree...")
         result = subprocess.run([sys.executable, str(sidecar_builder)], cwd=ROOT)
         if result.returncode != 0:
             fail(f"build_exe.py falhou com codigo {result.returncode}; nenhum candidato foi criado")
@@ -143,20 +217,26 @@ def main() -> int:
             "Nenhuma mudanca de backend entrou. Nao faz sentido gerar candidato."
         )
 
-    stamp = datetime.now().strftime("%Y%m%d-%H%M")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     build_id = f"release-candidate-{args.tag}-{stamp}"
     dest_dir = FRONTEND / build_id
     if dest_dir.exists():
         fail(f"ja existe: {dest_dir}")
 
     print(f"\ncriando           : {build_id}")
-    print("copiando o candidato base (pode levar 1-2 minutos)...")
-    try:
-        shutil.copytree(base_dir, dest_dir)
-    except Exception as exc:
-        preserved = preserve_failed_candidate(dest_dir, f"copytree failed: {type(exc).__name__}: {exc}")
-        suffix = f" Parcial preservado em: {preserved}" if preserved else ""
-        fail(f"falha ao copiar o candidato base: {exc}.{suffix}")
+    frontend_toolchain = {}
+    if args.rebuild_frontend:
+        frontend_toolchain = rebuild_frontend_candidate(build_id, dest_dir)
+    else:
+        print("copiando o candidato base (pode levar 1-2 minutos)...")
+        try:
+            shutil.copytree(base_dir, dest_dir)
+        except Exception as exc:
+            preserved = preserve_failed_candidate(
+                dest_dir, f"copytree failed: {type(exc).__name__}: {exc}"
+            )
+            suffix = f" Parcial preservado em: {preserved}" if preserved else ""
+            fail(f"falha ao copiar o candidato base: {exc}.{suffix}")
 
     # ZARA-BUILD-INTEGRIDADE-001
     # Um candidato nasceu sem ffmpeg.dll, locales/ e icudtl.dat e so falhou na
@@ -253,7 +333,10 @@ def main() -> int:
         "BUILD_TIMESTAMP": datetime.now().astimezone().isoformat(),
         "BASE_BUILD": base_label,
         "BASE_BUILD_PATH": str(base_dir),
-        "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
+        "BUILD_METHOD": (
+            "frontend-and-sidecar-rebuild" if args.rebuild_frontend
+            else "sidecar-swap (frontend do base preservado, backend recompilado)"
+        ),
         "GIT_BRANCH": git("rev-parse", "--abbrev-ref", "HEAD"),
         "GIT_COMMIT": git("rev-parse", "HEAD"),
         "GIT_DIRTY": bool(git("status", "--porcelain")),
@@ -264,6 +347,7 @@ def main() -> int:
         "ASAR_SHA256": sha256(asar) if asar.exists() else "",
         "DELTA": args.delta or "nao informado",
     }
+    info.update(frontend_toolchain)
     (dest_dir / "win-unpacked" / "BUILD_INFO.json").write_text(
         json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
     )

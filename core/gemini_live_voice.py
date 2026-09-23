@@ -291,6 +291,9 @@ class GeminiLiveVoice:
         self._turn_direct = False        # o audio deste turno pode tocar?
         self._turn_route_decided = False # ja decidimos o roteamento do turno?
         self._turn_routed_early = False  # executor started at first model frame
+        self._discarded_draft_active = False  # Live draft suppressed for executor route
+        self._expected_client_interrupt = False  # our turn_complete=True replaces that draft
+        self._expected_client_turn_complete = False  # completion event for that discarded draft
         self._utterance_open = False     # Alex esta no meio de uma fala?
         self._routed_turn_task: asyncio.Task | None = None
         # --- Anti-loop de eco (ZARA-VOICE-ECO-002) ---
@@ -1144,6 +1147,17 @@ class GeminiLiveVoice:
             # ZARA-LATENCIA-SEGUNDA-VIAGEM-001: aqui comeca a ida e volta ao
             # Google. Tudo daqui ate _t_primeiro_byte_tts e rede + modelo.
             self._t_fala_pedida = time.perf_counter()
+            self._expected_client_interrupt = False
+            if self._discarded_draft_active:
+                # Gemini Live reports interrupted when this client turn replaces
+                # the still-running draft. That event belongs to our text request,
+                # not to Alex talking over the Kore reply that follows it.
+                self._expected_client_interrupt = True
+                print(
+                    "[VOICE_TRACE] stage=LIVE_INTERRUPT_EXPECTED "
+                    "result=CLIENT_TURN_REPLACES_EXECUTOR_DRAFT",
+                    flush=True,
+                )
             await session.send_client_content(
                 turns=types.Content(
                     role="user",
@@ -1175,24 +1189,47 @@ class GeminiLiveVoice:
                     continue
 
                 if getattr(content, "interrupted", False):
-                    self._flush_output()
-                    self._mark_assistant_output_finished()
-                    self._input_text = ""
-                    self._output_text = ""
-                    # Barge-in encerra o turno corrente: o roteamento dele nao
-                    # vale mais para o audio que vier depois.
-                    self._reset_turn_state()
-                    self._play_generated_audio = False
-                    if self._speech_done is not None:
-                        self._speech_done.set()
-                    self._gate_until_idle = False
-                    if self.config.wake_word_enabled and self._wake_detector is not None:
-                        self._gate_open = False
-                        await self._emit_state("IDLE")
+                    input_transcription = getattr(content, "input_transcription", None)
+                    interim_transcription = getattr(content, "interim_input_transcription", None)
+                    client_replacement = (
+                        self._expected_client_interrupt
+                        and not input_transcription
+                        and not interim_transcription
+                    )
+                    if client_replacement:
+                        self._expected_client_interrupt = False
+                        self._discarded_draft_active = False
+                        self._input_text = ""
+                        self._output_text = ""
+                        # The previous draft was muted already. Keep the current
+                        # Kore request and its completion event alive.
+                        self._reset_turn_state()
+                        self._expected_client_turn_complete = True
+                        print(
+                            "[VOICE_TRACE] stage=SERVER_INTERRUPT "
+                            "result=EXPECTED_CLIENT_TURN_REPLACEMENT",
+                            flush=True,
+                        )
                     else:
-                        await self._emit_state("LISTENING")
-                    await self._emit_level(0.0, False)
-                    await self._call(self.on_interrupt)
+                        self._expected_client_interrupt = False
+                        self._flush_output()
+                        self._mark_assistant_output_finished()
+                        self._input_text = ""
+                        self._output_text = ""
+                        # Barge-in encerra o turno corrente: o roteamento dele nao
+                        # vale mais para o audio que vier depois.
+                        self._reset_turn_state()
+                        self._play_generated_audio = False
+                        if self._speech_done is not None:
+                            self._speech_done.set()
+                        self._gate_until_idle = False
+                        if self.config.wake_word_enabled and self._wake_detector is not None:
+                            self._gate_open = False
+                            await self._emit_state("IDLE")
+                        else:
+                            await self._emit_state("LISTENING")
+                        await self._emit_level(0.0, False)
+                        await self._call(self.on_interrupt)
 
                 input_tx = getattr(content, "input_transcription", None)
                 if input_tx and getattr(input_tx, "text", None):
@@ -1304,21 +1341,29 @@ class GeminiLiveVoice:
                                 )
 
                 if getattr(content, "turn_complete", False):
-                    await self._finish_turn()
-                    if self._play_generated_audio and self._speech_done is not None:
-                        self._speech_done.set()
-                    # Return to wake mode after a short cooldown so Alex can
-                    # say "Zara" again without the previous turn bleeding in.
-                    self._gate_open = False
-                    # ZARA-VOICE-LATENCY-001
-                    # Este cooldown ficava DENTRO do _receive_loop, entao por
-                    # 1,5 s o loop parava de consumir respostas do servidor —
-                    # inclusive as do turno seguinte, o que empurrava a fala da
-                    # Kore para depois. O gate ja fechou na linha acima, que e
-                    # o que de fato impede o turno anterior de sangrar; a
-                    # espera so precisa atrasar o estado visual IDLE.
-                    # Agora roda em paralelo e o loop continua livre.
-                    self._schedule_idle_after_cooldown()
+                    if self._expected_client_turn_complete:
+                        self._expected_client_turn_complete = False
+                        print(
+                            "[VOICE_TRACE] stage=TURN_COMPLETE "
+                            "result=DISCARDED_EXECUTOR_DRAFT",
+                            flush=True,
+                        )
+                    else:
+                        await self._finish_turn()
+                        if self._play_generated_audio and self._speech_done is not None:
+                            self._speech_done.set()
+                        # Return to wake mode after a short cooldown so Alex can
+                        # say "Zara" again without the previous turn bleeding in.
+                        self._gate_open = False
+                        # ZARA-VOICE-LATENCY-001
+                        # Este cooldown ficava DENTRO do _receive_loop, entao por
+                        # 1,5 s o loop parava de consumir respostas do servidor —
+                        # inclusive as do turno seguinte, o que empurrava a fala da
+                        # Kore para depois. O gate ja fechou na linha acima, que e
+                        # o que de fato impede o turno anterior de sangrar; a
+                        # espera so precisa atrasar o estado visual IDLE.
+                        # Agora roda em paralelo e o loop continua livre.
+                        self._schedule_idle_after_cooldown()
 
     def _begin_utterance(self) -> None:
         """Alex comecou a falar de novo. ZARA-VOICE-ORDEM-001.
@@ -1335,6 +1380,9 @@ class GeminiLiveVoice:
         self._turn_route_decided = False
         self._turn_direct = False
         self._turn_routed_early = False
+        self._discarded_draft_active = False
+        self._expected_client_interrupt = False
+        self._expected_client_turn_complete = False
         self._turn_rejected_as_echo = False
         # ZARA-LATENCIA-SEGUNDA-VIAGEM-001: fala nova, relogio novo. Sem isto o
         # "fim da fala" ficaria preso no primeiro turno da sessao e todo turno
@@ -1397,6 +1445,9 @@ class GeminiLiveVoice:
         self._turn_route_decided = False
         self._turn_direct = False
         self._turn_routed_early = False
+        self._discarded_draft_active = False
+        self._expected_client_interrupt = False
+        self._expected_client_turn_complete = False
         self._turn_echo_suspect = False
         self._turn_echo_references = ()
         self._turn_rejected_as_echo = False
@@ -1456,6 +1507,7 @@ class GeminiLiveVoice:
             return
         self._t_transcricao_pronta = time.perf_counter()
         self._turn_routed_early = True
+        self._discarded_draft_active = True
         self._cancel_superseded_routed_turn()
         task = asyncio.create_task(
             self._call(self.on_turn, user_text, "", False),

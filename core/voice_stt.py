@@ -231,6 +231,10 @@ class AudioInput:
                 except queue.Full:
                     pass  # Drop frame if queue full
 
+        # PortAudio may invoke the callback synchronously from ``start()``.
+        # Mark the input live before opening the stream so the first frames of
+        # a short utterance are not discarded by the callback guard.
+        self._running = True
         try:
             self.stream = sd.RawInputStream(
                 samplerate=self.config.vosk_sample_rate,
@@ -241,10 +245,27 @@ class AudioInput:
                 callback=callback,
             )
             self.stream.start()
-            self._running = True
             print(f"[Audio] Started: {self.config.vosk_sample_rate}Hz, {self.config.channels}ch")
         except sd.PortAudioError as exc:
+            self._running = False
+            stream = self.stream
+            self.stream = None
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
             raise VoiceNotConfiguredError(f"AUDIO_INPUT_FAILED: {exc} permanent=True") from exc
+        except Exception:
+            self._running = False
+            stream = self.stream
+            self.stream = None
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            raise
 
     def stop(self):
         """Stop audio capture."""
@@ -353,6 +374,10 @@ class VoicePipeline:
         try:
             self.audio.start()
         except VoiceNotConfiguredError as e:
+            # A failed open must be retryable after the device/permission is
+            # fixed. Leaving this true makes the next start() return early and
+            # falsely imply that listening recovered.
+            self._running = False
             self._state = "ERROR"
             if hasattr(self, 'on_error') and self.on_error:
                 try:
@@ -362,6 +387,7 @@ class VoicePipeline:
             return
         except Exception as e:
             # Handle other unexpected errors during audio start
+            self._running = False
             self._state = "ERROR"
             if hasattr(self, 'on_error') and self.on_error:
                 try:

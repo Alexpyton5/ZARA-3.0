@@ -10,7 +10,7 @@ Concluir na ordem do plano enviado por Alex. Cada fase tem build e commit própr
 
 - **F0 — EM FECHAMENTO.** P0.2 concluído. P0.3 passou no app empacotado com leitura independente do Windows: volume 98→88→98, mudo ativado/desativado e brilho 0→5→0; estado original restaurado. Identidade do EXE/backend/ASAR verificada; `TestBuildIdentity` 2/2 passou.
 - **P0.1 — PARCIAL.** Manifesto SHA-256 registra os 819 arquivos já presentes em `_quarentena/` (57.749.157 bytes). Nada foi apagado nem classificado como descartável. A lista das “35 stubs/memórias mortas” não existe de forma reconciliada; itens incertos continuam protegidos. Nenhum espaço foi liberado.
-- **F1 — A SEGUIR.** Voz fluida e controles de PC, conforme P1.1–P1.8. Aprovação física de fala/latência segue pendente de Alex.
+- **F1 — EM EXECUÇÃO.** Fonte F1 isolada; validação focada: 118 passaram e 22 foram pulados por limite conhecido do módulo de janela de voz. Build empacotado e medições ainda pendentes. Aprovação física de fala/latência é exclusiva de Alex.
 - **F2–F4 — NÃO INICIADAS.** Manter a ordem definida no plano mestre; preservar o backlog WOW existente.
 
 ### Build empacotado F0
@@ -29,7 +29,7 @@ F0 Higiene → F1 Voz fluida → F2 Modelos grátis → F3 Zara Lab (P3.3, P3.4,
 
 ## Próxima ação
 
-Fechar o registro e commit próprios de F0; em seguida trabalhar em F1 sem promover prova automatizada a aprovação física.
+Empacotar F1 pelo construtor oficial incluindo o frontend alterado; validar o EXE exato e deixar a aprovação de voz física para Alex. Só então abrir F2.
 
 ## Histórico anterior — OPENCODE + VOZ + LAB 24H (2026-09-22)
 

@@ -583,7 +583,7 @@ def _read_windows_brightness_level() -> int | None:
 # Import existing ZARA components
 try:
     from core.action_registry import execute_action, execute_confirmed_action
-    from core.model_router import ModelRouter
+    from core.model_router import ModelRouter, get_model_config
     from core.zara_orchestrator import ZaraOrchestrator
     from memory.memory_manager import MemoryManager
 except ImportError as e:
@@ -1835,9 +1835,9 @@ class IPCHandler:
         return not self._voice_turn_needs_executor(command)
 
     def _voice_can_answer_directly(self, user_text: str) -> bool:
-        # Keep Gemini's microphone/STT stream, but suppress its conversational
-        # answer. The selected front brain owns every accepted conversation.
-        return False
+        # Gemini Live speaks conversational turns in one pass. The local
+        # classifier keeps PC actions, echoes and unaddressed audio off this route.
+        return self._voice_is_authorized_conversation(user_text)
 
     # ZARA-SILENCIO-VISIVEL-001 -------------------------------------------
     #
@@ -1939,6 +1939,18 @@ class IPCHandler:
             'role': 'user', 'content': command, 'engine': 'gemini_live_stt',
             'timestamp': datetime.now().isoformat(),
         })
+        if direct:
+            # Live already emitted the conversational answer. Persist/display
+            # it, but do not ask the text brain or TTS to answer a second time.
+            answer = str(model_text or "").strip()
+            if answer:
+                await self._append_conversation_message("assistant", answer, "gemini_live")
+                await self.send_event('message', {
+                    'role': 'assistant', 'content': answer, 'engine': 'gemini_live',
+                    'timestamp': datetime.now().isoformat(),
+                })
+            print("[VOICE_TRACE] stage=ROUTE result=DIRECT_CONVERSATION", flush=True)
+            return
         # ZARA-VOICE-CONVERSA-001
         # Depois de um comando aceito, abrir uma janela de continuacao. Sem
         # isso Alex precisa dizer "Zara" a cada frase, o que impede conversa
@@ -2203,6 +2215,7 @@ class IPCHandler:
         front_run_id: str | None = None,
     ) -> None:
         """Persist a completed brain answer without delaying its spoken start."""
+        queued_at = time.perf_counter()
 
         async def persist() -> None:
             history = await self._append_conversation_message("assistant", response, engine)
@@ -2240,12 +2253,20 @@ class IPCHandler:
 
         def finished(done: asyncio.Task) -> None:
             self._voice_persistence_tasks.discard(done)
+            result = "FINISHED"
             try:
                 done.result()
             except asyncio.CancelledError:
-                pass
+                result = "CANCELLED"
             except Exception as exc:
+                result = "ERROR"
                 print(f"[Voice] Background persistence failed: {type(exc).__name__}")
+            finally:
+                print(
+                    "[VOICE_TRACE] stage=VOICE_PERSIST "
+                    f"result={result} duration_ms={(time.perf_counter() - queued_at) * 1000:.1f}",
+                    flush=True,
+                )
 
         task.add_done_callback(finished)
 
@@ -3202,8 +3223,17 @@ class IPCHandler:
                 print(f"[VOICE_TRACE] stage=TURN_FENCE result=STALE turn={voice_turn_id}", flush=True)
                 return
 
-            # Speak response via TTS
-            await self._speak_response(response, voice_turn_id=voice_turn_id)
+            # Only a catalog-proven zero-cost brain earns an extra Live trip.
+            cost_status = str(front_result.get('cost_status') or 'UNKNOWN_COST')
+            prefer_live = cost_status in {'LOCAL_FREE', 'FREE_PROVEN'}
+            print(
+                f"[VOICE_TRACE] stage=VOICE_BRAIN_COST result={cost_status} "
+                f"kore_second_trip={'YES' if prefer_live else 'NO'}",
+                flush=True,
+            )
+            await self._speak_response(
+                response, voice_turn_id=voice_turn_id, prefer_live=prefer_live
+            )
 
         except Exception as e:
             print(f"[Voice] Process message error: {e}")
@@ -3629,7 +3659,9 @@ class IPCHandler:
         if self._active_voice_turn_id == turn_id:
             self._active_voice_turn_id = None
 
-    async def _speak_response(self, text: str, *, voice_turn_id: int | None = None):
+    async def _speak_response(
+        self, text: str, *, voice_turn_id: int | None = None, prefer_live: bool = True
+    ):
         """Speak response using TTS, loading the local model only on first use."""
         value = str(text or "").strip()
         if not value:
@@ -3637,16 +3669,15 @@ class IPCHandler:
         if voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id):
             return
 
-        live_voice_available = bool(self.gemini_live_voice and self.gemini_live_voice.active)
-        if self.tts_manager and not self._tts_initialized and not live_voice_available:
-            try:
-                await asyncio.to_thread(self.tts_manager.initialize)
-                self._tts_initialized = True
-            except Exception as exc:
-                self._tts_initialized = False
-                print(f"[Voice] TTS lazy initialization failed: {exc}")
-        if voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id):
+        # Muting suppresses output before the microphone is paused or the
+        # speaking flag is set. Returning after those changes would leave the
+        # local listener paused indefinitely.
+        if getattr(self, "_silenciada", False):
+            print("[VOICE_TRACE] stage=TTS_MUDA result=SILENCIADA_POR_ALEX", flush=True)
+            await self.send_event('state-change', 'LISTENING')
             return
+
+        live_voice_available = bool(self.gemini_live_voice and self.gemini_live_voice.active)
 
         # Never feed ZARA's own local TTS back into Vosk.  The microphone
         # worker keeps draining audio but recognition remains paused until the
@@ -3665,16 +3696,6 @@ class IPCHandler:
             'speaking': True,
             'state': 'SPEAKING'
         })
-
-        # ZARA-BOTAO-MUDO-001
-        # Alex: "agora eu nao to falando com ela, voce ta respondendo aqui e ela
-        # ta toda hora falando o claude respondeu.. isso irrita".
-        # Ela continua ouvindo, entendendo e executando — só não fala. É a
-        # diferença entre uma presença e uma interrupção.
-        if getattr(self, "_silenciada", False):
-            print("[VOICE_TRACE] stage=TTS_MUDA result=SILENCIADA_POR_ALEX", flush=True)
-            await self.send_event('state-change', 'LISTENING')
-            return
 
         try:
             # ZARA-VOICE-TTS-OBSERVABILITY-001
@@ -3707,29 +3728,47 @@ class IPCHandler:
                 _crono.marcar("antes_de_falar")
             spoken = False
             engine_used = "none"
+            live_started_audio = False
             # ZARA-VOZ-UNICA-002: cada fala começa com a folha limpa.
             if voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id):
                 return
             self._fala_interrompida = False
-            if live_voice_available and self.gemini_live_voice:
+            if prefer_live and live_voice_available and self.gemini_live_voice:
                 spoken = await self.gemini_live_voice.speak(value)
-                if not spoken and self.gemini_live_voice.active:
-                    # ZARA-VOZ-UNICA-001: uma segunda chance antes de trocar de
-                    # voz. Alex reconhece a Kore e detesta a voz do Windows;
-                    # trocar de voz no meio da conversa é pior do que esperar
-                    # mais um instante.
-                    print("[VOICE_TRACE] stage=TTS_RETRY result=KORE_SEGUNDA_TENTATIVA", flush=True)
-                    spoken = await self.gemini_live_voice.speak(value)
                 if spoken:
                     engine_used = f"gemini_live/{_tts_voice_name(self.gemini_live_voice)}"
                 else:
                     print("[VOICE_TRACE] stage=TTS_FALLBACK result=LIVE_DID_NOT_SPEAK", flush=True)
+                try:
+                    live_started_audio = (
+                        self.gemini_live_voice.ultimo_audio_entregue() is not None
+                    )
+                except Exception:
+                    live_started_audio = False
             # ZARA-VOZ-UNICA-002 — quem manda parar é Alex.
             # Ele interrompeu a Kore no meio de um recado e a voz do Windows
             # continuou lendo o mesmo texto do começo, sem aceitar comando. A
             # causa: interromper faz a Kore devolver "não falei", e a cascata
             # entendia isso como falha e tentava a próxima voz. Parar é uma
             # ordem, não uma falha.
+            if (getattr(self, "_fala_interrompida", False)
+                    or (voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id))):
+                print("[VOICE_TRACE] stage=TTS_ABORT result=INTERROMPIDO_POR_ALEX", flush=True)
+                return
+            if live_started_audio and not spoken:
+                # Kore began this utterance, so restarting all text in another
+                # voice would switch voices mid-sentence and repeat content.
+                print("[VOICE_TRACE] stage=TTS_FALLBACK result=SUPPRESSED_AFTER_LIVE_AUDIO", flush=True)
+                return
+            if not spoken and self.tts_manager and not self._tts_initialized:
+                try:
+                    # Kore succeeded on the normal path, so only load the
+                    # fallback after it actually fails. Keep init off the loop.
+                    await asyncio.to_thread(self.tts_manager.initialize)
+                    self._tts_initialized = True
+                except Exception as exc:
+                    self._tts_initialized = False
+                    print(f"[Voice] TTS lazy initialization failed: {exc}")
             if (getattr(self, "_fala_interrompida", False)
                     or (voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id))):
                 print("[VOICE_TRACE] stage=TTS_ABORT result=INTERROMPIDO_POR_ALEX", flush=True)
@@ -3759,7 +3798,12 @@ class IPCHandler:
                 )
                 spoken = True
                 engine_used = f"kokoro/{_tts_voice_name(self.tts_manager.kokoro)}"
-            elif not spoken and self.tts_manager and self.tts_manager.gemini:  # type: ignore[union-attr]
+            elif (
+                not spoken
+                and prefer_live
+                and self.tts_manager
+                and self.tts_manager.gemini
+            ):  # type: ignore[union-attr]
                 await self.tts_manager.gemini.play(value)  # type: ignore[union-attr]
                 spoken = True
                 engine_used = f"gemini_http/{_tts_voice_name(self.tts_manager.gemini)}"
@@ -4669,9 +4713,11 @@ class IPCHandler:
             response = await self.orchestrator.process_message(
                 text, engine=engine, history=history,
             )
+            engine_used = getattr(self.orchestrator, 'last_engine_used', engine)
             return {
                 'response': str(response),
-                'engine': getattr(self.orchestrator, 'last_engine_used', engine),
+                'engine': engine_used,
+                'cost_status': self._brain_cost_status(engine_used),
             }
         if self.lab_v1 is None:
             if not LAB_V1_AVAILABLE or LabV1Service is None:
@@ -4698,7 +4744,17 @@ class IPCHandler:
         )
         if result.get('engine'):
             self.current_engine = result['engine']
+        result['cost_status'] = self._brain_cost_status(result.get('engine'))
         return result
+
+    @staticmethod
+    def _brain_cost_status(engine: object) -> str:
+        """Return factual catalog cost status; unknown stays conservative."""
+        try:
+            model = get_model_config(str(engine or ''))
+            return str(getattr(model, 'cost_status', 'UNKNOWN_COST'))
+        except Exception:
+            return 'UNKNOWN_COST'
 
     async def handle_send_message(self, msg: IPCMessage):
         payload = msg.payload or {}

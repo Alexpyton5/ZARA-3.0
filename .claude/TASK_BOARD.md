@@ -12,7 +12,10 @@ Formato simples. Não virar burocracia.
   estado F0: P0.2 concluído; P0.3 passou no candidato empacotado, com volume, mudo e brilho alterados, lidos no Windows e restaurados; teste de identidade 2/2 passou. Candidato `release-candidate-f0-wt-20260923-190251-20260923-1904`.
   estado P0.1: PARCIAL — manifesto SHA-256 cobre 819 arquivos já em quarentena (57.749.157 bytes); nenhum arquivo foi apagado; nenhum espaço foi liberado. A lista exata das “35 stubs/memórias mortas” não foi encontrada e os itens não foram movidos/classificados como lixo.
   evidências: `.unlazy/f0-current-worktree/GATES.md`, `.unlazy/f0-current-worktree/candidate-identity-report.json`, `_quarentena/MANIFEST_P0.1_20260923.json`, `_quarentena/organizacao-2026-09-23/pc-controls-probes/20260923-190841-2868/REPORT.json`.
-  próxima ação: registrar e commitar F0; começar F1 e manter a aprovação física de voz pendente de Alex.
+  próxima ação: build F1 empacotado com frontend recompilado, smoke amarrado ao hash e aprovação de voz de Alex antes de abrir F2.
+
+  estado F1: código de voz isolado em `.unlazy/f1-voice/TASK.md`; testes direcionados 118 passaram e 22 foram pulados pelo módulo de voz com janela/hang conhecido. `SOURCE`/`TEST` apenas; pacote e aprovação física pendentes. O construtor oficial agora aceita rebuild de sidecar e frontend no mesmo candidato.
+  evidência de teste: `.unlazy/f1-voice/TEST_REPORT.md` e `.unlazy/f1-voice/GATES.md`.
 
 O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a prioridade atual é a ordem F0–F4 de T-ZARA-MASTER-20260923.
 

@@ -337,6 +337,7 @@ class EdgeTTS:
         self._alias: str | None = None
         self._source: _EdgeChunkSource | None = None
         self._stop_event = threading.Event()
+        self._mci_cancel: threading.Event | None = None
 
     def _resolve_voice(self, voice: str | None) -> str:
         voice = voice or self.voice_name
@@ -381,17 +382,25 @@ class EdgeTTS:
 
     def play(self, text: str, voice: str = None, speed: float = 1.0, blocking: bool = True):
         """Sintetiza e toca. `blocking=False` devolve a thread que esta tocando."""
+        cancellation = threading.Event()
+        with self._lock:
+            self._mci_cancel = cancellation
         if not blocking:
             t = threading.Thread(
-                target=self.play, args=(text, voice, speed, True), daemon=True
+                target=self._play_blocking,
+                args=(text, voice, speed, cancellation), daemon=True,
             )
             t.start()
             return t
 
+        self._play_blocking(text, voice, speed, cancellation)
+
+    def _play_blocking(self, text: str, voice: str | None, speed: float,
+                       cancellation: threading.Event):
         if self._can_stream():
             self._play_streaming(text, voice, speed)
             return
-        self._play_via_file(text, voice, speed)
+        self._play_via_file(text, voice, speed, cancellation)
 
     # -- caminho rapido: comeca a falar antes de terminar de sintetizar ----
 
@@ -473,20 +482,41 @@ class EdgeTTS:
 
     # -- caminho de reserva: MP3 inteiro tocado pelo MCI do Windows -------
 
-    def _play_via_file(self, text: str, voice: str = None, speed: float = 1.0):
+    def _play_via_file(self, text: str, voice: str = None, speed: float = 1.0,
+                       cancellation: threading.Event | None = None):
+        cancellation = cancellation or threading.Event()
         tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         tmp.close()
         alias = f"zara_tts_{next(self._alias_seq)}"
         try:
-            self.synthesize_to_file(text, tmp.name, voice, speed)
-            self._mci(f'open "{tmp.name}" type mpegvideo alias {alias}')
+            try:
+                self.synthesize_to_file(text, tmp.name, voice, speed)
+            except Exception:
+                if cancellation.is_set():
+                    return
+                raise
+            if cancellation.is_set():
+                return
+            try:
+                self._mci(f'open "{tmp.name}" type mpegvideo alias {alias}')
+            except RuntimeError:
+                if cancellation.is_set():
+                    return
+                raise
             with self._lock:
                 self._alias = alias
             try:
-                self._mci(f"play {alias} wait")
+                if cancellation.is_set():
+                    return
+                try:
+                    self._mci(f"play {alias} wait")
+                except RuntimeError:
+                    if not cancellation.is_set():
+                        raise
             finally:
                 with self._lock:
-                    self._alias = None
+                    if self._alias == alias:
+                        self._alias = None
                 try:
                     self._mci(f"close {alias}")
                 except RuntimeError:
@@ -503,6 +533,9 @@ class EdgeTTS:
         with self._lock:
             alias = self._alias
             source = self._source
+            cancellation = self._mci_cancel
+            if cancellation is not None:
+                cancellation.set()
             self._alias = None
         if source is not None:
             source.close()
@@ -604,6 +637,9 @@ class TTSManager:
         self.gemini: GeminiTTS | None = None
         self._current_playback = None
         self._interrupt_event = threading.Event()
+        # Tracks the whole cascade, including blocking MCI playback. Relying
+        # only on sounddevice made Edge/MCI look idle while it was audible.
+        self._speaking_event = threading.Event()
 
     def initialize(self):
         """Initialize available TTS engines."""
@@ -664,28 +700,40 @@ class TTSManager:
 
     def _speak_cascade(self, text, voice, speed, engines, raise_on_exhausted: bool):
         """Walk Edge -> Kokoro -> Gemini, catching failures at every step."""
-        for engine, label in engines:
-            if not engine:
-                continue
-            try:
-                engine.play(text, voice, speed, blocking=True)
-                return
-            except Exception as e:
-                print(f"[TTS] {label} failed, trying fallback: {e}")
-
-        if self.gemini:
-            if raise_on_exhausted:
-                asyncio.run(self._gemini_speak(text, voice))
-            else:
+        self._speaking_event.set()
+        try:
+            for engine, label in engines:
+                if self._interrupt_event.is_set():
+                    return
+                if not engine:
+                    continue
                 try:
-                    asyncio.run(self._gemini_speak(text, voice))
+                    engine.play(text, voice, speed, blocking=True)
+                    return
                 except Exception as e:
-                    print(f"[TTS] Gemini fallback failed: {e}")
-            return
+                    # Barge-in is an owner command, not an engine failure. A
+                    # stopped Edge request must never restart on Kokoro/Gemini.
+                    if self._interrupt_event.is_set():
+                        return
+                    print(f"[TTS] {label} failed, trying fallback: {e}")
 
-        if raise_on_exhausted:
-            raise RuntimeError("No TTS engine available")
-        print("[TTS] Cascade exhausted (non-blocking) - nenhuma voz falou este texto")
+            if self._interrupt_event.is_set():
+                return
+            if self.gemini:
+                if raise_on_exhausted:
+                    asyncio.run(self._gemini_speak(text, voice))
+                else:
+                    try:
+                        asyncio.run(self._gemini_speak(text, voice))
+                    except Exception as e:
+                        print(f"[TTS] Gemini fallback failed: {e}")
+                return
+
+            if raise_on_exhausted:
+                raise RuntimeError("No TTS engine available")
+            print("[TTS] Cascade exhausted (non-blocking) - nenhuma voz falou este texto")
+        finally:
+            self._speaking_event.clear()
 
     async def _gemini_speak(self, text: str, voice: str = None):
         """Speak via Gemini (async)."""
@@ -707,13 +755,15 @@ class TTSManager:
 
     def is_speaking(self) -> bool:
         """Check if currently speaking."""
+        if self._speaking_event.is_set():
+            return True
         if SOUNDDEVICE_AVAILABLE:
             # sd.get_stream() raises (does not return None) when there is no
             # active stream, which is the common case between utterances.
             try:
                 return sd.get_stream().active
             except Exception:
-                return False
+                pass
         return self._current_playback is not None and self._current_playback.is_alive()
 
     def cleanup(self):

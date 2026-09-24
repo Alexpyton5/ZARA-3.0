@@ -68,6 +68,7 @@ CORE_TEAM_NAME = "ZARA Core"
 CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
     "ceo": {"name": "Artemis", "provider_id": "claude_cli", "model": "opus"},
     "builder": {"name": "Vulcan", "provider_id": "claude_cli", "model": "sonnet"},
+    "builder_reserve": {"name": "Vulcan Reserva", "provider_id": "nvidia", "model": "moonshotai/kimi-k3"},
     "reviewer": {"name": "Iris", "provider_id": "claude_cli", "model": "haiku"},
 }
 
@@ -264,8 +265,9 @@ class LabRuntime:
 
     def ensure_core_team(self) -> Team:
         """Idempotent: returns the existing "ZARA Core" team if one exists,
-        otherwise creates it with Artemis (CEO, acting), Vulcan (BUILDER) and
-        Iris (REVIEWER), with unproven profiles kept non-callable until proof."""
+        otherwise creates it with Artemis (CEO, acting), Vulcan (BUILDER),
+        Vulcan Reserva (BUILDER) and Iris (REVIEWER). Unproven profiles stay
+        non-callable until proof."""
         team = next((item for item in self.store.list_teams(include_archived=True)
                      if item.name == CORE_TEAM_NAME), None)
         if team is None:
@@ -280,6 +282,7 @@ class LabRuntime:
                        if membership.left_at is None}
         by_role: dict[str, AgentProfile] = {}
         for key, role in (("ceo", RoleName.CEO), ("builder", RoleName.BUILDER),
+                          ("builder_reserve", RoleName.BUILDER),
                           ("reviewer", RoleName.REVIEWER)):
             config = CORE_TEAM_AGENTS[key]
             # Provider/model may change only after an owner-authorized fallback

@@ -151,8 +151,11 @@ def test_first_core_team_selection_certifies_two_distinct_workers_and_reuses_pro
     assert planner.role == RoleName.CEO and builder.role == RoleName.BUILDER
     assert (planner.provider_id, planner.model) != (builder.provider_id, builder.model)
     assert adapter.calls == ['opus', 'sonnet', 'haiku']
-    assert len(autopilot.store.list_agents(team.id)) == 3
-    assert all('model.text' in agent.capabilities for agent in autopilot.store.list_agents(team.id))
+    assert len(autopilot.store.list_agents(team.id)) == 4
+    assert all('model.text' in agent.capabilities for agent in autopilot.store.list_agents(team.id)
+               if agent.name != 'Vulcan Reserva')
+    assert 'model.text' not in next(agent for agent in autopilot.store.list_agents(team.id)
+                                   if agent.name == 'Vulcan Reserva').capabilities
 
     restart_adapter = BootstrapClaudeAdapter()
     registry = ProviderRegistry(tmp_path / 'health.json')
@@ -172,7 +175,7 @@ def test_first_core_team_does_not_mark_workers_callable_when_certification_fails
         autopilot._team()
 
     profiles = autopilot.store.list_agents()
-    assert len(profiles) == 3
+    assert len(profiles) == 4
     assert all('model.text' not in agent.capabilities for agent in profiles)
     assert adapter.calls == ['opus']
 
@@ -195,25 +198,92 @@ def test_first_core_team_uses_distinct_owner_authorized_nvidia_fallbacks_after_c
     nvidia = NvidiaBootstrapAdapter()
     autopilot = _core_autopilot(tmp_path, claude, additional=(nvidia,))
     core = autopilot.runtime.ensure_core_team()
-    original = {agent.role: agent.id for agent in autopilot.store.list_agents(core.id)}
+    original = {agent.name: agent.id for agent in autopilot.store.list_agents(core.id)}
 
     team, planner, builder = autopilot._team()
 
     assert team.name == 'ZARA Core'
-    assert planner.id == original[RoleName.CEO]
-    assert builder.id == original[RoleName.BUILDER]
+    assert planner.id == original['Artemis']
+    assert builder.id == original['Vulcan']
     assert (planner.provider_id, planner.model) == ('nvidia', 'moonshotai/kimi-k3')
     assert (builder.provider_id, builder.model) == ('nvidia', 'z-ai/glm-5.3')
     assert (planner.provider_id, planner.model) != (builder.provider_id, builder.model)
-    assert len(autopilot.store.list_agents(team.id)) == 3
+    assert len(autopilot.store.list_agents(team.id)) == 4
     assert all('model.text' in agent.capabilities for agent in (planner, builder))
     reviewer = next(agent for agent in autopilot.store.list_agents(team.id)
                     if agent.role == RoleName.REVIEWER)
     assert (reviewer.provider_id, reviewer.model) == (
         'nvidia', 'nvidia/nemotron-3-super-120b-a12b')
     assert 'model.text' in reviewer.capabilities
-    assert nvidia.calls == ['moonshotai/kimi-k3', 'z-ai/glm-5.3',
+    reserve = next(agent for agent in autopilot.store.list_agents(team.id)
+                   if agent.name == 'Vulcan Reserva')
+    assert reserve.id == original['Vulcan Reserva'] and reserve.role == RoleName.BUILDER
+    assert (reserve.provider_id, reserve.model) == ('nvidia', 'moonshotai/kimi-k3')
+    assert 'model.text' in reserve.capabilities
+    assert nvidia.calls == ['moonshotai/kimi-k3', 'z-ai/glm-5.3', 'moonshotai/kimi-k3',
                             'nvidia/nemotron-3-super-120b-a12b']
+
+
+def test_core_glm_failure_hands_same_mission_to_certified_kimi_builder(tmp_path):
+    claude = BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED)
+    nvidia = NvidiaBootstrapAdapter()
+    autopilot = _core_autopilot(tmp_path, claude, additional=(nvidia,))
+    autopilot.executor_factory = Files
+    team, planner, primary = autopilot._team()
+    reserve = next(agent for agent in autopilot.store.list_agents(team.id)
+                   if agent.name == 'Vulcan Reserva')
+    assert primary.model == 'z-ai/glm-5.3'
+    assert reserve.id != planner.id and reserve.id != primary.id
+
+    plan = {'mission': 'Document', 'plan_version': 1, 'tasks': [
+        {'id': 'document', 'title': 'Document', 'instruction': 'Create the requested short document',
+         'role': 'BUILDER', 'capability': 'artifact.text', 'path': 'result.md',
+         'risk': 'LOW', 'repair_budget': 1, 'depends_on': [],
+         'acceptance': {'method': 'constraints', 'min_chars': 10, 'max_chars': 100,
+                        'required_sections': []}}]}
+    mission_calls = []
+
+    def mission_complete(**kwargs):
+        model, system = kwargs['model'], kwargs['system']
+        mission_calls.append(model)
+        if system.startswith('Return JSON only:'):
+            text = json.dumps(plan)
+        elif system.startswith('Implement only') and model == 'z-ai/glm-5.3':
+            return ProviderResult(False, availability=Availability.PROVIDER_ERROR,
+                                  error='invalid provider response')
+        elif system.startswith('Implement only') and model == 'moonshotai/kimi-k3':
+            text = 'ZARA_AUTOPILOT_OK'
+        else:
+            raise AssertionError((model, system[:50]))
+        return ProviderResult(True, text=text, availability=Availability.AVAILABLE,
+                              model_reported=model)
+
+    nvidia.complete = mission_complete
+    sid = autopilot.start('Create a short document')['session_id']
+    result = autopilot.run(sid)
+
+    assert result['state'] == 'COMPLETED'
+    assert result['session_id'] == sid and len(autopilot.store.list_sessions()) == 1
+    assert result['autonomy']['owner_touches'] == 1
+    assert result['autonomy']['recovery_automatic'] is True
+    assert mission_calls == ['moonshotai/kimi-k3', 'z-ai/glm-5.3', 'moonshotai/kimi-k3']
+    assert autopilot.store.get_task(sid + ':document:draft').assigned_agent_id == reserve.id
+    handoffs = [item for item in autopilot.store.list_handoffs(sid)
+                if item.reason.startswith('PROVIDER_')]
+    assert len(handoffs) == 1
+    assert (handoffs[0].from_agent_id, handoffs[0].to_agent_id) == (primary.id, reserve.id)
+    assert Path(result['autonomy']['target']).read_text() == 'ZARA_AUTOPILOT_OK'
+    with autopilot.store._connect() as conn:
+        proof_rows = conn.execute('SELECT document FROM model_certification_runs').fetchall()
+    certified = {json.loads(row[0]).get('agent_id') for row in proof_rows
+                 if json.loads(row[0]).get('state') == 'COMPLETED'
+                 and json.loads(row[0]).get('result', {}).get('ok')}
+    for run in autopilot.store.list_runs(sid):
+        agent = autopilot.store.get_agent(run.agent_id)
+        assert agent.id in certified
+        assert autopilot._decision(agent, retry=True, team_id=team.id).allowed
+        assert autopilot.policy.resource_class(agent.provider_id, agent.model).value == 'OWNER_REPORTED_FREE'
+    assert claude.calls == ['opus']
 
 
 @pytest.mark.skipif(shutil.which('claude') is None,
@@ -283,6 +353,24 @@ def test_one_intent_routes_delegates_executes_verifies_and_reports(engine):
     engine.run(sid)
     assert len(engine.store.list_runs(sid)) == 2
     assert len([m for m in engine.store.list_messages(sid) if m.kind.value == 'ZARA']) == 1
+
+
+def test_spontaneous_observation_is_attributed_to_zara_and_owner_intent_to_alex(engine, monkeypatch):
+    monkeypatch.setattr('core.lab_v1.source_mission.source_requested', lambda *_: False)
+    owner_sid = engine.start('Owner intent')['session_id']
+    assert engine.store.list_messages(owner_sid)[0].author == 'Alex'
+    engine.controller.cancel(owner_sid)
+    engine.run(owner_sid)
+
+    observed_sid = engine.start('Observed defect', mission_kind='SELF_IMPROVEMENT',
+        evidence={'observation_kind': 'BEHAVIORAL_COUNTEREXAMPLE'})['session_id']
+    observed = engine.store.list_messages(observed_sid)[0]
+    assert observed.kind.value == 'USER' and observed.author == 'ZARA'
+    engine.controller.cancel(observed_sid)
+    engine.run(observed_sid)
+
+    owner_review = engine.start('Owner requested review', mission_kind='SELF_IMPROVEMENT')['session_id']
+    assert engine.store.list_messages(owner_review)[0].author == 'Alex'
 
 
 def test_quota_failover_retains_session_and_uses_bounded_handoff(engine):

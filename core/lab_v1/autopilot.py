@@ -90,6 +90,7 @@ class Autopilot:
         failures = []
 
         for key, role in (("ceo", RoleName.CEO), ("builder", RoleName.BUILDER),
+                          ("builder_reserve", RoleName.BUILDER),
                           ("reviewer", RoleName.REVIEWER)):
             config = CORE_TEAM_AGENTS[key]
             agent = next((item for item in self.store.list_agents(team.id)
@@ -157,8 +158,11 @@ class Autopilot:
                         (provider_id, model),
                     ).fetchall()
                 prior = [(row['id'], json.loads(row['document'])) for row in rows]
+                # One proof record belongs to one profile. Kimi's CEO proof
+                # cannot silently turn a second BUILDER into a callable bot.
                 proven = next(((cert_id, doc) for cert_id, doc in prior
-                               if doc.get('state') == 'COMPLETED' and doc.get('result', {}).get('ok')), None)
+                               if doc.get('state') == 'COMPLETED' and doc.get('result', {}).get('ok')
+                               and doc.get('agent_id') in (None, agent.id)), None)
                 if proven is not None:
                     cert_id, result = proven
                 else:
@@ -252,6 +256,10 @@ class Autopilot:
             sid = session_id or new_id('session')
             session = self.store.get_session(sid)
             team, planner, _ = self._team(session.team_id if session else None)
+            # Older Core teams may predate the reserve. Prepare it before the
+            # mission freezes its explicit provider resource allowlist.
+            if team.name == CORE_TEAM_NAME:
+                self._bootstrap_core_team()
             if session is not None:
                 if session.state.value != 'QUEUED' or session.team_id != team.id or self.store.list_runs(sid):
                     raise ValueError('Session is not an unstarted mission')
@@ -262,7 +270,13 @@ class Autopilot:
             from core.lab_v1.source_mission import source_requested, prepare_source
             source = prepare_source(self, sandbox, intent) if source_requested(intent, mission_kind) else None
             self.store.save_session(session)
-            self.store.add_message(Message('owner:' + sid, sid, MessageKind.USER, 'Alex', intent.strip()))
+            spontaneous = (mission_kind == 'SELF_IMPROVEMENT'
+                           and isinstance(evidence, dict)
+                           and evidence.get('observation_kind') in {
+                               'SOURCE_INSPECTION', 'BEHAVIORAL_COUNTEREXAMPLE',
+                               'RUNTIME_CAPABILITY_FAILURE'})
+            author = 'ZARA' if spontaneous else 'Alex'
+            self.store.add_message(Message('owner:' + sid, sid, MessageKind.USER, author, intent.strip()))
             resources = tuple(_resource(a) for a in self.candidates(team.id))
             scope = ExecutionScope((str(sandbox), *resources), ('model.text', 'files.write', 'source.prepare', 'source.apply', 'source.tests', 'source.build'),
                 authorization_state='POLICY_AUTHORIZED', authorization_ref='autopilot:internal-dynamic-v1')
@@ -540,7 +554,14 @@ class Autopilot:
                         failed = next((s for s in doc['steps'] if s['status'] == 'PROVIDER_FAILED'), None)
                         if failed:
                             agent = self.store.get_agent(self.store.get_task(failed['task_id']).assigned_agent_id)
-                            replacements = self.candidates(self.store.get_session(sid).team_id, agent.role, exclude=(agent.id,))
+                            team_id = self.store.get_session(sid).team_id
+                            replacements = self.candidates(team_id, agent.role, exclude=(agent.id,))
+                            # Existing missions may have been created before
+                            # the reserve profile was introduced. Their Kimi
+                            # planner resource is already inside mission scope.
+                            if not replacements and self.store.get_team(team_id).name == CORE_TEAM_NAME:
+                                self._bootstrap_core_team()
+                                replacements = self.candidates(team_id, agent.role, exclude=(agent.id,))
                             if replacements and self.controller.retry_text_with(sid, replacements[0].id):
                                 self._metrics(sid, recovery_automatic=True); continue
                     if doc.get('blocker'): self._gap(sid, doc['blocker'])

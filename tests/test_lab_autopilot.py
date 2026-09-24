@@ -81,7 +81,8 @@ class NvidiaBootstrapAdapter(ProviderAdapter):
     controlled_text_only = True
     declared_models = tuple(ModelDescriptor('nvidia', model, model)
                             for model in ('moonshotai/kimi-k3', 'z-ai/glm-5.3',
-                                          'nvidia/nemotron-3-super-120b-a12b'))
+                                          'nvidia/nemotron-3-super-120b-a12b',
+                                          'nvidia/nemotron-3-ultra-550b-a55b'))
 
     def __init__(self):
         self.calls = []
@@ -222,6 +223,27 @@ def test_first_core_team_uses_distinct_owner_authorized_nvidia_fallbacks_after_c
     assert 'model.text' in reserve.capabilities
     assert nvidia.calls == ['moonshotai/kimi-k3', 'z-ai/glm-5.3', 'moonshotai/kimi-k3',
                             'nvidia/nemotron-3-super-120b-a12b']
+
+
+def test_core_reviewer_uses_certified_ultra_when_super_is_temporarily_overloaded(tmp_path):
+    class OverloadedSuper(NvidiaBootstrapAdapter):
+        def complete(self, **kwargs):
+            if kwargs['model'] == 'nvidia/nemotron-3-super-120b-a12b':
+                self.calls.append(kwargs['model'])
+                return ProviderResult(False, availability=Availability.PROVIDER_ERROR,
+                                      error='Service temporarily overloaded')
+            return super().complete(**kwargs)
+
+    nvidia = OverloadedSuper()
+    autopilot = _core_autopilot(tmp_path, BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED),
+                                additional=(nvidia,))
+    team, _, _ = autopilot._team()
+    reviewer = next(agent for agent in autopilot.store.list_agents(team.id)
+                    if agent.role == RoleName.REVIEWER)
+    assert (reviewer.provider_id, reviewer.model) == ('nvidia', 'nvidia/nemotron-3-ultra-550b-a55b')
+    assert 'model.text' in reviewer.capabilities
+    assert nvidia.calls[-2:] == ['nvidia/nemotron-3-super-120b-a12b',
+                                 'nvidia/nemotron-3-ultra-550b-a55b']
 
 
 def test_core_glm_failure_hands_same_mission_to_certified_kimi_builder(tmp_path):

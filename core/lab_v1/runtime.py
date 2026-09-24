@@ -79,7 +79,8 @@ CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
 CORE_TEAM_MODEL_FALLBACKS = {
     "ceo": (("nvidia", "moonshotai/kimi-k3"),),
     "builder": (("nvidia", "z-ai/glm-5.3"),),
-    "reviewer": (("nvidia", "nvidia/nemotron-3-super-120b-a12b"),),
+    "reviewer": (("nvidia", "nvidia/nemotron-3-super-120b-a12b"),
+                 ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b")),
 }
 
 CEO_ACTING_REASON = "Papel CEO inicial do time; a disponibilidade depende do provedor verificado."

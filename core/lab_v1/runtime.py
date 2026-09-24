@@ -68,6 +68,17 @@ CORE_TEAM_NAME = "ZARA Core"
 CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
     "ceo": {"name": "Artemis", "provider_id": "claude_cli", "model": "opus"},
     "builder": {"name": "Vulcan", "provider_id": "claude_cli", "model": "sonnet"},
+    "reviewer": {"name": "Iris", "provider_id": "claude_cli", "model": "haiku"},
+}
+
+# Alex-authorized, owner-reported-free fallbacks for the first real Core team
+# bootstrap. Each worker receives a different model so the room has two
+# independent provider/model identities. A profile becomes callable only after
+# FleetCertification records a successful inference.
+CORE_TEAM_MODEL_FALLBACKS = {
+    "ceo": (("nvidia", "moonshotai/kimi-k3"),),
+    "builder": (("nvidia", "z-ai/glm-5.3"),),
+    "reviewer": (("nvidia", "nvidia/nemotron-3-super-120b-a12b"),),
 }
 
 CEO_ACTING_REASON = "Papel CEO inicial do time; a disponibilidade depende do provedor verificado."
@@ -253,63 +264,63 @@ class LabRuntime:
 
     def ensure_core_team(self) -> Team:
         """Idempotent: returns the existing "ZARA Core" team if one exists,
-        otherwise creates it with Artemis (CEO, acting) and Vulcan (BUILDER,
-        permanent), Vulcan wired as Artemis's fallback."""
-        for team in self.store.list_teams(include_archived=True):
-            if team.name == CORE_TEAM_NAME:
-                return team
+        otherwise creates it with Artemis (CEO, acting), Vulcan (BUILDER) and
+        Iris (REVIEWER), with unproven profiles kept non-callable until proof."""
+        team = next((item for item in self.store.list_teams(include_archived=True)
+                     if item.name == CORE_TEAM_NAME), None)
+        if team is None:
+            team = Team(id=new_id("team"), name=CORE_TEAM_NAME,
+                        objective="Time permanente de trabalho da ZARA.")
+            self.store.save_team(team)
+            self._emit(EventType.TEAM_CREATED, session_id=None, entity_id=team.id,
+                       payload={"name": team.name})
 
-        team = Team(id=new_id("team"), name=CORE_TEAM_NAME, objective="Time permanente de trabalho da ZARA.")
-        self.store.save_team(team)
-        self._emit(EventType.TEAM_CREATED, session_id=None, entity_id=team.id, payload={"name": team.name})
+        members = self.store.list_agents(team.id, include_archived=True)
+        memberships = {membership.agent_id for membership in self.store.list_memberships(team.id)
+                       if membership.left_at is None}
+        by_role: dict[str, AgentProfile] = {}
+        for key, role in (("ceo", RoleName.CEO), ("builder", RoleName.BUILDER),
+                          ("reviewer", RoleName.REVIEWER)):
+            config = CORE_TEAM_AGENTS[key]
+            # Provider/model may change only after an owner-authorized fallback
+            # receives real certification. Preserve that same named role bot on
+            # later startup instead of resurrecting a second Claude placeholder.
+            agent = next((item for item in members if not item.archived
+                          and item.name == config["name"] and item.role == role), None)
+            if agent is None:
+                agent = AgentProfile(
+                    id=new_id("agent"), name=config["name"], provider_id=config["provider_id"],
+                    model=config["model"], role=role, lifecycle=Lifecycle.PERMANENT,
+                )
+                self.store.save_agent(agent)
+                self._emit(EventType.AGENT_CREATED, session_id=None, entity_id=agent.id,
+                           payload={"name": agent.name, "role": agent.role.value})
+                members.append(agent)
+            if agent.id not in memberships:
+                self.store.save_membership(TeamMembership(id=new_id("mem"), team_id=team.id,
+                                                          agent_id=agent.id))
+                memberships.add(agent.id)
+            by_role[key] = agent
 
-        ceo_cfg = CORE_TEAM_AGENTS["ceo"]
-        builder_cfg = CORE_TEAM_AGENTS["builder"]
-
-        ceo = AgentProfile(
-            id=new_id("agent"), name=ceo_cfg["name"], provider_id=ceo_cfg["provider_id"],
-            model=ceo_cfg["model"], role=RoleName.CEO, lifecycle=Lifecycle.PERMANENT,
-        )
-        builder = AgentProfile(
-            id=new_id("agent"), name=builder_cfg["name"], provider_id=builder_cfg["provider_id"],
-            model=builder_cfg["model"], role=RoleName.BUILDER, lifecycle=Lifecycle.PERMANENT,
-        )
-        # Vulcan is who takes the chair if Artemis (today's acting CEO) goes down.
-        ceo.fallback_agent_id = builder.id
-
-        self.store.save_agent(builder)
-        self.store.save_agent(ceo)
-        self._emit(
-            EventType.AGENT_CREATED, session_id=None, entity_id=ceo.id,
-            payload={"name": ceo.name, "role": ceo.role.value},
-        )
-        self._emit(
-            EventType.AGENT_CREATED, session_id=None, entity_id=builder.id,
-            payload={"name": builder.name, "role": builder.role.value},
-        )
-
-        for agent in (ceo, builder):
-            self.store.save_membership(TeamMembership(id=new_id("mem"), team_id=team.id, agent_id=agent.id))
-
-        ceo_binding = RoleBinding(
-            id=new_id("bind"), team_id=team.id, role=RoleName.CEO, agent_id=ceo.id,
-            designation="ACTING", reason=CEO_ACTING_REASON,
-        )
-        builder_binding = RoleBinding(
-            id=new_id("bind"), team_id=team.id, role=RoleName.BUILDER, agent_id=builder.id,
-            designation="PERMANENT",
-        )
-        self.store.save_role_binding(ceo_binding)
-        self.store.save_role_binding(builder_binding)
-        self._emit(
-            EventType.ROLE_BOUND, session_id=None, entity_id=ceo_binding.id,
-            payload={"role": "CEO", "agent_id": ceo.id, "designation": "ACTING"},
-        )
-        self._emit(
-            EventType.ROLE_BOUND, session_id=None, entity_id=builder_binding.id,
-            payload={"role": "BUILDER", "agent_id": builder.id, "designation": "PERMANENT"},
-        )
-
+        ceo, builder = by_role["ceo"], by_role["builder"]
+        if ceo.fallback_agent_id is None:
+            ceo.fallback_agent_id = builder.id
+            self.store.save_agent(ceo)
+        bindings = {binding.role: binding for binding in self.store.list_bindings(team.id)
+                    if binding.unbound_at is None}
+        for key, role, designation, reason in (
+            ("ceo", RoleName.CEO, "ACTING", CEO_ACTING_REASON),
+            ("builder", RoleName.BUILDER, "PERMANENT", ""),
+            ("reviewer", RoleName.REVIEWER, "PERMANENT", ""),
+        ):
+            if role in bindings:
+                continue
+            binding = RoleBinding(id=new_id("bind"), team_id=team.id, role=role,
+                                  agent_id=by_role[key].id, designation=designation, reason=reason)
+            self.store.save_role_binding(binding)
+            self._emit(EventType.ROLE_BOUND, session_id=None, entity_id=binding.id,
+                       payload={"role": role.value, "agent_id": binding.agent_id,
+                                "designation": designation})
         return team
 
     # ------------------------------------------------------------------

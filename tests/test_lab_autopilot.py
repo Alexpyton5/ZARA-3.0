@@ -6,7 +6,7 @@ import pytest
 
 from core.lab_v1.autopilot import Autopilot
 from core.lab_v1.domain import (AgentProfile, Availability, ProviderInfo, ProviderResult, RoleName, Team, TeamMembership)
-from core.lab_v1.providers.base import ProviderAdapter
+from core.lab_v1.providers.base import ModelDescriptor, ProviderAdapter
 from core.lab_v1.providers.claude_cli import ClaudeCliAdapter
 from core.lab_v1.providers.registry import ProviderRegistry
 from core.lab_v1.router import TaskRouter
@@ -49,6 +49,57 @@ class TextAdapter(ProviderAdapter):
                               input_tokens=10, output_tokens=20, duration_ms=1, provider_session_id='fake-request')
 
 
+class BootstrapClaudeAdapter(ProviderAdapter):
+    id = 'claude_cli'
+    label = 'Claude fixture'
+    controlled_text_only = True
+    declared_models = tuple(ModelDescriptor('claude_cli', model, model.title())
+                            for model in ('opus', 'sonnet', 'haiku'))
+
+    def __init__(self, failure=None):
+        self.calls = []
+        self.failure = failure
+
+    def probe(self):
+        return ProviderInfo(self.id, self.label, 'fixture', Availability.AVAILABLE)
+
+    def complete_with_options(self, **kwargs):
+        return self.complete(**kwargs)
+
+    def complete(self, **kwargs):
+        model = kwargs['model']
+        self.calls.append(model)
+        if self.failure:
+            return ProviderResult(False, availability=self.failure, error=self.failure.value)
+        return ProviderResult(True, text='A test passing is evidence only for that test.',
+                              availability=Availability.AVAILABLE, model_reported=model)
+
+
+class NvidiaBootstrapAdapter(ProviderAdapter):
+    id = 'nvidia'
+    label = 'NVIDIA fixture'
+    controlled_text_only = True
+    declared_models = tuple(ModelDescriptor('nvidia', model, model)
+                            for model in ('moonshotai/kimi-k3', 'z-ai/glm-5.3',
+                                          'nvidia/nemotron-3-super-120b-a12b'))
+
+    def __init__(self):
+        self.calls = []
+
+    def probe(self):
+        return ProviderInfo(self.id, self.label, 'fixture', Availability.AVAILABLE,
+                            models=[item.model_id for item in self.declared_models])
+
+    def complete_with_options(self, **kwargs):
+        return self.complete(**kwargs)
+
+    def complete(self, **kwargs):
+        model = kwargs['model']
+        self.calls.append(model)
+        return ProviderResult(True, text='Uma verificação precisa confirma apenas o escopo observado.',
+                              availability=Availability.AVAILABLE, model_reported=model)
+
+
 class Files:
     def __init__(self, sandbox):
         self.sandbox = sandbox
@@ -77,6 +128,92 @@ def engine(tmp_path):
         'authorized_models': ['primary/*', 'fallback/*'],
         'authorized_roles': ['CEO', 'BUILDER', 'REVIEWER', 'RESEARCHER', 'MEMBER']})
     return Autopilot(runtime, root=tmp_path / 'missions', executor_factory=Files, policy=policy)
+
+
+def _core_autopilot(tmp_path, adapter, policy=None, additional=()):
+    store = LabStore(tmp_path / 'lab.db')
+    registry = ProviderRegistry(tmp_path / 'health.json')
+    registry.register(adapter)
+    for extra in additional:
+        registry.register(extra)
+    runtime = LabRuntime(store, registry)
+    return Autopilot(runtime, root=tmp_path / 'missions', policy=policy or
+                     WorkforcePolicy(WorkforcePolicy.default_document()))
+
+
+def test_first_core_team_selection_certifies_two_distinct_workers_and_reuses_proof(tmp_path):
+    adapter = BootstrapClaudeAdapter()
+    autopilot = _core_autopilot(tmp_path, adapter)
+
+    team, planner, builder = autopilot._team()
+
+    assert team.name == 'ZARA Core'
+    assert planner.role == RoleName.CEO and builder.role == RoleName.BUILDER
+    assert (planner.provider_id, planner.model) != (builder.provider_id, builder.model)
+    assert adapter.calls == ['opus', 'sonnet', 'haiku']
+    assert len(autopilot.store.list_agents(team.id)) == 3
+    assert all('model.text' in agent.capabilities for agent in autopilot.store.list_agents(team.id))
+
+    restart_adapter = BootstrapClaudeAdapter()
+    registry = ProviderRegistry(tmp_path / 'health.json')
+    registry.register(restart_adapter)
+    restarted = Autopilot(LabRuntime(autopilot.store, registry), root=tmp_path / 'missions',
+                          policy=WorkforcePolicy(WorkforcePolicy.default_document()))
+    _, restarted_planner, restarted_builder = restarted._team()
+    assert (restarted_planner.id, restarted_builder.id) == (planner.id, builder.id)
+    assert restart_adapter.calls == []
+
+
+def test_first_core_team_does_not_mark_workers_callable_when_certification_fails(tmp_path):
+    adapter = BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED)
+    autopilot = _core_autopilot(tmp_path, adapter)
+
+    with pytest.raises(ValueError, match='WAITING_RESOURCE.*AUTH_REQUIRED'):
+        autopilot._team()
+
+    profiles = autopilot.store.list_agents()
+    assert len(profiles) == 3
+    assert all('model.text' not in agent.capabilities for agent in profiles)
+    assert adapter.calls == ['opus']
+
+
+def test_first_core_team_respects_unknown_cost_before_model_call(tmp_path):
+    document = WorkforcePolicy.default_document()
+    document['resource_classes']['claude_cli/*'] = 'UNKNOWN_COST'
+    adapter = BootstrapClaudeAdapter()
+    autopilot = _core_autopilot(tmp_path, adapter, WorkforcePolicy(document))
+
+    with pytest.raises(ValueError, match='WAITING_RESOURCE.*UNKNOWN_COST'):
+        autopilot._team()
+
+    assert adapter.calls == []
+    assert all('model.text' not in agent.capabilities for agent in autopilot.store.list_agents())
+
+
+def test_first_core_team_uses_distinct_owner_authorized_nvidia_fallbacks_after_claude_auth_failure(tmp_path):
+    claude = BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED)
+    nvidia = NvidiaBootstrapAdapter()
+    autopilot = _core_autopilot(tmp_path, claude, additional=(nvidia,))
+    core = autopilot.runtime.ensure_core_team()
+    original = {agent.role: agent.id for agent in autopilot.store.list_agents(core.id)}
+
+    team, planner, builder = autopilot._team()
+
+    assert team.name == 'ZARA Core'
+    assert planner.id == original[RoleName.CEO]
+    assert builder.id == original[RoleName.BUILDER]
+    assert (planner.provider_id, planner.model) == ('nvidia', 'moonshotai/kimi-k3')
+    assert (builder.provider_id, builder.model) == ('nvidia', 'z-ai/glm-5.3')
+    assert (planner.provider_id, planner.model) != (builder.provider_id, builder.model)
+    assert len(autopilot.store.list_agents(team.id)) == 3
+    assert all('model.text' in agent.capabilities for agent in (planner, builder))
+    reviewer = next(agent for agent in autopilot.store.list_agents(team.id)
+                    if agent.role == RoleName.REVIEWER)
+    assert (reviewer.provider_id, reviewer.model) == (
+        'nvidia', 'nvidia/nemotron-3-super-120b-a12b')
+    assert 'model.text' in reviewer.capabilities
+    assert nvidia.calls == ['moonshotai/kimi-k3', 'z-ai/glm-5.3',
+                            'nvidia/nemotron-3-super-120b-a12b']
 
 
 @pytest.mark.skipif(shutil.which('claude') is None,

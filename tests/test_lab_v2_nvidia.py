@@ -88,7 +88,7 @@ def test_success_parses_provenance_usage_and_request_id(tmp_path):
     assert (result.input_tokens, result.output_tokens) == (5, 3)
     assert result.cost_usd is None and result.cost_basis.value == "UNKNOWN"
     request_payload = json.loads(http.calls[0][3])
-    assert request_payload["max_tokens"] == 256 and request_payload["stream"] is False
+    assert 2048 <= request_payload["max_tokens"] <= 8192 and request_payload["stream"] is False
 
 
 @pytest.mark.parametrize("status,message,expected", [

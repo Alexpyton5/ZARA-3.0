@@ -11,8 +11,8 @@ Two worlds are exercised here, both entirely inside `tmp_path`:
   real Mission through the canonical `EvolutionEngine.observe_and_plan` flow.
 
 Nothing in this file touches the owner's workspace, CURRENT build, Lab database
-or the real autonomy policy. The master switch stays False in source; every test
-that needs the scheduler awake turns it on the way the owner would.
+or the real autonomy policy. Tests set an explicit persisted pause or opt-in;
+the production fallback stays False when no owner policy exists.
 """
 import asyncio
 import json
@@ -73,9 +73,9 @@ def gap_scheduler(loop, *, cap: int = 1) -> ImprovementScheduler:  # noqa: F811
 
 
 # ---------------------------------------------------------------------------
-# 1. The master switch. Production default is OFF and nothing runs by itself.
+# 1. An explicit persisted pause wins and nothing runs by itself.
 # ---------------------------------------------------------------------------
-def test_the_master_switch_ships_off_and_the_cycle_refuses_to_look_for_work(tmp_path, monkeypatch):
+def test_explicit_pause_refuses_to_look_for_work(tmp_path, monkeypatch):
     monkeypatch.delenv(SCHEDULER_ENV_FLAG, raising=False)
     assert SCHEDULER_ENABLED is False           # the in-source default that ships
     scheduler = idle_scheduler(tmp_path, opted_in=False)

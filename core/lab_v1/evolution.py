@@ -185,6 +185,11 @@ class EvolutionEngine:
 
     @staticmethod
     def _check_counterexample(source: Path):
+        # A frozen backend cannot serve as `python -c`. Observe the actual
+        # bundled classifier only when the running binary and checkout source
+        # both match the exact active package's build receipts.
+        if getattr(sys, "frozen", False):
+            return EvolutionEngine._check_packaged_counterexample(source)
         script = (
             "import json,runpy,sys; "
             "fn=runpy.run_path(sys.argv[1])['looks_like_product_criticism']; "
@@ -204,6 +209,39 @@ class EvolutionEngine:
             "input": COUNTEREXAMPLE, "expected": False, "observed": observed,
             "exit_code": process.returncode,
         }
+
+    @staticmethod
+    def _check_packaged_counterexample(source: Path):
+        inconclusive = {"conclusive": False, "exit_code": None,
+                        "reason": "PACKAGED_SOURCE_IDENTITY_NOT_PROVEN"}
+        try:
+            workspace = source.resolve(strict=True).parents[2]
+            pointer = json.loads((workspace / 'ZARA_ACTIVE_BUILD.json').read_text(encoding='utf-8'))
+            package = Path(pointer['EXE_PATH']).resolve(strict=True).parent.parent
+            package.relative_to((workspace / 'frontend').resolve(strict=True))
+            unpacked = package / 'win-unpacked'
+            info = json.loads((unpacked / 'BUILD_INFO.json').read_text(encoding='utf-8'))
+            manifest = json.loads((package / 'SOURCE_MANIFEST.json').read_text(encoding='utf-8'))
+            backend = unpacked / 'resources' / 'backend' / 'zara-backend.exe'
+            with backend.open('rb') as stream:
+                backend_digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+            if (pointer.get('BUILD_ID') != info.get('BUILD_ID')
+                    or Path(sys.executable).resolve(strict=True) != backend.resolve(strict=True)
+                    or backend_digest.casefold() != str(info.get('BACKEND_SHA256', '')).casefold()
+                    or manifest.get('sha256') != info.get('SOURCE_SHA256')):
+                return inconclusive
+            relative = source.relative_to(workspace).as_posix()
+            recorded = next((entry.get('sha256') for entry in manifest.get('files', [])
+                             if isinstance(entry, dict) and entry.get('path') == relative), None)
+            if recorded != _digest_bytes(source.read_bytes()):
+                return inconclusive
+            from core.lab_v1.feedback_inbox import looks_like_product_criticism
+            observed = looks_like_product_criticism(COUNTEREXAMPLE)
+            return {'conclusive': isinstance(observed, bool), 'input': COUNTEREXAMPLE,
+                    'expected': False, 'observed': observed, 'exit_code': None,
+                    'observer': 'PACKAGED_CLASSIFIER_MATCHING_CHECKOUT'}
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return inconclusive
 
     def observe_and_plan(self, *, inventory=None):
         self._record_unsupported_gaps()

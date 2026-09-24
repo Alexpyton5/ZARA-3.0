@@ -1,6 +1,6 @@
 import pytest
 
-from core.lab_v1.domain import Availability, ProviderInfo, ProviderResult, RoleName, Team
+from core.lab_v1.domain import AgentProfile, Availability, ProviderInfo, ProviderResult, RoleName, Team, TeamMembership
 from core.lab_v1.providers.base import ModelDescriptor, ProviderAdapter
 from core.lab_v1.providers.registry import ProviderRegistry
 from core.lab_v1.runtime import LabRuntime
@@ -53,6 +53,40 @@ def test_profile_requires_real_result_and_restart_does_not_retry(fleet):
     agent = cert.register_proven_agent('test-run', team_id='team', name='Worker', role=RoleName.MEMBER)
     assert agent.model == 'model' and agent.effort == 'low'
     assert FleetCertification(runtime).register_proven_agent('test-run', team_id='team', name='Worker', role=RoleName.MEMBER).id == agent.id
+
+
+def test_successful_proof_promotes_existing_non_callable_profile(fleet):
+    runtime, cert, fake = fleet
+    placeholder = AgentProfile('placeholder', 'Worker', 'fake', 'model', role=RoleName.MEMBER)
+    runtime.store.save_agent(placeholder)
+    runtime.store.save_membership(TeamMembership('member:placeholder', 'team', placeholder.id))
+
+    invoke(runtime)
+    proven = cert.register_proven_agent(
+        'test-run', team_id='team', name='Worker', role=RoleName.MEMBER)
+
+    assert proven.id == placeholder.id
+    assert proven.capabilities == ['model.text']
+    assert len(runtime.store.list_agents(team_id='team')) == 1
+    assert fake.calls == 1
+
+
+def test_successful_fallback_proof_retargets_the_existing_core_role_profile(fleet):
+    runtime, cert, fake = fleet
+    placeholder = AgentProfile('artemis', 'Artemis', 'claude_cli', 'opus', role=RoleName.CEO)
+    runtime.store.save_agent(placeholder)
+    runtime.store.save_membership(TeamMembership('member:artemis', 'team', placeholder.id))
+
+    invoke(runtime)
+    proven = cert.register_proven_agent(
+        'test-run', team_id='team', name='Artemis', role=RoleName.CEO,
+        placeholder_id=placeholder.id)
+
+    assert proven.id == placeholder.id
+    assert (proven.provider_id, proven.model) == ('fake', 'model')
+    assert proven.capabilities == ['model.text']
+    assert len(runtime.store.list_agents(team_id='team')) == 1
+    assert fake.calls == 1
 
 
 @pytest.mark.parametrize('state', [Availability.AUTH_REQUIRED, Availability.DISABLED_BY_OWNER_POLICY, Availability.OFFLINE])

@@ -405,6 +405,26 @@ def main() -> int:
     print("conferencia sidecar: OK (byte a byte igual ao dist-sidecar)")
 
     asar = dest_dir / "win-unpacked" / "resources" / "app.asar"
+    # Keep a full source receipt beside the package, including when the
+    # frontend comes from an immutable base candidate. SourceMission builds
+    # from a disposable projection and needs the same identity proof before
+    # it can offer that package to the journaled promotion gate.
+    try:
+        sys.path.insert(0, str(ROOT))
+        from tools.build_current import source_identity
+        source_manifest = source_identity()
+    except Exception as exc:
+        fail(f"nao consegui registrar a identidade do source: {type(exc).__name__}")
+    if not isinstance(source_manifest, dict) or not source_manifest.get("sha256"):
+        fail("identidade do source invalida")
+    # The build tool itself is outside build_current's runtime source set.
+    # Record its exact bytes separately so a staged Lab package can prove
+    # which official builder produced the candidate.
+    build_tool_sha = sha256(Path(__file__).resolve())
+    source_manifest["build_tool"] = {
+        "path": "tools/build_candidate.py", "sha256": build_tool_sha,
+    }
+
     info = {
         "BUILD_ID": build_id,
         "BUILD_TIMESTAMP": datetime.now().astimezone().isoformat(),
@@ -422,9 +442,16 @@ def main() -> int:
         "BACKEND_SHA256": conferido,
         "BACKEND_SHA256_ANTERIOR": base_backend_sha,
         "ASAR_SHA256": sha256(asar) if asar.exists() else "",
+        "SOURCE_SHA256": source_manifest["sha256"],
+        "BUILD_TOOL_SHA256": build_tool_sha,
         "DELTA": args.delta or "nao informado",
     }
     info.update(frontend_toolchain)
+    if source_identity()["sha256"] != source_manifest["sha256"]:
+        fail("o source mudou durante a criacao do candidato")
+    (dest_dir / "SOURCE_MANIFEST.json").write_text(
+        json.dumps(source_manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     (dest_dir / "win-unpacked" / "BUILD_INFO.json").write_text(
         json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
     )

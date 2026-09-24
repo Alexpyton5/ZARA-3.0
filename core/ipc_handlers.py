@@ -1376,8 +1376,7 @@ class IPCHandler:
         if LAB_V1_AVAILABLE and LabV1Service:
             try:
                 self.lab_v1 = LabV1Service()
-                self.lab_v1.on_release_ready = lambda result: self.send_event('lab-release-ready', {
-                    'state': 'READY_TO_ACTIVATE', 'session_id': result['session_id']})
+                self.lab_v1.on_release_ready = lambda result: self.send_event('lab-release-ready', result)
                 await self.lab_v1.start_background()
                 self._schedule_lab_v1_task(
                     self._drain_lab_v1_operation_outbox(self.lab_v1),

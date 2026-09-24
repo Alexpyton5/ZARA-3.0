@@ -1,6 +1,8 @@
 """Persistent opt-in supervisor. Sequential ticks resume work and inspect reviewed improvements."""
 import json
+import os
 from pathlib import Path
+import sys
 import threading
 import time
 from core.lab_v1.autopilot import Autopilot, WORKFLOW
@@ -9,6 +11,29 @@ from core.lab_v1.workforce_policy import WorkforcePolicy
 from core.lab_v1.scout import TechnologyScout
 from core.lab_v1.feedback_inbox import FeedbackInbox
 from core.lab_v1.mission_controller import MissionController
+
+
+def _default_workspace(executable=None):
+    """Find the source checkout for packaged runs launched from a candidate."""
+    configured = os.environ.get('ZARA_LAB_WORKSPACE')
+    if configured:
+        target = Path(configured).resolve()
+        if (target / 'core' / 'lab_v1').is_dir() and (target / 'tools' / 'build_candidate.py').is_file():
+            return target
+
+    executable = Path(executable or sys.executable).resolve()
+    for parent in executable.parents:
+        marker = parent / 'ZARA_ACTIVE_BUILD.json'
+        if (marker.is_file() and (parent / 'core' / 'lab_v1').is_dir()
+                and (parent / 'tools' / 'build_candidate.py').is_file()):
+            try:
+                active = json.loads(marker.read_text(encoding='utf-8'))
+                active_exe = Path(active.get('EXE_PATH', '')).resolve()
+                if active_exe.is_file() and active_exe.is_relative_to(parent.resolve()):
+                    return parent.resolve()
+            except (OSError, ValueError, TypeError):
+                continue
+    return Path(__file__).resolve().parents[2]
 
 
 class AutonomySupervisor:
@@ -21,14 +46,21 @@ class AutonomySupervisor:
         with self.store._connect() as conn:
             conn.execute('CREATE TABLE IF NOT EXISTS lab_autonomy_policy(id INTEGER PRIMARY KEY, document TEXT NOT NULL)')
             defaults = WorkforcePolicy.default_document() | {
-                'enabled': True, 'workspace': str(Path(__file__).resolve().parents[2]),
+                'enabled': True, 'workspace': str(_default_workspace()),
                 'last_tick': None, 'last_state': 'READY',
                 'next_evolution_check': 0, 'cadence_seconds': 60, 'evolution_cadence_seconds': 86400,
                 'max_new_evolution_missions_per_day': 1, 'daily_date': None, 'daily_missions': 0,
-                'stale_legacy_sessions': [], 'source_observer': None}
+                'stale_legacy_sessions': [], 'source_observer': None,
+                # Alex explicitly asked on 2026-09-23 for Lab to start bounded
+                # self-improvement on app launch. A saved False remains a pause.
+                'scheduler_enabled': True}
             conn.execute('INSERT OR IGNORE INTO lab_autonomy_policy VALUES(1,?)', (json.dumps(defaults),))
             current = json.loads(conn.execute('SELECT document FROM lab_autonomy_policy WHERE id=1').fetchone()[0])
             merged = defaults | current
+            configured_workspace = Path(merged.get('workspace') or '').resolve()
+            if not ((configured_workspace / 'core' / 'lab_v1').is_dir()
+                    and (configured_workspace / 'tools' / 'build_candidate.py').is_file()):
+                merged['workspace'] = defaults['workspace']
             conn.execute('UPDATE lab_autonomy_policy SET document=? WHERE id=1', (json.dumps(merged),))
 
     def set_autopilot(self, autopilot):
@@ -63,7 +95,8 @@ class AutonomySupervisor:
         if enabled and not (target / 'tools/build_current.py').is_file():
             raise ValueError('Workspace de manutencao nao configurado')
         return self._save(enabled=enabled, workspace=str(target) if enabled else saved.get('workspace'),
-            last_state='READY' if enabled else 'MONITORING', background_enabled=True)
+            last_state='READY' if enabled else 'MONITORING', background_enabled=True,
+            scheduler_enabled=enabled)
 
     def ensure_team(self):
         # Autopilot provisions only policy-authorized Codex profiles.
@@ -78,6 +111,8 @@ class AutonomySupervisor:
             return 'core/gemini_live_voice.py'
         choices = (
             (latency, 'core/model_router.py'),
+            (('feedback', 'elogio', 'elogios', 'classificador', 'triagem'),
+             'core/lab_v1/feedback_inbox.py'),
             (('supervisor', 'autonomia', 'automática', 'automatica'), 'core/lab_v1/supervisor.py'),
             (('serviço', 'servico', 'interface', 'envio'), 'core/lab_v1/service.py'),
         )
@@ -103,8 +138,12 @@ class AutonomySupervisor:
             inventory = evolution.observe_local()
             self._save(source_observer=evolution.observer_snapshot())
             with self.store._connect() as conn:
-                pending = [json.loads(r[0]) for r in conn.execute('SELECT document FROM mission_controls')
-                    if json.loads(r[0])['state'] not in ('COMPLETED', 'CANCELLED', 'FAILED')]
+                has_missions = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mission_controls'"
+                ).fetchone()
+                pending = ([json.loads(r[0]) for r in conn.execute('SELECT document FROM mission_controls')
+                            if json.loads(r[0])['state'] not in ('COMPLETED', 'CANCELLED', 'FAILED')]
+                           if has_missions else [])
             supported, legacy = [], []
             for mission in pending:
                 autonomy = self.store.autonomy_snapshot(mission['session_id'])

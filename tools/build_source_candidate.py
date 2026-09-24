@@ -24,7 +24,7 @@ class CandidateBuildError(RuntimeError):
 
 _BACKEND_INPUTS = (
     "main.py", "build_exe.py", "pyproject.toml", "IDENTITY.md", "core", "memory", "voice", "plugins",
-    "tools/build_current.py", "tools/autonomy_release.py", "tools/electron_lab_canary.py",
+    "tools/build_current.py", "tools/build_candidate.py", "tools/autonomy_release.py", "tools/electron_lab_canary.py",
 )
 _FRONTEND_INPUTS = (
     "frontend/src", "frontend/public", "frontend/package.json", "frontend/package-lock.json",
@@ -45,6 +45,14 @@ def _digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _same_digest(actual: Any, expected: Any) -> bool:
+    return (isinstance(actual, str) and isinstance(expected, str)
+            and len(actual) == len(expected) == 64
+            and all(char in '0123456789abcdef' for char in actual.lower())
+            and all(char in '0123456789abcdef' for char in expected.lower())
+            and actual.lower() == expected.lower())
+
+
 def _inside(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
@@ -60,6 +68,38 @@ def _require_build_space(sandbox: Path) -> None:
         raise CandidateBuildError("CANDIDATE_BUILD_DISK_PREFLIGHT_FAILED") from exc
     if free < _MIN_BUILD_FREE_BYTES:
         raise CandidateBuildError("CANDIDATE_BUILD_DISK_SPACE_BELOW_2GB")
+
+
+def _active_build_package(workspace: Path) -> Path:
+    """Resolve the exact current package without guessing a release lineage."""
+    try:
+        pointer = json.loads((workspace / "ZARA_ACTIVE_BUILD.json").read_text(encoding="utf-8"))
+        exe = Path(pointer["EXE_PATH"]).resolve(strict=True)
+        package = exe.parent.parent
+        info = json.loads((package / "win-unpacked" / "BUILD_INFO.json").read_text(encoding="utf-8"))
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise CandidateBuildError("ACTIVE_BUILD_IDENTITY_UNAVAILABLE") from exc
+    try:
+        package.relative_to((workspace / "frontend").resolve())
+    except ValueError as exc:
+        raise CandidateBuildError("ACTIVE_BUILD_OUTSIDE_FRONTEND") from exc
+    expected = {"BUILD_ID": "BUILD_ID", "EXE_SHA256": "EXE_SHA256",
+                "ASAR_SHA256": "ASAR_SHA256", "BACKEND_SHA256": "BACKEND_SHA256"}
+    if (pointer.get("EXE_PATH") != info.get("EXE_PATH")
+            or exe != (package / "win-unpacked" / "ZARA 3.0.exe").resolve()
+            or any(not _same_digest(pointer.get(key), info.get(info_key))
+                   for key, info_key in expected.items() if key != "BUILD_ID")
+            or pointer.get("BUILD_ID") != info.get("BUILD_ID")):
+        raise CandidateBuildError("ACTIVE_BUILD_METADATA_MISMATCH")
+    artifacts = {
+        "EXE_SHA256": package / "win-unpacked" / "ZARA 3.0.exe",
+        "ASAR_SHA256": package / "win-unpacked" / "resources" / "app.asar",
+        "BACKEND_SHA256": package / "win-unpacked" / "resources" / "backend" / "zara-backend.exe",
+    }
+    if any(not path.is_file() or not _same_digest(_digest(path), info.get(key))
+           for key, path in artifacts.items()):
+        raise CandidateBuildError("ACTIVE_BUILD_ARTIFACT_DRIFT")
+    return package
 
 
 def _relative(value: str) -> PurePosixPath:
@@ -250,6 +290,28 @@ def _require_frozen_overlays(
     manifest = json.loads((package / "SOURCE_MANIFEST.json").read_text(encoding="utf-8"))
     if manifest.get("sha256") != source_sha256:
             raise CandidateBuildError("CANDIDATE_SOURCE_IDENTITY_CHANGED_DURING_BUILD")
+    files = manifest.get("files")
+    if (not isinstance(files, list) or any(not isinstance(item, dict)
+            or not isinstance(item.get("path"), str)
+            or not isinstance(item.get("sha256"), str) for item in files)):
+        raise CandidateBuildError("CANDIDATE_SOURCE_MANIFEST_INVALID")
+    manifested = {item["path"]: item["sha256"] for item in files}
+    if len(manifested) != len(files):
+        raise CandidateBuildError("CANDIDATE_SOURCE_MANIFEST_INVALID")
+    if any(not _same_digest(manifested.get(item["path"]), item["sha256"]) for item in overlays):
+        raise CandidateBuildError("CANDIDATE_OVERLAY_NOT_IN_SOURCE_MANIFEST")
+
+
+def _require_builder_identity(staged: Path, package: Path, info: dict[str, Any], manifest: dict[str, Any]) -> str:
+    """The official package must identify the exact staged builder that ran."""
+    builder = manifest.get("build_tool")
+    path = staged / "tools" / "build_candidate.py"
+    if (not isinstance(builder, dict) or builder.get("path") != "tools/build_candidate.py"
+            or not path.is_file() or path.is_symlink()
+            or not _same_digest(_digest(path), builder.get("sha256"))
+            or not _same_digest(info.get("BUILD_TOOL_SHA256"), builder.get("sha256"))):
+        raise CandidateBuildError("CANDIDATE_BUILD_TOOL_IDENTITY_MISMATCH")
+    return _digest(path)
 
 
 def _require_successful_build_receipt(receipt_path: Path) -> dict[str, Any]:
@@ -275,7 +337,8 @@ def _verify_reusable_receipt(
         raise CandidateBuildError("CANDIDATE_RECEIPT_REVIEW_MISMATCH")
     overlays = receipt.get("overlay")
     expected_paths = [_relative(value).as_posix() for value in allowed_paths]
-    if not isinstance(overlays, list) or [item.get("path") for item in overlays] != expected_paths:
+    if (not isinstance(overlays, list) or any(not isinstance(item, dict) for item in overlays)
+            or [item.get("path") for item in overlays] != expected_paths):
         raise CandidateBuildError("CANDIDATE_RECEIPT_OVERLAY_MISMATCH")
     _bind_review(review_evidence, overlays)
     for item in overlays:
@@ -285,7 +348,8 @@ def _verify_reusable_receipt(
 
     staged = Path(receipt.get("workspace", ""))
     package = Path(receipt.get("package", ""))
-    if not staged.is_dir() or not package.is_dir() or not _inside(package, staged):
+    if (not staged.is_dir() or not package.is_dir() or staged.parent != receipt_path.parent
+            or not _inside(package, staged / "frontend")):
         raise CandidateBuildError("CANDIDATE_RECEIPT_PACKAGE_INVALID")
     build_receipt = Path(receipt.get("build_receipt", ""))
     if not _inside(build_receipt, receipt_path.parent):
@@ -294,7 +358,8 @@ def _verify_reusable_receipt(
     try:
         info = json.loads((package / "win-unpacked" / "BUILD_INFO.json").read_text(encoding="utf-8"))
         manifest = json.loads((package / "SOURCE_MANIFEST.json").read_text(encoding="utf-8"))
-        report = json.loads(Path(receipt["canary_report"]).read_text(encoding="utf-8"))
+        report_path = Path(receipt["canary_report"]).resolve(strict=True)
+        report = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, KeyError, json.JSONDecodeError) as exc:
         raise CandidateBuildError("CANDIDATE_RECEIPT_PACKAGE_INVALID") from exc
     paths = {
@@ -302,17 +367,31 @@ def _verify_reusable_receipt(
         "asar_sha256": package / "win-unpacked" / "resources" / "app.asar",
         "backend_sha256": package / "win-unpacked" / "resources" / "backend" / "zara-backend.exe",
     }
-    if (manifest.get("sha256") != receipt.get("source_sha256")
+    if (report_path.name != "VALIDATION.json" or report_path.parent.parent != receipt_path.parent
+            or not isinstance(receipt.get("build_id"), str)
+            or receipt.get("build_id") != info.get("BUILD_ID")
+            or receipt["build_id"] not in package.name
+            or manifest.get("sha256") != receipt.get("source_sha256")
             or info.get("SOURCE_SHA256") != receipt.get("source_sha256")
             or report != receipt.get("canary")
             or report.get("status") != "passed" or report.get("live") is not False or report.get("runs")):
         raise CandidateBuildError("CANDIDATE_RECEIPT_IDENTITY_MISMATCH")
+    _require_builder_identity(staged, package, info, manifest)
+    if not _same_digest(receipt.get("build_tool_sha256"), info.get("BUILD_TOOL_SHA256")):
+        raise CandidateBuildError("CANDIDATE_BUILD_TOOL_IDENTITY_MISMATCH")
     for key, path in paths.items():
-        if not path.is_file() or _digest(path) != receipt.get(key):
+        artifact_name = key.removesuffix("_sha256")
+        named_path = receipt.get(artifact_name + "_path")
+        if (not isinstance(named_path, str) or not path.is_file()
+                or Path(named_path).resolve() != path.resolve()
+                or not _same_digest(_digest(path), receipt.get(key))
+                or not _same_digest(_digest(path), info.get(key.upper()))):
             raise CandidateBuildError("CANDIDATE_RECEIPT_ARTIFACT_DRIFT")
-    if (report.get("asar_sha256") != receipt.get("asar_sha256")
-            or report.get("backend_sha256") != receipt.get("backend_sha256")):
+    if (Path(info.get("EXE_PATH", "")).resolve() != paths["exe_sha256"].resolve()
+            or not _same_digest(report.get("asar_sha256"), receipt.get("asar_sha256"))
+            or not _same_digest(report.get("backend_sha256"), receipt.get("backend_sha256"))):
         raise CandidateBuildError("CANDIDATE_RECEIPT_IDENTITY_MISMATCH")
+    _require_frozen_overlays(source_root, staged, package, overlays, receipt["source_sha256"])
     return receipt
 
 
@@ -336,46 +415,27 @@ def build_candidate(
     workspace, sandbox, source_root = Path(workspace).resolve(strict=True), Path(sandbox).resolve(strict=True), Path(source_root).resolve(strict=True)
     if not workspace.is_dir() or not source_root.is_dir() or _inside(sandbox, workspace) or not _inside(source_root, sandbox):
         raise CandidateBuildError("CANDIDATE_WORKSPACE_BOUNDARY_INVALID")
+    completed = sandbox / "DESKTOP_CANDIDATE_RECEIPT.json"
+    if completed.is_file():
+        return _verify_reusable_receipt(completed, source_root, allowed_paths, review_evidence)
     _require_build_space(sandbox)
-    staged = sandbox / _CANDIDATE_DIR
-    retry_index = 0
-    recover_existing = False
-    if staged.exists():
-        retry_index = 1
-        while (sandbox / f"{_CANDIDATE_DIR}-retry-{retry_index}").exists():
-            completed = (sandbox / f"{_CANDIDATE_DIR}-retry-{retry_index}" / "DESKTOP_CANDIDATE_RECEIPT.json").is_file()
-            candidate_staging = sandbox / f"{_CANDIDATE_DIR}-retry-{retry_index}"
-            if completed:
-                raise CandidateBuildError("CANDIDATE_DESKTOP_BUILD_RETRY_LIMIT")
-            if retry_index >= 2:
-                # A failed NSIS wrapper may leave a complete package.  Reuse
-                # that exact immutable staging tree after validating its bytes;
-                # this is a harness recovery, not a new candidate build.
-                if _recoverable_package(candidate_staging):
-                    staged, recover_existing = candidate_staging, True
-                    break
-                raise CandidateBuildError("CANDIDATE_DESKTOP_BUILD_RETRY_LIMIT")
-            retry_index += 1
-        if not recover_existing:
-            staged = sandbox / f"{_CANDIDATE_DIR}-retry-{retry_index}"
+    staged, retry_index = _fresh_staging_path(sandbox)
     venv = workspace / ".venv"
     python = venv / "Scripts" / "python.exe"
     node_modules = workspace / "frontend" / "node_modules"
     if not python.is_file() or not (node_modules / "electron-builder" / "cli.js").is_file():
         raise CandidateBuildError("CANDIDATE_BUILD_DEPENDENCIES_UNAVAILABLE")
 
-    if not recover_existing:
-        staged.mkdir(parents=True)
+    staged.mkdir(parents=True)
     # Reuse the isolated tool caches from a timed-out build.  The previous
     # staging tree remains immutable evidence; only this fresh projection is
     # rebuilt, so a retry never overwrites an earlier candidate.
     build_temp = sandbox / "desktop-build-temp"
     build_temp.mkdir(exist_ok=True)
-    _copy_projection(workspace, staged, skip_paths=runtime_drift_paths if recover_existing else ())
+    _copy_projection(workspace, staged)
     overlays = _overlay_candidate(source_root, staged, allowed_paths)
     _bind_review(review_evidence, overlays)
-    if not recover_existing:
-        _dependency_junction(staged / "frontend" / "node_modules", node_modules)
+    _dependency_junction(staged / "frontend" / "node_modules", node_modules)
     environment = dict(os.environ)
     environment.update({
         "ZARA_BUILD_VENV_DIR": str(venv), "ZARA_BUILD_PYTHON": str(python),
@@ -391,19 +451,28 @@ def build_candidate(
     })
     identity = _source_identity(python, staged, environment)
     evidence_dir = sandbox / ("desktop-build-evidence" + (f"-retry-{retry_index}" if retry_index else ""))
-    if not recover_existing:
-        _run([str(python), "tools/build_current.py", "build", "--delta", "Isolated SourceMission desktop candidate"],
-             cwd=staged, env=environment, failure="CANDIDATE_DESKTOP_BUILD_FAILED",
-             timeout_seconds=_BUILD_TIMEOUT_SECONDS, receipt_dir=evidence_dir)
-    packages = sorted((staged / "frontend").glob(".current-build-staging-*"), key=lambda path: path.stat().st_mtime)
-    if len(packages) != 1:
-        raise CandidateBuildError("CANDIDATE_PACKAGE_IDENTITY_AMBIGUOUS")
-    package = packages[0]
-    if recover_existing and not (package / "win-unpacked" / "BUILD_INFO.json").is_file():
-        _materialize_recovered_metadata(package, identity, environment, retry_index)
-    _run([str(python), "tools/build_current.py", "verify", str(package)], cwd=staged, env=environment,
-         failure="CANDIDATE_PACKAGE_VERIFY_FAILED", timeout_seconds=_VERIFY_TIMEOUT_SECONDS,
-         receipt_dir=evidence_dir)
+    base_package = _active_build_package(workspace)
+    command = [str(python), str(staged / "tools" / "build_candidate.py"),
+               "--base", str(base_package), "--tag", "lab-source",
+               "--delta", "Isolated Lab SourceMission candidate", "--rebuild-sidecar"]
+    if any(path.startswith("frontend/") for path in allowed_paths):
+        command.append("--rebuild-frontend")
+    build_output = _run(command, cwd=staged, env=environment,
+                        failure="OFFICIAL_CANDIDATE_BUILD_FAILED",
+                        timeout_seconds=_BUILD_TIMEOUT_SECONDS, receipt_dir=evidence_dir)
+    try:
+        pointer = json.loads((staged / "ZARA_ACTIVE_BUILD.json").read_text(encoding="utf-8"))
+        package = Path(pointer["EXE_PATH"]).resolve().parent.parent
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise CandidateBuildError("OFFICIAL_CANDIDATE_BUILD_IDENTITY_INVALID") from exc
+    if (not _inside(package, staged / "frontend")
+            or pointer.get("BUILD_ID") not in package.name
+            or "CANDIDATE_READY: true" not in build_output):
+        raise CandidateBuildError("OFFICIAL_CANDIDATE_BUILD_IDENTITY_INVALID")
+    build_receipt = evidence_dir / "official_candidate_build_failed.json"
+    _require_successful_build_receipt(build_receipt)
+    if not (package / "SOURCE_MANIFEST.json").is_file():
+        raise CandidateBuildError("CANDIDATE_SOURCE_MANIFEST_MISSING")
 
     canary_output = sandbox / ("desktop-canary" + (f"-retry-{retry_index}" if retry_index else ""))
     canary_command = [str(python), str(workspace / "tools" / "electron_lab_canary.py"), str(package),
@@ -439,12 +508,14 @@ def build_candidate(
     except (OSError, json.JSONDecodeError) as exc:
         raise CandidateBuildError("CANDIDATE_CANARY_REPORT_MISSING") from exc
     if (report.get("status") != "passed" or report.get("live") is not False or report.get("runs")
-            or report.get("asar_sha256") != info["ASAR_SHA256"]
-            or report.get("backend_sha256") != info["BACKEND_SHA256"]):
+            or not _same_digest(report.get("asar_sha256"), info.get("ASAR_SHA256"))
+            or not _same_digest(report.get("backend_sha256"), info.get("BACKEND_SHA256"))):
         raise CandidateBuildError("CANDIDATE_CANARY_NOT_READONLY")
     if info.get("SOURCE_SHA256") != identity["sha256"]:
         raise CandidateBuildError("CANDIDATE_SOURCE_IDENTITY_CHANGED_DURING_BUILD")
     _require_frozen_overlays(source_root, staged, package, overlays, identity["sha256"])
+    manifest = json.loads((package / "SOURCE_MANIFEST.json").read_text(encoding="utf-8"))
+    build_tool_sha = _require_builder_identity(staged, package, info, manifest)
     paths = {
         "exe": package / "win-unpacked" / "ZARA 3.0.exe",
         "asar": package / "win-unpacked" / "resources" / "app.asar",
@@ -461,13 +532,16 @@ def build_candidate(
         "canonical_git_commit": environment["ZARA_BUILD_GIT_COMMIT"],
         "canonical_git_dirty": environment["ZARA_BUILD_GIT_DIRTY"] == "1",
         "build_id": info["BUILD_ID"], "canary_report": str(report_path), "canary": report,
-        "build_recovered_from_complete_output": recover_existing,
-        "build_failure_evidence": str(evidence_dir / "candidate_desktop_build_failed.json")
-            if recover_existing and (evidence_dir / "candidate_desktop_build_failed.json").is_file() else None,
+        "build_recovered_from_complete_output": False,
+        "build_failure_evidence": None,
         "activation": "FORBIDDEN_UNTIL_CANONICAL_SOURCE_PROMOTION_AND_REBUILD",
         "build_retry_index": retry_index,
-        "automatic_promotion": "NOT_IMPLEMENTED",
+        "automatic_promotion": "ELIGIBLE_ONLY_AFTER_LOW_RISK_LAB_POLICY_AND_ALL_RELEASE_GATES",
+        "build_method": "tools/build_candidate.py",
+        "build_tool_sha256": build_tool_sha,
+        "build_receipt": str(build_receipt),
     }
+    result["build_receipt"] = str(build_receipt)
     (sandbox / "DESKTOP_CANDIDATE_RECEIPT.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result
 

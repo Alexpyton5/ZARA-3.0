@@ -61,7 +61,8 @@ class FleetCertification:
             conn.execute('UPDATE model_certification_runs SET document=? WHERE id=?', (json.dumps(doc), key))
         return doc
 
-    def register_proven_agent(self, certification_id, *, team_id, name, role: RoleName):
+    def register_proven_agent(self, certification_id, *, team_id, name, role: RoleName,
+                              placeholder_id: str | None = None):
         if self.store.get_team(team_id) is None:
             raise ValueError('UNKNOWN_TEAM')
         with self.store._connect() as conn:
@@ -71,13 +72,53 @@ class FleetCertification:
             raise ValueError('NO_CALLABLE_PROOF')
         if doc.get('agent_id'):
             agent = self.store.get_agent(doc['agent_id'])
-            if agent is not None and 'model.text' not in agent.capabilities:
-                agent.capabilities.append('model.text')
-                self.store.save_agent(agent)
+            if (agent is not None and not agent.archived and agent.provider_id == doc['provider_id']
+                    and agent.model == doc['model'] and agent.role == role):
+                if 'model.text' not in agent.capabilities:
+                    agent.capabilities.append('model.text')
+                    self.store.save_agent(agent)
+                if agent.id not in {item.agent_id for item in self.store.list_memberships(team_id)
+                                    if item.left_at is None}:
+                    self.store.save_membership(TeamMembership(new_id('member'), team_id, agent.id))
+                return agent
+            doc['agent_id'] = None
+        if placeholder_id:
+            agent = self.store.get_agent(placeholder_id)
+            if agent is None or agent.archived or agent.role != role:
+                raise ValueError('INVALID_CORE_PLACEHOLDER')
+            if 'model.text' in agent.capabilities and (
+                    agent.provider_id != doc['provider_id'] or agent.model != doc['model']):
+                raise ValueError('CALLABLE_CORE_PROFILE_MISMATCH')
+            if agent.id not in {item.agent_id for item in self.store.list_memberships(team_id)
+                                if item.left_at is None}:
+                raise ValueError('CORE_PLACEHOLDER_NOT_IN_TEAM')
+            agent.provider_id = doc['provider_id']
+            agent.model = doc['model']
+            agent.effort = doc.get('effort')
+            agent.capabilities = sorted(set(agent.capabilities) | {'model.text'})
+            self.store.save_agent(agent)
+            doc['agent_id'] = agent.id
+            with self.store._connect() as conn:
+                conn.execute('UPDATE model_certification_runs SET document=? WHERE id=?',
+                             (json.dumps(doc), certification_id))
             return agent
-        agent = AgentProfile(new_id('agent'), name, doc['provider_id'], doc['model'], role=role, effort=doc['effort'], capabilities=['model.text'])
-        self.store.save_agent(agent)
-        self.store.save_membership(TeamMembership(new_id('member'), team_id, agent.id))
+        # The permanent ZARA Core team has visible, non-callable placeholders
+        # before its first provider proof. Promote the exact matching profile
+        # after real certification instead of creating a duplicate bot.
+        agent = next((item for item in self.store.list_agents(team_id)
+                      if item.name == name and item.provider_id == doc['provider_id']
+                      and item.model == doc['model'] and item.role == role), None)
+        if agent is None:
+            agent = AgentProfile(new_id('agent'), name, doc['provider_id'], doc['model'], role=role,
+                                 effort=doc['effort'], capabilities=['model.text'])
+            self.store.save_agent(agent)
+        else:
+            agent.capabilities = sorted(set(agent.capabilities) | {'model.text'})
+            agent.effort = doc['effort']
+            self.store.save_agent(agent)
+        if agent.id not in {item.agent_id for item in self.store.list_memberships(team_id)
+                            if item.left_at is None}:
+            self.store.save_membership(TeamMembership(new_id('member'), team_id, agent.id))
         doc['agent_id'] = agent.id
         with self.store._connect() as conn:
             conn.execute('UPDATE model_certification_runs SET document=? WHERE id=?', (json.dumps(doc), certification_id))

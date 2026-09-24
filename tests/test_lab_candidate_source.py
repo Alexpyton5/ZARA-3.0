@@ -296,6 +296,31 @@ def test_pytest_rejects_unapproved_tests_and_bad_timeout(tmp_path: Path) -> None
         candidate.run_pytest(["tests/test_existing.py"], timeout_seconds=0)
 
 
+def test_readonly_support_test_is_runnable_but_cannot_be_edited(tmp_path: Path) -> None:
+    workspace = _fixture_workspace(tmp_path)
+    test_path = workspace / "tests" / "test_existing_pipeline.py"
+    _write(test_path, "from core.calculator import add\n\ndef test_existing_behavior():\n    assert add(5, 3) == 2\n")
+    original_test = test_path.read_bytes()
+    candidate = CandidateSource(
+        workspace,
+        tmp_path / "sandbox",
+        ["core/calculator.py"],
+        support_paths=["tests/test_existing_pipeline.py"],
+        readonly_test_paths=["tests/test_existing_pipeline.py"],
+        python_executable=Path(sys.executable),
+    )
+    candidate.prepare()
+
+    result = candidate.run_pytest(["tests/test_existing_pipeline.py"], timeout_seconds=20)
+
+    assert result.exit_code == 0
+    assert result.counts["collected"] == result.counts["passed"] == 1
+    assert result.test_hashes["tests/test_existing_pipeline.py"]
+    with pytest.raises(CandidateSourceError, match="not editable"):
+        candidate.apply_edits([{"path": "tests/test_existing_pipeline.py", "content": "def test_lie(): assert True\n"}])
+    assert test_path.read_bytes() == original_test
+
+
 def test_generated_test_cannot_write_to_production_workspace(tmp_path: Path) -> None:
     workspace = _fixture_workspace(tmp_path)
     forbidden = workspace / "written-by-test.txt"

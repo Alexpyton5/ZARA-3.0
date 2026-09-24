@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import copy
 from pathlib import Path
 import re
 import threading
@@ -16,7 +17,8 @@ from core.lab_v1.domain import (Artifact, Availability, CapabilityGap, Lifecycle
     RoleName, Session, Task, TeamMembership, new_id, RunState)
 from core.lab_v1.execution_scope import ExecutionScope, ScopeViolation, canonical_resource
 from core.lab_v1.mission_controller import MissionController, MissionLimits, MissionStep, Receipt, Verification, TextProviderFailure, LeaseLost
-from core.lab_v1.runtime import _extract_json
+from core.lab_v1.runtime import (CORE_TEAM_AGENTS, CORE_TEAM_MODEL_FALLBACKS,
+                                 CORE_TEAM_NAME, _extract_json)
 from core.lab_v1.sandbox_actions import SandboxActionPorts, SandboxActionRequest, SandboxFileExecutor
 from core.lab_v1.workforce_policy import WorkforcePolicy
 from core.lab_v1.artifact_verifier import ArtifactVerifier, validate_acceptance
@@ -80,17 +82,143 @@ class Autopilot:
                      if not a.archived and a.role == RoleName.CEO
                      and self._decision(a, team_id=team.id).allowed), None)
 
-    def _team(self, team_id=None):
+    def _bootstrap_core_team(self):
+        """Enable Core workers only after policy checks and real inference proof."""
+        team = self.runtime.ensure_core_team()
+        from core.lab_v1.fleet import FleetCertification
+        certification = FleetCertification(self.runtime)
+        failures = []
+
+        for key, role in (("ceo", RoleName.CEO), ("builder", RoleName.BUILDER),
+                          ("reviewer", RoleName.REVIEWER)):
+            config = CORE_TEAM_AGENTS[key]
+            agent = next((item for item in self.store.list_agents(team.id)
+                          if item.name == config["name"] and item.role == role and not item.archived), None)
+            if agent is None:
+                failures.append(f'{config["provider_id"]}/{config["model"]}:PROFILE_MISSING')
+                continue
+
+            candidates = [(config['provider_id'], config['model'])]
+            candidates.extend(CORE_TEAM_MODEL_FALLBACKS.get(key, ()))
+            activated = False
+            for provider_id, model in candidates:
+                adapter = self.runtime.registry.get(provider_id)
+                if adapter is None:
+                    continue
+
+                info = adapter.probe()
+                descriptor = next((item for item in getattr(adapter, 'declared_models', ())
+                                   if item.model_id == model), None)
+                if provider_id == 'nvidia' and descriptor is None:
+                    try:
+                        adapter.discover_models(timeout_s=30)
+                        info = adapter.probe()
+                        descriptor = next((item for item in adapter.declared_models
+                                           if item.model_id == model), None)
+                    except Exception:
+                        failures.append(f'{provider_id}/{model}:CATALOG_UNAVAILABLE')
+                        continue
+
+                candidate_agent = copy(agent)
+                candidate_agent.provider_id = provider_id
+                candidate_agent.model = model
+                available = descriptor is not None and (
+                    not info.models or model in info.models)
+                decision = self.policy.authorize(
+                    candidate_agent, info, model_available=available, team_id=team.id)
+                if not decision.allowed:
+                    failures.append(f'{provider_id}/{model}:{decision.code}')
+                    continue
+
+                health = self.runtime.registry.health_snapshot()
+                status = health.get(f'model:{provider_id}:{model}', {})
+                if ('model.text' in agent.capabilities and agent.provider_id == provider_id
+                        and agent.model == model
+                        and status.get('availability') == Availability.AVAILABLE.value):
+                    activated = True
+                    break
+                provider_status = health.get(f'provider:{provider_id}', {})
+                provider_availability = str(provider_status.get('availability') or '')
+                provider_retry = provider_status.get('retry_after')
+                if not isinstance(provider_retry, (int, float)):
+                    provider_retry = float(provider_status.get('timestamp') or 0) + {
+                        'AUTH_REQUIRED': 900, 'RATE_LIMITED': 300,
+                        'QUOTA_EXHAUSTED': 18000,
+                    }.get(provider_availability, 0)
+                if provider_availability in {'AUTH_REQUIRED', 'RATE_LIMITED', 'QUOTA_EXHAUSTED'} \
+                        and time.time() < float(provider_retry):
+                    failures.append(f'{provider_id}/{model}:{provider_availability}')
+                    continue
+
+                with self.store._connect() as conn:
+                    rows = conn.execute(
+                        'SELECT id,document FROM model_certification_runs '
+                        'WHERE provider_id=? AND model=? ORDER BY rowid DESC',
+                        (provider_id, model),
+                    ).fetchall()
+                prior = [(row['id'], json.loads(row['document'])) for row in rows]
+                proven = next(((cert_id, doc) for cert_id, doc in prior
+                               if doc.get('state') == 'COMPLETED' and doc.get('result', {}).get('ok')), None)
+                if proven is not None:
+                    cert_id, result = proven
+                else:
+                    _latest_id, latest = prior[0] if prior else (None, None)
+                    now = time.time()
+                    if latest and latest.get('state') == 'STARTED':
+                        failures.append(f'{provider_id}/{model}:CERTIFICATION_UNCERTAIN')
+                        continue
+                    if latest and latest.get('state') == 'FAILED':
+                        availability = str((latest.get('result') or {}).get('availability') or '')
+                        cooldown = {'AUTH_REQUIRED': 900, 'RATE_LIMITED': 300,
+                                    'QUOTA_EXHAUSTED': 18000}.get(availability, 300)
+                        ended = float(latest.get('ended_at') or latest.get('started_at') or now)
+                        if now - ended < cooldown:
+                            failures.append(f'{provider_id}/{model}:{availability or "RETRY_BACKOFF"}')
+                            continue
+                    cert_id = (f'zara-core-bootstrap:{team.id}:{provider_id}:{model}:{len(prior)}')
+                    try:
+                        result = self.runtime.certify_model(
+                            key=cert_id, provider_id=provider_id, model=model)
+                    except Exception as exc:
+                        failures.append(f'{provider_id}/{model}:{type(exc).__name__}')
+                        continue
+
+                if result.get('state') != 'COMPLETED' or not result.get('result', {}).get('ok'):
+                    availability = str((result.get('result') or {}).get('availability') or result.get('state'))
+                    failures.append(f'{provider_id}/{model}:{availability}')
+                    continue
+                certification.register_proven_agent(
+                    cert_id, team_id=team.id, name=agent.name, role=agent.role,
+                    placeholder_id=agent.id)
+                activated = True
+                break
+            if not activated and not failures:
+                failures.append(f'{config["provider_id"]}/{config["model"]}:NO_AUTHORIZED_MODEL')
+
+        return failures
+
+    def _team(self, team_id=None, *, bootstrap=True, blockers=()):
         for team in self.store.list_teams():
             if team.archived or (team_id and team.id != team_id): continue
             architect = self._ensure_architect(team)
             agents = self.candidates(team.id)
             if not agents: continue
+            distinct_models = {(agent.provider_id, agent.model) for agent in agents}
+            if team.name == CORE_TEAM_NAME and len(distinct_models) < 2:
+                continue
             planner = next((a for a in agents if architect and a.id == architect.id), None)
             planner = planner or next((a for a in agents if a.role in (RoleName.MEMBER, RoleName.CEO)), agents[0])
             builder = next((a for a in agents if a.role == RoleName.BUILDER), planner)
             return team, planner, builder
-        raise ValueError('WAITING_RESOURCE: no authorized internal worker')
+        requested_team = self.store.get_team(team_id) if team_id else None
+        can_bootstrap = (team_id is None or
+                         (requested_team is not None and requested_team.name == CORE_TEAM_NAME))
+        if bootstrap and can_bootstrap:
+            discovered = self._bootstrap_core_team()
+            return self._team(team_id, bootstrap=False, blockers=discovered)
+        detail = '; '.join(blockers[:2])
+        suffix = f' ({detail})' if detail else ''
+        raise ValueError('WAITING_RESOURCE: no authorized internal worker' + suffix)
 
     def _yield_internal_work_to_owner(self):
         """Internal work may fail or wait, but may never block an owner mission."""

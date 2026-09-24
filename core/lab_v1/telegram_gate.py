@@ -549,13 +549,18 @@ class TelegramLabGate:
 
     def _restore_last_known_good(self) -> str:
         try:
-            info = self.release.most_recent_promotion(self.build)
+            build = self.build
+            if build is None:
+                from core.lab_v1.release import _build_module_for_workspace
+                from core.lab_v1.supervisor import _default_workspace
+                build = _build_module_for_workspace(_default_workspace())
+            info = self.release.most_recent_promotion(build)
         except Exception as exc:
             return f"Não consegui checar o histórico de atualizações ({type(exc).__name__})."
         if not info:
             return "Não tem nada para restaurar — eu nunca cheguei a aplicar nenhuma atualização."
         try:
-            promotion = self.release.SourcePromotion.from_journal(info["journal"], build=self.build)
+            promotion = self.release.SourcePromotion.from_journal(info["journal"], build=build)
             promotion.rollback()
         except ValueError:
             return (

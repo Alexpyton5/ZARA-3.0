@@ -25,6 +25,43 @@ def test_service_snapshot_does_not_advertise_hermes_workcell(tmp_path):
     assert result['autonomy_policy']['max_new_evolution_missions_per_day'] == 1
 
 
+def test_packaged_backend_resolves_checkout_from_active_build_record(tmp_path):
+    root = tmp_path / 'checkout'
+    backend = root / 'frontend' / 'release-candidate-test' / 'win-unpacked' / 'resources' / 'backend'
+    backend.mkdir(parents=True)
+    (root / 'core' / 'lab_v1').mkdir(parents=True)
+    (root / 'tools').mkdir()
+    (root / 'tools' / 'build_candidate.py').write_text('# build entrypoint', encoding='utf-8')
+    active_exe = root / 'frontend' / 'release-candidate-test' / 'win-unpacked' / 'ZARA 3.0.exe'
+    active_exe.write_bytes(b'exe')
+    (root / 'ZARA_ACTIVE_BUILD.json').write_text(
+        json.dumps({'EXE_PATH': str(active_exe)}), encoding='utf-8')
+    packaged_backend = backend / 'zara-backend.exe'
+    packaged_backend.write_bytes(b'backend')
+
+    assert module._default_workspace(packaged_backend) == root.resolve()
+
+
+def test_first_supervisor_tick_without_mission_controls_is_idle_not_failed(tmp_path, monkeypatch):
+    store = LabStore(tmp_path / 'first-run.db'); store.initialize()
+    runtime = SimpleNamespace(store=store)
+    autopilot = SimpleNamespace(run=lambda sid: {'success': True, 'state': 'COMPLETED', 'session_id': sid})
+    supervisor = AutonomySupervisor(runtime, autopilot=autopilot)
+    monkeypatch.setattr(supervisor, 'ensure_team', lambda: None)
+    monkeypatch.setattr(module, 'EvolutionEngine', lambda *args, **kwargs: SimpleNamespace(
+        snapshot=lambda *args: None,
+        observe_local=lambda: [],
+        observer_snapshot=lambda: {'inventory_count': 0, 'provider_calls': 0},
+        observe_and_plan=lambda **kwargs: {'state': 'NO_CHANGED_SOURCE_BATCH'}))
+    monkeypatch.setattr(module, 'TechnologyScout', lambda *args, **kwargs: SimpleNamespace(
+        run_due=lambda: {'state': 'NOT_DUE', 'new': 0}, next_unreviewed=lambda: None))
+
+    result = supervisor.tick()
+
+    assert result['state'] == 'MONITORING'
+    assert supervisor.policy()['error'] is None
+
+
 def test_service_persists_only_typed_factual_capability_failure(tmp_path):
     from core.lab_v1.service import LabV1Service
     store = LabStore(tmp_path / 'service.db'); store.initialize()
@@ -88,7 +125,7 @@ def test_feedback_source_selection_is_specific_and_has_no_blind_fallback(supervi
     assert s._feedback_source_path('A resposta está lenta e demora') == 'core/model_router.py'
     assert s._feedback_source_path('A voz Kore falhou no microfone') == 'core/gemini_live_voice.py'
     assert s._feedback_source_path('A voz está lenta e demora para responder') == 'core/gemini_live_voice.py'
-    assert s._feedback_source_path('O feedback marcou uma crítica errada') is None
+    assert s._feedback_source_path('O feedback marcou uma crítica errada') == 'core/lab_v1/feedback_inbox.py'
     assert s._feedback_source_path('Algo deveria ficar melhor') is None
     assert s._proposal_only('Tenho uma sugestão para avaliar') is True
 

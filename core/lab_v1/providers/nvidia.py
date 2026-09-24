@@ -16,6 +16,9 @@ from core.paths import api_keys_path, data_dir
 
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 ULTRA_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b'
+# Lab plans, code edits and independent reviews need room for structured
+# answers. The former 256-token ceiling truncated otherwise valid JSON.
+NVIDIA_LAB_MAX_OUTPUT_TOKENS = 4096
 HttpTransport = Callable[[str, str, dict[str, str], bytes | None, int], tuple[int, dict[str, str], bytes]]
 
 
@@ -151,7 +154,7 @@ class NvidiaApiAdapter(ProviderAdapter):
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
         payload = {
-            "model": model, "messages": messages, "max_tokens": 256,
+            "model": model, "messages": messages, "max_tokens": NVIDIA_LAB_MAX_OUTPUT_TOKENS,
             "temperature": 0, "stream": False,
         }
         if effort is not None:

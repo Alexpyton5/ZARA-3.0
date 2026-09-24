@@ -52,6 +52,10 @@ class WorkforcePolicy:
         return {
             'mission_entry_enabled': True,
             'background_enabled': True,
+            # Alex explicitly authorized automatic application of only
+            # LOW-risk Lab changes after test, independent review, package
+            # canary, and journaled rollback gates pass (2026-09-24).
+            'auto_promote_low_risk_lab': True,
             'paid_allowed': False,
             # Owner-set, per-bot provider/model choice (2026-09-12, "bots
             # customizaveis"). Empty by default: with no entry here an agent
@@ -98,6 +102,12 @@ class WorkforcePolicy:
                 'nvidia/*': 'UNKNOWN_COST',
                 'nvidia/nvidia/nemotron-3-super-120b-a12b': 'OWNER_REPORTED_FREE',
                 'nvidia/nvidia/nemotron-3-ultra-550b-a55b': 'OWNER_REPORTED_FREE',
+                # Alex explicitly identified these two NVIDIA catalog entries
+                # as models available free to his account on 2026-09-24. This
+                # records his cost authorization for these exact ids only; it
+                # does not treat catalog discovery as proof of zero cost.
+                'nvidia/moonshotai/kimi-k3': 'OWNER_REPORTED_FREE',
+                'nvidia/z-ai/glm-5.3': 'OWNER_REPORTED_FREE',
                 'deepseek_harness/*': 'UNKNOWN_COST',
             },
             # Only aliases proven by a real call are listed. `claude_cli/haiku`
@@ -121,6 +131,7 @@ class WorkforcePolicy:
                 # "nvidia/" appears twice: provider id "nvidia" + NVIDIA's own
                 # real model id "nvidia/nemotron-...".
                 'nvidia/nvidia/nemotron-3-super-120b-a12b', 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+                'nvidia/moonshotai/kimi-k3', 'nvidia/z-ai/glm-5.3',
             ],
             'authorized_providers': ['codex_cli', 'claude_cli', 'nvidia'],
             'authorized_roles': ['CEO', 'BUILDER', 'REVIEWER', 'RESEARCHER', 'MEMBER'],
@@ -146,11 +157,11 @@ class WorkforcePolicy:
             # candidate standing (e.g. codex_cli and claude_cli both out of
             # quota) -- see tests/test_lab_workforce_bot_customization.py.
             'role_model_preference': {
-                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus'],
-                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus'],
-                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus'],
-                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus'],
-                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus'],
+                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3'],
+                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'z-ai/glm-5.3', 'moonshotai/kimi-k3'],
+                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'z-ai/glm-5.3', 'moonshotai/kimi-k3'],
+                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3'],
+                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3'],
             },
         }
 
@@ -172,6 +183,10 @@ class WorkforcePolicy:
     @property
     def background_enabled(self) -> bool:
         return self.document.get('background_enabled') is True
+
+    @property
+    def auto_promote_low_risk_lab(self) -> bool:
+        return self.document.get('auto_promote_low_risk_lab') is True
 
     def _matches(self, provider_id: str, model_id: str, patterns: Iterable[str]) -> bool:
         key = f'{provider_id}/{model_id}'

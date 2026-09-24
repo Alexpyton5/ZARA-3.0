@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import core.lab_v1.evolution as evolution_module
 
 from core.lab_v1.domain import CapabilityGap, Session, Team
 from core.lab_v1.evolution import EvolutionEngine, LEGACY_WORKFLOW, WORKFLOW
@@ -85,6 +86,53 @@ def test_fixed_behavior_still_allows_honest_source_inspection(engine):
     evidence = engine.test_autopilot.starts[0][1]["evidence"]
     assert evidence["observation_kind"] == "SOURCE_INSPECTION"
     assert "behavioral_counterexample" not in evidence
+
+
+def test_frozen_backend_skips_python_cli_probe_and_still_dispatches_source_inspection(
+        monkeypatch, engine):
+    monkeypatch.setattr(evolution_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        evolution_module.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("frozen backend must not be invoked as python -c"),
+    )
+
+    result = engine.observe_and_plan()
+
+    assert result["state"] == "QUEUED"
+    evidence = engine.test_autopilot.starts[0][1]["evidence"]
+    assert evidence["observation_kind"] == "SOURCE_INSPECTION"
+
+
+def test_frozen_backend_detects_counterexample_only_when_package_matches_checkout(monkeypatch, engine):
+    import sys
+    source = engine.workspace / 'core/lab_v1/feedback_inbox.py'
+    package = engine.workspace / 'frontend' / 'release-candidate-test'
+    unpacked = package / 'win-unpacked'
+    exe = unpacked / 'ZARA 3.0.exe'
+    backend = unpacked / 'resources' / 'backend' / 'zara-backend.exe'
+    exe.parent.mkdir(parents=True)
+    backend.parent.mkdir(parents=True)
+    exe.write_bytes(b'frontend')
+    backend.write_bytes(b'backend')
+    source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    manifest = {'sha256': 'source-set', 'files': [
+        {'path': 'core/lab_v1/feedback_inbox.py', 'sha256': source_sha}]}
+    (package / 'SOURCE_MANIFEST.json').write_text(json.dumps(manifest))
+    info = {'BUILD_ID': 'release-candidate-test', 'EXE_PATH': str(exe),
+            'SOURCE_SHA256': manifest['sha256'],
+            'BACKEND_SHA256': hashlib.sha256(backend.read_bytes()).hexdigest().upper()}
+    (unpacked / 'BUILD_INFO.json').write_text(json.dumps(info))
+    (engine.workspace / 'ZARA_ACTIVE_BUILD.json').write_text(json.dumps(info))
+    monkeypatch.setattr(evolution_module.sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(sys, 'executable', str(backend))
+
+    result = engine.observe_and_plan()
+
+    assert result['state'] == 'QUEUED'
+    evidence = engine.test_autopilot.starts[0][1]['evidence']
+    assert evidence['observation_kind'] == 'BEHAVIORAL_COUNTEREXAMPLE'
+    assert evidence['behavioral_counterexample']['observer'] == 'PACKAGED_CLASSIFIER_MATCHING_CHECKOUT'
 
 
 def test_unchanged_batches_are_not_re_read_until_a_source_changes(engine):

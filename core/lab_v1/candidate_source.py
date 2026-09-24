@@ -385,6 +385,7 @@ class CandidateSource:
         python_executable: Path | None = None,
         runtime_drift_paths: Iterable[str] = (),
         objective_paths: Iterable[str] = (),
+        readonly_test_paths: Iterable[str] = (),
     ) -> None:
         self.workspace = Path(workspace).resolve(strict=True)
         if not self.workspace.is_dir() or self.workspace.is_symlink():
@@ -414,6 +415,15 @@ class CandidateSource:
 
         self.allowed_paths = tuple(editable)
         self.support_paths = tuple(support)
+        readonly_tests: list[str] = []
+        for raw in readonly_test_paths:
+            relative = _normalise_relative(raw)
+            if (relative not in self.support_paths or not _is_test_path(relative)
+                    or not relative.endswith(".py")):
+                raise CandidateSourceError(f"READONLY_TEST_NOT_SUPPORTED: {relative}")
+            if relative not in readonly_tests:
+                readonly_tests.append(relative)
+        self.readonly_test_paths = tuple(readonly_tests)
 
         # What this mission is actually ABOUT, decided upstream from mission
         # evidence (``source_work['source_paths']``, chosen by select_source_scope
@@ -1119,8 +1129,13 @@ class CandidateSource:
                 raise CandidateSourceError("TEST_NOT_AUTHORIZED")
             path_part, separator, suffix = raw.partition("::")
             relative = _normalise_relative(path_part)
+            readonly_support_test = (
+                relative in self.readonly_test_paths
+                and bool(self._manifest.get(relative, {}).get("exists"))
+                and self._manifest.get(relative, {}).get("editable") is False
+            )
             if (
-                relative not in self.allowed_paths
+                (relative not in self.allowed_paths and not readonly_support_test)
                 or not _is_test_path(relative)
                 or not relative.endswith(".py")
             ):

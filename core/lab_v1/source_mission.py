@@ -106,9 +106,20 @@ def prepare_source(engine, sandbox, intent):
         if 'hermes' in path.casefold() or not (workspace / path).is_file():
             raise ScopeViolation('Only existing internal ZARA source is authorized')
     tests = ['tests/test_zara_mission_regression.py']
+    readonly_test_map = {
+        'core/lab_v1/feedback_inbox.py': ('tests/test_lab_feedback_pipeline.py',),
+    }
+    readonly_tests = list(dict.fromkeys(
+        test_path
+        for source_path in paths
+        for test_path in readonly_test_map.get(source_path, ())
+        if (workspace / test_path).is_file()
+    ))
+    support_paths = ['core', 'memory'] + (['frontend/src'] if any(p.startswith('frontend/') for p in paths) else [])
+    support_paths.extend(readonly_tests)
     meta = {'workspace': str(workspace), 'sandbox': str(sandbox),
             'allowed_paths': paths + tests, 'source_paths': paths, 'test_paths': tests,
-            'support_paths': ['core', 'memory'] + (['frontend/src'] if any(p.startswith('frontend/') for p in paths) else []), 'repair_count': 0,
+            'readonly_test_paths': readonly_tests, 'support_paths': support_paths, 'repair_count': 0,
             'repair_cycle_count': 0, 'repair_limit': _MAX_SOURCE_REPAIRS,
             'repair_replans': 0, 'counterexamples': [], 'review_count': 0,
             'snapshot_state': 'PENDING'}
@@ -124,6 +135,7 @@ class SourceMission:
         self.candidate = CandidateSource(Path(self.meta['workspace']), Path(self.meta['sandbox']),
             self.meta['allowed_paths'], support_paths=self.meta['support_paths'],
             runtime_drift_paths=self.meta.get('runtime_drift_paths', ()),
+            readonly_test_paths=self.meta.get('readonly_test_paths', ()),
             # What the mission is about, from the scope selection - not from the
             # worker. The executor needs it to tell a legitimate test-fix mission
             # apart from a worker dodging production code with a test-only edit.
@@ -341,7 +353,9 @@ class SourceMission:
         """Which test files the ``tests`` step actually executes.
 
         The fixed regression test in ``test_paths`` is always mandatory and is
-        never replaced. When the mission's own objective IS a test file - a
+        never replaced. Existing, source-relevant project tests in
+        ``readonly_test_paths`` run beside it and cannot be edited by the
+        candidate. When the mission's own objective IS a test file - a
         flaky-test repair, where ``source_paths`` holds a file under ``tests/`` -
         that file has to run too, or the step proves nothing about the very test
         the mission was asked to fix.
@@ -357,6 +371,9 @@ class SourceMission:
         pattern is invented here.
         """
         nodeids = list(self.meta['test_paths'])
+        for path in self.meta.get('readonly_test_paths', ()):
+            if path not in nodeids:
+                nodeids.append(path)
         for path in getattr(self.candidate, 'objective_test_paths', ()):
             if path not in nodeids:
                 nodeids.append(path)
@@ -872,9 +889,41 @@ class SourceMission:
         self.engine._metrics(self.sid, recovery_automatic=True)
         return True
 
+    def _validated_automatic_promotion(self):
+        previous = self.meta.get('automatic_promotion')
+        if not isinstance(previous, dict) or previous.get('state') != 'ACTIVE':
+            return previous
+        try:
+            from core.lab_v1.release import known_good, _build_module_for_workspace
+            journal = json.loads(Path(previous['journal']).read_text(encoding='utf-8'))
+            active = known_good(_build_module_for_workspace(self.meta['workspace']))
+            if (journal.get('state') in ('COMMITTED', 'RECONCILED_COMMITTED')
+                    and active.get('available')
+                    and active.get('build_id') == previous.get('build_id')
+                    and Path(active['path']).resolve() == Path(previous['candidate_package']).resolve()):
+                return previous
+            if journal.get('state') in ('ROLLED_BACK', 'RECONCILED_KNOWN_GOOD'):
+                state = 'ROLLED_BACK'
+            elif journal.get('state') in ('COMMITTED', 'RECONCILED_COMMITTED') and active.get('available'):
+                state = 'SUPERSEDED'
+            else:
+                state = 'NOT_VERIFIED'
+            return dict(previous, state=state, health_passed=False,
+                        reason='PROMOTION_' + state)
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return dict(previous, state='NOT_VERIFIED', health_passed=False,
+                        reason='PROMOTION_IDENTITY_UNREADABLE')
+
     def promotion_gate(self):
         """State the candidate hands to the release gate; never promotes here."""
         from core.lab_v1.release import promotion_readiness
+        previous = self._validated_automatic_promotion()
+        if previous and previous.get('state') == 'ACTIVE' and previous.get('health_passed'):
+            return {'state': 'ACTIVE', 'reason': 'ALREADY_PROMOTED_AND_HEALTHY',
+                    'automatic_promotion': previous, 'desktop_promoted': True}
+        if previous:
+            return {'state': 'NOT_ELIGIBLE', 'reason': 'PREVIOUS_PROMOTION_' + str(previous.get('state')),
+                    'automatic_promotion': previous, 'desktop_promoted': False}
         candidate_build = self.meta.get('candidate_build')
         if not candidate_build:
             return {'state': 'NOT_APPLICABLE', 'reason': 'NO_DESKTOP_CANDIDATE',
@@ -885,10 +934,80 @@ class SourceMission:
         except (ValueError, KeyError, TypeError, AttributeError):
             risks = {'UNKNOWN'}
         candidate = dict(candidate_build, risk='LOW' if risks == {'LOW'} else 'NOT_LOW')
-        readiness = promotion_readiness(candidate, self.meta['workspace'])
+        try:
+            readiness = promotion_readiness(candidate, self.meta['workspace'])
+        except Exception as exc:
+            return {'state': 'NOT_ELIGIBLE', 'gate': 'core.lab_v1.release.promotion_readiness',
+                    'readiness': {'eligible': False, 'reason': 'PROMOTION_GATE_UNAVAILABLE',
+                                  'detail': f'{type(exc).__name__}: {str(exc)[:300]}'},
+                    'candidate': candidate, 'desktop_promoted': False}
         return {'state': 'ELIGIBLE' if readiness['eligible'] else 'NOT_ELIGIBLE',
                 'gate': 'core.lab_v1.release.ReleaseQueue.schedule_source_candidate',
                 'readiness': readiness, 'candidate': candidate, 'desktop_promoted': False}
+
+    def _automatic_promotion(self, promotion):
+        """Apply only a fully verified LOW-risk Lab candidate using release.py."""
+        previous = self._validated_automatic_promotion()
+        if previous:
+            return previous
+        policy = getattr(self.engine, 'policy', None)
+        if (promotion.get('state') != 'ELIGIBLE'
+                or not getattr(policy, 'auto_promote_low_risk_lab', False)):
+            return None
+        candidate = promotion['candidate']
+        workspace = self.meta['workspace']
+        from core.lab_v1.release import (
+            ReleaseQueue, SourcePromotion, _build_module_for_workspace,
+        )
+        build = _build_module_for_workspace(workspace)
+        queue = ReleaseQueue(self.store, policy=policy, build=build)
+        queue.schedule_source_candidate(self.sid, candidate, workspace)
+        queue.package_ready(self.sid, candidate['package'], {
+            'BUILD_ID': candidate.get('build_id'),
+            'SOURCE_SHA256': candidate.get('source_sha256'),
+            'ASAR_SHA256': candidate.get('asar_sha256'),
+            'BACKEND_SHA256': candidate.get('backend_sha256'),
+        })
+        queue.accept_canary(self.sid, candidate['canary_report'])
+        release = SourcePromotion(workspace, candidate, build=build)
+        outcome = queue.promote(
+            self.sid, activate=release.activate, monitor=release.health,
+            rollback=release.rollback, commit=release.commit,
+        )
+        state = outcome.get('state')
+        if state == 'ACTIVE':
+            for key in ('package', 'exe_path', 'asar_path', 'backend_path'):
+                self.meta['candidate_build'][key] = candidate.get(key)
+        return {'state': state, 'build_id': outcome.get('build_id'),
+                'journal': outcome.get('rollback_journal'),
+                'candidate_package': outcome.get('package') if state == 'ACTIVE' else candidate.get('package'),
+                'health_passed': outcome.get('monitored') is True}
+
+    def _notify_committed_desktop(self, automatic):
+        """Request one desktop handoff only after a durable, verified commit."""
+        if (not isinstance(automatic, dict) or automatic.get('state') != 'ACTIVE'
+                or automatic.get('health_passed') is not True):
+            return False
+        verified = self._validated_automatic_promotion()
+        if (not isinstance(verified, dict) or verified.get('state') != 'ACTIVE'
+                or verified.get('health_passed') is not True):
+            return False
+        callback = getattr(self.engine, 'on_release_ready', None)
+        if not callable(callback):
+            return False
+        try:
+            package = Path(verified['candidate_package']).resolve()
+            payload = {
+                'state': 'PROMOTED_COMMITTED', 'session_id': self.sid,
+                'build_id': verified['build_id'], 'workspace': str(Path(self.meta['workspace']).resolve()),
+                'package': str(package),
+                'exe_path': str(package / 'win-unpacked' / 'ZARA 3.0.exe'),
+                'journal': str(Path(verified['journal']).resolve()),
+            }
+            return callback(payload) is True
+        except Exception:
+            # Delivery must not undo a committed source/package promotion.
+            return False
 
     def report(self):
         runs = self.store.list_runs(self.sid)
@@ -902,11 +1021,25 @@ class SourceMission:
         except ValueError as exc:
             production = [{'status': 'NOT_PROVEN', 'reason': str(exc)}]
         promotion = self.promotion_gate()
-        self.save_meta(promotion_gate=promotion)
+        # report() may be called again after a completed mission or after a
+        # process restart. Preserve the durable promotion outcome instead of
+        # erasing it and attempting a second activation of the same package.
+        automatic = self._validated_automatic_promotion()
+        if promotion.get('state') == 'ELIGIBLE':
+            try:
+                automatic = self._automatic_promotion(promotion)
+            except Exception as exc:
+                automatic = {'state': 'BLOCKED', 'reason': f'{type(exc).__name__}: {str(exc)[:400]}',
+                             'health_passed': False}
+        self.save_meta(promotion_gate=promotion, automatic_promotion=automatic,
+                       candidate_build=self.meta.get('candidate_build'))
         result = {'mission_id': self.sid, 'owner_touches': self.metrics['owner_touches'],
                   'participants': factual['participants'], 'provider_calls': len(runs),
                   'production_evidence': production, 'source_work': self.meta,
-                  'hermes_calls': 0, 'desktop_promoted': False, 'promotion': promotion}
+                  'hermes_calls': 0,
+                  'desktop_promoted': bool(automatic and automatic.get('state') == 'ACTIVE'
+                                            and automatic.get('health_passed')),
+                  'promotion': promotion, 'automatic_promotion': automatic}
         path = Path(self.meta['sandbox']) / 'REAL_WORK_PROOF.json'
         path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         mid = 'autopilot-report:' + self.sid
@@ -915,11 +1048,18 @@ class SourceMission:
                        if self.meta.get('no_change_reason') else
                        'Código alterado na candidata isolada. Testes reais executados antes/depois, revisão independente '
                        'e candidata desktop com canário somente leitura concluídos.')
-            candidate_note = ('' if self.meta.get('no_change_reason') else
-                ' Candidata desktop: ' + str(self.meta['candidate_build']['package']) + '.')
+            if automatic and automatic.get('state') == 'ACTIVE' and automatic.get('health_passed'):
+                outcome += ' A promoção automática foi aplicada e a checagem final passou.'
+            elif automatic:
+                outcome += ' A promoção automática não foi aprovada: ' + str(automatic.get('reason') or automatic.get('state')) + '.'
+            candidate_build = self.meta.get('candidate_build') or {}
+            candidate_note = ('' if self.meta.get('no_change_reason') or not candidate_build.get('package') else
+                ' Candidata desktop: ' + str(candidate_build['package']) + '.')
             self.store.add_message(Message(mid, self.sid, MessageKind.ZARA, 'ZARA',
                 outcome + ' '
                 'Participantes com Runs: ' + ', '.join(sorted({p['agent_name'] or p['agent_id'] for p in factual['participants']})) +
-                '. Evidências: ' + str(path) + '.' + candidate_note + ' Promoção: pendente.'))
+                '. Evidências: ' + str(path) + '.' + candidate_note +
+                (' Promoção: ativa.' if result['desktop_promoted'] else ' Promoção: pendente.')))
         self.engine._metrics(self.sid, verification_automatic=True, final_report_automatic=True,
                              content_review='NO_CHANGE_JUSTIFIED' if self.meta.get('no_change_reason') else 'INDEPENDENT_REVIEW_PASSED', proof_path=str(path))
+        self._notify_committed_desktop(automatic)

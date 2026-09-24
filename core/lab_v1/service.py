@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import time
 from pathlib import Path
@@ -60,23 +61,19 @@ LAST_BOOT_ROW = "@last_boot"
 # 24/7 improvement scheduler — MASTER SWITCH
 # =====================================================================
 #
-# `SCHEDULER_ENABLED` ships **False** and is the hard, in-source default.
-# While it is False and neither override below is set, `ImprovementScheduler`
-# refuses to look for work, `LabV1Service.start_scheduler()` creates no task,
-# and `start_background()` cannot bring it up as a side effect. That is
-# deliberate: even if a build promotes this file by accident, the scheduler
-# stays inert.
+# The code fallback stays False. The persisted policy is authoritative: new
+# Lab policies enable the scheduler following Alex's explicit 2026-09-23
+# request, while an explicit saved False always keeps it paused across restart.
+# The environment flag remains a test/development override only when no saved
+# policy value exists.
 #
-# Three ways to turn it on, checked in this order by `scheduler_enabled()`:
+# Policy resolution order in `scheduler_enabled()`:
 #
-#   1. flip `SCHEDULER_ENABLED = True` here in `core/lab_v1/service.py`
-#      (permanent, owner-reviewed decision);
-#   2. set the environment variable `ZARA_LAB_SCHEDULER_ENABLED=1`
-#      (per-process, used by the sandbox tests);
-#   3. persist the owner opt-in with `LabV1Service.configure_scheduler(True)`,
-#      which writes `scheduler_enabled` into the `lab_autonomy_policy` row.
+#   1. explicit persisted True/False;
+#   2. environment variable, only for a policy without that field;
+#   3. the source fallback below.
 #
-# Absent all three, the answer is False. There is no fourth path.
+# A saved pause cannot be overridden by an environment flag or source default.
 SCHEDULER_ENABLED = False
 SCHEDULER_ENV_FLAG = "ZARA_LAB_SCHEDULER_ENABLED"
 SCHEDULER_POLICY_FLAG = "scheduler_enabled"
@@ -104,11 +101,12 @@ def scheduler_enabled(policy: dict | None = None) -> bool:
     """The single authority on whether the improvement scheduler may run."""
     import os
 
-    if SCHEDULER_ENABLED:
-        return True
+    saved = (policy or {}).get(SCHEDULER_POLICY_FLAG)
+    if type(saved) is bool:
+        return saved
     if os.environ.get(SCHEDULER_ENV_FLAG) == "1":
         return True
-    return bool((policy or {}).get(SCHEDULER_POLICY_FLAG) is True)
+    return SCHEDULER_ENABLED
 
 
 class ImprovementScheduler:
@@ -216,6 +214,20 @@ class ImprovementScheduler:
 
     # -- one cycle --------------------------------------------------------
     def cycle(self, *, now: float | None = None) -> dict[str, Any]:
+        """Run one decision without racing the supervisor's mission tick."""
+        lock = getattr(self.supervisor, "lock", None)
+        acquired = False
+        if lock is not None:
+            acquired = lock.acquire(blocking=False)
+            if not acquired:
+                return {"state": "BUSY", "dispatched": False}
+        try:
+            return self._cycle_once(now=now)
+        finally:
+            if acquired:
+                lock.release()
+
+    def _cycle_once(self, *, now: float | None = None) -> dict[str, Any]:
         """Run at most one scheduling decision. Never raises, never blocks long."""
         now = self.clock() if now is None else now
         try:
@@ -426,6 +438,8 @@ class LabV1Service:
         self._supervisor_task = None
         self._manus = None
         self.on_release_ready = None
+        self._ipc_loop: asyncio.AbstractEventLoop | None = None
+        self._release_event_error: str | None = None
         self._background_interval = 2.0
         self._background_error: str | None = None
         self._boot_reconciliation: dict[str, Any] | None = None
@@ -442,6 +456,7 @@ class LabV1Service:
 
     async def start_background(self):
         try:
+            self._ipc_loop = asyncio.get_running_loop()
             policy = self._get_supervisor().policy()
             from core.lab_v1.workforce_policy import WorkforcePolicy
             workforce = WorkforcePolicy(policy)
@@ -449,6 +464,10 @@ class LabV1Service:
                 return {'success': True, 'state': 'PAUSED'}
             if self._supervisor_task and not self._supervisor_task.done():
                 return {'success': True, 'state': 'RUNNING'}
+            if hasattr(self._get_supervisor(), 'set_autopilot'):
+                # The supervisor creates its Autopilot lazily. Bind the desktop
+                # event before its first tick can complete a source promotion.
+                await asyncio.to_thread(self._get_autopilot)
             self._background_error = None
             self._supervisor_task = asyncio.create_task(self._background_loop())
             # Integrated, but gated: with the master switch off this returns
@@ -594,6 +613,8 @@ class LabV1Service:
     async def configure_autonomy(self, enabled):
         try:
             policy = await asyncio.to_thread(self._get_supervisor().configure, enabled=enabled)
+            if enabled is False:
+                await self.stop_scheduler()
             await self.start_background()
             return {'success': True, 'policy': policy}
         except Exception:
@@ -658,9 +679,33 @@ class LabV1Service:
                 self._autopilot = Autopilot(self._get_runtime(), policy=WorkforcePolicy(supervisor.policy()))
         if hasattr(supervisor, 'set_autopilot') and getattr(supervisor, 'autopilot', None) is None:
             supervisor.set_autopilot(self._autopilot)
+        self._autopilot.on_release_ready = self._queue_release_ready
         return self._autopilot
 
+    def _queue_release_ready(self, payload: dict[str, Any]) -> bool:
+        """Deliver the verified release event on the IPC loop from a worker."""
+        callback, loop = self.on_release_ready, self._ipc_loop
+        if not callable(callback) or loop is None or loop.is_closed():
+            return False
+        try:
+            result = callback(payload)
+            if inspect.isawaitable(result):
+                future = asyncio.run_coroutine_threadsafe(result, loop)
+
+                def finished(done):
+                    try:
+                        done.result()
+                    except Exception as exc:
+                        self._release_event_error = f'{type(exc).__name__}: {exc}'
+
+                future.add_done_callback(finished)
+            return True
+        except Exception as exc:
+            self._release_event_error = f'{type(exc).__name__}: {exc}'
+            return False
+
     async def start_autopilot(self, intent: str, session_id: str | None = None):
+        self._ipc_loop = asyncio.get_running_loop()
         try:
             blocked = await asyncio.to_thread(self._promotion_block)
             if blocked is not None:
@@ -681,6 +726,7 @@ class LabV1Service:
             return {'success': False, 'state': 'BLOCKED_NEEDS_OWNER', 'error': 'Nao foi possivel iniciar a missao.'}
 
     async def run_autopilot(self, session_id: str):
+        self._ipc_loop = asyncio.get_running_loop()
         try:
             return await asyncio.to_thread(self._get_autopilot().run, session_id)
         except Exception:
@@ -688,6 +734,7 @@ class LabV1Service:
 
     async def resume_source_autopilot(self, session_id: str):
         """Resume a failed source mission in place; never creates another session."""
+        self._ipc_loop = asyncio.get_running_loop()
         try:
             return await asyncio.to_thread(self._get_autopilot().resume_failed_source, session_id)
         except Exception:
@@ -743,13 +790,34 @@ class LabV1Service:
         reconciled.
         """
         report: dict[str, Any] = {"checked_at": time.time(), "state": "CLEAN",
-                                  "pending_before": [], "records": [], "unresolved": []}
+                                  "pending_before": [], "records": [],
+                                  "queue_records": [], "unresolved": []}
         try:
             self._ensure_boot_table(store)
-            from core.lab_v1.release import pending_promotions, reconcile_promotions
-            report["pending_before"] = pending_promotions()
+            from core.lab_v1.release import (
+                SOURCE_WORKFLOW, ReleaseQueue, _build_module_for_workspace,
+                pending_promotions, reconcile_promotions,
+            )
+            from core.lab_v1.supervisor import _default_workspace
+            build = _build_module_for_workspace(_default_workspace())
+            report["pending_before"] = pending_promotions(build=build)
             if report["pending_before"]:
-                report["records"] = reconcile_promotions()
+                report["records"] = reconcile_promotions(build=build)
+            # A crash can leave the journal committed while the SQLite release
+            # row still says ACTIVATING/MONITORING/COMMIT_PENDING. Reconcile that
+            # row from the journal before allowing the next mission to start.
+            queue = ReleaseQueue(store, build=build)
+            with store._connect() as conn:
+                rows = conn.execute('SELECT session_id, document FROM lab_releases').fetchall()
+            for sid, raw in rows:
+                doc = json.loads(raw)
+                if (doc.get('workflow') == SOURCE_WORKFLOW
+                        and doc.get('state') in {'ACTIVATING', 'MONITORING', 'COMMIT_PENDING'}):
+                    resolved = queue.reconcile_interrupted(sid)
+                    report['queue_records'].append({'session_id': sid,
+                                                    'state': resolved.get('state'),
+                                                    'journal': resolved.get('rollback_journal'),
+                                                    'needs_owner': resolved.get('needs_owner', False)})
         except Exception as exc:
             # Reconciliation itself broke. That is the loudest possible state:
             # persist it and let the Lab refuse mission entry.
@@ -764,9 +832,11 @@ class LabV1Service:
             return report
         try:
             self._persist_records(store, report["records"])
-            report["unresolved"] = self._unresolved_promotions(store)
+            report["unresolved"] = (self._unresolved_promotions(store)
+                                     + self._unresolved_release_queue(store))
             report["state"] = ("NEEDS_OWNER" if report["unresolved"]
-                               else "RECONCILED" if report["records"] else "CLEAN")
+                               else "RECONCILED" if report["records"] or report["queue_records"]
+                               else "CLEAN")
             self._persist_summary(store, report)
         except Exception as exc:
             report["state"] = "NEEDS_OWNER"
@@ -827,12 +897,34 @@ class LabV1Service:
                                    "reason": record.get("reason")})
         return unresolved
 
+    @staticmethod
+    def _unresolved_release_queue(store) -> list[dict[str, Any]]:
+        from core.lab_v1.release import SOURCE_WORKFLOW
+
+        with store._connect() as conn:
+            exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lab_releases'").fetchone()
+            rows = conn.execute('SELECT session_id, document FROM lab_releases').fetchall() if exists else []
+        unresolved = []
+        for sid, raw in rows:
+            try:
+                doc = json.loads(raw)
+            except ValueError:
+                unresolved.append({'session_id': sid, 'state': 'QUEUE_UNREADABLE'})
+                continue
+            if (doc.get('workflow') == SOURCE_WORKFLOW
+                    and (doc.get('state') in {'ACTIVATING', 'MONITORING', 'COMMIT_PENDING'}
+                         or (doc.get('state') == 'BLOCKED' and doc.get('needs_owner')))):
+                unresolved.append({'session_id': sid, 'state': doc.get('state'),
+                                   'journal': doc.get('rollback_journal')})
+        return unresolved
+
     def boot_reconciliation(self) -> dict[str, Any]:
         """What the boot gate found, with the unresolved list re-read from disk."""
         report = dict(self._boot_reconciliation or {"state": "NOT_RUN"})
         try:
             if self._store is not None:
-                report["unresolved"] = self._unresolved_promotions(self._store)
+                report["unresolved"] = (self._unresolved_promotions(self._store)
+                                        + self._unresolved_release_queue(self._store))
                 if report["unresolved"]:
                     report["state"] = "NEEDS_OWNER"
         except Exception as exc:

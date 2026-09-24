@@ -4,6 +4,7 @@ These fixtures must never qualify as production autonomy proof.
 """
 import json
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -136,6 +137,36 @@ def test_source_pipeline_reopens_candidate_and_runs_real_subprocesses(source_eng
     assert proof['production_evidence'][0]['status'] == 'NOT_PROVEN'
     assert len(proof['participants']) == 3
     assert proof['owner_touches'] == 1
+
+
+def test_feedback_source_mission_binds_existing_pipeline_tests_as_readonly(tmp_path):
+    from core.lab_v1.source_mission import prepare_source
+
+    workspace = tmp_path / 'workspace'
+    source = workspace / 'core/lab_v1/feedback_inbox.py'
+    source.parent.mkdir(parents=True)
+    source.write_text('def looks_like_product_criticism(text): return True\n', encoding='utf-8')
+    existing_tests = workspace / 'tests/test_lab_feedback_pipeline.py'
+    existing_tests.parent.mkdir(parents=True)
+    existing_tests.write_text('def test_existing_feedback_behavior(): assert True\n', encoding='utf-8')
+    engine = SimpleNamespace(policy=SimpleNamespace(document={'workspace': str(workspace)}))
+
+    meta = prepare_source(
+        engine,
+        tmp_path / 'sandbox',
+        'Melhore core/lab_v1/feedback_inbox.py sem alterar nem promover produção.',
+    )
+
+    assert meta['readonly_test_paths'] == ['tests/test_lab_feedback_pipeline.py']
+    assert 'tests/test_lab_feedback_pipeline.py' in meta['support_paths']
+    assert 'tests/test_lab_feedback_pipeline.py' not in meta['allowed_paths']
+    mission = object.__new__(SourceMission)
+    mission.meta = meta
+    mission.candidate = SimpleNamespace(objective_test_paths=())
+    assert mission.test_nodeids() == [
+        'tests/test_zara_mission_regression.py',
+        'tests/test_lab_feedback_pipeline.py',
+    ]
 
 
 def test_public_start_defers_cold_snapshot_until_supervised_run(source_engine, monkeypatch):

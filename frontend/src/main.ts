@@ -2,9 +2,10 @@
 // Renderer is allowed to open independently; Python sidecar connects when ready.
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, session, shell, Tray, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
-import { join } from 'path'
+import { dirname, isAbsolute, join, resolve } from 'path'
 import { spawn, execFileSync, ChildProcess } from 'child_process'
-import { existsSync, readdirSync, writeFileSync } from 'fs'
+import { createHash } from 'crypto'
+import { createReadStream, existsSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
 
 let pythonProcess: ChildProcess | null = null
@@ -34,7 +35,73 @@ const pendingRequests = new Map<string, { resolve: (value: any) => void; reject:
 // `will-quit` continuam matando a árvore de processos como antes.
 let tray: Tray | null = null
 let saindoDeVerdade = false
+let releaseRestartPending = false
 const abriuMinimizada = process.argv.includes('--minimizada')
+
+function sameNativePath(left: string, right: string): boolean {
+  return resolve(left).toLocaleLowerCase('en-US') === resolve(right).toLocaleLowerCase('en-US')
+}
+
+async function sha256File(file: string): Promise<string> {
+  const digest = createHash('sha256')
+  for await (const chunk of createReadStream(file)) digest.update(chunk)
+  return digest.digest('hex')
+}
+
+async function restartForCommittedLabRelease(data: any): Promise<void> {
+  if (!app.isPackaged || process.env.ZARA_SMOKE_TEST === '1' || releaseRestartPending) return
+  if (data?.state !== 'PROMOTED_COMMITTED') return
+  if (!['session_id', 'build_id', 'workspace', 'package', 'exe_path', 'journal']
+    .every(key => typeof data[key] === 'string' && data[key].length > 0 &&
+      !data[key].includes('\0'))) return
+  if (!['workspace', 'package', 'exe_path', 'journal']
+    .every(key => isAbsolute(data[key]))) return
+  releaseRestartPending = true
+  let relaunchScheduled = false
+  try {
+    const workspace = resolve(data.workspace)
+    const packageDir = resolve(data.package)
+    const exe = resolve(data.exe_path)
+    const journalPath = resolve(data.journal)
+    if (!sameNativePath(dirname(packageDir), join(workspace, 'frontend'))
+      || !sameNativePath(exe, join(packageDir, 'win-unpacked', 'ZARA 3.0.exe'))
+      || !sameNativePath(dirname(dirname(journalPath)), join(workspace, 'artifacts', 'releases'))
+      || !existsSync(exe)) {
+      return
+    }
+    if (sameNativePath(process.execPath, exe)) return
+    const pointerPath = join(workspace, 'ZARA_ACTIVE_BUILD.json')
+    const infoPath = join(packageDir, 'win-unpacked', 'BUILD_INFO.json')
+    const pointer = JSON.parse(readFileSync(pointerPath, 'utf8'))
+    const info = JSON.parse(readFileSync(infoPath, 'utf8'))
+    const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+    if (journal.state !== 'COMMITTED' || journal.activation_mode !== 'ACTIVE_POINTER'
+      || journal.new_build_id !== data.build_id || !sameNativePath(journal.workspace, workspace)
+      || !sameNativePath(journal.candidate_package, packageDir)
+      || info.BUILD_ID !== data.build_id || pointer.BUILD_ID !== data.build_id
+      || !sameNativePath(info.EXE_PATH, exe) || !sameNativePath(pointer.EXE_PATH, exe)
+      || !sameNativePath(info.SOURCE_PROMOTION_JOURNAL, journalPath)
+      || typeof info.EXE_SHA256 !== 'string' || typeof pointer.EXE_SHA256 !== 'string'
+      || info.EXE_SHA256.toLowerCase() !== pointer.EXE_SHA256.toLowerCase()) {
+      return
+    }
+    if ((await sha256File(exe)).toLowerCase() !== info.EXE_SHA256.toLowerCase()) return
+    // A later rollback or promotion must never be overridden by a stale event.
+    const current = JSON.parse(readFileSync(pointerPath, 'utf8'))
+    const currentJournal = JSON.parse(readFileSync(journalPath, 'utf8'))
+    if (current.BUILD_ID !== data.build_id || !sameNativePath(current.EXE_PATH, exe)
+      || currentJournal.state !== 'COMMITTED') return
+    // Electron launches the replacement only after this process exits. Keep the
+    // disposable profile/CDP arguments and inherited backend environment.
+    app.relaunch({ execPath: exe, args: process.argv.slice(1) })
+    relaunchScheduled = true
+    sairDeVerdade()
+  } catch (error) {
+    console.error('[Electron] Promoted Lab release could not be relaunched:', error)
+  } finally {
+    if (!relaunchScheduled) releaseRestartPending = false
+  }
+}
 
 function getPythonExecutable(): string {
   if (app.isPackaged) {
@@ -458,6 +525,10 @@ function handlePythonEvent(msg: any): void {
   if (!msg?.type) return
   switch (msg.type) {
     case 'lab-release-ready':
+      if (msg.data?.state === 'PROMOTED_COMMITTED') {
+        void restartForCommittedLabRelease(msg.data)
+        break
+      }
       // Only the governed backend release queue emits this after package canary.
       // Its detached worker waits for this process to exit, activates and relaunches.
       if (app.isPackaged && process.env.ZARA_SMOKE_TEST !== '1' && msg.data?.state === 'READY_TO_ACTIVATE') {

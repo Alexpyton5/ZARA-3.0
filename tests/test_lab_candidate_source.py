@@ -256,7 +256,19 @@ def test_real_pytest_proves_before_failure_and_after_pass_in_sandbox(tmp_path: P
             },
             {
                 "path": "tests/test_calculator.py",
-                "content": "from core.calculator import add\n\ndef test_add():\n    assert add(2, 3) == 5\n",
+                "content": (
+                    "import os\n"
+                    "from pathlib import Path\n"
+                    "from core.calculator import add\n\n"
+                    "def test_add(tmp_path):\n"
+                    "    scratch = tmp_path / 'fixture.txt'\n"
+                    "    scratch.write_text('ready')\n"
+                    "    assert [item.name for item in tmp_path.iterdir()] == ['fixture.txt']\n"
+                    "    home = Path(os.environ['HOME'])\n"
+                    "    (home / 'state.txt').write_text('ready')\n"
+                    "    assert [item.name for item in home.iterdir()] == ['state.txt']\n"
+                    "    assert add(2, 3) == 5\n"
+                ),
             },
         ]
     )
@@ -353,6 +365,38 @@ def test_generated_test_cannot_write_to_production_workspace(tmp_path: Path) -> 
     assert result.exit_code != 0
     assert "SANDBOX_WRITE_FORBIDDEN" in result.stdout + result.stderr
     assert not forbidden.exists()
+
+
+def test_generated_test_cannot_enumerate_production_workspace(tmp_path: Path) -> None:
+    workspace = _fixture_workspace(tmp_path)
+    candidate = CandidateSource(
+        workspace,
+        tmp_path / "sandbox",
+        ["core/calculator.py", "tests/test_escape.py"],
+        python_executable=Path(sys.executable),
+    )
+    candidate.prepare()
+    candidate.apply_edits(
+        [
+            {
+                "path": "core/calculator.py",
+                "content": "def add(left: int, right: int) -> int:\n    return left + right\n",
+            },
+            {
+                "path": "tests/test_escape.py",
+                "content": (
+                    "from pathlib import Path\n\n"
+                    "def test_escape():\n"
+                    f"    list(Path({str(workspace)!r}).iterdir())\n"
+                ),
+            },
+        ]
+    )
+
+    result = candidate.run_pytest(["tests/test_escape.py"], timeout_seconds=20)
+
+    assert result.exit_code != 0
+    assert "PRODUCTION_ENUMERATION_FORBIDDEN" in result.stdout + result.stderr
 
 
 @pytest.mark.parametrize(

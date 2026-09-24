@@ -1184,6 +1184,13 @@ import pytest
 
 write_flags = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
 allowed_write_roots = (run_root, runtime_root)
+# Pytest and the candidate runtime use these two private directories for
+# fixtures and app state.  Do not expose the rest of runtime_root: it contains
+# the mission manifest and test receipts.
+allowed_read_roots = (
+    run_root, environment_root,
+    runtime_root / "runtime-home", runtime_root / "runtime-tmp",
+)
 
 def resolved_path(value):
     if not isinstance(value, (str, bytes, os.PathLike)):
@@ -1296,7 +1303,7 @@ def audit(event, args):
         )
         if writing:
             require_sandbox_path(args[0], "SANDBOX_WRITE_FORBIDDEN")
-        elif path is not None and inside(path, workspace) and not inside(path, run_root) and not inside(path, environment_root):
+        elif path is not None and inside(path, workspace) and not any(inside(path, root) for root in allowed_read_roots):
             raise PermissionError(f"PRODUCTION_READ_FORBIDDEN: {path}")
         return
     mutation_positions = {
@@ -1314,7 +1321,7 @@ def audit(event, args):
         return
     if event in {"os.listdir", "os.scandir"} and args:
         path = resolved_path(args[0])
-        if path is not None and inside(path, workspace) and not inside(path, run_root) and not inside(path, environment_root):
+        if path is not None and inside(path, workspace) and not any(inside(path, root) for root in allowed_read_roots):
             raise PermissionError(f"PRODUCTION_ENUMERATION_FORBIDDEN: {path}")
         return
     if event == "subprocess.Popen" or event == "os.system" or event == "os.startfile" or event.startswith("os.spawn") or event.startswith("os.exec"):

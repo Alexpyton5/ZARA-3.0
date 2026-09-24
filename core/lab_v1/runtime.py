@@ -66,21 +66,20 @@ __all__ = ["LabRuntime"]
 CORE_TEAM_NAME = "ZARA Core"
 
 CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
-    "ceo": {"name": "Artemis", "provider_id": "claude_cli", "model": "opus"},
-    "builder": {"name": "Vulcan", "provider_id": "claude_cli", "model": "sonnet"},
-    "builder_reserve": {"name": "Vulcan Reserva", "provider_id": "nvidia", "model": "moonshotai/kimi-k3"},
-    "reviewer": {"name": "Iris", "provider_id": "claude_cli", "model": "haiku"},
+    "ceo": {"name": "Artemis", "provider_id": "nvidia", "model": "moonshotai/kimi-k3"},
+    "builder": {"name": "Vulcan", "provider_id": "nvidia", "model": "moonshotai/kimi-k3"},
+    "builder_reserve": {"name": "Vulcan Reserva", "provider_id": "nvidia", "model": "z-ai/glm-5.3-flash"},
+    "reviewer": {"name": "Iris", "provider_id": "nvidia", "model": "nvidia/nemotron-3-ultra-550b-a55b"},
 }
 
-# Alex-authorized, owner-reported-free fallbacks for the first real Core team
-# bootstrap. Each worker receives a different model so the room has two
-# independent provider/model identities. A profile becomes callable only after
-# FleetCertification records a successful inference.
+# Live calls on 2026-09-24 proved Kimi can plan and draft a source patch, while
+# GLM 5.3 returned invalid long-form builder results. GLM Flash answered a short
+# probe and remains a reserve. Profiles are callable only after certification.
 CORE_TEAM_MODEL_FALLBACKS = {
-    "ceo": (("nvidia", "moonshotai/kimi-k3"),),
-    "builder": (("nvidia", "z-ai/glm-5.3"),),
+    "ceo": (("nvidia", "z-ai/glm-5.3-flash"), ("claude_cli", "opus")),
+    "builder": (("nvidia", "z-ai/glm-5.3-flash"), ("claude_cli", "sonnet")),
     "reviewer": (("nvidia", "nvidia/nemotron-3-super-120b-a12b"),
-                 ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b")),
+                 ("claude_cli", "haiku")),
 }
 
 CEO_ACTING_REASON = "Papel CEO inicial do time; a disponibilidade depende do provedor verificado."

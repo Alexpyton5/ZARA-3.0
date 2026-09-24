@@ -36,5 +36,5 @@ def test_ensure_core_team_repairs_empty_existing_team_without_claiming_proof(tmp
     assert next(agent for agent in preserved if agent.role == RoleName.CEO).model == 'moonshotai/kimi-k3'
     reserve = next(agent for agent in preserved if agent.name == 'Vulcan Reserva')
     assert reserve.role == RoleName.BUILDER
-    assert (reserve.provider_id, reserve.model) == ('nvidia', 'moonshotai/kimi-k3')
+    assert (reserve.provider_id, reserve.model) == ('nvidia', 'z-ai/glm-5.3-flash')
     assert 'model.text' not in reserve.capabilities

@@ -81,6 +81,7 @@ class NvidiaBootstrapAdapter(ProviderAdapter):
     controlled_text_only = True
     declared_models = tuple(ModelDescriptor('nvidia', model, model)
                             for model in ('moonshotai/kimi-k3', 'z-ai/glm-5.3',
+                                          'z-ai/glm-5.3-flash',
                                           'nvidia/nemotron-3-super-120b-a12b',
                                           'nvidia/nemotron-3-ultra-550b-a55b'))
 
@@ -194,7 +195,7 @@ def test_first_core_team_respects_unknown_cost_before_model_call(tmp_path):
     assert all('model.text' not in agent.capabilities for agent in autopilot.store.list_agents())
 
 
-def test_first_core_team_uses_distinct_owner_authorized_nvidia_fallbacks_after_claude_auth_failure(tmp_path):
+def test_first_core_team_certifies_working_nvidia_roles_without_spending_claude_quota(tmp_path):
     claude = BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED)
     nvidia = NvidiaBootstrapAdapter()
     autopilot = _core_autopilot(tmp_path, claude, additional=(nvidia,))
@@ -207,46 +208,48 @@ def test_first_core_team_uses_distinct_owner_authorized_nvidia_fallbacks_after_c
     assert planner.id == original['Artemis']
     assert builder.id == original['Vulcan']
     assert (planner.provider_id, planner.model) == ('nvidia', 'moonshotai/kimi-k3')
-    assert (builder.provider_id, builder.model) == ('nvidia', 'z-ai/glm-5.3')
-    assert (planner.provider_id, planner.model) != (builder.provider_id, builder.model)
+    assert (builder.provider_id, builder.model) == ('nvidia', 'moonshotai/kimi-k3')
     assert len(autopilot.store.list_agents(team.id)) == 4
     assert all('model.text' in agent.capabilities for agent in (planner, builder))
     reviewer = next(agent for agent in autopilot.store.list_agents(team.id)
                     if agent.role == RoleName.REVIEWER)
     assert (reviewer.provider_id, reviewer.model) == (
-        'nvidia', 'nvidia/nemotron-3-super-120b-a12b')
+        'nvidia', 'nvidia/nemotron-3-ultra-550b-a55b')
     assert 'model.text' in reviewer.capabilities
     reserve = next(agent for agent in autopilot.store.list_agents(team.id)
                    if agent.name == 'Vulcan Reserva')
     assert reserve.id == original['Vulcan Reserva'] and reserve.role == RoleName.BUILDER
-    assert (reserve.provider_id, reserve.model) == ('nvidia', 'moonshotai/kimi-k3')
+    assert (reserve.provider_id, reserve.model) == ('nvidia', 'z-ai/glm-5.3-flash')
     assert 'model.text' in reserve.capabilities
-    assert nvidia.calls == ['moonshotai/kimi-k3', 'z-ai/glm-5.3', 'moonshotai/kimi-k3',
-                            'nvidia/nemotron-3-super-120b-a12b']
+    assert len({(agent.provider_id, agent.model)
+                for agent in autopilot.store.list_agents(team.id)}) >= 3
+    assert nvidia.calls == ['moonshotai/kimi-k3', 'moonshotai/kimi-k3',
+                            'z-ai/glm-5.3-flash', 'nvidia/nemotron-3-ultra-550b-a55b']
+    assert claude.calls == []
 
 
-def test_core_reviewer_uses_certified_ultra_when_super_is_temporarily_overloaded(tmp_path):
-    class OverloadedSuper(NvidiaBootstrapAdapter):
+def test_core_reviewer_uses_certified_super_when_ultra_is_temporarily_overloaded(tmp_path):
+    class OverloadedUltra(NvidiaBootstrapAdapter):
         def complete(self, **kwargs):
-            if kwargs['model'] == 'nvidia/nemotron-3-super-120b-a12b':
+            if kwargs['model'] == 'nvidia/nemotron-3-ultra-550b-a55b':
                 self.calls.append(kwargs['model'])
                 return ProviderResult(False, availability=Availability.PROVIDER_ERROR,
                                       error='Service temporarily overloaded')
             return super().complete(**kwargs)
 
-    nvidia = OverloadedSuper()
+    nvidia = OverloadedUltra()
     autopilot = _core_autopilot(tmp_path, BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED),
                                 additional=(nvidia,))
     team, _, _ = autopilot._team()
     reviewer = next(agent for agent in autopilot.store.list_agents(team.id)
                     if agent.role == RoleName.REVIEWER)
-    assert (reviewer.provider_id, reviewer.model) == ('nvidia', 'nvidia/nemotron-3-ultra-550b-a55b')
+    assert (reviewer.provider_id, reviewer.model) == ('nvidia', 'nvidia/nemotron-3-super-120b-a12b')
     assert 'model.text' in reviewer.capabilities
-    assert nvidia.calls[-2:] == ['nvidia/nemotron-3-super-120b-a12b',
-                                 'nvidia/nemotron-3-ultra-550b-a55b']
+    assert nvidia.calls[-2:] == ['nvidia/nemotron-3-ultra-550b-a55b',
+                                 'nvidia/nemotron-3-super-120b-a12b']
 
 
-def test_core_glm_failure_hands_same_mission_to_certified_kimi_builder(tmp_path):
+def test_core_kimi_failure_hands_same_mission_to_certified_glm_flash_builder(tmp_path):
     claude = BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED)
     nvidia = NvidiaBootstrapAdapter()
     autopilot = _core_autopilot(tmp_path, claude, additional=(nvidia,))
@@ -254,7 +257,8 @@ def test_core_glm_failure_hands_same_mission_to_certified_kimi_builder(tmp_path)
     team, planner, primary = autopilot._team()
     reserve = next(agent for agent in autopilot.store.list_agents(team.id)
                    if agent.name == 'Vulcan Reserva')
-    assert primary.model == 'z-ai/glm-5.3'
+    assert primary.model == 'moonshotai/kimi-k3'
+    assert reserve.model == 'z-ai/glm-5.3-flash'
     assert reserve.id != planner.id and reserve.id != primary.id
 
     plan = {'mission': 'Document', 'plan_version': 1, 'tasks': [
@@ -270,10 +274,10 @@ def test_core_glm_failure_hands_same_mission_to_certified_kimi_builder(tmp_path)
         mission_calls.append(model)
         if system.startswith('Return JSON only:'):
             text = json.dumps(plan)
-        elif system.startswith('Implement only') and model == 'z-ai/glm-5.3':
+        elif system.startswith('Implement only') and model == 'moonshotai/kimi-k3':
             return ProviderResult(False, availability=Availability.PROVIDER_ERROR,
                                   error='invalid provider response')
-        elif system.startswith('Implement only') and model == 'moonshotai/kimi-k3':
+        elif system.startswith('Implement only') and model == 'z-ai/glm-5.3-flash':
             text = 'ZARA_AUTOPILOT_OK'
         else:
             raise AssertionError((model, system[:50]))
@@ -288,7 +292,7 @@ def test_core_glm_failure_hands_same_mission_to_certified_kimi_builder(tmp_path)
     assert result['session_id'] == sid and len(autopilot.store.list_sessions()) == 1
     assert result['autonomy']['owner_touches'] == 1
     assert result['autonomy']['recovery_automatic'] is True
-    assert mission_calls == ['moonshotai/kimi-k3', 'z-ai/glm-5.3', 'moonshotai/kimi-k3']
+    assert mission_calls == ['moonshotai/kimi-k3', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash']
     assert autopilot.store.get_task(sid + ':document:draft').assigned_agent_id == reserve.id
     handoffs = [item for item in autopilot.store.list_handoffs(sid)
                 if item.reason.startswith('PROVIDER_')]
@@ -305,7 +309,7 @@ def test_core_glm_failure_hands_same_mission_to_certified_kimi_builder(tmp_path)
         assert agent.id in certified
         assert autopilot._decision(agent, retry=True, team_id=team.id).allowed
         assert autopilot.policy.resource_class(agent.provider_id, agent.model).value == 'OWNER_REPORTED_FREE'
-    assert claude.calls == ['opus']
+    assert claude.calls == []
 
 
 @pytest.mark.skipif(shutil.which('claude') is None,

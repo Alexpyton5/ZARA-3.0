@@ -4,7 +4,7 @@ from core.lab_v1.workforce_policy import ResourceClass, WorkforcePolicy
 
 def test_alex_authorized_nvidia_free_fallback_models_are_exactly_allowlisted():
     policy = WorkforcePolicy(WorkforcePolicy.default_document())
-    models = ('moonshotai/kimi-k3', 'z-ai/glm-5.3')
+    models = ('moonshotai/kimi-k3', 'z-ai/glm-5.3', 'z-ai/glm-5.3-flash')
 
     for model in models:
         agent = AgentProfile('agent-' + model, 'worker', 'nvidia', model, role=RoleName.BUILDER)

@@ -108,6 +108,9 @@ class WorkforcePolicy:
                 # does not treat catalog discovery as proof of zero cost.
                 'nvidia/moonshotai/kimi-k3': 'OWNER_REPORTED_FREE',
                 'nvidia/z-ai/glm-5.3': 'OWNER_REPORTED_FREE',
+                # Alex authorized his NVIDIA free catalog; a live completion
+                # on 2026-09-24 confirmed this exact Flash endpoint responds.
+                'nvidia/z-ai/glm-5.3-flash': 'OWNER_REPORTED_FREE',
                 'deepseek_harness/*': 'UNKNOWN_COST',
             },
             # Only aliases proven by a real call are listed. `claude_cli/haiku`
@@ -132,6 +135,7 @@ class WorkforcePolicy:
                 # real model id "nvidia/nemotron-...".
                 'nvidia/nvidia/nemotron-3-super-120b-a12b', 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
                 'nvidia/moonshotai/kimi-k3', 'nvidia/z-ai/glm-5.3',
+                'nvidia/z-ai/glm-5.3-flash',
             ],
             'authorized_providers': ['codex_cli', 'claude_cli', 'nvidia'],
             'authorized_roles': ['CEO', 'BUILDER', 'REVIEWER', 'RESEARCHER', 'MEMBER'],
@@ -157,11 +161,11 @@ class WorkforcePolicy:
             # candidate standing (e.g. codex_cli and claude_cli both out of
             # quota) -- see tests/test_lab_workforce_bot_customization.py.
             'role_model_preference': {
-                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3'],
-                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'z-ai/glm-5.3', 'moonshotai/kimi-k3'],
-                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'z-ai/glm-5.3', 'moonshotai/kimi-k3'],
-                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3'],
-                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3'],
+                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash'],
+                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash'],
+                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'nvidia/nemotron-3-ultra-550b-a55b', 'moonshotai/kimi-k3'],
+                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'z-ai/glm-5.3-flash', 'moonshotai/kimi-k3'],
+                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash'],
             },
         }
 

@@ -2,19 +2,36 @@
 
 Formato simples. Não virar burocracia.
 
+## COMPLETED DOCUMENT TASK
+
+- ID: ZARA-LAB-MASTER-MANUAL-20260925
+  goal: produzir um manual factual e sequencial para transformar o Zara Lab em um laboratório autônomo, persistente, visível e seguro, reutilizando os componentes que já existem e separando fatos de hipóteses.
+  scope: auditoria de estado já registrada + spot-checks read-only dos pontos de maior risco + síntese do relatório Hermes + missões pequenas com dependências, arquivos permitidos, validação real e rollback.
+  files_allowed: `.claude/TASK_BOARD.md`, `.claude/CURRENT_MISSION.md`, `.claude/ZARA_LAB_AUTOPILOT_MASTER_MANUAL.md`.
+  files_forbidden: source do produto, testes, banco do Lab, memória/vault do usuário, build identity, diretórios de release, `_quarentena/`, `.unlazy/` e quaisquer outros artefatos operacionais existentes.
+  baseline: HEAD `25d6be0`, branch `codex/zara-master-20260923`, 99 paths dirty/untracked já presentes; preservar sem reset, limpeza, movimentação ou inclusão acidental no commit documental.
+  expected_delta: manual em português com estado medido, divergências do relatório Hermes, arquitetura-alvo, missões implementáveis em sequência, evidência mínima, gates de segurança/continuidade e fechamento por fase com build único, commit e push.
+  validation: revisão estrutural do documento e do diff limitado aos três arquivos permitidos; não executar a suíte nem declarar prova de runtime nova para uma tarefa documental.
+  packaged_test: N/A para documentação; usar a identidade atual do app somente como dado do estado auditado.
+  physical_test: N/A para documentação; todo gate de produto descrito no manual exige missão visível no Lab canônico empacotado.
+  rollback: reverter somente as alterações documentais desta tarefa; não restaurar ou descartar os 99 paths preexistentes.
+  stop_condition: se uma afirmação do material Hermes não corresponder ao checkout ou à evidência disponível, registrá-la como não confirmada e transformar sua verificação em gate da primeira missão aplicável.
+  status: COMPLETE — manual criado em `.claude/ZARA_LAB_AUTOPILOT_MASTER_MANUAL.md`; documentação reconciliada; nenhuma suíte, fonte, banco, vault ou build foi alterado nesta tarefa.
+
 ## MASTER MISSION IN PROGRESS
 
 - ID: T-ZARA-MASTER-20260923
   owner: Chief of Staff (sessão principal)
   scope: concluir o plano F0–F4 de Alex, na ordem aprovada, com build e commit separados por fase, identidade do build ativo e evidência por runtime real.
   override de prioridade: em 2026-09-23 Alex pediu pausar voz e priorizar Zara Lab autônomo. F0–F2 e F1 físico continuam pendentes; backlog preservado.
-  estado Lab autonomy (2026-09-25): PACKAGED_RUNTIME aprovado para a fatia `ZARA-LAB-AUTONOMY-20260923`. Missão espontânea `session_5ae1423b4098` executou planejamento visível → patch isolado → 16/16 testes → reviewer PASS → build oficial → canário PASS → promoção automática LOW-risk. Build ativo `release-candidate-lab-source-20260925-051603`; journal de promoção `COMMITTED`; 4/4 cenários transacionais de promoção/rollback passaram. Evidência: `.unlazy/zara-lab-autonomy-20260923/AUTONOMY_E2E_EVIDENCE_20260925.md`.
+  estado Lab autonomy (2026-09-25): PACKAGED_RUNTIME registrado para a fatia `ZARA-LAB-AUTONOMY-20260923`. A sessão `session_5ae1423b4098` executou planejamento visível → patch isolado → testes focados → reviewer → build → canário → promoção automática LOW-risk. A promoção foi registrada em `COMMITTED`; 4/4 cenários transacionais de promoção/rollback passaram. O build produzido naquela missão era `release-candidate-lab-source-20260925-051603`; não é o build atual. Evidência: `.unlazy/zara-lab-autonomy-20260923/AUTONOMY_E2E_EVIDENCE_20260925.md` — evidência complementar que precisa ser correlacionada com a sessão e UI canônicas para provar trabalho visível.
+  identidade observada na retomada de 2026-09-25: ZARA_ACTIVE_BUILD.json aponta para `release-candidate-lab-source-20260925-120718`, backend SHA-256 `79943875F0F2942ACDC28412112566E63E311EF6819328A433FC02101DAFEE48`; foram encontradas duas pastas de release em `frontend/`, incluindo a antiga `release-candidate-lab-continuous-autonomy-20260925-20260925-112133`. Próxima: M000 reconcilia JSON, processo, documentação e pasta única, preservando excedentes em quarentena com manifesto.
   files: por fase, sob contrato TASK_ID; `core/ipc_handlers.py` continua sob trava do Chief.
   critérios: build apenas por `tools/build_candidate.py`; quarentena com manifest e sem apagar; testes automáticos direcionados; ações de PC aprovadas só por postcondição do Windows; voz aprovada fisicamente só por Alex; build final aberto e identificado.
   estado F0: fechado, exceto P0.1 parcial; P0.2 concluído; P0.3 passou no candidato empacotado, com volume, mudo e brilho alterados, lidos no Windows e restaurados; teste de identidade 2/2 passou. Candidato baseline `release-candidate-f0-wt-20260923-190251-20260923-1904`.
   estado P0.1: PARCIAL — manifesto do worktree atualizado cobre 1.033 arquivos preservados (93.428.117 bytes); manifestos anteriores guardados em pre-refresh e pre-refresh-2. O checkout principal já tem 26,2 GB/164.642 arquivos em quarentena; a maioria não foi auditada item a item. A pasta `voice/` preservada ali é usada somente por um teste legacy, não pelo runtime atual. Nenhum arquivo foi movido/apagado e nenhum espaço foi liberado; os “35 stubs/memórias mortas” e 8,5 GB seguros continuam sem prova.
   evidências: `.unlazy/f0-current-worktree/GATES.md`, `.unlazy/f0-current-worktree/candidate-identity-report.json`, `_quarentena/MANIFEST_P0.1_20260923.json`, `_quarentena/organizacao-2026-09-23/pc-controls-probes/20260923-190841-2868/REPORT.json`.
-  próxima ação: o candidato F1 exato já está aberto, sem microfone falso; Alex valida fala/interrupção quando voltar. Fechar fallback empacotado e medição sem promover evidência sintética a física. F2 segue bloqueada pela ordem até o gate físico.
+  próxima ação atual: executar M000 do manual do Zara Lab antes de outra edição de produto. Voz continua pausada por decisão de Alex; manter os gates F1/F2 sem reclassificá-los como concluídos.
 
   estado F1: candidato release-candidate-f1-voice-20260923-195354 validado por SHA. Testes direcionados 118 passaram e 22 foram pulados pelo módulo de voz com janela/hang conhecido. PACKAGED_RUNTIME: resposta direta no Gemini Live/Kore com PCM sintético (uma medição 5.076 ms, sem delta comparável porque F0 não respondeu); controles por texto de volume, mudo e brilho confirmados por leitura independente e restaurados. Falha real no probe sintético de voz→PC: pediu 80%, Gemini transcreveu 40%, Windows mudou para 40%; estado restaurado a 98%. Interrupção parcial observada; sem prova física nem teste de falha controlada de TTS. Global frontend lint permanece com 5 erros e 62 avisos em arquivos fora da alteração F1.
   evidência: `.unlazy/f1-voice/TEST_REPORT.md`, `.unlazy/f1-voice/GATES.md`, `.unlazy/f1-voice/PACKAGED_RUNTIME_REPORT.md`, `.unlazy/f1-voice/candidate-identity-report.json`.
@@ -71,7 +88,18 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 
 —
 
-## IN PROGRESS
+## READY — CURRENT FOCUS
+
+- ID: ZARA-LAB-M000
+  owner: Chief of Staff
+  scope: reconciliar build ativo, processo, diretórios de release, banco canônico e comando de smoke; preservar uma única ZARA operacional.
+  status: READY — ainda não iniciado.
+  files: conforme o cartão M000 em `.claude/ZARA_LAB_AUTOPILOT_MASTER_MANUAL.md`; declarar o caminho exato do manifesto antes de qualquer movimentação.
+  acceptance: JSON/documentação/processo/única pasta ativa concordam; build excedente vai para `_quarentena/` com manifesto, sem exclusão; a mesma sessão do Lab fica visível no app.
+
+## IN PROGRESS / PRESERVED BACKLOG
+
+Foco atual de execução: Zara Lab, começando por ZARA-LAB-M000 acima. O ticket T-JARVIS-P0-02 abaixo fica preservado e pausado pela prioridade atual de Alex; não compete com as missões do Lab.
 
 - ID: T-JARVIS-P0-02
   owner: Chief of Staff (sessão principal)

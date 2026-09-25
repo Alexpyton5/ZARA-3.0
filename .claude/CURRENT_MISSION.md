@@ -6,7 +6,16 @@ Atualizar conforme o trabalho progride. Não é histórico — é só o estado a
 
 Concluir na ordem do plano enviado por Alex. Cada fase tem build e commit próprios; build apenas por `tools/build_candidate.py`; atualizar `ZARA_ACTIVE_BUILD.json`; preservar material incerto em `_quarentena/` com manifest. Voz só é aprovada fisicamente por Alex.
 
-### Contrato ativo — LAB-VISIBLE-RUNTIME-20260925
+**Foco operacional atual:** por instrução de Alex, priorizar a autonomia real do Zara Lab e manter voz pausada. Isso não conclui nem apaga os gates F0/F1/F2/F4 do plano original.
+
+### Entrega documental concluída — ZARA-LAB-MASTER-MANUAL-20260925
+
+- Manual: `.claude/ZARA_LAB_AUTOPILOT_MASTER_MANUAL.md`.
+- Inclui estado atual medido, correções ao relatório Hermes, sequência M000–M170, critérios de pronto, arquivos permitidos, evidência visível e rollback.
+- Esta entrega alterou somente documentação. Nenhum fonte de produto, banco, vault ou build foi alterado.
+- Próxima missão de produto ainda não iniciada: **M000 — Verdade operacional e uma única ZARA**.
+
+### Contrato concluído — LAB-VISIBLE-RUNTIME-20260925
 
 - **GOAL:** toda missão real de desenvolvimento/autonomia deve nascer no ZARA Lab canônico e ficar fiscalizável na UI real.
 - **SCOPE:** regra permanente de operação + launcher oficial de missão visível usando o mesmo `LabStore` canônico exibido pelo app.
@@ -27,14 +36,14 @@ Concluir na ordem do plano enviado por Alex. Cada fase tem build e commit própr
 **Correção de evidência por decisão do Alex (2026-09-25):** qualquer execução anterior que tenha usado `ZARA3_HOME` descartável, `.unlazy/`, `tmp` ou harness isolado deixa de contar como prova de missão/autonomia real do Lab. Esses resultados passam a valer apenas como evidência técnica auxiliar. A aceitação daqui para frente exige uma sessão no banco canônico do Lab, visível na UI enquanto os agentes trabalham.
 
 - **ZARA LAB AUTONOMY — PACKAGED_RUNTIME CONCLUÍDO (2026-09-25).** No build empacotado, sem mensagem do Alex, o Lab abriu a missão `session_5ae1423b4098`, planejou em linguagem natural, recuperou automaticamente de indisponibilidade de recurso por fallback autorizado, criou patch isolado, passou 16/16 testes focados, recebeu revisão independente PASS, construiu o candidato `release-candidate-lab-source-20260925-051603`, passou canário e promoveu automaticamente a mudança LOW-risk. O journal `artifacts/releases/source-20260925-051655-271259/SOURCE_PROMOTION.json` terminou `COMMITTED`. Testes transacionais de promoção/rollback: 4/4 PASS. Evidência: `.unlazy/zara-lab-autonomy-20260923/AUTONOMY_E2E_EVIDENCE_20260925.md`.
-- **Build ativo do Lab:** `release-candidate-lab-continuous-autonomy-20260925-20260925-112133`; backend SHA-256 `FB07B6E5C25A3C17040444B24F4AB41BCB59A6B4C6091BDF30223AC7C02052A6`. Há exatamente **1 build operacional em `frontend/` e 1 janela principal da ZARA**. Os 25 builds anteriores foram movidos sem exclusão para `_quarentena/builds-single-active-20260925-112656/`, com `MANIFEST.json` de rollback/auditoria. O supervisor migrou do limite legado de 1 missão/dia para ciclo de 5 minutos com teto finito de 288/dia. Isso não fecha os gates físicos de voz nem reclassifica F0/F1/F2/F4.
+- **Build ativo apontado pelo JSON na auditoria de 2026-09-25:** `release-candidate-lab-source-20260925-120718`; backend SHA-256 `79943875F0F2942ACDC28412112566E63E311EF6819328A433FC02101DAFEE48`. Foi observada também a pasta `release-candidate-lab-continuous-autonomy-20260925-20260925-112133` em `frontend/`, logo existem duas pastas de release e a documentação anterior estava desatualizada. M000 deve confirmar o processo em execução e preservar qualquer build excedente em `_quarentena/` com manifesto. Os 25 builds anteriores já registrados na quarentena não foram apagados. O supervisor/scheduler e o limite diário continuam governados pela política persistida. Isso não fecha os gates físicos de voz nem reclassifica F0/F1/F2/F4.
 
 - **F0 — PARCIAL.** P0.2 concluído. P0.3 passou no app empacotado com leitura independente do Windows: volume, mudo e brilho foram alterados e restaurados. P0.1 segue parcial: não houve exclusão nem espaço liberado. F1 já tem implementação e candidato devido ao trabalho anterior, mas a higiene ainda não pode ser chamada de concluída.
 - **P0.1 — PARCIAL.** Manifesto do worktree atualizado para 1.033 arquivos preservados (93.428.117 bytes), com manifestos anteriores guardados em pre-refresh e pre-refresh-2. Leitura somente do checkout principal encontrou 26,2 GB já em `_quarentena/` (164.642 arquivos), incluindo fontes de legacy; nada foi movido/apagado. A lista das “35 stubs/memórias mortas” e a meta de 8,5 GB seguro para remoção não foram comprovadas; nenhum espaço foi liberado.
 - **F1 — EM EXECUÇÃO, GATES PARCIAIS.** Candidato empacotado exato release-candidate-f1-voice-20260923-195354. Testes focados: 118 passaram, 22 foram pulados pelo limite conhecido do módulo de janela de voz. Runtime empacotado provou resposta direta Gemini Live→Kore em estímulo sintético (5.076 ms após última amostra falada) e controles por texto de volume/mudo/brilho, confirmados pelo Windows e restaurados. Um comando sintético por áudio pediu 80%, foi transcrito como 40% e alterou o volume para 40%; o estado foi restaurado para 98%. F0 não emitiu áudio para o mesmo estímulo; portanto não existe delta numérico antes/depois. Interrupção automatizada parcial; fallback TTS controlado e validação física continuam pendentes. Aprovação física de fala é exclusiva de Alex.
 - **F2–F4 — NÃO INICIADAS.** Manter a ordem definida no plano mestre; preservar o backlog WOW existente.
 
-### Build empacotado ativo F1
+### Candidato F1 histórico — não é o build ativo do Lab
 
 - BUILD_ID: `release-candidate-f1-voice-20260923-195354`
 - EXE: `frontend/release-candidate-f1-voice-20260923-195354/win-unpacked/ZARA 3.0.exe`
@@ -59,7 +68,7 @@ F0 Higiene → F1 Voz fluida → F2 Modelos grátis → F3 Zara Lab (P3.3, P3.4,
 
 ## Próxima ação
 
-O candidato F1 exato já está aberto, com perfil normal, sem flags de microfone falso; janela e EXE foram confirmados. Alex precisa validar fala e interrupção quando voltar. Fallback empacotado e comparação numérica de latência permanecem sem prova; só então abrir F2.
+Executar **M000** do manual do Zara Lab: conferir processo real, JSON, pastas de release e DB canônico; reconciliar a identidade e preservar qualquer build excedente em quarentena com manifesto. Não iniciar outra alteração do produto antes desse gate. F1 continua pausada por decisão de Alex.
 
 ## Histórico anterior — OPENCODE + VOZ + LAB 24H (2026-09-22)
 
@@ -115,7 +124,7 @@ interromper por decisão irreversível, risco alto ou blocker externo genuíno.
 
 ## Task ativa
 
-T-JARVIS-P0-01 — ver `TASK_BOARD.md`.
+T-ZARA-MASTER-20260923 — foco atual Zara Lab. Entrega documental ZARA-LAB-MASTER-MANUAL-20260925 concluída; preparar M000 — ver `TASK_BOARD.md` e `.claude/ZARA_LAB_AUTOPILOT_MASTER_MANUAL.md`.
 
 ## Owner da task
 
@@ -123,8 +132,11 @@ Chief of Staff (sessão principal), delegando por área conforme necessário.
 
 ## Files
 
-`core/ipc_handlers.py`, `core/action_registry.py`, `core/pc_voice_intent.py`,
-`core/actions/*`, `frontend/src/renderer/components/zara-home/TextCommandInput.tsx`.
+Para a próxima missão M000: `ZARA_ACTIVE_BUILD.json`, `ZARA_ACTIVE_BUILD.txt`,
+`.claude/CURRENT_MISSION.md`, `.claude/TASK_BOARD.md`,
+`.claude/rules/build-release.md`, `.claude/rules/test-run-policy.md`,
+`tools/build_candidate.py` e o manifesto exato de quarentena declarado antes
+de mover qualquer build.
 
 ## Dependencies
 
@@ -132,12 +144,10 @@ Nenhuma pendência externa conhecida no momento da abertura desta missão.
 
 ## Status
 
-`IN_PROGRESS`.
+`READY — M000 ainda não começou`.
 
 ## Next action
 
-Fase 0 e o golden path P0 de texto+ação estão fechados e verificados no build
-empacotado (ver acima). Próximo: ampliar PC control (Fase 2 da missão —
-arquivos, sistema, browser além do que já existe) e só depois destravar Voice
-(reaproveitando o trabalho Kore já feito). Ver `TASK_BOARD.md` para a tarefa
-aberta e os itens de qualidade/limpeza pendentes.
+Começar M000 no build apontado por `ZARA_ACTIVE_BUILD.json`, confirmar uma só
+ZARA/build operacional e atualizar o estado oficial. Depois seguir M010 em
+diante na ordem do manual, sem marcar voz ou fases antigas como concluídas.

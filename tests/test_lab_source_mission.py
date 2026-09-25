@@ -139,6 +139,16 @@ def test_source_pipeline_reopens_candidate_and_runs_real_subprocesses(source_eng
     assert proof['owner_touches'] == 1
 
 
+def test_source_mission_waits_before_creating_session_without_independent_team(source_engine):
+    source_engine.runtime.registry.record_result(
+        'unit-only', 'planner',
+        ProviderResult(False, availability=Availability.PROVIDER_ERROR, error='overloaded'),
+    )
+    with pytest.raises(ValueError, match='WAITING_RESOURCE'):
+        source_engine.start('Corrija a ZARA core/example.py: twice deve duplicar também negativos.')
+    assert source_engine.store.list_sessions() == []
+
+
 def test_feedback_source_mission_binds_existing_pipeline_tests_as_readonly(tmp_path):
     from core.lab_v1.source_mission import prepare_source
 

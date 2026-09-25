@@ -201,7 +201,7 @@ class Autopilot:
 
         return failures
 
-    def _team(self, team_id=None, *, bootstrap=True, blockers=()):
+    def _team(self, team_id=None, *, bootstrap=True, blockers=(), source=False):
         for team in self.store.list_teams():
             if team.archived or (team_id and team.id != team_id): continue
             architect = self._ensure_architect(team)
@@ -210,19 +210,34 @@ class Autopilot:
             distinct_models = {(agent.provider_id, agent.model) for agent in agents}
             if team.name == CORE_TEAM_NAME and len(distinct_models) < 2:
                 continue
-            planner = next((a for a in agents if architect and a.id == architect.id), None)
-            planner = planner or next((a for a in agents if a.role in (RoleName.MEMBER, RoleName.CEO)), agents[0])
-            builder = next((a for a in agents if a.role == RoleName.BUILDER), planner)
-            return team, planner, builder
+            # The sole REVIEWER must remain available to inspect the planner's
+            # and builder's actual runs. A provider outage must not quietly
+            # turn that reviewer into the architect.
+            planners = [a for a in agents if architect and a.id == architect.id]
+            planners += [a for a in agents if a not in planners and a.role in
+                         (RoleName.CEO, RoleName.MEMBER, RoleName.RESEARCHER, RoleName.BUILDER)]
+            for planner in planners:
+                builders = [a for a in agents if a.role == RoleName.BUILDER
+                            and (not source or a.id != planner.id)]
+                if not source:
+                    return team, planner, builders[0] if builders else planner
+                for builder in builders:
+                    if any(a.role == RoleName.REVIEWER and a.id not in (planner.id, builder.id)
+                           and (a.provider_id, a.model) not in
+                           ((planner.provider_id, planner.model), (builder.provider_id, builder.model))
+                           for a in agents):
+                        return team, planner, builder
         requested_team = self.store.get_team(team_id) if team_id else None
         can_bootstrap = (team_id is None or
                          (requested_team is not None and requested_team.name == CORE_TEAM_NAME))
         if bootstrap and can_bootstrap:
             discovered = self._bootstrap_core_team()
-            return self._team(team_id, bootstrap=False, blockers=discovered)
+            return self._team(team_id, bootstrap=False, blockers=discovered, source=source)
         detail = '; '.join(blockers[:2])
         suffix = f' ({detail})' if detail else ''
-        raise ValueError('WAITING_RESOURCE: no authorized internal worker' + suffix)
+        requirement = ('no independent planner, builder and reviewer'
+                       if source else 'no authorized internal planner')
+        raise ValueError('WAITING_RESOURCE: ' + requirement + suffix)
 
     def _yield_internal_work_to_owner(self):
         """Internal work may fail or wait, but may never block an owner mission."""
@@ -255,7 +270,9 @@ class Autopilot:
                                 'error': 'Outra missão solicitada por você ainda está em andamento.'}
             sid = session_id or new_id('session')
             session = self.store.get_session(sid)
-            team, planner, _ = self._team(session.team_id if session else None)
+            from core.lab_v1.source_mission import source_requested, prepare_source
+            source_work = source_requested(intent, mission_kind)
+            team, planner, _ = self._team(session.team_id if session else None, source=source_work)
             # Older Core teams may predate the reserve. Prepare it before the
             # mission freezes its explicit provider resource allowlist.
             if team.name == CORE_TEAM_NAME:
@@ -267,8 +284,7 @@ class Autopilot:
             else: session = Session(sid, team.id, intent.strip())
             sandbox = Path(canonical_resource(str(self.root / sid)))
             sandbox.mkdir(parents=True, exist_ok=False)
-            from core.lab_v1.source_mission import source_requested, prepare_source
-            source = prepare_source(self, sandbox, intent) if source_requested(intent, mission_kind) else None
+            source = prepare_source(self, sandbox, intent) if source_work else None
             self.store.save_session(session)
             spontaneous = (mission_kind == 'SELF_IMPROVEMENT'
                            and isinstance(evidence, dict)

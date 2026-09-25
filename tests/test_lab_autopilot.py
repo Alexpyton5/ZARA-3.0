@@ -228,6 +228,38 @@ def test_first_core_team_certifies_working_nvidia_roles_without_spending_claude_
     assert claude.calls == []
 
 
+def test_source_team_waits_instead_of_using_sole_reviewer_as_planner(tmp_path):
+    nvidia = NvidiaBootstrapAdapter()
+    autopilot = _core_autopilot(tmp_path, nvidia)
+    team, _, _ = autopilot._team()
+
+    # One real model outage removes both Kimi profiles while GLM and Nemotron
+    # remain callable. The old selection chose Iris to plan and then could not
+    # assign an independent review after the patch was written.
+    autopilot.runtime.registry.record_result(
+        'nvidia', 'moonshotai/kimi-k3',
+        ProviderResult(False, availability=Availability.PROVIDER_ERROR, error='overloaded'),
+    )
+    with pytest.raises(ValueError, match='WAITING_RESOURCE'):
+        autopilot._team(team.id, bootstrap=False, source=True)
+
+
+def test_source_team_uses_distinct_builder_as_planner_when_ceo_profile_unavailable(tmp_path):
+    autopilot = _core_autopilot(tmp_path, NvidiaBootstrapAdapter())
+    team, _, _ = autopilot._team()
+    ceo = next(a for a in autopilot.store.list_agents(team.id) if a.role == RoleName.CEO)
+    ceo.capabilities = []
+    autopilot.store.save_agent(ceo)
+
+    _, planner, builder = autopilot._team(team.id, bootstrap=False, source=True)
+    assert planner.role == RoleName.BUILDER
+    assert builder.role == RoleName.BUILDER and builder.id != planner.id
+    reviewers = autopilot.candidates(team.id, RoleName.REVIEWER)
+    assert len(reviewers) == 1
+    assert (reviewers[0].provider_id, reviewers[0].model) not in {
+        (planner.provider_id, planner.model), (builder.provider_id, builder.model)}
+
+
 def test_core_reviewer_uses_certified_super_when_ultra_is_temporarily_overloaded(tmp_path):
     class OverloadedUltra(NvidiaBootstrapAdapter):
         def complete(self, **kwargs):

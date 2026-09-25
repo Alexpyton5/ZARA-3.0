@@ -49,6 +49,10 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   const messages = query
     ? allMessages.filter(message => `${message.mission_objective || ''}\n${message.content}`.toLocaleLowerCase('pt-BR').includes(query))
     : allMessages;
+  const firstMessageByMission = new Map<string, string>();
+  for (const message of messages) {
+    if (!firstMessageByMission.has(message.session_id)) firstMessageByMission.set(message.session_id, message.id);
+  }
   const tasks = creating ? [] : asList(session?.tasks);
   const runs = creating ? [] : asList(session?.runs);
   const linkedMemorySources = asList(session?.events)
@@ -62,7 +66,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
         const row = source as Record<string, unknown>;
         const path = typeof row.path === 'string' ? row.path.replace(/\\/g, '/') : '';
         if (!path || path.startsWith('/') || /^[a-z]:/i.test(path) || /(^|\/)\.\.(\/|$)/.test(path)) return [];
-        return [{ key: `${event.id}:${path}`, path, title: typeof row.title === 'string' ? row.title : path, agentName, occurredAt: event.occurred_at }];
+        return [{ key: `${event.id}:${path}`, path, title: typeof row.title === 'string' ? row.title : path, agentName, occurredAt: event.occurred_at, updatedAt: typeof row.updated_at === 'number' ? row.updated_at : undefined }];
       });
     })
     .slice(-8)
@@ -133,7 +137,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   return <section className={`zl-room ${inspectorOpen ? 'inspector-open' : ''}`} role="dialog" aria-modal="true" aria-label="ZARA Lab" tabIndex={-1} ref={root}>
     <aside className="zl-sidebar">
       <header className="zl-brand"><button aria-label="Voltar para início" onClick={onClose}><ArrowLeft size={19} /></button><img className="zl-mark" src={zaraMark} alt="ZARA" /><div><strong>ZARA <b>LAB</b></strong><small>Sua equipe de inteligência</small></div></header>
-      <div className="zl-sidebar-title"><h2>Equipe</h2><button aria-label="Nova missão" onClick={() => { setCreating(true); setText(''); }}><Plus size={20} /></button></div>
+      <div className="zl-sidebar-title"><h2>Equipe</h2><button aria-label="Novo objetivo para a equipe" onClick={() => { setCreating(true); setText(''); }}><Plus size={20} /></button></div>
       <label className="zl-search"><Search size={16} /><input placeholder="Buscar no grupo" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <nav className="zl-conversations" aria-label="Sala da equipe">
         <button className="zl-conversation selected" aria-current="page" onClick={() => { select('', activeTeamId); setCreating(false); setText(''); }}>
@@ -152,8 +156,12 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
       <div className="zl-messages" ref={log} role="log" aria-label="Conversa da equipe" aria-live="polite">
         {!allMessages.length && <div className="zl-welcome"><span className="zl-welcome-orb"><img src={zaraMark} alt="ZARA" /></span><span className="zl-eyebrow">ZARA + SUA EQUIPE</span><h2>Uma ideia sua.<br />Um objetivo para todos.</h2><p>Uma intenção. Sua equipe cuida do contexto, divide o trabalho e devolve um resultado com evidências.</p><button onClick={() => { setCreating(true); setText('Crie um briefing curto para melhorar a experiência do ZARA Lab.'); }}>Começar com um briefing <ArrowUpRight size={16} /></button></div>}
         {allMessages.length > 0 && !messages.length && <p className="zl-empty-small zl-no-search-results">Nenhuma mensagem corresponde à busca.</p>}
-        {messages.map((message, index) => { const mine = message.kind === 'USER'; const system = message.kind === 'ZARA'; const author = agents.find(a => a.id === message.author_agent_id); const newMission = index === 0 || messages[index - 1].session_id !== message.session_id; let content = message.content; try { const value = JSON.parse(content); content = value.summary || (value.title && value.instruction ? value.title + '\n\n' + value.instruction : content); } catch { /* delivered plain text */ } return <Fragment key={message.id}>
-          {newMission && <div className="zl-mission-strip"><Zap size={13} /><span>{message.mission_objective || 'Missão sem descrição'}</span><b>{label(message.mission_state)}</b></div>}
+        {messages.map(message => { const mine = message.kind === 'USER'; const system = message.kind === 'ZARA'; const author = agents.find(a => a.id === message.author_agent_id); const firstInMission = firstMessageByMission.get(message.session_id) === message.id; const mission = teamSessions.find(item => item.id === message.session_id); let content = message.content; try { const value = JSON.parse(content); content = value.summary || (value.title && value.instruction ? value.title + '\n\n' + value.instruction : content); } catch { /* delivered plain text */ } return <Fragment key={message.id}>
+          {firstInMission && <section className="zl-mission-card" aria-label={`Objetivo: ${message.mission_objective || mission?.objective || 'sem descrição'}`}>
+            <div className="zl-mission-card-heading"><span><Zap size={14} /> Novo objetivo</span><time>{timestamp(message.created_at, true)}</time></div>
+            <p>{message.mission_objective || mission?.objective || 'Objetivo não registrado'}</p>
+            <div className="zl-mission-card-footer"><span>{label(message.mission_state || mission?.state)}</span><button type="button" onClick={() => select(message.session_id, activeTeamId)} aria-label="Ver progresso deste objetivo">Ver progresso <ArrowUpRight size={13} /></button></div>
+          </section>}
           <article className={`zl-message ${mine ? 'mine' : ''} ${system ? 'system' : ''}`}>
             {!mine && <Avatar name={message.author} id={message.author_agent_id || message.author} small />}
             <div className="zl-bubble"><strong>{mine ? 'Você' : message.author}{system && <ShieldCheck size={12} />}</strong>{author && <span className="zl-author-role">{label(author.role)} · {author.provider_id === 'codex_cli' ? 'OpenAI / Codex' : author.provider_id}</span>}<p>{content}</p><footer>{message.run_id && <span>Resposta registrada</span>}<time>{timestamp(message.created_at)}</time>{mine && <Check size={13} />}</footer></div>
@@ -173,7 +181,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
       <div className="zl-inspector-body">{tab === 'operations' ? <>
         <div className="zl-regent"><ShieldCheck size={22} /><div><strong>{running ? 'ZARA está coordenando' : 'Estado factual da missão'}</strong><p>Coordenação, continuidade e evidências persistidas.</p></div></div>
         <div className="zl-autonomy"><h3>Continuidade</h3><p>{backgroundRunning ? `Supervisor ativo · ${label(cycleState)}` : `Supervisor ${label(data?.autonomy_policy?.background_task_state || 'STOPPED').toLowerCase()}`}</p>{data?.autonomy_policy?.background_error && <p className="zl-error">{data.autonomy_policy.background_error}</p>}<h3>Melhoria contínua</h3><p>{cycleStatus}</p><button disabled={busy || !data?.autonomy_policy} onClick={() => void perform(async () => { requireResult(await window.zaraIPC?.labV1?.configureAutonomy(!data?.autonomy_policy?.enabled)); })}>{data?.autonomy_policy?.enabled ? 'Pausar novos ciclos' : 'Ativar ciclos automáticos'}</button></div>
-        <div className="zl-autonomy"><h3>Memória compartilhada</h3><p>{data?.shared_memory?.state === 'CONNECTED' ? 'Obsidian conectado' : data?.shared_memory?.state === 'CONNECTED_EMPTY' ? 'Cofre conectado; pasta de memória vazia' : data?.shared_memory?.state === 'UNAVAILABLE' ? 'Obsidian indisponível' : 'Verificando Obsidian'}</p><p>{data?.shared_memory?.source || 'Obsidian · Zara-Memoria'} · {data?.shared_memory?.notes_count ?? 0} notas encontradas (limite 128)</p><p>Leitura direta, sem índice salvo · verificado {timestamp(data?.shared_memory?.checked_at)}</p><p>Nota mais recente: {timestamp(data?.shared_memory?.latest_updated_at ?? undefined, true)}</p><h3>Fontes consultadas nesta missão</h3>{linkedMemorySources.length ? <ul className="zl-memory-sources">{linkedMemorySources.map(source => <li key={source.key}><strong>{source.title}</strong><small>{source.path} · {source.agentName} · {timestamp(source.occurredAt)}</small></li>)}</ul> : <p className="zl-empty-small">Nenhuma fonte foi registrada nesta missão ainda.</p>}</div>
+        <div className="zl-autonomy"><h3>Memória compartilhada</h3><p>{data?.shared_memory?.state === 'CONNECTED' ? 'Obsidian conectado' : data?.shared_memory?.state === 'CONNECTED_EMPTY' ? 'Cofre conectado; pasta de memória vazia' : data?.shared_memory?.state === 'UNAVAILABLE' ? 'Obsidian indisponível' : 'Verificando Obsidian'}</p><p>{data?.shared_memory?.source || 'Obsidian · Zara-Memoria'} · {data?.shared_memory?.notes_count ?? 0} notas encontradas (limite 128)</p><p>Leitura direta, sem índice salvo · verificado {timestamp(data?.shared_memory?.checked_at)}</p><p>Nota mais recente: {timestamp(data?.shared_memory?.latest_updated_at ?? undefined, true)}</p><h3>Fontes consultadas nesta missão</h3>{linkedMemorySources.length ? <ul className="zl-memory-sources">{linkedMemorySources.map(source => <li key={source.key}><strong>{source.title}</strong><small>{source.path} · {source.agentName} · consultada {timestamp(source.occurredAt, true)} · nota atualizada {timestamp(source.updatedAt, true)}</small></li>)}</ul> : <p className="zl-empty-small">Nenhuma fonte foi registrada nesta missão ainda.</p>}</div>
         <div className="zl-section-heading"><h3>Plano de trabalho</h3><span>{tasks.filter(t => t.state === 'COMPLETED').length}/{tasks.length}</span></div>
         {tasks.map((task, index) => <details className="zl-task" key={task.id}><summary><span className={task.state === 'COMPLETED' ? 'done' : ''}>{task.state === 'COMPLETED' ? <Check size={13} /> : index + 1}</span><div><strong>{task.title}</strong><small>{nameOf(task.assigned_agent_id)} · {label(task.state)}</small></div><ChevronRight size={14} /></summary><p>{task.instruction}</p>{task.result && <pre>{task.result}</pre>}</details>)}
         {!tasks.length && <p className="zl-empty-small">O plano aparece quando a equipe inicia uma missão.</p>}

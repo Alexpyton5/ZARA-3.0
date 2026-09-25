@@ -273,7 +273,7 @@ class ImprovementScheduler:
 
     # -- decisions --------------------------------------------------------
     def _active_missions(self) -> list[str]:
-        """Session ids of every mission that has not reached a terminal state.
+        """Session ids with a live execution slot, not paused historical work.
 
         `mission_controls` is created by `MissionController`, not by
         `LabStore.initialize`, so a Lab that has never run a mission has no
@@ -283,13 +283,11 @@ class ImprovementScheduler:
             if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
                                 "AND name='mission_controls'").fetchone():
                 return []
-            rows = conn.execute("SELECT document FROM mission_controls").fetchall()
-        active = []
-        for row in rows:
-            mission = json.loads(row[0])
-            if mission.get("state") not in TERMINAL_MISSION_STATES:
-                active.append(mission.get("session_id"))
-        return active
+        from core.lab_v1.mission_controller import MissionController
+        controller = MissionController(self.store)
+        with self.store._connect() as conn:
+            mission = controller.blocking_mission(conn)
+        return [mission['session_id']] if mission else []
 
     def _budget(self, policy: dict, now: float) -> dict[str, Any]:
         """The supervisor's own daily counter, read the way the supervisor reads it."""
@@ -972,6 +970,16 @@ class LabV1Service:
             supervisor_policy['background_error'] = self._background_error or (
                 supervisor_policy.get('error_detail') if supervisor_policy.get('last_state') == 'FAILED' else None)
             data['autonomy_policy'] = supervisor_policy
+            # The room may contain many retained missions. The active one is
+            # determined from the controller's live execution slot, never from
+            # an old saved active_session or a stale blocked card.
+            from core.lab_v1.mission_controller import MissionController
+            controller = MissionController(runtime.store)
+            with runtime.store._connect() as conn:
+                active = controller.blocking_mission(conn)
+            visible_ids = {item['id'] for item in data.get('sessions', [])}
+            data['active_session_id'] = (
+                active['session_id'] if active and active['session_id'] in visible_ids else None)
             from core.lab_v1.scout import TechnologyScout
             data['improvement_opportunities'] = TechnologyScout(runtime.store).snapshot()['opportunities']
             from core.lab_v1.release import ReleaseQueue

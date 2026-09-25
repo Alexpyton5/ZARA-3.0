@@ -189,6 +189,15 @@ class AutonomySupervisor:
                         state = mission.get('state')
                         if state in ('COMPLETED', 'CANCELLED', 'FAILED'):
                             continue
+                        # Quota/resource waits stay in the room, but a wait
+                        # whose persisted retry is not due must not occupy
+                        # every startup tick or starve a fresh team cycle.
+                        if (state == 'WAITING_RESOURCE'
+                                and float(row['lease_until'] or 0) <= now
+                                and not any(step.get('status') == 'PROVIDER_FAILED'
+                                            and float(step.get('retry_at') or float('inf')) <= now
+                                            for step in mission.get('steps', ()))):
+                            continue
                         # Historical blocked work stays visible, but without a lease
                         # or a provider run it must not freeze the global supervisor.
                         # Keep WAITING_RESOURCE eligible here so the retry path can

@@ -29,7 +29,9 @@ export function useLabRoom() {
       const next = requireResult(await window.zaraIPC?.labV1?.snapshot?.(selected.current.sessionId || undefined, selected.current.teamId || undefined)) as Snapshot;
       if (!mounted.current || revision !== generation.current) return;
       if (!selected.current.sessionId) {
-        const latest = asList(next.sessions).filter(session => !selected.current.teamId || session.team_id === selected.current.teamId).sort((a, b) => b.updated_at - a.updated_at)[0];
+        const sessions = asList(next.sessions).filter(session => !selected.current.teamId || session.team_id === selected.current.teamId);
+        const latest = sessions.find(session => session.id === next.active_session_id)
+          || sessions.sort((a, b) => b.updated_at - a.updated_at)[0];
         if (latest) {
           selected.current = { sessionId: latest.id, teamId: latest.team_id };
           setSessionId(latest.id); setTeamId(latest.team_id);

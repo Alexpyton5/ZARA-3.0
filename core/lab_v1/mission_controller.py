@@ -299,13 +299,21 @@ class MissionController:
         if except_session_id is not None:
             query += ' WHERE session_id<>?'
             params = (except_session_id,)
+        current = self.clock()
         for row in conn.execute(query, params):
             doc = json.loads(row['document'])
             state = doc.get('state')
             if state in ('COMPLETED', 'FAILED', 'CANCELLED'):
                 continue
+            # A process interrupted before its Run was finalized can leave a
+            # STARTED row indefinitely. After its mission deadline and lease
+            # have both expired, that row is history to reconcile, not a live
+            # executor that can occupy the slot on every future app launch.
+            if (float(doc.get('deadline') or 0) <= current
+                    and float(row['lease_until'] or 0) <= current):
+                continue
             if (state in ('BLOCKED', 'WAITING_RESOURCE', 'BLOCKED_NEEDS_OWNER')
-                    and float(row['lease_until'] or 0) <= self.clock()
+                    and float(row['lease_until'] or 0) <= current
                     and not conn.execute(
                         "SELECT 1 FROM runs WHERE session_id=? AND state='STARTED' LIMIT 1",
                         (row['session_id'],),

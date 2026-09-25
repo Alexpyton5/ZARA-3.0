@@ -139,7 +139,7 @@ def rebuild_frontend_candidate(
                 changed_source = sorted(
                     p.removeprefix("frontend/").replace("\\", "/")
                     for p in git("diff", "--name-only", f"{lint_baseline_commit}..HEAD", "--", "frontend/src").splitlines()
-                    if p.startswith("frontend/src/")
+                    if p.startswith("frontend/src/") and p.endswith((".ts", ".tsx"))
                 )
                 targets = sorted(lint_targets or [])
                 if not lint_baseline_commit or not targets:

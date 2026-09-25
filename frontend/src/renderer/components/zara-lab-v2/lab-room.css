@@ -46,3 +46,11 @@
 .zl-template strong{display:block;color:#deebe8;font-size:11px;font-weight:600;overflow-wrap:anywhere}
 .zl-template small{display:block;margin-top:2px;color:#7ac5ae;font-size:9px;overflow-wrap:anywhere}
 .zl-template p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:5px 0 0;color:#9aafb7;font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.zl-mission-card{max-width:780px;margin:6px auto 22px;padding:13px 16px;background:#15312c;border:1px solid #2c6455;border-radius:12px;color:#d9eee6;box-shadow:0 8px 22px #0002}
+.zl-mission-card-heading,.zl-mission-card-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.zl-mission-card-heading span{display:flex;align-items:center;gap:7px;color:#65dab0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.zl-mission-card-heading time{color:#9aada9;font-size:9px;white-space:nowrap}
+.zl-mission-card p{margin:10px 0 12px;font-size:12px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
+.zl-mission-card-footer{padding-top:10px;border-top:1px solid #2d5148;color:#83d4b5;font-size:10px}
+.zl-mission-card-footer button{display:inline-flex;align-items:center;gap:5px;padding:4px 6px;color:#abdfca;font-size:10px;border-radius:5px}
+.zl-mission-card-footer button:hover,.zl-mission-card-footer button:focus-visible{background:#275548;color:#fff}

@@ -17,7 +17,7 @@ Scope: connect real Lab model calls to vetted project notes in the configured Ob
   EVIDENCE: pending
 
 - [ ] G5: one real, read-only mission in the packaged Lab confirms memory was consulted and the same run/source appears in the visible room
-  EVIDENCE: the new package created a real session in the canonical Lab DB, proving the paused item no longer monopolizes the room. Its first planner turn stopped before provider invocation with `NameError: datetime is not defined` while formatting memory freshness. That session is preserved; the missing import is fixed and covered by a focused regression. Rebuild and repeat the real mission before passing this gate.
+  EVIDENCE: the package created real sessions in the canonical Lab DB, proving a paused item no longer monopolizes the room. First attempt stopped before provider invocation with `NameError: datetime is not defined`; fixed. Second attempt reached the provider, but the generated planner task incorrectly used `model.text` instead of a supported artifact capability and exhausted repair. Both sessions are preserved. Prompt clarification and a focused contract regression are pending packaged rerun; G5 remains open.
 
 - [x] G6: the active EXE/ASAR/backend identity matches the build manifest and exactly one ZARA window is open
   EVIDENCE: active manifest SHA256 matched EXE, ASAR, and backend; exactly one main ZARA process matched the manifest; both backend processes belong to that same packaged process tree; app responded.

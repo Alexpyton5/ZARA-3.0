@@ -46,16 +46,16 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 - **Objetivo:** sala única ZARA Core com retomada idempotente, equipe dinâmica entre 264 perfis, inspeção proativa, pesquisa pública citada, memória compartilhada Obsidian, conversas naturais reais e pipeline seguro de código até build empacotado.
 - **Plano e prompt:** `.claude/ZARA_LAB_LIVING_TEAM_MISSION.md`.
 - **Gates:** `.unlazy/zara-lab-living-team-20260925/GATES.md`.
-- **Estado:** ATIVA. M010/M020 seguem observados no app empacotado. A build M030 liberou trabalho após missão pausada e iniciou a prova real. O caminho da memória então falhou por `datetime` não importado; correção e regressão estão prontas para novo pacote.
-- **Build ativo:** manifesto aponta para `release-candidate-lab-unblock-paused-20260925-163850`; identidade foi conferida, mas o app já foi fechado para substituir este candidato pela correção da memória. M020 permanece disponível como rollback.
-- **Próximo:** empacotar o import faltante, abrir uma única janela da build ativa e repetir a missão read-only sem alterar tentativas antigas.
+- **Estado:** ATIVA. M010/M020 seguem observados no app empacotado. M030 liberou o room slot em runtime. A prova real encontrou e corrigiu o import de `datetime`; uma segunda chamada do modelo expôs o planejador usando `model.text` como capacidade de tarefa. O prompt agora lista os formatos aceitos explicitamente, com teste focado.
+- **Build ativo:** manifesto aponta para `release-candidate-lab-memory-timestamp-20260925-164953`; hashes conferidos. O app será trocado pela próxima candidata depois do build, sem manter duas janelas.
+- **Próximo:** compilar a clarificação do planejador, verificar identidade e fazer uma tentativa read-only final no Lab canônico.
 
 ### Lista de execução — cumprir em ordem, sem delegar ao Lab
 
 - [ ] M000 — Fechar a reconciliação do build ativo, da janela única e do banco canônico. Estado: PARCIAL; identidade do build e janela única conferidas, lease/política ainda precisam ser conciliados.
 - [x] M010 — Transformar a interface numa sala ZARA Core contínua, com mensagens de várias missões e divisores visíveis. Estado: PACKAGED_RUNTIME observado; G1–G3 e G5–G6 aprovados.
 - [x] M020 — Reabrir o app na mesma sala e retomar a missão ativa sem duplicar ciclos, mensagens ou tarefas. Estado: PACKAGED_RUNTIME observado; após reinício abriu direto no Lab e o banco permaneceu em 35 sessões, 197 mensagens e 120 tarefas.
-- [ ] M030 — Conectar a memória compartilhada ao vault Obsidian verdadeiro e mostrar fonte/atualização. Estado: chamada real encontrou e localizou um import faltante antes da invocação do modelo; patch e regressão focada passaram. Novo build e prova no app ainda pendentes.
+- [ ] M030 — Conectar a memória compartilhada ao vault Obsidian verdadeiro e mostrar fonte/atualização. Estado: primeira falha de runtime corrigida; chamada seguinte provou que o modelo foi executado, mas plano inválido atingiu o limite de reparo. Prompt e regressão da capacidade válida prontos; novo build e prova read-only pendentes.
 - [ ] M040 — Fazer leitores e pesquisadores estudarem a ZARA e trazerem achados com fontes verificáveis.
 - [ ] M050 — Fazer a equipe discutir em linguagem natural e convocar especialistas sob demanda.
 - [ ] M060 — Validar o caminho de código real: patch, revisão, testes, promoção permitida e resultado no app.
@@ -114,7 +114,7 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 
 - ID: ZARA-LAB-LIVING-TEAM-M030
   owner: Chief of Staff (sessão principal)
-  status: EM ANDAMENTO — sala desbloqueada no pacote, primeiro smoke real achou falha de import antes da chamada ao modelo; correção focalizada aguarda novo pacote e reexecução
+  status: EM ANDAMENTO — sala desbloqueada no pacote; smoke real corrigiu erro do contexto de memória e expôs plano inválido gerado pelo modelo; nova instrução e teste de contrato aguardam pacote e reexecução
   goal: fazer as chamadas reais do ZARA Lab consumirem memória de projeto do vault Obsidian configurado e expor, na UI, status, proveniência e atualização.
   scope: pesquisa lexical sob demanda somente em `Zara-Memoria`; contexto para chamadas do CEO/delegado e Autopilot; evento persistido de fontes consultadas; estado visível na sala; build único e missão curta read-only no app empacotado.
   files_allowed: `core/obsidian_memory.py`, `core/lab_v1/runtime.py`, `core/lab_v1/autopilot.py`, `core/lab_v1/mission_controller.py`, `tests/test_lab_autopilot.py`, `frontend/src/renderer/components/zara-lab-v2/labTypes.ts`, `frontend/src/renderer/components/zara-lab-v2/LabRoom.tsx`, `frontend/src/renderer/components/zara-lab-v2/lab-room.css`, `.claude/CURRENT_MISSION.md`, `.claude/TASK_BOARD.md`, `.unlazy/zara-lab-living-team-20260925/GATES.md`, `.unlazy/zara-lab-living-team-20260925/M030/GATES.md`, `ZARA_ACTIVE_BUILD.json`, `ZARA_ACTIVE_BUILD.txt` e artefatos oficiais de build.

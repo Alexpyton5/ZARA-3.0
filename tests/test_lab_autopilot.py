@@ -150,6 +150,20 @@ def test_shared_project_memory_prompt_includes_relative_source_and_freshness(eng
     assert str(note.parent.parent) not in prompt
 
 
+def test_planner_prompt_names_only_supported_task_deliverables(engine):
+    from core.lab_v1.autopilot import _AutopilotPorts
+
+    sid = engine.start('Write a short report')['session_id']
+    ports = _AutopilotPorts(engine, sid, engine.metrics(sid))
+    engine.controller.tick(sid, ports)
+    planner_calls = engine.runtime.registry.get('primary').calls
+
+    assert planner_calls
+    system = planner_calls[0]['system']
+    assert 'Allowed task deliverable capabilities are ONLY artifact.text, artifact.json, and artifact.python.' in system
+    assert 'model.text is only the planner invocation, never a task capability' in system
+
+
 def _core_autopilot(tmp_path, adapter, policy=None, additional=()):
     store = LabStore(tmp_path / 'lab.db')
     registry = ProviderRegistry(tmp_path / 'health.json')

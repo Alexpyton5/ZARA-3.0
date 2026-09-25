@@ -255,6 +255,8 @@ def select_template(objective: str, role: str | None = None) -> dict[str, Any] |
         # name happens to contain "Builder" (for example, MCP Builder).
         # A worker implementing a fix should not inherit a reviewer persona.
         normalized = _normalize(objective or "")
+        if "core/" in (objective or "").casefold() or "memory/" in (objective or "").casefold():
+            return get_template("engineering/engineering-minimal-change-engineer")
         if any(word in normalized for word in ("frontend", "react", "css", "interface", "ui ")):
             return get_template("engineering/engineering-frontend-developer")
         return get_template("engineering/engineering-minimal-change-engineer")

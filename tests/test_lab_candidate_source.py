@@ -260,7 +260,7 @@ def test_real_pytest_proves_before_failure_and_after_pass_in_sandbox(tmp_path: P
                     "import os\n"
                     "from pathlib import Path\n"
                     "from core.calculator import add\n\n"
-                    "def test_add(tmp_path):\n"
+                    "def test_cálculo(tmp_path):\n"
                     "    scratch = tmp_path / 'fixture.txt'\n"
                     "    scratch.write_text('ready')\n"
                     "    assert [item.name for item in tmp_path.iterdir()] == ['fixture.txt']\n"
@@ -278,6 +278,7 @@ def test_real_pytest_proves_before_failure_and_after_pass_in_sandbox(tmp_path: P
 
     assert before.exit_code != 0
     assert "FAILED" in before.stdout
+    assert "test_cálculo" in before.stdout
     assert before.counts == {"collected": 1, "passed": 0, "failed": 1, "errors": 0,
                              "skipped": 0, "xfailed": 0, "xpassed": 0}
     assert after.exit_code == 0

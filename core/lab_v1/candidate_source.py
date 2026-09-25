@@ -1153,6 +1153,11 @@ class CandidateSource:
 import json, os, sys
 from pathlib import Path
 
+# Isolated mode (-I) ignores PYTHONIOENCODING. The parent decodes the test
+# receipt as UTF-8, so configure the child's streams explicitly on Windows.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 run_root = Path(sys.argv[1]).resolve()
 workspace = Path(sys.argv[2]).resolve()
 environment_root = Path(sys.argv[3]).resolve()

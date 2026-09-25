@@ -17,7 +17,7 @@ Scope: connect real Lab model calls to vetted project notes in the configured Ob
   EVIDENCE: pending
 
 - [ ] G5: one real, read-only mission in the packaged Lab confirms memory was consulted and the same run/source appears in the visible room
-  EVIDENCE: initial packaged attempt returned MISSION_BUSY because an earlier session was BLOCKED / UNCERTAIN_EFFECT without a live lease or run. The global busy guard is corrected; repeat the packaged mission after the new backend build. The earlier session remains preserved.
+  EVIDENCE: the new package created a real session in the canonical Lab DB, proving the paused item no longer monopolizes the room. Its first planner turn stopped before provider invocation with `NameError: datetime is not defined` while formatting memory freshness. That session is preserved; the missing import is fixed and covered by a focused regression. Rebuild and repeat the real mission before passing this gate.
 
 - [x] G6: the active EXE/ASAR/backend identity matches the build manifest and exactly one ZARA window is open
   EVIDENCE: active manifest SHA256 matched EXE, ASAR, and backend; exactly one main ZARA process matched the manifest; both backend processes belong to that same packaged process tree; app responded.
@@ -26,4 +26,4 @@ Scope: connect real Lab model calls to vetted project notes in the configured Ob
   EVIDENCE: M020 rollback package remains present; M030 source and checkpoint commits are pushed. No unrelated dirty files were staged.
 
 - [ ] G8: a paused mission with no live lease or started run remains visible but does not prevent a new work item in the same team room; active/queued work still blocks a second executor
-  EVIDENCE: four focused regressions pass for paused work, queue exclusivity, and a live lease; packaged Lab runtime pending.
+  EVIDENCE: packaged run created a new canonical session while the earlier blocked session remained unchanged; four focused regressions pass for paused work, queue exclusivity, and a live lease. Fresh-process verification remains pending.

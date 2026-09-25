@@ -132,6 +132,24 @@ def engine(tmp_path):
     return Autopilot(runtime, root=tmp_path / 'missions', executor_factory=Files, policy=policy)
 
 
+def test_shared_project_memory_prompt_includes_relative_source_and_freshness(engine, tmp_path):
+    from core.obsidian_memory import ObsidianMemoryManager
+
+    note = tmp_path / 'vault' / 'Zara-Memoria' / 'Autopilot.md'
+    note.parent.mkdir(parents=True)
+    note.write_text('# Autopilot\n\nA equipe compartilha memoria do projeto ZARA.', encoding='utf-8')
+    engine.runtime._obsidian_memory = ObsidianMemoryManager(vault_path=note.parents[1])
+
+    prompt, sources = engine.runtime.attach_shared_project_memory(
+        None, None, 'objetivo', query='autopilot memoria ZARA',
+    )
+
+    assert 'Zara-Memoria/Autopilot.md' in prompt
+    assert 'atualizada:' in prompt
+    assert sources and sources[0]['path'] == 'Zara-Memoria/Autopilot.md'
+    assert str(note.parent.parent) not in prompt
+
+
 def _core_autopilot(tmp_path, adapter, policy=None, additional=()):
     store = LabStore(tmp_path / 'lab.db')
     registry = ProviderRegistry(tmp_path / 'health.json')

@@ -47,10 +47,12 @@ class FeedbackInbox:
         result.update(id=row["id"], status=row["status"], mission_id=row["mission_id"])
         return result
 
-    def next_received(self):
+    def next_received(self, *, max_age_seconds: float | None = None):
+        since = time.time() - max_age_seconds if max_age_seconds is not None else 0
         with self.store._connect() as conn:
             row = conn.execute("""SELECT * FROM lab_product_feedback
-                WHERE status='RECEIVED' ORDER BY created_at LIMIT 1""").fetchone()
+                WHERE status='RECEIVED' AND created_at>=?
+                ORDER BY created_at DESC LIMIT 1""", (since,)).fetchone()
         if not row:
             return None
         result = json.loads(row["document"])

@@ -803,8 +803,12 @@ class _AutopilotPorts:
         if (active['attempt_id'] != dispatch.attempt_id or current['cancel_requested']
                 or self.engine.controller.clock() >= dispatch.deadline):
             raise LeaseLost('Stale model response retained as evidence, not delivered as a new turn')
-        self.store.add_message(Message('message:' + run.id, self.sid, MessageKind.AGENT, agent.name,
-            body, author_agent_id=agent.id, run_id=run.id))
+        # Source missions publish a readable update only after their structured
+        # model output passes SourceMission.verify. Keep the raw answer as an
+        # artifact so the verifier still sees exactly what the model returned.
+        if not self.metrics.get('source_work'):
+            self.store.add_message(Message('message:' + run.id, self.sid, MessageKind.AGENT, agent.name,
+                body, author_agent_id=agent.id, run_id=run.id))
         return Receipt(artifact.id, body)
 
     def verify(self, dispatch, receipt):

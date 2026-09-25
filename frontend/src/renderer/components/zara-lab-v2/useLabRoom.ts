@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { asList, failureText, requireResult, type Snapshot } from './labTypes';
 
 function savedRoom() {
-  try { const value = JSON.parse(localStorage.getItem('zara.lab.selection.v1') || '{}');
+  // V1 could persist the legacy conversation team and reopen the Lab with no
+  // Core participants or autonomous missions visible. Start V2 on Core once;
+  // subsequent selections are still remembered normally.
+  try { const value = JSON.parse(localStorage.getItem('zara.lab.selection.v2') || '{}');
     return { sessionId: typeof value.sessionId === 'string' ? value.sessionId : '', teamId: typeof value.teamId === 'string' ? value.teamId : '' };
   } catch { return { sessionId: '', teamId: '' }; }
 }
@@ -43,7 +46,7 @@ export function useLabRoom() {
   const select = useCallback((nextSessionId = '', nextTeamId = '') => {
     generation.current += 1;
     selected.current = { sessionId: nextSessionId, teamId: nextTeamId };
-    try { localStorage.setItem('zara.lab.selection.v1', JSON.stringify(selected.current)); } catch { /* backend persistence remains authoritative */ }
+    try { localStorage.setItem('zara.lab.selection.v2', JSON.stringify(selected.current)); } catch { /* backend persistence remains authoritative */ }
     setSessionId(nextSessionId); setTeamId(nextTeamId); setError(''); setLoading(true);
     setSnapshot(current => current ? { ...current, session: null } : null);
     void refresh();

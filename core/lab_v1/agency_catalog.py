@@ -254,11 +254,10 @@ def select_template(objective: str, role: str | None = None) -> dict[str, Any] |
         # BUILDER is a Lab workflow role, not a request for a persona whose
         # name happens to contain "Builder" (for example, MCP Builder).
         # A worker implementing a fix should not inherit a reviewer persona.
-        rows = _ranked(objective or "")
-        for row in rows:
-            if not {"reviewer", "auditor", "checker"} & _field_tokens(row["name"]):
-                return dict(row)
-        return None
+        normalized = _normalize(objective or "")
+        if any(word in normalized for word in ("frontend", "react", "css", "interface", "ui ")):
+            return get_template("engineering/engineering-frontend-developer")
+        return get_template("engineering/engineering-minimal-change-engineer")
     if role:
         by_id = get_template(role)
         if by_id:
@@ -267,7 +266,13 @@ def select_template(objective: str, role: str | None = None) -> dict[str, Any] |
         for row in _records():
             if _normalize(row["name"]) == role_key:
                 return dict(row)
-    rows = _ranked(objective or "", role=role)
+    # Lab source missions use these workflow roles for code work. A broad
+    # objective can mention health or UI evidence without making those
+    # divisions appropriate source reviewers.
+    if role and role.strip().casefold() == "reviewer":
+        return get_template("engineering/engineering-code-reviewer")
+    division = None
+    rows = _ranked(objective or "", division=division, role=role)
     return dict(rows[0]) if rows else None
 
 

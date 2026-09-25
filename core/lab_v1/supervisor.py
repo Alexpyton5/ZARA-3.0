@@ -184,7 +184,9 @@ class AutonomySupervisor:
                 self._save(next_evolution_check=now + policy['evolution_cadence_seconds'])
                 self.ensure_team()
                 evolution.autopilot = self._engine(workforce)
-                feedback = FeedbackInbox(self.store).next_received()
+                # Old unresolved feedback remains in history, but cannot
+                # displace today's autonomous source inspection indefinitely.
+                feedback = FeedbackInbox(self.store).next_received(max_age_seconds=86400)
                 if feedback:
                     source_path = self._feedback_source_path(feedback['text'])
                     proposal_only = self._proposal_only(feedback['text']) or source_path is None

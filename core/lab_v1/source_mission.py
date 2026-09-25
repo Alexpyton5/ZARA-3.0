@@ -256,7 +256,8 @@ class SourceMission:
             prompt += '\nOBSERVED SOURCE: ' + json.dumps(self.candidate.read_context(
                 self.meta['source_paths'], max_chars=24000,
                 on_overflow='outline', focus=self.context_focus()), ensure_ascii=False)
-            system = ('You are the architect planning real ZARA source improvement. Return JSON only with '
+            system = ('You are the architect planning real ZARA source improvement. Write task titles and '
+                'instructions in clear Brazilian Portuguese so the owner can follow the Lab conversation. Return JSON only with '
                 'exactly the top-level keys mission, plan_version:1, tasks. tasks contains exactly these 3 logical '
                 'task records in order: (1) id="patch", role="BUILDER", capability="source.patch", path="patch.json", '
                 'depends_on=[], acceptance={"method":"source_changed"}; (2) id="tests", role="BUILDER", '
@@ -303,7 +304,8 @@ class SourceMission:
             rejected = self.meta.get('counterexamples') or self.meta.get('repair_evidence')
             if rejected:
                 prompt += '\nREJECTED_ATTEMPT_EVIDENCE: ' + json.dumps(rejected, ensure_ascii=False)[-14000:]
-            system = ('You are the actual implementation worker. Independently find the root cause in the supplied '
+            system = ('You are the actual implementation worker. Write the summary field in clear Brazilian Portuguese '
+                'for the project owner to read in the Lab conversation. Independently find the root cause in the supplied '
                 'real ZARA source. Return JSON only {"edits":[<edit>,...],"summary":"what changed and why"}. '
                 'An edit is EITHER {"path":"relative.py","content":"complete file"} - allowed only for a file you '
                 'received in full - OR {"path":"relative.py","anchored_edits":[{"find":"exact current source text",'
@@ -343,7 +345,8 @@ class SourceMission:
                 {'artifact_hashes': hashes,
                  'test_receipt_ids': [self.meta['test_receipt_id'], self.meta['preservation_receipt_id'],
                                       preservation_id]})
-            system = ('You are the independent reviewer. Inspect the objective, actual diff/source/tests and '
+            system = ('You are the independent reviewer. Write the rationale field in clear Brazilian Portuguese '
+                'for the project owner to read in the Lab conversation. Inspect the objective, actual diff/source/tests and '
                 'actual subprocess results plus the deterministic local before/after preservation receipt. '
                 'The future desktop candidate build is a later gate; review only source, tests, and the factual '
                 'NO_PROMOTION proof at this stage. Reject superficial fixes, weakened tests, fabricated work, unrelated '
@@ -655,6 +658,7 @@ class SourceMission:
                     raise
                 self.save_meta(independent_review=verified)
                 if verified['verdict'] != 'PASS':
+                    self._publish_agent_update(dispatch, verified)
                     counterexample = {
                         'review_count': self.meta.get('review_count', 0),
                         'failure_kind': failure_kind,
@@ -670,7 +674,39 @@ class SourceMission:
         except (ValueError, KeyError, TypeError, SyntaxError) as exc:
             evidence['error'] = str(exc)[:2000]
         saved = self.artifact(dispatch, 'SOURCE_VERIFICATION', evidence)
+        if evidence['passed'] and dispatch.capability == 'model.text':
+            self._publish_agent_update(dispatch, value)
         return Verification('PASS' if evidence['passed'] else 'FAIL', saved.artifact_ref)
+
+    def _publish_agent_update(self, dispatch, value):
+        """Show a verified agent's work as conversation, never as raw JSON/code."""
+        if not isinstance(value, dict):
+            return
+        if dispatch.step_id == 'plan':
+            titles = [task.get('title', '') for task in value.get('tasks', ())]
+            titles = [title.strip() for title in titles if isinstance(title, str) and title.strip()]
+            content = ('Li o objetivo e organizei o trabalho: ' + '; '.join(titles[:3]) + '.'
+                       if titles else 'Li o objetivo e concluí o plano de trabalho para a equipe.')
+        elif dispatch.step_id == self.meta.get('patch_step'):
+            summary = value.get('summary', '')
+            content = ('Preparei a alteração no ambiente isolado. ' + summary.strip()
+                       if isinstance(summary, str) and summary.strip()
+                       else 'Preparei a alteração no ambiente isolado para revisão e testes.')
+        elif dispatch.step_id == self.meta.get('review_step'):
+            rationale = value.get('rationale', '')
+            content = ('Revisei a alteração e as provas. ' + rationale.strip()
+                       if isinstance(rationale, str) and rationale.strip()
+                       else 'Revisei a alteração e as provas apresentadas.')
+        else:
+            return
+        runs = [run for run in self.store.list_runs(self.sid)
+                if run.task_id == dispatch.task_id and run.agent_id == dispatch.agent_id]
+        if not runs:
+            return
+        run = runs[-1]
+        agent = self.store.get_agent(dispatch.agent_id)
+        self.store.add_message(Message('public:' + run.id, self.sid, MessageKind.AGENT,
+            agent.name, content[:1200], author_agent_id=agent.id, run_id=run.id))
 
     def repair_rejected_plan(self, reason):
         """One bounded replan after the local verifier refused the plan itself.

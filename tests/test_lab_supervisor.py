@@ -120,6 +120,20 @@ def test_tick_writes_visible_heartbeat(supervisor):
     assert s.policy()['last_heartbeat'] == s.policy()['last_tick']
 
 
+def test_failed_bootstrap_stays_visible_and_retries_without_spending_daily_mission(supervisor, monkeypatch):
+    s, _ = supervisor
+    monkeypatch.setattr(s, 'ensure_team', lambda: (_ for _ in ()).throw(
+        ValueError('CALLABLE_CORE_PROFILE_MISMATCH')))
+
+    assert s.tick()['state'] == 'FAILED'
+    failed = s.policy()
+    assert failed['daily_missions'] == 0
+    assert failed['error'] == 'SUPERVISOR_NEEDS_RECONCILIATION'
+    assert failed['next_evolution_check'] > failed['last_tick']
+    assert s.tick()['state'] == 'WAITING_RETRY'
+    assert s.policy()['error'] == 'SUPERVISOR_NEEDS_RECONCILIATION'
+
+
 def test_feedback_source_selection_is_specific_and_has_no_blind_fallback(supervisor):
     s, _ = supervisor
     assert s._feedback_source_path('A resposta está lenta e demora') == 'core/model_router.py'
@@ -259,7 +273,7 @@ def test_product_criticism_reaches_architect_before_external_scout(supervisor, m
     feedback = {'id': 'feedback:1', 'text': 'O envio não funciona.', 'channel': 'text',
                 'evidence_sha256': 'deadbeef', 'observed_at': 1}
     inbox = SimpleNamespace(
-        next_received=lambda: feedback,
+        next_received=lambda **kwargs: feedback,
         link=lambda fid, sid: calls.append(('link', fid, sid)),
         finish=lambda fid, completed: calls.append(('finish', fid, completed)))
     monkeypatch.setattr(module, 'FeedbackInbox', lambda store: inbox)
@@ -285,7 +299,7 @@ def test_proposal_feedback_does_not_authorize_source_change(supervisor, monkeypa
     feedback = {'id': 'feedback:proposal',
                 'text': 'Tenho uma sugestão: a ZARA deveria avaliar uma ideia melhor.',
                 'channel': 'text', 'evidence_sha256': 'proposal-sha', 'observed_at': 1}
-    inbox = SimpleNamespace(next_received=lambda: feedback, link=lambda *args: None,
+    inbox = SimpleNamespace(next_received=lambda **kwargs: feedback, link=lambda *args: None,
                             finish=lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'FeedbackInbox', lambda store: inbox)
     result = s.tick()

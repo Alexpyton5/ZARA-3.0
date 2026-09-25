@@ -132,7 +132,7 @@ class AutonomySupervisor:
             if not workforce.background_enabled:
                 return {'state': 'DISABLED'}
             now = time.time()
-            self._save(last_tick=now, last_heartbeat=now, last_state='CHECKING', error=None, error_detail=None)
+            self._save(last_tick=now, last_heartbeat=now, last_state='CHECKING')
             evolution = EvolutionEngine(self.runtime, policy['workspace'], policy=workforce,
                                         autopilot=self.autopilot)
             inventory = evolution.observe_local()
@@ -173,7 +173,8 @@ class AutonomySupervisor:
                     self._save(last_state='BLOCKED', active_session=sid)
                     return {'state': 'BLOCKED', 'session_id': sid}
                 result = self._engine(workforce).run(sid)
-                self._save(last_state=result.get('state', 'UNKNOWN'), active_session=sid)
+                self._save(last_state=result.get('state', 'UNKNOWN'), active_session=sid,
+                           error=None, error_detail=None)
                 return result
             if not policy.get('enabled'):
                 self._save(last_state='MONITORING')
@@ -184,7 +185,8 @@ class AutonomySupervisor:
             # previous day's cadence timestamp has not elapsed yet.
             due = now >= policy.get('next_evolution_check', 0) or policy.get('daily_date') != day
             if due and count < policy['max_new_evolution_missions_per_day']:
-                self._save(next_evolution_check=now + policy['evolution_cadence_seconds'])
+                self._save(next_evolution_check=now + policy['evolution_cadence_seconds'],
+                           daily_date=day)
                 self.ensure_team()
                 evolution.autopilot = self._engine(workforce)
                 # Old unresolved feedback remains in history, but cannot
@@ -222,13 +224,15 @@ class AutonomySupervisor:
                         result = self._engine(workforce).run(started['session_id'])
                         FeedbackInbox(self.store).finish(feedback['id'],
                             completed=result.get('state') == 'COMPLETED')
-                        self._save(last_state=result.get('state', 'UNKNOWN'))
+                        self._save(last_state=result.get('state', 'UNKNOWN'),
+                                   error=None, error_detail=None)
                         return result
                 planned = evolution.observe_and_plan(inventory=inventory)
                 if planned.get('session_id') and not planned.get('existing'):
                     self._save(daily_date=day, daily_missions=count + 1, active_session=planned['session_id'])
                     result = evolution.run(planned['session_id'])
-                    self._save(last_state=result.get('state', 'UNKNOWN'))
+                    self._save(last_state=result.get('state', 'UNKNOWN'),
+                               error=None, error_detail=None)
                     return result
                 # External scouting is due only after local owner evidence and
                 # source inspection have no mission to dispatch.
@@ -256,13 +260,21 @@ class AutonomySupervisor:
                         result = self._engine(workforce).run(started['session_id'])
                         verification = scout.verify_review(opportunity['id'])
                         scout.finish_review(opportunity['id'], accepted=verification['passed'])
-                        self._save(last_state=result.get('state', 'UNKNOWN'))
+                        self._save(last_state=result.get('state', 'UNKNOWN'),
+                                   error=None, error_detail=None)
                         return result
-            self._save(last_state='MONITORING')
+            if count >= policy['max_new_evolution_missions_per_day']:
+                self._save(last_state='BUDGET_EXHAUSTED')
+                return {'state': 'BUDGET_EXHAUSTED'}
+            if policy.get('error') and not due:
+                self._save(last_state='WAITING_RETRY')
+                return {'state': 'WAITING_RETRY', 'error': policy['error']}
+            self._save(last_state='MONITORING', error=None, error_detail=None)
             return {'state': 'MONITORING'}
         except Exception as exc:
             self._save(last_state='FAILED', error='SUPERVISOR_NEEDS_RECONCILIATION',
-                       error_detail=f'{type(exc).__name__}: {exc}')
+                       error_detail=f'{type(exc).__name__}: {exc}',
+                       next_evolution_check=time.time() + 300)
             return {'state': 'FAILED', 'error': 'SUPERVISOR_NEEDS_RECONCILIATION'}
         finally:
             self.lock.release()

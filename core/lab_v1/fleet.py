@@ -62,7 +62,7 @@ class FleetCertification:
         return doc
 
     def register_proven_agent(self, certification_id, *, team_id, name, role: RoleName,
-                              placeholder_id: str | None = None):
+                              placeholder_id: str | None = None, allow_model_change: bool = False):
         if self.store.get_team(team_id) is None:
             raise ValueError('UNKNOWN_TEAM')
         with self.store._connect() as conn:
@@ -86,8 +86,8 @@ class FleetCertification:
             agent = self.store.get_agent(placeholder_id)
             if agent is None or agent.archived or agent.role != role:
                 raise ValueError('INVALID_CORE_PLACEHOLDER')
-            if 'model.text' in agent.capabilities and (
-                    agent.provider_id != doc['provider_id'] or agent.model != doc['model']):
+            if ('model.text' in agent.capabilities and not allow_model_change and (
+                    agent.provider_id != doc['provider_id'] or agent.model != doc['model'])):
                 raise ValueError('CALLABLE_CORE_PROFILE_MISMATCH')
             if agent.id not in {item.agent_id for item in self.store.list_memberships(team_id)
                                 if item.left_at is None}:

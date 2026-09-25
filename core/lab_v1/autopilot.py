@@ -104,6 +104,8 @@ class Autopilot:
             candidates.extend(CORE_TEAM_MODEL_FALLBACKS.get(key, ()))
             activated = False
             for provider_id, model in candidates:
+                migrating = ('model.text' in agent.capabilities and
+                             (agent.provider_id, agent.model) != (provider_id, model))
                 adapter = self.runtime.registry.get(provider_id)
                 if adapter is None:
                     continue
@@ -163,7 +165,8 @@ class Autopilot:
                 # cannot silently turn a second BUILDER into a callable bot.
                 proven = next(((cert_id, doc) for cert_id, doc in prior
                                if doc.get('state') == 'COMPLETED' and doc.get('result', {}).get('ok')
-                               and doc.get('agent_id') in (None, agent.id)), None)
+                               and (doc.get('agent_id') == agent.id if migrating
+                                    else doc.get('agent_id') in (None, agent.id))), None)
                 if proven is not None:
                     cert_id, result = proven
                 else:
@@ -180,7 +183,7 @@ class Autopilot:
                         if now - ended < cooldown:
                             failures.append(f'{provider_id}/{model}:{availability or "RETRY_BACKOFF"}')
                             continue
-                    cert_id = (f'zara-core-bootstrap:{team.id}:{provider_id}:{model}:{len(prior)}')
+                    cert_id = (f'zara-core-bootstrap:{team.id}:{agent.id}:{provider_id}:{model}:{len(prior)}')
                     try:
                         result = self.runtime.certify_model(
                             key=cert_id, provider_id=provider_id, model=model)
@@ -194,7 +197,7 @@ class Autopilot:
                     continue
                 certification.register_proven_agent(
                     cert_id, team_id=team.id, name=agent.name, role=agent.role,
-                    placeholder_id=agent.id)
+                    placeholder_id=agent.id, allow_model_change=migrating)
                 activated = True
                 break
             if not activated and not failures:

@@ -89,6 +89,26 @@ def test_successful_fallback_proof_retargets_the_existing_core_role_profile(flee
     assert fake.calls == 1
 
 
+def test_callable_core_model_change_requires_new_proof_and_explicit_rebind(fleet):
+    runtime, cert, fake = fleet
+    worker = AgentProfile('vulcan', 'Vulcan', 'fake', 'previous',
+                          role=RoleName.BUILDER, capabilities=['model.text'])
+    runtime.store.save_agent(worker)
+    runtime.store.save_membership(TeamMembership('member:vulcan', 'team', worker.id))
+
+    runtime.certify_model(key='new-model-proof', provider_id='fake', model='model')
+    with pytest.raises(ValueError, match='CALLABLE_CORE_PROFILE_MISMATCH'):
+        cert.register_proven_agent('new-model-proof', team_id='team', name='Vulcan',
+                                   role=RoleName.BUILDER, placeholder_id=worker.id)
+
+    rebound = cert.register_proven_agent('new-model-proof', team_id='team', name='Vulcan',
+                                         role=RoleName.BUILDER, placeholder_id=worker.id,
+                                         allow_model_change=True)
+    assert rebound.id == worker.id and rebound.model == 'model'
+    assert len(runtime.store.list_agents(team_id='team')) == 1
+    assert fake.calls == 1
+
+
 @pytest.mark.parametrize('state', [Availability.AUTH_REQUIRED, Availability.DISABLED_BY_OWNER_POLICY, Availability.OFFLINE])
 def test_owner_and_auth_blocks_never_call(fleet, state):
     runtime, _, fake = fleet

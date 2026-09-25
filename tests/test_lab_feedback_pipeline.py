@@ -21,7 +21,7 @@ class CodexSolAdapter(ProviderAdapter):
 
     def probe(self):
         return ProviderInfo(self.id, self.label, 'test', Availability.AVAILABLE,
-                            models=['gpt-5.6-sol'])
+                            models=['gpt-5.6-sol', 'gpt-5.6-luna'])
 
     def complete(self, **kwargs):
         raise AssertionError('architect provisioning must not call the provider')
@@ -55,14 +55,20 @@ def test_sol_is_provisioned_as_architect_and_owns_planning(tmp_path):
     adapter = CodexSolAdapter(); registry.register(adapter)
     registry.record_result('codex_cli', 'gpt-5.6-sol',
                            ProviderResult(True, availability=Availability.AVAILABLE))
+    registry.record_result('codex_cli', 'gpt-5.6-luna',
+                           ProviderResult(True, availability=Availability.AVAILABLE))
     runtime = LabRuntime(store, registry)
     store.save_team(Team('team', 'ZARA Core'))
     sol = AgentProfile('sol', 'Sol', 'codex_cli', 'gpt-5.6-sol',
                        role=RoleName.CEO, capabilities=['model.text'])
+    luna = AgentProfile('luna', 'Luna', 'codex_cli', 'gpt-5.6-luna',
+                        role=RoleName.BUILDER, capabilities=['model.text'])
     store.save_agent(sol); store.save_membership(TeamMembership('member:sol', 'team', 'sol'))
+    store.save_agent(luna); store.save_membership(TeamMembership('member:luna', 'team', 'luna'))
     policy = WorkforcePolicy({'authorized_providers': ['codex_cli'],
-        'authorized_models': ['codex_cli/gpt-5.6-sol'],
-        'resource_classes': {'codex_cli/gpt-5.6-sol': 'PLAN_INCLUDED'}})
+        'authorized_models': ['codex_cli/gpt-5.6-sol', 'codex_cli/gpt-5.6-luna'],
+        'resource_classes': {'codex_cli/gpt-5.6-sol': 'PLAN_INCLUDED',
+                             'codex_cli/gpt-5.6-luna': 'PLAN_INCLUDED'}})
     engine = Autopilot(runtime, root=tmp_path / 'missions', policy=policy)
     started = engine.start('Crítica observada', mission_kind='PRODUCT_CRITICISM_REVIEW',
                            evidence={'feedback_text': 'Falhou', 'evidence_sha256': 'x'})
@@ -70,7 +76,8 @@ def test_sol_is_provisioned_as_architect_and_owns_planning(tmp_path):
     architect = store.get_agent(metrics['planner_id'])
     assert architect.id == 'sol' and architect.name == 'Sol'
     assert architect.model == 'gpt-5.6-sol' and architect.role is RoleName.CEO
-    assert len(store.list_agents(team_id='team')) == 1
+    assert {'sol', 'luna'}.issubset(
+        {agent.id for agent in store.list_agents(team_id='team')})
     assert metrics['planner_function'] == 'ARCHITECT'
     base = {'mission': 'Plan', 'plan_version': 1, 'tasks': [{
         'id': 'review', 'title': 'Revisar plano', 'instruction': 'Revise a proposta',

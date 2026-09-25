@@ -1034,6 +1034,7 @@ class LabRuntime:
             "role_bindings": [b.to_dict() for b in bindings],
             "memberships": [m.to_dict() for m in self.store.list_memberships(team.id)] if team else [],
             "sessions": [s.to_dict() for s in sessions],
+            "team_messages": self.store.list_team_messages(team.id) if team is not None else [],
             "participation": participation,
             "regent": {"id": "zara", "name": "ZARA", "role": "REGENT", "state": "OBSERVING" if working_agent_ids else "READY", "source": "runtime_events", "detail": "Preserva missoes, registra resultados e coordena a continuidade. Sem modelo proprio invocado."},
             "health": health,

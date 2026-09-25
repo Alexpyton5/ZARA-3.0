@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, Check, ChevronRight, Circle, FileText, Plus, Search, Send, ShieldCheck, Square, Users, X, Zap } from 'lucide-react';
 import { useLabRoom } from './useLabRoom';
 import { asList, avatarHue, failureText, initials, label, requireResult, timestamp, type Agent } from './labTypes';
@@ -40,8 +40,15 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   const matchingTemplates = templateQuery
     ? templates.filter(template => `${template.name} ${template.description} ${template.division}`.toLocaleLowerCase('pt-BR').includes(templateQuery))
     : templates;
-  const sessions = asList(data?.sessions).filter(s => s.objective.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
-  const messages = creating ? [] : asList(session?.messages);
+  const activeTeamId = teamId || data?.team?.id || '';
+  const teamSessions = asList(data?.sessions)
+    .filter(s => !activeTeamId || s.team_id === activeTeamId)
+    .sort((a, b) => b.updated_at - a.updated_at);
+  const allMessages = asList(data?.team_messages);
+  const query = search.trim().toLocaleLowerCase('pt-BR');
+  const messages = query
+    ? allMessages.filter(message => `${message.mission_objective || ''}\n${message.content}`.toLocaleLowerCase('pt-BR').includes(query))
+    : allMessages;
   const tasks = creating ? [] : asList(session?.tasks);
   const runs = creating ? [] : asList(session?.runs);
   const missionState = session?.mission?.state || session?.state;
@@ -88,7 +95,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
       const api = window.zaraIPC?.labV1;
       const result = requireResult(await api?.autopilot(intent));
       if (!result.session_id) throw new Error('O backend não registrou uma missão.');
-      select(result.session_id); setCreating(false);
+      select(result.session_id, activeTeamId); setCreating(false);
       setText('');
     });
   }
@@ -110,25 +117,32 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   return <section className={`zl-room ${inspectorOpen ? 'inspector-open' : ''}`} role="dialog" aria-modal="true" aria-label="ZARA Lab" tabIndex={-1} ref={root}>
     <aside className="zl-sidebar">
       <header className="zl-brand"><button aria-label="Voltar para início" onClick={onClose}><ArrowLeft size={19} /></button><img className="zl-mark" src={zaraMark} alt="ZARA" /><div><strong>ZARA <b>LAB</b></strong><small>Sua equipe de inteligência</small></div></header>
-      <div className="zl-sidebar-title"><h2>Conversas</h2><button aria-label="Nova missão" onClick={() => { setCreating(true); setText(''); }}><Plus size={20} /></button></div>
-      <label className="zl-search"><Search size={16} /><input placeholder="Buscar uma missão" value={search} onChange={e => setSearch(e.target.value)} /></label>
-      <label className="zl-team-select"><Users size={15} /><select aria-label="Selecionar equipe" value={teamId || data?.team?.id || ''} onChange={e => { select('', e.target.value); setCreating(false); }}><option value="">Todas as equipes disponíveis</option>{asList(data?.teams).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-      <nav className="zl-conversations" aria-label="Missões">
-        {sessions.map(s => <button className={`zl-conversation ${!creating && s.id === sessionId ? 'selected' : ''}`} key={s.id} onClick={() => { select(s.id, s.team_id); setCreating(false); setText(''); }}><Avatar name={s.objective} id={s.id} /><span><strong>{s.objective}</strong><small><Circle size={7} fill="currentColor" /> {label(s.state)}</small></span><time>{timestamp(s.updated_at)}</time></button>)}
-        {!sessions.length && <div className="zl-empty-small">As missões da equipe aparecerão aqui.</div>}
+      <div className="zl-sidebar-title"><h2>Equipe</h2><button aria-label="Nova missão" onClick={() => { setCreating(true); setText(''); }}><Plus size={20} /></button></div>
+      <label className="zl-search"><Search size={16} /><input placeholder="Buscar no grupo" value={search} onChange={e => setSearch(e.target.value)} /></label>
+      <nav className="zl-conversations" aria-label="Sala da equipe">
+        <button className="zl-conversation selected" aria-current="page" onClick={() => { select('', activeTeamId); setCreating(false); setText(''); }}>
+          <Avatar name={data?.team?.name || 'ZARA Core'} id={activeTeamId || 'zara-core'} />
+          <span><strong>{data?.team?.name || 'ZARA Core'}</strong><small><Circle size={7} fill="currentColor" /> {session ? label(missionState) : 'Sala contínua'}</small></span>
+          <time>{timestamp(teamSessions[0]?.updated_at)}</time>
+        </button>
+        <div className="zl-empty-small">{teamSessions.length} {teamSessions.length === 1 ? 'missão no histórico' : 'missões no histórico'}</div>
       </nav>
       <footer className="zl-owner"><Avatar name="Alex" small /><div><strong>Alex</strong><small>Você define o objetivo</small></div><ShieldCheck size={18} /></footer>
     </aside>
 
     <main className="zl-conversation-main">
-      <header className="zl-chat-header"><Avatar name="ZARA" id="zara" /><div><h1>{creating ? 'Nova missão' : data?.team?.name || 'ZARA Lab'}</h1><p>{members.length ? `${members.length} agentes · ZARA regente` : templates.length ? `${templates.length} perfis sob demanda · ZARA regente` : 'Aguardando equipe comprovada'} <span>·</span> <span className="zl-good">{missionLabel}</span></p></div><button onClick={() => { setTab('people'); setInspectorOpen(v => !v); }} aria-label="Ver participantes"><Users size={20} /></button><button onClick={onClose} aria-label="Fechar ZARA Lab"><X size={20} /></button></header>
+      <header className="zl-chat-header"><Avatar name="ZARA" id="zara" /><div><h1>{data?.team?.name || 'ZARA Core'}</h1><p>{members.length ? `${members.length} agentes · ZARA regente` : templates.length ? `${templates.length} perfis sob demanda · ZARA regente` : 'Aguardando equipe comprovada'} <span>·</span> <span className="zl-good">{missionLabel}</span></p></div><button onClick={() => { setTab('people'); setInspectorOpen(v => !v); }} aria-label="Ver participantes"><Users size={20} /></button><button onClick={onClose} aria-label="Fechar ZARA Lab"><X size={20} /></button></header>
       {!creating && session && <div className="zl-mission-strip"><Zap size={15} /><span>{session.objective}</span><b>{label(missionState)}</b></div>}
       <div className="zl-messages" ref={log} role="log" aria-label="Conversa da equipe" aria-live="polite">
-        {!messages.length && <div className="zl-welcome"><span className="zl-welcome-orb"><img src={zaraMark} alt="ZARA" /></span><span className="zl-eyebrow">ZARA + SUA EQUIPE</span><h2>Uma ideia sua.<br />Um objetivo para todos.</h2><p>Uma intenção. Sua equipe cuida do contexto, divide o trabalho e devolve um resultado com evidências.</p><button onClick={() => { setCreating(true); setText('Crie um briefing curto para melhorar a experiência do ZARA Lab.'); }}>Começar com um briefing <ArrowUpRight size={16} /></button></div>}
-        {messages.map(message => { const mine = message.kind === 'USER'; const system = message.kind === 'ZARA'; const author = agents.find(a => a.id === message.author_agent_id); let content = message.content; try { const value = JSON.parse(content); content = value.summary || (value.title && value.instruction ? value.title + '\n\n' + value.instruction : content); } catch { /* delivered plain text */ } return <article className={`zl-message ${mine ? 'mine' : ''} ${system ? 'system' : ''}`} key={message.id}>
-          {!mine && <Avatar name={message.author} id={message.author_agent_id || message.author} small />}
-          <div className="zl-bubble"><strong>{mine ? 'Você' : message.author}{system && <ShieldCheck size={12} />}</strong>{author && <span className="zl-author-role">{label(author.role)} · {author.provider_id === 'codex_cli' ? 'OpenAI / Codex' : author.provider_id}</span>}<p>{content}</p><footer>{message.run_id && <span>Resposta registrada</span>}<time>{timestamp(message.created_at)}</time>{mine && <Check size={13} />}</footer></div>
-        </article>; })}
+        {!allMessages.length && <div className="zl-welcome"><span className="zl-welcome-orb"><img src={zaraMark} alt="ZARA" /></span><span className="zl-eyebrow">ZARA + SUA EQUIPE</span><h2>Uma ideia sua.<br />Um objetivo para todos.</h2><p>Uma intenção. Sua equipe cuida do contexto, divide o trabalho e devolve um resultado com evidências.</p><button onClick={() => { setCreating(true); setText('Crie um briefing curto para melhorar a experiência do ZARA Lab.'); }}>Começar com um briefing <ArrowUpRight size={16} /></button></div>}
+        {allMessages.length > 0 && !messages.length && <p className="zl-empty-small zl-no-search-results">Nenhuma mensagem corresponde à busca.</p>}
+        {messages.map((message, index) => { const mine = message.kind === 'USER'; const system = message.kind === 'ZARA'; const author = agents.find(a => a.id === message.author_agent_id); const newMission = index === 0 || messages[index - 1].session_id !== message.session_id; let content = message.content; try { const value = JSON.parse(content); content = value.summary || (value.title && value.instruction ? value.title + '\n\n' + value.instruction : content); } catch { /* delivered plain text */ } return <Fragment key={message.id}>
+          {newMission && <div className="zl-mission-strip"><Zap size={13} /><span>{message.mission_objective || 'Missão sem descrição'}</span><b>{label(message.mission_state)}</b></div>}
+          <article className={`zl-message ${mine ? 'mine' : ''} ${system ? 'system' : ''}`}>
+            {!mine && <Avatar name={message.author} id={message.author_agent_id || message.author} small />}
+            <div className="zl-bubble"><strong>{mine ? 'Você' : message.author}{system && <ShieldCheck size={12} />}</strong>{author && <span className="zl-author-role">{label(author.role)} · {author.provider_id === 'codex_cli' ? 'OpenAI / Codex' : author.provider_id}</span>}<p>{content}</p><footer>{message.run_id && <span>Resposta registrada</span>}<time>{timestamp(message.created_at)}</time>{mine && <Check size={13} />}</footer></div>
+          </article>
+        </Fragment>; })}
         {running && supervisorLive && <div className="zl-working"><span /><span /><span /><small>{runs.find(r => r.state === 'STARTED') ? `${nameOf(runs.find(r => r.state === 'STARTED')?.agent_id)} está trabalhando` : `Supervisor ativo · ${label(data?.autonomy_policy?.last_state)}`}</small></div>}
       </div>
       {(error || room.error) && <div className="zl-error" role="alert">{error || room.error}</div>}

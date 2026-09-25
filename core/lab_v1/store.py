@@ -635,6 +635,37 @@ class LabStore:
             ).fetchall()
         return [self._row_to_message(r) for r in rows]
 
+    def list_team_messages(self, team_id: str, limit: int = 2000) -> list[dict[str, Any]]:
+        """Return one chronological room feed while retaining each mission ID.
+
+        The inner query bounds snapshots to the most recent messages; the outer
+        query restores chronological order after selecting that window.
+        """
+        bounded_limit = max(1, min(int(limit), 10000))
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM (
+                    SELECT m.*, s.objective AS mission_objective,
+                           s.state AS mission_state, m.rowid AS message_order
+                    FROM messages AS m
+                    JOIN sessions AS s ON s.id=m.session_id
+                    WHERE s.team_id=?
+                    ORDER BY m.created_at DESC, m.rowid DESC
+                    LIMIT ?
+                )
+                ORDER BY created_at ASC, message_order ASC
+                """,
+                (team_id, bounded_limit),
+            ).fetchall()
+        result = []
+        for row in rows:
+            message = self._row_to_message(row).to_dict()
+            message["mission_objective"] = row["mission_objective"]
+            message["mission_state"] = row["mission_state"]
+            result.append(message)
+        return result
+
     def delete_messages_for_run(self, session_id: str, run_id: str) -> int:
         """Remove only canonical messages promoted from one interrupted Run."""
         with self._connect() as conn:

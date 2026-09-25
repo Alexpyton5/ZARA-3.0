@@ -2,11 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { asList, failureText, requireResult, type Snapshot } from './labTypes';
 
 function savedRoom() {
-  // V1 could persist the legacy conversation team and reopen the Lab with no
-  // Core participants or autonomous missions visible. Start V2 on Core once;
-  // subsequent selections are still remembered normally.
-  try { const value = JSON.parse(localStorage.getItem('zara.lab.selection.v2') || '{}');
-    return { sessionId: typeof value.sessionId === 'string' ? value.sessionId : '', teamId: typeof value.teamId === 'string' ? value.teamId : '' };
+  // Keep the team selection, but resolve its newest mission on every reopen.
+  // Persisting an individual mission here recreates the old one-chat-per-mission UX.
+  try { const value = JSON.parse(localStorage.getItem('zara.lab.selection.v3') || '{}');
+    return { sessionId: '', teamId: typeof value.teamId === 'string' ? value.teamId : '' };
   } catch { return { sessionId: '', teamId: '' }; }
 }
 
@@ -34,6 +33,7 @@ export function useLabRoom() {
         if (latest) {
           selected.current = { sessionId: latest.id, teamId: latest.team_id };
           setSessionId(latest.id); setTeamId(latest.team_id);
+          try { localStorage.setItem('zara.lab.selection.v3', JSON.stringify({ sessionId: '', teamId: latest.team_id })); } catch { /* backend remains authoritative */ }
           const expanded = requireResult(await window.zaraIPC?.labV1?.snapshot?.(latest.id, latest.team_id)) as Snapshot;
           if (!mounted.current || revision !== generation.current) return;
           setSnapshot(expanded);
@@ -46,7 +46,7 @@ export function useLabRoom() {
   const select = useCallback((nextSessionId = '', nextTeamId = '') => {
     generation.current += 1;
     selected.current = { sessionId: nextSessionId, teamId: nextTeamId };
-    try { localStorage.setItem('zara.lab.selection.v2', JSON.stringify(selected.current)); } catch { /* backend persistence remains authoritative */ }
+    try { localStorage.setItem('zara.lab.selection.v3', JSON.stringify({ sessionId: '', teamId: nextTeamId })); } catch { /* backend persistence remains authoritative */ }
     setSessionId(nextSessionId); setTeamId(nextTeamId); setError(''); setLoading(true);
     setSnapshot(current => current ? { ...current, session: null } : null);
     void refresh();

@@ -221,6 +221,8 @@ def main() -> int:
                     help="forca rebuild do backend a partir deste checkout")
     ap.add_argument("--rebuild-frontend", action="store_true",
                     help="rebuild typecheck/lint/Vite/Electron e empacota em candidato novo")
+    ap.add_argument("--frontend-only", action="store_true",
+                    help="gera pacote só de frontend, preservando byte a byte o backend do build base")
     ap.add_argument("--allow-existing-frontend-lint-errors", action="store_true",
                     help="aceita apenas erros do lint global fora do delta frontend explicitamente validado")
     ap.add_argument("--frontend-baseline-commit", default="",
@@ -230,6 +232,8 @@ def main() -> int:
     args = ap.parse_args()
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", args.tag):
         fail("--tag aceita apenas letras minusculas, numeros e hifens")
+    if args.frontend_only and (not args.rebuild_frontend or args.rebuild_sidecar):
+        fail("--frontend-only exige --rebuild-frontend e nao pode ser combinado com --rebuild-sidecar")
 
     # A base pode morar fora deste worktree. Nunca troque uma base explicita
     # ausente por outra linhagem, pois isso esconderia qual app foi empacotado.
@@ -264,7 +268,7 @@ def main() -> int:
         fail(f"candidato base nao encontrado: {base_exe}")
     if not base_backend.exists():
         fail(f"sidecar do candidato base nao encontrado: {base_backend}")
-    if args.rebuild_sidecar or not DIST_SIDECAR.exists():
+    if args.rebuild_sidecar or (not args.frontend_only and not DIST_SIDECAR.exists()):
         sidecar_builder = ROOT / "build_exe.py"
         if not sidecar_builder.is_file():
             fail(f"builder oficial do sidecar nao encontrado: {sidecar_builder}")
@@ -275,15 +279,16 @@ def main() -> int:
         if not DIST_SIDECAR.is_file():
             fail("build_exe.py terminou sem criar dist-sidecar/zara-backend.exe")
 
-    novo_backend_sha = sha256(DIST_SIDECAR)
     base_backend_sha = sha256(base_backend)
+    sidecar_path = base_backend if args.frontend_only else DIST_SIDECAR
+    novo_backend_sha = sha256(sidecar_path)
 
     print(f"\nbase              : {base_label}")
     print(f"base path         : {base_dir}")
     print(f"sidecar do base   : {base_backend_sha[:16]}...")
     print(f"sidecar novo      : {novo_backend_sha[:16]}...")
 
-    if novo_backend_sha == base_backend_sha:
+    if novo_backend_sha == base_backend_sha and not args.frontend_only:
         fail(
             "o sidecar recem-gerado e IDENTICO ao do candidato base. "
             "Nenhuma mudanca de backend entrou. Nao faz sentido gerar candidato."
@@ -395,8 +400,8 @@ def main() -> int:
     dest_backend = dest_dir / "win-unpacked" / "resources" / "backend" / "zara-backend.exe"
     dest_exe = dest_dir / "win-unpacked" / "ZARA 3.0.exe"
 
-    print("trocando o sidecar pelo recem-compilado...")
-    shutil.copy2(DIST_SIDECAR, dest_backend)
+    print("preservando o sidecar do build base..." if args.frontend_only else "trocando o sidecar pelo recem-compilado...")
+    shutil.copy2(sidecar_path, dest_backend)
 
     # Prova de que a troca aconteceu: byte a byte igual ao dist-sidecar.
     conferido = sha256(dest_backend)
@@ -431,7 +436,8 @@ def main() -> int:
         "BASE_BUILD": base_label,
         "BASE_BUILD_PATH": str(base_dir),
         "BUILD_METHOD": (
-            "frontend-and-sidecar-rebuild" if args.rebuild_frontend
+            "frontend-only (backend preserved from base)" if args.frontend_only
+            else "frontend-and-sidecar-rebuild" if args.rebuild_frontend
             else "sidecar-swap (frontend do base preservado, backend recompilado)"
         ),
         "GIT_BRANCH": git("rev-parse", "--abbrev-ref", "HEAD"),

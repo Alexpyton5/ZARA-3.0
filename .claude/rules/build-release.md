@@ -71,9 +71,14 @@ Antes de gerar um build físico:
 
 ## Verificação de correspondência sidecar ↔ pacote
 
-O `zara-backend.exe` dentro de `win-unpacked/resources/backend/` deve ser byte a byte
+ O `zara-backend.exe` dentro de `win-unpacked/resources/backend/` deve ser byte a byte
 idêntico ao recém-gerado em `dist-sidecar/`. Se divergir, o pacote está velho e qualquer
 teste em cima dele é inválido.
+
+Para alterações somente de interface, use `tools/build_candidate.py --rebuild-frontend --frontend-only`.
+Esse modo exige o rebuild completo do frontend e copia o backend diretamente do build base,
+comparando seu SHA-256 antes e depois. Ele não usa um `dist-sidecar` possivelmente antigo.
+Não combine `--frontend-only` com `--rebuild-sidecar`.
 
 ## Build ativo não é baseline
 

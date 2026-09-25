@@ -10,17 +10,17 @@ Scope: connect real Lab model calls to vetted project notes in the configured Ob
 - [ ] G2: every Autopilot model role receives the same bounded memory mechanism, with source references recorded as events
   EVIDENCE: pending
 
-- [ ] G3: retrieval stays under Zara-Memoria, records relative source paths only, and filters credential-like content
-  EVIDENCE: pending
+- [x] G3: retrieval stays under Zara-Memoria, records relative source paths only, and filters credential-like content
+  EVIDENCE: source review and focused Python import/compile verified bounded paths, relative references, and credential-like filtering.
 
 - [ ] G4: the Lab UI shows vault connection, source, check time, and live-read/index status without exposing note bodies
   EVIDENCE: pending
 
 - [ ] G5: one real, read-only mission in the packaged Lab confirms memory was consulted and the same run/source appears in the visible room
-  EVIDENCE: pending
+  EVIDENCE: BLOCKED. The real launcher refused to start because the canonical Lab still has an earlier session in BLOCKED / UNCERTAIN_EFFECT, with a pending candidate-build reconciliation. No new mission was created and the earlier session was preserved.
 
-- [ ] G6: the active EXE/ASAR/backend identity matches the build manifest and exactly one ZARA window is open
-  EVIDENCE: pending
+- [x] G6: the active EXE/ASAR/backend identity matches the build manifest and exactly one ZARA window is open
+  EVIDENCE: active manifest SHA256 matched EXE, ASAR, and backend; exactly one main ZARA process and its backend were observed; app responded.
 
 - [ ] G7: the previous room build remains available for rollback and only task-owned files are committed/pushed
-  EVIDENCE: pending
+  EVIDENCE: M020 rollback package remains present; M030 source commit exists. Documentation/manifest checkpoint still needs commit and normal GitHub push.

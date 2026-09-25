@@ -46,16 +46,16 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 - **Objetivo:** sala única ZARA Core com retomada idempotente, equipe dinâmica entre 264 perfis, inspeção proativa, pesquisa pública citada, memória compartilhada Obsidian, conversas naturais reais e pipeline seguro de código até build empacotado.
 - **Plano e prompt:** `.claude/ZARA_LAB_LIVING_TEAM_MISSION.md`.
 - **Gates:** `.unlazy/zara-lab-living-team-20260925/GATES.md`.
-- **Estado:** ATIVA. M010 e M020 implementados, empacotados e observados no app real: uma sala ZARA Core com 34 missões no histórico, mensagens entre sessões e retorno direto à sala após reinício. M000 continua parcial quanto à reconciliação de execução/DB.
-- **Build ativo:** `release-candidate-lab-resume-room-20260925-151800`; hashes do EXE, ASAR e backend conferidos; uma janela principal ativa. Release anterior preservada como rollback.
-- **Próximo:** M030 — conectar o contexto dos agentes à memória do vault Obsidian e mostrá-la na sala. O resíduo de lease/política do M000 permanece registrado e não será alterado por esta fatia.
+- **Estado:** ATIVA. M010/M020 seguem observados no app empacotado. M030 está integrado e empacotado; a chamada real de memória aguarda liberar a sala sem interromper a missão anterior.
+- **Build ativo:** manifesto aponta para o candidato M030; EXE, ASAR e backend conferidos; uma janela principal aberta e respondendo. M020 continua disponível como rollback.
+- **Próximo:** concluir a prova read-only de M030 quando a missão anterior sair de `BLOCKED / UNCERTAIN_EFFECT`; não alterar nem descartar aquela missão enquanto aguarda.
 
 ### Lista de execução — cumprir em ordem, sem delegar ao Lab
 
 - [ ] M000 — Fechar a reconciliação do build ativo, da janela única e do banco canônico. Estado: PARCIAL; identidade do build e janela única conferidas, lease/política ainda precisam ser conciliados.
 - [x] M010 — Transformar a interface numa sala ZARA Core contínua, com mensagens de várias missões e divisores visíveis. Estado: PACKAGED_RUNTIME observado; G1–G3 e G5–G6 aprovados.
 - [x] M020 — Reabrir o app na mesma sala e retomar a missão ativa sem duplicar ciclos, mensagens ou tarefas. Estado: PACKAGED_RUNTIME observado; após reinício abriu direto no Lab e o banco permaneceu em 35 sessões, 197 mensagens e 120 tarefas.
-- [ ] M030 — Conectar a memória compartilhada ao vault Obsidian verdadeiro e mostrar fonte/atualização. Estado: EM EXECUÇÃO, contrato `ZARA-LAB-LIVING-TEAM-20260925/M030`; busca limitada à pasta `Zara-Memoria`, sem leitura de notas pessoais do vault.
+- [ ] M030 — Conectar a memória compartilhada ao vault Obsidian verdadeiro e mostrar fonte/atualização. Estado: código e build prontos; G3 e G6 verificados. G5 bloqueado com `MISSION_BUSY` pela sessão anterior em `BLOCKED / UNCERTAIN_EFFECT`; UI e chamada real não provadas.
 - [ ] M040 — Fazer leitores e pesquisadores estudarem a ZARA e trazerem achados com fontes verificáveis.
 - [ ] M050 — Fazer a equipe discutir em linguagem natural e convocar especialistas sob demanda.
 - [ ] M060 — Validar o caminho de código real: patch, revisão, testes, promoção permitida e resultado no app.
@@ -114,7 +114,7 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 
 - ID: ZARA-LAB-LIVING-TEAM-M030
   owner: Chief of Staff (sessão principal)
-  status: IN_PROGRESS
+  status: EM ANDAMENTO — código e build prontos; prova no Lab bloqueada por missão anterior com resultado incerto
   goal: fazer as chamadas reais do ZARA Lab consumirem memória de projeto do vault Obsidian configurado e expor, na UI, status, proveniência e atualização.
   scope: pesquisa lexical sob demanda somente em `Zara-Memoria`; contexto para chamadas do CEO/delegado e Autopilot; evento persistido de fontes consultadas; estado visível na sala; build único e missão curta read-only no app empacotado.
   files_allowed: `core/obsidian_memory.py`, `core/lab_v1/runtime.py`, `core/lab_v1/autopilot.py`, `frontend/src/renderer/components/zara-lab-v2/labTypes.ts`, `frontend/src/renderer/components/zara-lab-v2/LabRoom.tsx`, `frontend/src/renderer/components/zara-lab-v2/lab-room.css`, `.claude/CURRENT_MISSION.md`, `.claude/TASK_BOARD.md`, `.unlazy/zara-lab-living-team-20260925/GATES.md`, `.unlazy/zara-lab-living-team-20260925/M030/GATES.md`, `ZARA_ACTIVE_BUILD.json`, `ZARA_ACTIVE_BUILD.txt` e artefatos oficiais de build.

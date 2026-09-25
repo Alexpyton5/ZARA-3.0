@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Wifi, Shield, Cloud, Zap, Link2 } from 'lucide-react';
 import '../../styles/zara-home.css';
-import { Sidebar } from './Sidebar';
+import { NAV_ITEMS, Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { TextCommandInput } from './TextCommandInput';
 import { ForYouCard } from './ForYouCard';
@@ -22,11 +22,28 @@ import { HomeDrawer } from './HomeDrawer';
 import { LabRoom } from '../zara-lab-v2/LabRoom';
 import auroraBackground from '../../../assets/zara-home/aurora-master-refined.png';
 
+const ACTIVE_NAV_STORAGE_KEY = 'zara.home.active-nav.v1';
+
+function getInitialActiveNav(): string {
+  try {
+    const saved = localStorage.getItem(ACTIVE_NAV_STORAGE_KEY);
+    if (saved && NAV_ITEMS.some(({ label }) => label === saved)) return saved;
+  } catch {
+    // localStorage can be unavailable in restricted or damaged profiles.
+  }
+  return 'ZARA Lab';
+}
+
 /** MASTER composition with connected data and the Lab product direction. */
 export function ZaraHome() {
-  const [activeNav, setActiveNav] = useState('Hoje');
-  const closePanel = useCallback(() => setActiveNav('Hoje'), []);
-  const navigate = useCallback((section: string) => setActiveNav(section), []);
+  const [activeNav, setActiveNav] = useState(getInitialActiveNav);
+  const navigate = useCallback((section: string) => {
+    setActiveNav(section);
+    if (NAV_ITEMS.some(({ label }) => label === section)) {
+      try { localStorage.setItem(ACTIVE_NAV_STORAGE_KEY, section); } catch { /* keep navigation usable without persistence */ }
+    }
+  }, []);
+  const closePanel = useCallback(() => navigate('Hoje'), [navigate]);
   const coreState = useZaraCoreState();
   const metrics = useSystemMetrics();
   const battery = useBattery();

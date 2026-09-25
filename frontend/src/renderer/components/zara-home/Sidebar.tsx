@@ -7,7 +7,7 @@ import profileAndroid from '../../../assets/zara-home/profile-android.png';
 import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
 
 // Itens 1:1 com o MASTER (ordem exata, incluindo "Dispositivos").
-const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [
+export const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [
   { label: 'Hoje', Icon: House },
   { label: 'Conversas', Icon: MessageCircle },
   { label: 'Projetos', Icon: Folder },

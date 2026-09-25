@@ -287,6 +287,33 @@ class MissionController:
             seen.add(step.id)
             task_ids.add(step.task_id)
 
+    def blocking_mission(self, conn, *, except_session_id=None):
+        """Return live work that must serialize before another work item can run.
+
+        Paused missions remain persisted in the shared room. They do not hold
+        the execution slot after their lease expires and their provider run is
+        no longer STARTED.
+        """
+        query = 'SELECT session_id, document, lease_until FROM mission_controls'
+        params = ()
+        if except_session_id is not None:
+            query += ' WHERE session_id<>?'
+            params = (except_session_id,)
+        for row in conn.execute(query, params):
+            doc = json.loads(row['document'])
+            state = doc.get('state')
+            if state in ('COMPLETED', 'FAILED', 'CANCELLED'):
+                continue
+            if (state in ('BLOCKED', 'WAITING_RESOURCE', 'BLOCKED_NEEDS_OWNER')
+                    and float(row['lease_until'] or 0) <= self.clock()
+                    and not conn.execute(
+                        "SELECT 1 FROM runs WHERE session_id=? AND state='STARTED' LIMIT 1",
+                        (row['session_id'],),
+                    ).fetchone()):
+                continue
+            return doc
+        return None
+
     def plan(self, session_id: str, steps: list[MissionStep], limits: MissionLimits | None = None,
              *, scope: ExecutionScope, dynamic: bool = False):
         limits = limits or MissionLimits()
@@ -300,10 +327,10 @@ class MissionController:
                                      (session_id,)).fetchone()
             if authority and authority['owner'] != 'MISSION':
                 raise ValueError('Session already belongs to V1')
-            # One nonterminal mission, including blocked/cancelling work. No tick interleaving.
-            for row in conn.execute('SELECT document FROM mission_controls WHERE session_id<>?', (session_id,)):
-                if json.loads(row[0])['state'] not in ('COMPLETED', 'CANCELLED', 'FAILED'):
-                    raise ValueError('Another mission must finish or be safely cancelled first')
+            # Only live execution owns the slot. Paused room work is retained
+            # and can be resumed later without blocking another work item.
+            if self.blocking_mission(conn, except_session_id=session_id):
+                raise ValueError('Another mission must finish or be safely cancelled first')
             existing = conn.execute("SELECT document FROM mission_controls WHERE session_id=?", (session_id,)).fetchone()
             if existing:
                 old = json.loads(existing[0])
@@ -429,10 +456,8 @@ class MissionController:
             if conn.execute("SELECT 1 FROM mission_controls WHERE lease_token IS NOT NULL AND lease_until>?",
                             (self.clock(),)).fetchone():
                 return None
-            for other in conn.execute("SELECT document FROM mission_controls WHERE session_id<>?", (session_id,)):
-                other_doc = json.loads(other[0])
-                if other_doc['state'] not in ('COMPLETED', 'CANCELLED', 'FAILED'):
-                    return None  # Old multi-plan databases fail closed until explicitly reconciled.
+            if self.blocking_mission(conn, except_session_id=session_id):
+                return None
             token = new_id('lease')
             conn.execute("UPDATE mission_controls SET lease_token=?,lease_until=?,lease_owner=? WHERE session_id=?",
                          (token, self.clock() + self.lease_s, json.dumps(process_identity()), session_id))

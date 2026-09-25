@@ -382,12 +382,12 @@ class Autopilot:
             if mission_kind == 'OWNER_MISSION':
                 self._yield_internal_work_to_owner()
             with self.store._connect() as conn:
-                for row in conn.execute('SELECT document FROM mission_controls'):
-                    doc = json.loads(row[0])
-                    if doc['state'] not in ('COMPLETED', 'FAILED', 'CANCELLED'):
-                        return {'success': False, 'code': 'MISSION_BUSY', 'state': doc['state'],
-                                'session_id': doc['session_id'],
-                                'error': 'Outra missão solicitada por você ainda está em andamento.'}
+                blocking = self.controller.blocking_mission(conn)
+                if blocking:
+                    state = blocking['state']
+                    return {'success': False, 'code': 'MISSION_BUSY', 'state': state,
+                            'session_id': blocking['session_id'],
+                            'error': 'Outra missão solicitada por você ainda está em andamento.'}
             sid = session_id or new_id('session')
             session = self.store.get_session(sid)
             from core.lab_v1.source_mission import source_requested, prepare_source

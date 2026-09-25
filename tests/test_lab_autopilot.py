@@ -484,6 +484,50 @@ def test_busy_request_and_cancel_do_not_call_models(engine):
     assert not engine.store.list_runs(sid)
 
 
+def test_idle_blocked_work_item_does_not_freeze_the_shared_team_room(engine):
+    from core.lab_v1.autopilot import _AutopilotPorts
+    from core.lab_v1.mission_controller import Verification
+
+    blocked_sid = engine.start('First')['session_id']
+    ports = _AutopilotPorts(engine, blocked_sid, engine.metrics(blocked_sid))
+    engine.controller.tick(blocked_sid, ports)
+    ports.verify = lambda *_: Verification('FAIL', 'old-verifier')
+    assert engine.controller.tick(blocked_sid, ports)['state'] == 'BLOCKED'
+
+    next_item = engine.start('Second')
+
+    assert next_item['success'] is True and next_item['state'] == 'QUEUED'
+    assert engine.controller.snapshot(blocked_sid)['state'] == 'BLOCKED'
+    assert engine.store.get_session(next_item['session_id']).team_id == engine.store.get_session(blocked_sid).team_id
+
+
+def test_queued_work_still_blocks_a_new_work_item(engine):
+    sid = engine.start('First')['session_id']
+    with engine.store._connect() as conn:
+        doc = engine.controller.blocking_mission(conn)
+    assert doc['session_id'] == sid and doc['state'] == 'QUEUED'
+    assert engine.start('Second')['code'] == 'MISSION_BUSY'
+
+
+def test_live_lease_on_paused_work_still_blocks_a_new_work_item(engine):
+    from core.lab_v1.autopilot import _AutopilotPorts
+    from core.lab_v1.mission_controller import Verification
+
+    sid = engine.start('First')['session_id']
+    ports = _AutopilotPorts(engine, sid, engine.metrics(sid))
+    engine.controller.tick(sid, ports)
+    ports.verify = lambda *_: Verification('FAIL', 'old-verifier')
+    assert engine.controller.tick(sid, ports)['state'] == 'BLOCKED'
+    with engine.store._connect() as conn:
+        conn.execute('UPDATE mission_controls SET lease_token=?, lease_until=?, lease_owner=? WHERE session_id=?',
+                     ('live-test-lease', engine.controller.clock() + 30, 'test-owner', sid))
+
+    busy = engine.start('Second')
+
+    assert busy['code'] == 'MISSION_BUSY'
+    assert engine.controller.snapshot(sid)['state'] == 'BLOCKED'
+
+
 def test_owner_submission_retires_failed_daily_review_and_starts_immediately(engine):
     engine.runtime.registry.get('primary').invalid = True
     daily = engine.start('Internal review')['session_id']

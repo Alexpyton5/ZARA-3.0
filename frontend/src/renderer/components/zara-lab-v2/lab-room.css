@@ -34,6 +34,7 @@
 /* Agent Agency is a library of available profiles, separate from room members. */
 .zl-template-catalog{margin:22px 0 18px;padding-top:17px;border-top:1px solid #2d3b42}
 .zl-template-catalog .zl-section-heading h3{margin:0;color:#d6e6e2}
+.zl-memory-sources{list-style:none;margin:6px 0 10px;padding:0}.zl-memory-sources li{padding:7px 0;border-top:1px solid #2d4147;overflow-wrap:anywhere}.zl-memory-sources strong,.zl-memory-sources small{display:block;font-size:10px;font-weight:500}.zl-memory-sources small{margin-top:3px;color:#8da7ab;font-size:9px}
 .zl-template-help{margin:8px 0 12px;color:#99aeb6;font-size:11px;line-height:1.5}
 .zl-template-search{display:flex;align-items:center;gap:8px;padding:9px 10px;background:#202c33;border:1px solid #35464d;border-radius:9px;color:#88a7a7}
 .zl-template-search input{width:100%;font-size:11px}

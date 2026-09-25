@@ -40,6 +40,28 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 
 ## DONE
 
+## ACTIVE — ZARA-LAB-LIVING-TEAM-20260925
+
+- **Owner:** Alex; executor: Chief/Codex diretamente no source enquanto o Lab ainda não executa a missão sozinho.
+- **Objetivo:** sala única ZARA Core com retomada idempotente, equipe dinâmica entre 264 perfis, inspeção proativa, pesquisa pública citada, memória compartilhada Obsidian, conversas naturais reais e pipeline seguro de código até build empacotado.
+- **Plano e prompt:** `.claude/ZARA_LAB_LIVING_TEAM_MISSION.md`.
+- **Gates:** `.unlazy/zara-lab-living-team-20260925/GATES.md`.
+- **Estado:** ATIVA. M010 e M020 implementados, empacotados e observados no app real: uma sala ZARA Core com 34 missões no histórico, mensagens entre sessões e retorno direto à sala após reinício. M000 continua parcial quanto à reconciliação de execução/DB.
+- **Build ativo:** `release-candidate-lab-resume-room-20260925-151800`; hashes do EXE, ASAR e backend conferidos; uma janela principal ativa. Release anterior preservada como rollback.
+- **Próximo:** M030 — conectar o contexto dos agentes à memória do vault Obsidian e mostrá-la na sala. O resíduo de lease/política do M000 permanece registrado e não será alterado por esta fatia.
+
+### Lista de execução — cumprir em ordem, sem delegar ao Lab
+
+- [ ] M000 — Fechar a reconciliação do build ativo, da janela única e do banco canônico. Estado: PARCIAL; identidade do build e janela única conferidas, lease/política ainda precisam ser conciliados.
+- [x] M010 — Transformar a interface numa sala ZARA Core contínua, com mensagens de várias missões e divisores visíveis. Estado: PACKAGED_RUNTIME observado; G1–G3 e G5–G6 aprovados.
+- [x] M020 — Reabrir o app na mesma sala e retomar a missão ativa sem duplicar ciclos, mensagens ou tarefas. Estado: PACKAGED_RUNTIME observado; após reinício abriu direto no Lab e o banco permaneceu em 35 sessões, 197 mensagens e 120 tarefas.
+- [ ] M030 — Conectar a memória compartilhada ao vault Obsidian verdadeiro e mostrar fonte/atualização. Estado: EM EXECUÇÃO, contrato `ZARA-LAB-LIVING-TEAM-20260925/M030`; busca limitada à pasta `Zara-Memoria`, sem leitura de notas pessoais do vault.
+- [ ] M040 — Fazer leitores e pesquisadores estudarem a ZARA e trazerem achados com fontes verificáveis.
+- [ ] M050 — Fazer a equipe discutir em linguagem natural e convocar especialistas sob demanda.
+- [ ] M060 — Validar o caminho de código real: patch, revisão, testes, promoção permitida e resultado no app.
+- [ ] M070 — Permitir editar instruções/SOUL e modelo por bot, ordenar fallbacks e restaurar padrão.
+- [ ] M080 — Gerar um build oficial, conferir identidade e validar o ciclo no único app aberto.
+
 - ID: T-JARVIS-P0-01
   owner: Chief of Staff (sessão principal)
   scope: Fase 0/1 da Missão Jarvis — confirmar fonte↔build↔runtime e validar
@@ -90,12 +112,37 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 
 ## READY — CURRENT FOCUS
 
+- ID: ZARA-LAB-LIVING-TEAM-M030
+  owner: Chief of Staff (sessão principal)
+  status: IN_PROGRESS
+  goal: fazer as chamadas reais do ZARA Lab consumirem memória de projeto do vault Obsidian configurado e expor, na UI, status, proveniência e atualização.
+  scope: pesquisa lexical sob demanda somente em `Zara-Memoria`; contexto para chamadas do CEO/delegado e Autopilot; evento persistido de fontes consultadas; estado visível na sala; build único e missão curta read-only no app empacotado.
+  files_allowed: `core/obsidian_memory.py`, `core/lab_v1/runtime.py`, `core/lab_v1/autopilot.py`, `frontend/src/renderer/components/zara-lab-v2/labTypes.ts`, `frontend/src/renderer/components/zara-lab-v2/LabRoom.tsx`, `frontend/src/renderer/components/zara-lab-v2/lab-room.css`, `.claude/CURRENT_MISSION.md`, `.claude/TASK_BOARD.md`, `.unlazy/zara-lab-living-team-20260925/GATES.md`, `.unlazy/zara-lab-living-team-20260925/M030/GATES.md`, `ZARA_ACTIVE_BUILD.json`, `ZARA_ACTIVE_BUILD.txt` e artefatos oficiais de build.
+  files_forbidden: `core/ipc_handlers.py`, `memory/project_memory.py`, DB do Lab, qualquer conteúdo fora de `Zara-Memoria`, notas privadas não relacionadas, `.env`/credenciais, builds históricos e qualquer caminho preexistente sujo fora do escopo.
+  baseline: `7f4f29a`; build ativo M020 identificado no `ZARA_ACTIVE_BUILD.json`; 106 paths dirty/untracked preexistentes nesta cópia de trabalho.
+  expected_delta: consultas dos agentes recebem apenas trechos de notas do projeto relevantes e com tamanho limitado; cada consulta bem-sucedida persiste proveniência relativa sem corpo de nota; snapshot/UI mostram conexão, contagem/data e leitura direta sem alegar índice persistente.
+  validation: revisar o boundary de privacidade e os caminhos reais de prompt; verificações focadas apenas se necessárias para encontrar regressão.
+  packaged_test: `tools/build_candidate.py`; conferir hashes do EXE/ASAR/backend, iniciar apenas o build apontado, observar o cartão de memória e uma missão read-only no Lab canônico.
+  physical_test: N/A para voz/controle físico nesta fatia.
+  rollback: preservar build ativo anterior; reverter apenas mudanças M030, sem alterar DB ou vault.
+  stop_condition: vault ausente/inválido, leitura fora de `Zara-Memoria`, segredo no contexto/evento, provedor sem autorização, UI não mostra fonte real ou build/janela divergente.
+
 - ID: ZARA-LAB-M000
   owner: Chief of Staff
   scope: reconciliar build ativo, processo, diretórios de release, banco canônico e comando de smoke; preservar uma única ZARA operacional.
-  status: READY — ainda não iniciado.
-  files: conforme o cartão M000 em `.claude/ZARA_LAB_AUTOPILOT_MASTER_MANUAL.md`; declarar o caminho exato do manifesto antes de qualquer movimentação.
-  acceptance: JSON/documentação/processo/única pasta ativa concordam; build excedente vai para `_quarentena/` com manifesto, sem exclusão; a mesma sessão do Lab fica visível no app.
+  status: IN_PROGRESS — auditoria inicial concluída; abrir sessão canônica M000 após fechar a missão bloqueada sem alterações.
+  GOAL: reconciliar identidade e operação do único build ativo; encerrar em linguagem natural e com evidência dentro do Lab visível.
+  SCOPE: somente identidade do build, processo em execução, referência de rollback, DB canônico, smoke curto e atualização deste estado. Sem correção funcional nesta missão.
+  FILES_ALLOWED: `ZARA_ACTIVE_BUILD.json`, `ZARA_ACTIVE_BUILD.txt`, `.claude/CURRENT_MISSION.md`, `.claude/TASK_BOARD.md`, `.claude/rules/build-release.md`, `.claude/rules/test-run-policy.md`, `tools/build_candidate.py`, um manifesto novo em `_quarentena/` somente se um pacote for comprovadamente excedente e não referenciado.
+  FILES_FORBIDDEN: fonte funcional, DB do Lab, vault/ProjectMemory, reset/clean, os 99 caminhos preexistentes, build ativo, pacote base/rollback referido por `ZARA_ACTIVE_BUILD.json` ou `SOURCE_PROMOTION.json`.
+  BASELINE: branch `codex/zara-master-20260923`, HEAD `f5208cd`; 99 caminhos dirty/untracked preexistentes. Build ativo `release-candidate-lab-source-20260925-120718`, EXE SHA-256 `67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89`, backend SHA-256 `79943875F0F2942ACDC28412112566E63E311EF6819328A433FC02101DAFEE48`. Processo reaberto uma vez; uma janela principal.
+  EXPECTED_DELTA: relatório natural da equipe na sessão M000 e estado operacional atualizado; nenhum delta de código. A release `release-candidate-lab-continuous-autonomy-20260925-20260925-112133` é BASE_BUILD e aparece como rollback no journal, portanto fica protegida até substituição segura dessa referência.
+  TESTS: não executar pytest/harness. Conferir EXE/backend SHA, caminho dos processos, contagem/estado da sessão no DB canônico e o mesmo session_id na UI do build aberto.
+  PACKAGED_TEST: usar a ZARA já aberta pelo EXE oficial; não abrir outro pacote.
+  PHYSICAL_TEST: sem comando de voz/PC; confirmação de tela é do app real. Controle de tela indisponível neste runtime; Alex pode precisar selecionar “ZARA Lab” na navegação.
+  ROLLBACK: reverter apenas as edições operacionais deste cartão/estado; não mover baseline/rollback. Manifesto e procedimento de retorno obrigatórios antes de qualquer movimentação autorizada.
+  STOP_CONDITION: divergência de SHA/processo, promoção pendente, lease vivo, incapacidade de apontar a mesma sessão canônica, ou tentativa de tocar nos 99 deltas anteriores.
+  acceptance: JSON/documentação/processo concordam sobre um build ativo; release anterior fica identificada e protegida como rollback, sem ser tratada como outro build ativo; smoke curto documentado; sessão M000 aparece no Lab real sem duplicar janela.
 
 ## IN PROGRESS / PRESERVED BACKLOG
 

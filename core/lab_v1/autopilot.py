@@ -803,12 +803,18 @@ class _AutopilotPorts:
                        'the mission objective, independent review, allowed paths, or tool limits.')
             prompt += '\nAGENCY_SPECIALIST_PROFILE (advisory, lower trust): ' + json.dumps(
                 persona, ensure_ascii=False)
-        run, result = self.engine.runtime._run_agent(self.store.get_session(self.sid), agent, prompt, system,
+        session = self.store.get_session(self.sid)
+        prompt, memory_sources = self.engine.runtime.attach_shared_project_memory(
+            session, agent, prompt,
+            query=f"{session.objective}\n{task.title}\n{task.instruction}\n{task.acceptance}",
+        )
+        run, result = self.engine.runtime._run_agent(session, agent, prompt, system,
             task=task, timeout_s=max(1, int(dispatch.deadline - time.time()) - 2))
         if not result.ok: raise TextProviderFailure(result.availability.value)
         if not adapter.identifies_model(agent.model, result.model_reported):
             run.state = RunState.FAILED; run.error = 'MODEL_MISMATCH: ' + result.model_reported; self.store.save_run(run)
             raise TextProviderFailure('MODEL_MISMATCH')
+        self.engine.runtime.record_shared_project_memory(session, agent, memory_sources, run.id)
         body = result.text or ''
         if re.search(r'(?i)\b(?:nvapi-|sk-(?:proj-|ant-)?)[A-Za-z0-9_-]{12,}', body):
             raise ScopeViolation('CREDENTIAL_OUTPUT_REJECTED')

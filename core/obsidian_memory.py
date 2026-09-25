@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import os
 import re
+import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +30,25 @@ from memory.project_memory import _detect_real_obsidian_vault
 
 _ZARA_SUBFOLDER = "Zara-Memoria"
 _SNIPPET_RADIUS_CHARS = 120
+_PROJECT_MEMORY_MAX_FILES = 128
+_PROJECT_MEMORY_MAX_ENTRIES = 4096
+_PROJECT_MEMORY_MAX_FILE_BYTES = 256_000
+_PROJECT_MEMORY_MAX_TOTAL_BYTES = 2_000_000
+_PROJECT_MEMORY_MAX_MATCHES = 4
+_PROJECT_MEMORY_MAX_SNIPPET_CHARS = 1_200
+_PROJECT_MEMORY_STOPWORDS = frozenset({
+    "para", "com", "uma", "uns", "das", "dos", "que", "por", "como", "mais", "menos",
+    "esta", "esse", "essa", "sobre", "entre", "quando", "onde", "the", "and", "for",
+    "from", "with", "that", "this", "into", "your", "have", "what", "which",
+})
+_PROJECT_MEMORY_SECRET_RE = re.compile(
+    r"(?i)(?:\b(?:[A-Z0-9]+_)?(?:API[_ -]?KEY|ACCESS[_ -]?TOKEN|REFRESH[_ -]?TOKEN|"
+    r"SECRET(?:[_ -]?ACCESS[_ -]?KEY)?|PASSWORD|PASSWD|TOKEN|CREDENTIALS?)\b"
+    r"\s*[:=]\s*['\"]?[^\s'\"]{8,}|\bbearer\s+[A-Za-z0-9._~+/-]{12,}|"
+    r"\b(?:nvapi-|sk-(?:proj-|ant-|live_)?|gh[pousr]_|github_pat_|xox[baprs]-|"
+    r"sk_live_|rk_live_|AIza|ya29\.|hf_|pypi-|npm_)"
+    r"[A-Za-z0-9_./+=-]{12,}|-----BEGIN (?:ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----)"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +71,10 @@ class ObsidianMemoryManager:
 
     @property
     def available(self) -> bool:
-        return self.vault_path is not None and self.vault_path.is_dir()
+        try:
+            return self.vault_path is not None and self.vault_path.is_dir()
+        except OSError:
+            return False
 
     def search_notes(self, query: str) -> list[dict]:
         """Varre recursivamente as notas .md do cofre (case-insensitive) e
@@ -78,6 +102,151 @@ class ObsidianMemoryManager:
             match = NoteMatch(title=md_path.stem, path=str(md_path.relative_to(self.vault_path)), snippet=snippet)
             matches.append({"title": match.title, "path": match.path, "snippet": match.snippet})
         return matches
+
+    @staticmethod
+    def _normalize_project_text(value: str) -> str:
+        decomposed = unicodedata.normalize("NFKD", str(value or ""))
+        return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
+
+    def _project_memory_files(self) -> list[tuple[Path, float, int]]:
+        """Return Markdown metadata from the ZARA project-memory folder only.
+
+        The rest of Alex's Obsidian vault is deliberately outside the Lab's
+        retrieval boundary. Symlinks and paths resolving outside this folder
+        are ignored.
+        """
+        if not self.available:
+            return []
+        try:
+            vault = self.vault_path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return []
+        folder = self.vault_path / _ZARA_SUBFOLDER
+        if folder.is_symlink() or not folder.is_dir():
+            return []
+        try:
+            root = folder.resolve(strict=True)
+            root.relative_to(vault)
+        except (OSError, ValueError):
+            return []
+
+        rows: list[tuple[Path, float, int]] = []
+        entries_seen = 0
+        try:
+            for current, directories, filenames in os.walk(folder, followlinks=False):
+                directories[:] = [name for name in directories if not (Path(current) / name).is_symlink()]
+                for name in filenames:
+                    entries_seen += 1
+                    if entries_seen > _PROJECT_MEMORY_MAX_ENTRIES:
+                        break
+                    path = Path(current) / name
+                    if path.suffix.casefold() != ".md" or path.is_symlink():
+                        continue
+                    try:
+                        resolved = path.resolve(strict=True)
+                        resolved.relative_to(root)
+                        if not resolved.is_file():
+                            continue
+                        stat = resolved.stat()
+                        rows.append((resolved, stat.st_mtime, stat.st_size))
+                    except (OSError, RuntimeError, ValueError):
+                        continue
+                if entries_seen > _PROJECT_MEMORY_MAX_ENTRIES:
+                    break
+        except (OSError, RuntimeError):
+            return []
+        rows.sort(key=lambda row: (row[1], str(row[0]).casefold()), reverse=True)
+        return rows[:_PROJECT_MEMORY_MAX_FILES]
+
+    def project_memory_status(self) -> dict:
+        """Describe connection and freshness without exposing a local path."""
+        checked_at = time.time()
+        if not self.available:
+            return {
+                "state": "UNAVAILABLE", "source": "Obsidian · Zara-Memoria",
+                "notes_count": 0, "checked_at": checked_at,
+                "latest_updated_at": None, "read_mode": "LIVE_READ",
+            }
+        rows = self._project_memory_files()
+        return {
+            "state": "CONNECTED" if rows else "CONNECTED_EMPTY",
+            "source": "Obsidian · Zara-Memoria",
+            "notes_count": len(rows), "checked_at": checked_at,
+            "latest_updated_at": max((row[1] for row in rows), default=None),
+            "read_mode": "LIVE_READ",
+        }
+
+    def search_project_memory(self, query: str, *, limit: int = _PROJECT_MEMORY_MAX_MATCHES) -> list[dict]:
+        """Find bounded, relevant snippets only in `Zara-Memoria`.
+
+        This is a live read, not a persisted index. Notes with credential-like
+        material are excluded as a whole; the event/UI receives only source
+        metadata, never the note body.
+        """
+        if not self.available:
+            return []
+        normalized_query = self._normalize_project_text(str(query or '')[:12_000])
+        terms = [term for term in re.findall(r"[a-z0-9_]{3,}", normalized_query)
+                 if term not in _PROJECT_MEMORY_STOPWORDS]
+        terms = list(dict.fromkeys(terms))[:32]
+        if not terms:
+            return []
+
+        scored: list[tuple[int, float, dict]] = []
+        bytes_read = 0
+        try:
+            vault = self.vault_path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return []
+        for path, modified_at, size in self._project_memory_files():
+            if size <= 0 or size > _PROJECT_MEMORY_MAX_FILE_BYTES:
+                continue
+            if bytes_read + size > _PROJECT_MEMORY_MAX_TOTAL_BYTES:
+                break
+            try:
+                raw = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            bytes_read += size
+            if _PROJECT_MEMORY_SECRET_RE.search(raw):
+                continue
+
+            title = path.stem
+            normalized_title = self._normalize_project_text(title)
+            normalized_body = self._normalize_project_text(raw)
+            title_score = sum(4 for term in terms if term in normalized_title)
+            body_score = sum(min(4, normalized_body.count(term)) for term in terms)
+            score = title_score + body_score
+            if score <= 0:
+                continue
+
+            lines = raw.splitlines()
+            line_scores = [
+                sum(min(3, self._normalize_project_text(line).count(term)) for term in terms)
+                for line in lines
+            ]
+            if line_scores and max(line_scores) > 0:
+                center = line_scores.index(max(line_scores))
+                snippet = "\n".join(lines[max(0, center - 1):center + 3]).strip()
+            else:
+                snippet = raw.strip()[:_PROJECT_MEMORY_MAX_SNIPPET_CHARS]
+            if len(snippet) > _PROJECT_MEMORY_MAX_SNIPPET_CHARS:
+                snippet = snippet[:_PROJECT_MEMORY_MAX_SNIPPET_CHARS - 1].rstrip() + "…"
+            try:
+                relative_path = str(path.relative_to(vault)).replace("\\", "/")
+            except ValueError:
+                continue
+            scored.append((score, modified_at, {
+                "title": title[:160], "path": relative_path,
+                "updated_at": modified_at, "snippet": snippet,
+            }))
+
+        scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
+        try:
+            bounded_limit = max(1, min(int(limit), _PROJECT_MEMORY_MAX_MATCHES))
+        except (TypeError, ValueError, OverflowError):
+            bounded_limit = _PROJECT_MEMORY_MAX_MATCHES
+        return [row[2] for row in scored[:bounded_limit]]
 
     def save_memory(self, topic: str, content: str, category: str = "Geral") -> str | None:
         """Cria ou anexa uma nota markdown com timestamp na subpasta

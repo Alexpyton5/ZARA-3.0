@@ -51,6 +51,22 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
     : allMessages;
   const tasks = creating ? [] : asList(session?.tasks);
   const runs = creating ? [] : asList(session?.runs);
+  const linkedMemorySources = asList(session?.events)
+    .filter(event => event.type === 'memory.linked')
+    .flatMap(event => {
+      const payload = event.payload || {};
+      const agentName = typeof payload.agent_name === 'string' ? payload.agent_name : 'Agente';
+      const sources = Array.isArray(payload.sources) ? payload.sources : [];
+      return sources.flatMap(source => {
+        if (!source || typeof source !== 'object') return [];
+        const row = source as Record<string, unknown>;
+        const path = typeof row.path === 'string' ? row.path.replace(/\\/g, '/') : '';
+        if (!path || path.startsWith('/') || /^[a-z]:/i.test(path) || /(^|\/)\.\.(\/|$)/.test(path)) return [];
+        return [{ key: `${event.id}:${path}`, path, title: typeof row.title === 'string' ? row.title : path, agentName, occurredAt: event.occurred_at }];
+      });
+    })
+    .slice(-8)
+    .reverse();
   const missionState = session?.mission?.state || session?.state;
   const missionOpen = !creating && !!session?.mission && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(missionState || '');
   const backgroundRunning = data?.autonomy_policy?.background_task_state === 'RUNNING';
@@ -157,6 +173,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
       <div className="zl-inspector-body">{tab === 'operations' ? <>
         <div className="zl-regent"><ShieldCheck size={22} /><div><strong>{running ? 'ZARA está coordenando' : 'Estado factual da missão'}</strong><p>Coordenação, continuidade e evidências persistidas.</p></div></div>
         <div className="zl-autonomy"><h3>Continuidade</h3><p>{backgroundRunning ? `Supervisor ativo · ${label(cycleState)}` : `Supervisor ${label(data?.autonomy_policy?.background_task_state || 'STOPPED').toLowerCase()}`}</p>{data?.autonomy_policy?.background_error && <p className="zl-error">{data.autonomy_policy.background_error}</p>}<h3>Melhoria contínua</h3><p>{cycleStatus}</p><button disabled={busy || !data?.autonomy_policy} onClick={() => void perform(async () => { requireResult(await window.zaraIPC?.labV1?.configureAutonomy(!data?.autonomy_policy?.enabled)); })}>{data?.autonomy_policy?.enabled ? 'Pausar novos ciclos' : 'Ativar ciclos automáticos'}</button></div>
+        <div className="zl-autonomy"><h3>Memória compartilhada</h3><p>{data?.shared_memory?.state === 'CONNECTED' ? 'Obsidian conectado' : data?.shared_memory?.state === 'CONNECTED_EMPTY' ? 'Cofre conectado; pasta de memória vazia' : data?.shared_memory?.state === 'UNAVAILABLE' ? 'Obsidian indisponível' : 'Verificando Obsidian'}</p><p>{data?.shared_memory?.source || 'Obsidian · Zara-Memoria'} · {data?.shared_memory?.notes_count ?? 0} notas encontradas (limite 128)</p><p>Leitura direta, sem índice salvo · verificado {timestamp(data?.shared_memory?.checked_at)}</p><p>Nota mais recente: {timestamp(data?.shared_memory?.latest_updated_at ?? undefined, true)}</p><h3>Fontes consultadas nesta missão</h3>{linkedMemorySources.length ? <ul className="zl-memory-sources">{linkedMemorySources.map(source => <li key={source.key}><strong>{source.title}</strong><small>{source.path} · {source.agentName} · {timestamp(source.occurredAt)}</small></li>)}</ul> : <p className="zl-empty-small">Nenhuma fonte foi registrada nesta missão ainda.</p>}</div>
         <div className="zl-section-heading"><h3>Plano de trabalho</h3><span>{tasks.filter(t => t.state === 'COMPLETED').length}/{tasks.length}</span></div>
         {tasks.map((task, index) => <details className="zl-task" key={task.id}><summary><span className={task.state === 'COMPLETED' ? 'done' : ''}>{task.state === 'COMPLETED' ? <Check size={13} /> : index + 1}</span><div><strong>{task.title}</strong><small>{nameOf(task.assigned_agent_id)} · {label(task.state)}</small></div><ChevronRight size={14} /></summary><p>{task.instruction}</p>{task.result && <pre>{task.result}</pre>}</details>)}
         {!tasks.length && <p className="zl-empty-small">O plano aparece quando a equipe inicia uma missão.</p>}

@@ -8,6 +8,16 @@ Concluir na ordem do plano enviado por Alex. Cada fase tem build e commit própr
 
 **Foco operacional atual:** por instrução de Alex, priorizar a autonomia real do Zara Lab e manter voz pausada. Isso não conclui nem apaga os gates F0/F1/F2/F4 do plano original.
 
+**Marco ativo — M030:** conectar a memória compartilhada dos agentes ao vault Obsidian configurado. A inspeção confirmou apenas metadata: configuração existe, vault acessível e pasta `Zara-Memoria` contém nota(s). O source atual não injeta essa memória nas chamadas do Lab e a UI não mostra proveniência. Limite desta fatia: consultar somente `Zara-Memoria`, nunca percorrer notas pessoais; registrar caminhos relativos e horário; provar a consulta numa missão read-only visível no app empacotado. O resíduo operacional M000 (registro de lease/política) segue preservado e fora da mutação M030.
+
+### Prioridade explícita de Alex — ZARA-LAB-LIVING-TEAM-20260925
+
+Alex determinou que o Lab vire uma única sala contínua onde um CEO convoca especialistas, leitores inspecionam a ZARA, pesquisadores buscam melhorias com fontes, todos consultam memória compartilhada do vault Obsidian, e engenheiros implementam mudanças reais com validação/revisão/build. O Codex implementa diretamente no source enquanto o Lab não consegue concluir a própria missão. Plano completo e prompt operacional: `.claude/ZARA_LAB_LIVING_TEAM_MISSION.md`; gates: `.unlazy/zara-lab-living-team-20260925/GATES.md`.
+
+**Estado inicial:** 35 sessões e 182 mensagens no DB canônico; mensagens ainda ligadas a sessões e sem feed unificado; print mostra missões separadas e uma candidata de código aguardando revisão; Obsidian compartilhado pelo Lab não está comprovado. Primeiro marco de produto: M010 — feed persistente ZARA Core. Preservar os 101 caminhos dirty/untracked anteriores. Não iniciar outra missão paralela nem abrir outro app.
+
+**Progresso desta execução (2026-09-25):** M010 e M020 foram gerados por `tools/build_candidate.py` e observados no app empacotado. A tela mostra uma só entrada `ZARA Core`, 34 missões no histórico e mensagens de missões distintas com separadores. M020 agora abre o app diretamente na sala; após reiniciar, as contagens canônicas permaneceram em 35 sessões, 197 mensagens e 120 tarefas, estáveis em duas leituras. Capturas: `.unlazy/zara-lab-living-team-20260925/PACKAGED_RUNTIME_M010_20260925.png` e `PACKAGED_RUNTIME_M020_20260925.png`. Build ativo: `release-candidate-lab-resume-room-20260925-151800`; hashes de EXE/ASAR/backend conferidos; uma janela principal aberta e release anterior preservada para rollback. M000 segue parcial até conciliar lease e política do supervisor.
+
 ### Entrega documental concluída — ZARA-LAB-MASTER-MANUAL-20260925
 
 - Manual: `.claude/ZARA_LAB_AUTOPILOT_MASTER_MANUAL.md`.
@@ -68,7 +78,13 @@ F0 Higiene → F1 Voz fluida → F2 Modelos grátis → F3 Zara Lab (P3.3, P3.4,
 
 ## Próxima ação
 
-Executar **M000** do manual do Zara Lab: conferir processo real, JSON, pastas de release e DB canônico; reconciliar a identidade e preservar qualquer build excedente em quarentena com manifesto. Não iniciar outra alteração do produto antes desse gate. F1 continua pausada por decisão de Alex.
+**M000 em andamento.** O app foi reaberto uma única vez pelo EXE de `ZARA_ACTIVE_BUILD.json` (`release-candidate-lab-source-20260925-120718`); a janela principal e os processos filhos apontam para essa mesma pasta. JSON, EXE e backend SHA conferem. Há uma release anterior, mas ela é referenciada como `BASE_BUILD` e rollback em `SOURCE_PROMOTION.json`; fica protegida e não será movida como lixo.
+
+Uma sessão anterior de inspeção (`session_8819d4e41e01`) ficou `BLOCKED` por `INSPECTION_REVIEW_SCHEMA`; não tinha patch nem alterações no produto. Foi encerrada pelo serviço real do Lab como `CANCELLED`, mantendo histórico e artefatos. Isso liberou a fila sem apagar a conversa.
+
+O Lab real inicia em `Hoje` a cada abertura (`ZaraHome` define `activeNav='Hoje'`), e uma missão em estado `BLOCKED` impedia `Autopilot.start` de aceitar outra. Esses são defeitos de continuidade/roteamento a tratar nas missões correspondentes do manual; não os contornar com sessões paralelas. O controle visual deste runtime falhou, então a rota do Lab não foi confirmada pela tela; Alex pode selecionar “ZARA Lab” para acompanhar a sessão canônica.
+
+Próximo passo: criar e concluir a sessão visível **M000** usando `tools/zara_lab_visible_mission.py`, conferir o mesmo `session_id` no DB canônico e na tela, e só então abrir **M010**. Não executar pytest nem outro harness. F1 continua pausada por decisão de Alex.
 
 ## Histórico anterior — OPENCODE + VOZ + LAB 24H (2026-09-22)
 

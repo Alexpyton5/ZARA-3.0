@@ -20,8 +20,7 @@ Scope: connect real Lab model calls to vetted project notes in the configured Ob
   EVIDENCE: BLOCKED. The real launcher refused to start because the canonical Lab still has an earlier session in BLOCKED / UNCERTAIN_EFFECT, with a pending candidate-build reconciliation. No new mission was created and the earlier session was preserved.
 
 - [x] G6: the active EXE/ASAR/backend identity matches the build manifest and exactly one ZARA window is open
-  EVIDENCE: active manifest SHA256 matched EXE, ASAR, and backend; exactly one main ZARA process and its backend were observed; app responded.
+  EVIDENCE: active manifest SHA256 matched EXE, ASAR, and backend; exactly one main ZARA process matched the manifest; both backend processes belong to that same packaged process tree; app responded.
 
-- [ ] G7: the previous room build remains available for rollback and only task-owned files are committed/pushed
-  EVIDENCE: M020 rollback package remains present; M030 source commit exists. Documentation/manifest checkpoint still needs commit and normal GitHub push.
-
+- [x] G7: the previous room build remains available for rollback and only task-owned files are committed/pushed
+  EVIDENCE: M020 rollback package remains present; M030 source and checkpoint commits are pushed. No unrelated dirty files were staged.

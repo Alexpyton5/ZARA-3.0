@@ -180,7 +180,10 @@ class AutonomySupervisor:
                 return {'state': 'MONITORING'}
             day = time.strftime('%Y-%m-%d')
             count = policy['daily_missions'] if policy.get('daily_date') == day else 0
-            if now >= policy.get('next_evolution_check', 0) and count < policy['max_new_evolution_missions_per_day']:
+            # An audit is due on the first launch of a new day even when the
+            # previous day's cadence timestamp has not elapsed yet.
+            due = now >= policy.get('next_evolution_check', 0) or policy.get('daily_date') != day
+            if due and count < policy['max_new_evolution_missions_per_day']:
                 self._save(next_evolution_check=now + policy['evolution_cadence_seconds'])
                 self.ensure_team()
                 evolution.autopilot = self._engine(workforce)

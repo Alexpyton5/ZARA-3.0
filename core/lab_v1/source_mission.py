@@ -201,6 +201,19 @@ class SourceMission:
         if not reviewers:
             self.engine._block(self.sid, 'INDEPENDENT_REVIEWER_UNAVAILABLE'); return
         reviewer = reviewers[0]
+        objective = self.store.get_session(self.sid).objective
+        builder, builder_selection = self.engine.agency_specialist(
+            team_id=team, objective=objective + '\n' + patch['instruction'],
+            role=RoleName.BUILDER, baseline=builder, planner_id=planner.id)
+        reviewer, reviewer_selection = self.engine.agency_specialist(
+            team_id=team, objective=objective + '\n' + review['instruction'],
+            role=RoleName.REVIEWER, baseline=reviewer, planner_id=planner.id,
+            used_template_ids=(builder_selection.get('template_id'),))
+        # The model resources are the same authorized resources frozen at
+        # mission start. Specialist identity changes only the participant and
+        # advisory persona, never scope or executor permissions.
+        selection = [builder_selection, reviewer_selection]
+        self.save_meta(agency_selection=selection)
         definitions = [
             (patch['id'] + ':draft', patch, builder, 'DELEGATE', 'model.text', ('plan',)),
             (patch['id'] + ':apply', patch, builder, 'ACTION', 'source.apply', (patch['id'] + ':draft',)),

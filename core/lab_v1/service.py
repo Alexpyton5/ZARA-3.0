@@ -772,6 +772,10 @@ class LabV1Service:
             memory_adapter = LabMemoryAdapter(store)
             self._store = store
             self._runtime = LabRuntime(store, registry, memory_adapter)
+            # Opening the Lab must show its permanent team before the first
+            # scheduled mission or owner message. This is idempotent and does
+            # not certify a model or start a run.
+            self._runtime.ensure_core_team()
         return self._runtime
 
     # -- boot reconciliation ---------------------------------------------
@@ -950,6 +954,11 @@ class LabV1Service:
         try:
             runtime = self._get_runtime()
             data = await asyncio.to_thread(runtime.snapshot, session_id, team_id)
+            from core.lab_v1.agency_catalog import catalog_info, list_templates
+            data['agent_templates'] = list_templates(limit=None)
+            data['agent_template_catalog'] = {
+                key: value for key, value in catalog_info().items() if key != 'license_text'
+            }
             from core.lab_v1.manus import ManusWorkCell
             if self._manus is None:
                 self._manus = ManusWorkCell(runtime.store)

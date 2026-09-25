@@ -24,3 +24,4 @@ Scope: connect real Lab model calls to vetted project notes in the configured Ob
 
 - [ ] G7: the previous room build remains available for rollback and only task-owned files are committed/pushed
   EVIDENCE: M020 rollback package remains present; M030 source commit exists. Documentation/manifest checkpoint still needs commit and normal GitHub push.
+

@@ -18,6 +18,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   const session = data?.session;
   const [text, setText] = useState('');
   const [search, setSearch] = useState('');
+  const [templateSearch, setTemplateSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [playing, setPlaying] = useState(false);
   useEffect(() => observarKore(setPlaying), []);
@@ -34,6 +35,11 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   const operation = useRef(false);
   const agents = asList(data?.agents).filter(a => !a.archived);
   const members = agents.filter(a => asList(data?.memberships).some(m => m.agent_id === a.id && !m.left_at));
+  const templates = asList(data?.agent_templates);
+  const templateQuery = templateSearch.trim().toLocaleLowerCase('pt-BR');
+  const matchingTemplates = templateQuery
+    ? templates.filter(template => `${template.name} ${template.description} ${template.division}`.toLocaleLowerCase('pt-BR').includes(templateQuery))
+    : templates;
   const sessions = asList(data?.sessions).filter(s => s.objective.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   const messages = creating ? [] : asList(session?.messages);
   const tasks = creating ? [] : asList(session?.tasks);
@@ -108,7 +114,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
     </aside>
 
     <main className="zl-conversation-main">
-      <header className="zl-chat-header"><Avatar name="ZARA" id="zara" /><div><h1>{creating ? 'Nova missão' : data?.team?.name || 'ZARA Lab'}</h1><p>{members.length ? `${members.length} agentes · ZARA regente` : 'Aguardando equipe comprovada'} <span>·</span> <span className="zl-good">{missionLabel}</span></p></div><button onClick={() => { setTab('people'); setInspectorOpen(v => !v); }} aria-label="Ver participantes"><Users size={20} /></button><button onClick={onClose} aria-label="Fechar ZARA Lab"><X size={20} /></button></header>
+      <header className="zl-chat-header"><Avatar name="ZARA" id="zara" /><div><h1>{creating ? 'Nova missão' : data?.team?.name || 'ZARA Lab'}</h1><p>{members.length ? `${members.length} agentes · ZARA regente` : templates.length ? `${templates.length} perfis sob demanda · ZARA regente` : 'Aguardando equipe comprovada'} <span>·</span> <span className="zl-good">{missionLabel}</span></p></div><button onClick={() => { setTab('people'); setInspectorOpen(v => !v); }} aria-label="Ver participantes"><Users size={20} /></button><button onClick={onClose} aria-label="Fechar ZARA Lab"><X size={20} /></button></header>
       {!creating && session && <div className="zl-mission-strip"><Zap size={15} /><span>{session.objective}</span><b>{label(missionState)}</b></div>}
       <div className="zl-messages" ref={log} role="log" aria-label="Conversa da equipe" aria-live="polite">
         {!messages.length && <div className="zl-welcome"><span className="zl-welcome-orb"><img src={zaraMark} alt="ZARA" /></span><span className="zl-eyebrow">ZARA + SUA EQUIPE</span><h2>Uma ideia sua.<br />Um objetivo para todos.</h2><p>Uma intenção. Sua equipe cuida do contexto, divide o trabalho e devolve um resultado com evidências.</p><button onClick={() => { setCreating(true); setText('Crie um briefing curto para melhorar a experiência do ZARA Lab.'); }}>Começar com um briefing <ArrowUpRight size={16} /></button></div>}
@@ -138,10 +144,23 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
         {session?.autonomy && !creating && <div className="zl-autonomy"><h3>Autonomia desta missão</h3><p>{session.autonomy.owner_touches} comando inicial</p><p>Resultado: {session.autonomy.content_review === 'NOT_CERTIFIED' ? 'Arquivo verificado; conteúdo sem revisão independente' : session.autonomy.content_review}</p>{session.autonomy.gaps?.map((gap, i) => <p key={i}>{gap.reason}</p>)}</div>}
         {missionOpen && <button className="zl-cancel" disabled={busy} onClick={() => void perform(async () => { requireResult(await window.zaraIPC?.labV1?.cancelMission(sessionId)); })}><Square size={13} /> Cancelar missão</button>}
       </> : <>
-        <div className="zl-section-heading"><h3>Equipe desta sala</h3><button aria-label="Adicionar participante" onClick={() => setShowAgent(true)}><Plus size={17} /></button></div>
+        <div className="zl-section-heading"><h3>Equipe desta sala ({members.length})</h3><button aria-label="Adicionar participante" onClick={() => setShowAgent(true)}><Plus size={17} /></button></div>
         <article className="zl-person"><Avatar name="ZARA" small /><div><strong>ZARA <em>Regente</em></strong><small>Coordenação do sistema</small><span className="zl-good">{data?.regent?.state || 'Conectando'}</span></div></article>
         {members.map(person)}
+        {!members.length && <p className="zl-empty-small">{templates.length ? 'Nenhum agente entrou nesta equipe ainda. Os perfis abaixo podem ser chamados conforme a missão.' : 'Nenhum agente entrou nesta equipe ainda.'}</p>}
         {agents.some(a => !members.includes(a)) && <><h3>Outros participantes</h3>{agents.filter(a => !members.includes(a)).map(person)}</>}
+        <section className="zl-template-catalog" aria-label="Catálogo Agent Agency">
+          <div className="zl-section-heading"><h3>Agent Agency</h3><span>{templates.length} perfis</span></div>
+          <p className="zl-template-help">Especialistas disponíveis sob demanda. O trabalho real aparece na equipe e nas execuções.</p>
+          <label className="zl-template-search"><Search size={15} /><input type="search" aria-label="Buscar perfil do Agent Agency" placeholder="Buscar nome, área ou especialidade" value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} /></label>
+          {templates.length ? <>
+            <small className="zl-template-count">{matchingTemplates.length} {matchingTemplates.length === 1 ? 'perfil encontrado' : 'perfis encontrados'}</small>
+            <div className="zl-template-list" role="list" aria-label="Perfis do Agent Agency">
+              {matchingTemplates.map(template => <article className="zl-template" role="listitem" key={template.id}><Avatar name={template.name} id={template.id} small /><div><strong>{template.name}</strong><small>{template.division}</small><p title={template.description}>{template.description}</p></div></article>)}
+            </div>
+            {!matchingTemplates.length && <p className="zl-empty-small">Nenhum perfil corresponde à busca.</p>}
+          </> : <p className="zl-empty-small">{data?.agent_templates ? 'Nenhum perfil disponível neste catálogo.' : 'Catálogo ainda não disponível nesta versão do Lab.'}</p>}
+        </section>
         <h3>Células de trabalho</h3>{asList(data?.workcells).map(cell => <article className="zl-person" key={cell.id}><Avatar name={cell.name} small /><div><strong>{cell.name}</strong><small>{cell.detail}</small><span className="zl-muted">{label(cell.availability)}</span></div></article>)}
         <h3>Conexões</h3>{asList(data?.providers).map(provider => <details className="zl-provider" key={provider.id}><summary><strong>{provider.label || provider.id}</strong><span className={provider.availability === 'AVAILABLE' ? 'zl-good' : 'zl-muted'}>{label(provider.availability)}</span></summary><p>{provider.detail}</p></details>)}
       </>}</div>

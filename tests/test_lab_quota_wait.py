@@ -124,3 +124,19 @@ def test_falha_real_de_provedor_continua_limitada(world):
     doc = _doc(ctl)
     assert doc['steps'][0].get('resource_failures', 0) >= 1, (
         'erro real de provedor deve contar como falha de recurso')
+
+
+def test_cota_apos_erros_reais_preserva_espera_da_missao(world):
+    _, ctl, clock = world
+    _plan(ctl)
+    ctl.tick('session', QuotaPorts('QUOTA_EXHAUSTED'))
+    with ctl._transaction() as conn:
+        doc, _ = ctl._load(conn, 'session')
+        doc['steps'][0]['resource_failures'] = 3
+        ctl._save(conn, doc, 'test.prior_provider_errors')
+    doc = _doc(ctl)
+    assert doc['state'] == 'WAITING_RESOURCE'
+    assert doc['steps'][0]['resource_failures'] == 3
+    clock.value = doc['steps'][0]['retry_at'] + 1
+    assert ctl.resume_due_resource('session')
+    assert _doc(ctl)['state'] == 'RUNNING'

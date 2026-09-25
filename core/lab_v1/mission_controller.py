@@ -499,7 +499,12 @@ class MissionController:
             due = next((s for s in doc['steps'] if s['status'] == 'PROVIDER_FAILED'
                         and s.get('retry_at', float('inf')) <= self.clock()), None)
             if not due: return False
-            waiting_on_quota = due.get('quota_waits', 0) > 0 and due.get('resource_failures', 0) < 3
+            # A quota failure pauses this attempt even if earlier provider
+            # errors used the ordinary retry budget. The prior errors remain
+            # recorded; they must not turn a later quota wait into exhaustion.
+            waiting_on_quota = (doc.get('blocker') in
+                                ('PROVIDER_QUOTA_EXHAUSTED', 'PROVIDER_RATE_LIMITED')
+                                and due.get('quota_waits', 0) > 0)
             if not waiting_on_quota and (doc['used']['retries'] >= doc['limits']['max_retries']
                                          or due.get('resource_failures', 0) >= 3):
                 doc['state'], doc['blocker'] = 'BLOCKED_NEEDS_OWNER', 'RESOURCE_RETRY_LIMIT'

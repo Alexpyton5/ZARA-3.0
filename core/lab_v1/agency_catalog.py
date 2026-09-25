@@ -63,6 +63,7 @@ _PT_ALIASES = {
     "clientes": "customers",
     "codigo": "code",
     "conteudo": "content",
+    "corrigir": "fix",
     "dados": "data",
     "desempenho": "performance",
     "desenvolvedor": "developer",
@@ -241,7 +242,23 @@ def select_template(objective: str, role: str | None = None) -> dict[str, Any] |
 
     An exact role ID or name wins. Otherwise metadata matching chooses the
     highest score; an unrelated or empty request returns ``None``.
+
+    These checks exercise the real bundled catalog, with no mock profiles::
+
+        >>> select_template("corrigir bug no código do ZARA Lab", role="BUILDER")["id"]
+        'engineering/engineering-minimal-change-engineer'
+        >>> select_template("melhorar interface do Zara Lab", role="BUILDER")["id"]
+        'engineering/engineering-frontend-developer'
     """
+    if role and role.strip().casefold() == "builder":
+        # BUILDER is a Lab workflow role, not a request for a persona whose
+        # name happens to contain "Builder" (for example, MCP Builder).
+        # A worker implementing a fix should not inherit a reviewer persona.
+        rows = _ranked(objective or "")
+        for row in rows:
+            if not {"reviewer", "auditor", "checker"} & _field_tokens(row["name"]):
+                return dict(row)
+        return None
     if role:
         by_id = get_template(role)
         if by_id:

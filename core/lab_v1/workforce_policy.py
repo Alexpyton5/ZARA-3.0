@@ -50,6 +50,7 @@ class WorkforcePolicy:
     @staticmethod
     def default_document() -> dict:
         return {
+            'policy_schema_version': 3,
             'mission_entry_enabled': True,
             'background_enabled': True,
             # Alex explicitly authorized automatic application of only
@@ -111,6 +112,12 @@ class WorkforcePolicy:
                 # Alex authorized his NVIDIA free catalog; a live completion
                 # on 2026-09-24 confirmed this exact Flash endpoint responds.
                 'nvidia/z-ai/glm-5.3-flash': 'OWNER_REPORTED_FREE',
+                # Real OpenCode calls on 2026-09-25 proved these exact local
+                # free/contributor-free routes return model text successfully.
+                'opencode/opencode/muse-spark-1.3-contributor-free': 'OWNER_REPORTED_FREE',
+                'opencode/opencode/ling-3.0-flash-fin-free': 'OWNER_REPORTED_FREE',
+                'opencode/opencode/mimo-v2.6-flash-free': 'OWNER_REPORTED_FREE',
+                'opencode/opencode/nemotron-3.5-lightning-free': 'OWNER_REPORTED_FREE',
                 'deepseek_harness/*': 'UNKNOWN_COST',
             },
             # Only aliases proven by a real call are listed. `claude_cli/haiku`
@@ -136,8 +143,12 @@ class WorkforcePolicy:
                 'nvidia/nvidia/nemotron-3-super-120b-a12b', 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
                 'nvidia/moonshotai/kimi-k3', 'nvidia/z-ai/glm-5.3',
                 'nvidia/z-ai/glm-5.3-flash',
+                'opencode/opencode/muse-spark-1.3-contributor-free',
+                'opencode/opencode/ling-3.0-flash-fin-free',
+                'opencode/opencode/mimo-v2.6-flash-free',
+                'opencode/opencode/nemotron-3.5-lightning-free',
             ],
-            'authorized_providers': ['codex_cli', 'claude_cli', 'nvidia'],
+            'authorized_providers': ['codex_cli', 'claude_cli', 'nvidia', 'opencode'],
             'authorized_roles': ['CEO', 'BUILDER', 'REVIEWER', 'RESEARCHER', 'MEMBER'],
             'max_repair_attempts': 1,
             'cadence_seconds': 60,
@@ -161,11 +172,11 @@ class WorkforcePolicy:
             # candidate standing (e.g. codex_cli and claude_cli both out of
             # quota) -- see tests/test_lab_workforce_bot_customization.py.
             'role_model_preference': {
-                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash'],
-                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash'],
-                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'nvidia/nemotron-3-ultra-550b-a55b', 'moonshotai/kimi-k3'],
-                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'z-ai/glm-5.3-flash', 'moonshotai/kimi-k3'],
-                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash'],
+                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash', 'opencode/muse-spark-1.3-contributor-free', 'opencode/ling-3.0-flash-fin-free'],
+                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash', 'opencode/mimo-v2.6-flash-free', 'opencode/ling-3.0-flash-fin-free'],
+                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'nvidia/nemotron-3-ultra-550b-a55b', 'moonshotai/kimi-k3', 'opencode/nemotron-3.5-lightning-free', 'opencode/muse-spark-1.3-contributor-free'],
+                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus', 'z-ai/glm-5.3-flash', 'moonshotai/kimi-k3', 'opencode/ling-3.0-flash-fin-free'],
+                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus', 'moonshotai/kimi-k3', 'z-ai/glm-5.3-flash', 'opencode/muse-spark-1.3-contributor-free'],
             },
         }
 

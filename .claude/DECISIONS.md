@@ -42,6 +42,28 @@ Só decisão estável/importante. Não é log de rotina — isso fica no git.
   (`ZARA_ACTIVE_BUILD.json`/`.txt`), não "candidatos" — já formalizado em
   `.claude/rules/build-release.md` desde 2026-09-04.
 
+- **2026-09-25 — Um build canônico visível + backup contínuo no GitHub.**
+  Alex reforçou que deve existir somente uma ZARA/build operacional no diretório
+  `frontend/`. Builds anteriores nunca são apagados diretamente: vão para
+  `_quarentena/` com manifesto de origem/destino para rollback e auditoria.
+  Depois de cada bloco relevante de progresso validado, registrar o delta em Git
+  e enviar a branch de trabalho ao `origin` para manter um backup remoto atualizado.
+  Não versionar bancos locais, credenciais, caches, binários empacotados ou outros
+  artefatos de runtime que não pertençam ao source/documentação do projeto.
+
+- **2026-09-25 — Missão real do ZARA Lab só vale se for visível no Lab canônico.**
+  Alex determinou que harness/perfil isolado nunca mais seja usado como prova de
+  que os bots estão trabalhando de verdade. Toda missão real de desenvolvimento,
+  pesquisa, revisão, código, teste ou autonomia deve usar o mesmo banco/estado do
+  ZARA Lab aberto no app, para que Alex consiga fiscalizar a conversa, os agentes,
+  o plano, as tarefas, os runs e as entregas enquanto acontecem. Diretórios
+  temporários, `.unlazy/`, `tmp_path` e qualquer `ZARA3_HOME` alternativo podem
+  continuar existindo apenas como infraestrutura técnica de testes de código; eles
+  **não contam** como evidência de missão, autonomia, PACKAGED_RUNTIME ou conclusão
+  de produto. O launcher oficial para trabalho real é
+  `tools/zara_lab_visible_mission.py`; ele exige o build ativo aberto e fixa o
+  processo no diretório de dados canônico do app.
+
 - **`ZARA_STATE.md`/`.json` (gerado por `tools/zara_selftest.py`) é a fonte de
   estado técnico oficial.** Antes de reauditar a ZARA, comparar o commit
   registrado nele com `git rev-parse HEAD`; se bater, não rodar suíte de novo.

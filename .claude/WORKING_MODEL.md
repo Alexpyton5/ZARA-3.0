@@ -146,8 +146,33 @@ Checkpoint (commit) antes de mudança grande. Nunca destruir trabalho
 desconhecido. (Reforça `governance.md`, que já lista o conjunto completo de
 operações proibidas sem autorização nomeada.)
 
+Com autorização explícita do Alex em 2026-09-25, cada bloco relevante de
+progresso validado da ZARA deve terminar com checkpoint Git e `push` normal da
+branch de trabalho para `origin`, mantendo o GitHub como backup atualizado.
+Antes do commit, revisar o staged diff e excluir secrets, bancos/perfis locais,
+caches, builds/binários e outros artefatos de runtime. Nunca usar force-push.
+
 ## Fonte única de verdade
 
 Uma interface oficial, um código ativo, um estado oficial (`ZARA_STATE.md`),
 um sistema de testes. Não trabalhar com múltiplos "candidatos" — já é a regra
 vigente em `.claude/rules/build-release.md`.
+
+Na árvore `frontend/` deve permanecer somente o build apontado por
+`ZARA_ACTIVE_BUILD.json`. Qualquer build anterior é preservado em
+`_quarentena/` com manifesto; não é excluído diretamente.
+
+## ZARA Lab visível — regra de execução real
+
+- Missão real dos agentes começa no **Lab canônico visível**, nunca em harness
+  isolado usado como substituto do produto.
+- Para iniciar trabalho autônomo fora do campo de texto da UI, usar
+  `python tools/zara_lab_visible_mission.py "<objetivo>"`.
+- O launcher só aceita o diretório real `%LOCALAPPDATA%\ZARA3`, exige o build
+  indicado por `ZARA_ACTIVE_BUILD.json` aberto e persiste no mesmo
+  `zara_lab_v1.db` que a tela consulta.
+- Alex precisa conseguir abrir a mesma `session_id` e acompanhar mensagens,
+  tarefas, runs, participantes e artefatos. Sem essa observabilidade, a missão
+  não vale como prova de autonomia real.
+- Testes isolados podem proteger código contra regressão, mas nunca fecham um
+  gate de produto nem substituem a missão visível no app.

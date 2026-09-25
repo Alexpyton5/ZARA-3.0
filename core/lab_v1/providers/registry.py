@@ -17,17 +17,24 @@ import os
 import shutil
 import threading
 import re
+from contextlib import contextmanager
 from pathlib import Path
 from time import time
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from core.lab_v1.domain import Availability, ProviderInfo, ProviderResult
 from core.lab_v1.providers.base import ProviderAdapter
 from core.lab_v1.providers.claude_cli import ClaudeCliAdapter
 from core.lab_v1.providers.nvidia import NvidiaApiAdapter
 from core.lab_v1.providers.harness import DeepSeekHarnessAdapter
+from core.lab_v1.providers.opencode import OpenCodeAdapter
 from core.paths import api_keys_path, data_dir
 
-__all__ = ["ProviderRegistry", "default_registry", "ClaudeCliAdapter", "CodexCliAdapter", "AnthropicApiAdapter", "NvidiaApiAdapter"]
+__all__ = ["ProviderRegistry", "default_registry", "ClaudeCliAdapter", "CodexCliAdapter", "AnthropicApiAdapter", "NvidiaApiAdapter", "OpenCodeAdapter"]
 
 
 # Backward-compatible registry name; implementation uses the official app-server.
@@ -155,6 +162,49 @@ class ProviderRegistry:
         except (OSError, ValueError, TypeError):
             return {}
 
+    @staticmethod
+    def _merge_health(*snapshots: dict[str, dict]) -> dict[str, dict]:
+        """Merge snapshots without allowing an older observation to win."""
+        merged: dict[str, dict] = {}
+        for snapshot in snapshots:
+            for key, value in (snapshot or {}).items():
+                if not isinstance(value, dict):
+                    continue
+                current = merged.get(key)
+                current_ts = float((current or {}).get("timestamp") or 0)
+                candidate_ts = float(value.get("timestamp") or 0)
+                if current is None or candidate_ts >= current_ts:
+                    merged[key] = dict(value)
+        return merged
+
+    @contextmanager
+    def _health_file_lock(self):
+        """Serialize provider-health writes across backend instances/processes."""
+        self._health_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self._health_path.with_suffix(self._health_path.suffix + ".lock")
+        with lock_path.open("a+b") as stream:
+            if lock_path.stat().st_size == 0:
+                stream.write(b"0")
+                stream.flush()
+            stream.seek(0)
+            if os.name == "nt":
+                msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                stream.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+    def _refresh_health(self) -> None:
+        """See observations persisted by another Registry instance/process."""
+        with self._health_lock:
+            self._health = self._merge_health(self._health, self._read_health())
+
     def _write_health(self) -> None:
         self._health_path.parent.mkdir(parents=True, exist_ok=True)
         temp = self._health_path.with_suffix(".tmp")
@@ -174,6 +224,7 @@ class ProviderRegistry:
         must be cheap and side-effect free — this can be called every time
         the Lab's provider screen renders.
         """
+        self._refresh_health()
         infos = [adapter.probe() for adapter in self._adapters.values()]
         for info in infos:
             observed = self._health.get(f"provider:{info.id}")
@@ -227,17 +278,26 @@ class ProviderRegistry:
             "retry_after": None,
         }
         with self._health_lock:
-            self._health[key] = record
-            if result.ok:
-                previous = self._health.get(f'provider:{provider_id}')
-                if (previous and previous.get('availability') in {a.value for a in self._ADVERSE}
-                        and previous.get('timestamp', 0) <= record['timestamp']):
-                    self._health[f'provider:{provider_id}'] = {**record, 'scope': 'provider',
-                        'recovered_by_model': model_id, 'previous_adverse': previous}
-            self._write_health()
+            with self._health_file_lock():
+                # Another backend/Registry may have observed a newer result since
+                # this object was created. Reconcile from disk before every write.
+                self._health = self._merge_health(self._health, self._read_health())
+                previous_same = self._health.get(key)
+                if (previous_same is None
+                        or float(previous_same.get('timestamp') or 0) <= record['timestamp']):
+                    self._health[key] = record
+                if result.ok:
+                    provider_key = f'provider:{provider_id}'
+                    previous = self._health.get(provider_key)
+                    if (previous and previous.get('availability') in {a.value for a in self._ADVERSE}
+                            and float(previous.get('timestamp') or 0) <= record['timestamp']):
+                        self._health[provider_key] = {**record, 'scope': 'provider',
+                            'recovered_by_model': model_id, 'previous_adverse': previous}
+                self._write_health()
 
     def model_status(self, provider_id: str, model_id: str, *, providers=None) -> dict:
         """One truth projection for router/UI; provider denial wins over stale success."""
+        self._refresh_health()
         info = next((p for p in (providers if providers is not None else self.list_providers()) if p.id == provider_id), None)
         model = self._health.get(f'model:{provider_id}:{model_id}', {})
         if info is None or info.availability != Availability.AVAILABLE:
@@ -249,6 +309,7 @@ class ProviderRegistry:
         return {'availability': 'DISCOVERED_UNPROVEN', 'detail': 'Catalog is not inference proof'}
 
     def health_snapshot(self) -> dict[str, dict]:
+        self._refresh_health()
         return {key: dict(value) for key, value in self._health.items()}
 
 
@@ -264,4 +325,5 @@ def default_registry() -> ProviderRegistry:
     registry.register(DeepSeekHarnessAdapter())
     registry.register(OwnerDisabledAdapter(AnthropicApiAdapter()))
     registry.register(NvidiaApiAdapter())
+    registry.register(OpenCodeAdapter())
     return registry

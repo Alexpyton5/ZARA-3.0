@@ -154,6 +154,8 @@ class SourceMission:
                 and plan['tasks'] == [] and plan['plan_version'] == 1
                 and isinstance(plan['mission'], str)
                 and isinstance(plan['no_change_reason'], str) and 30 <= len(plan['no_change_reason']) <= 3000):
+            if self.meta.get('inspection_counterexample'):
+                raise ValueError('INDEPENDENT_INSPECTION_REVIEW_REQUIRES_CHANGE_PLAN')
             return plan
         if (not isinstance(plan, dict) or set(plan) != {'mission', 'plan_version', 'tasks'}
                 or plan['plan_version'] != 1 or not isinstance(plan['mission'], str)):
@@ -185,8 +187,44 @@ class SourceMission:
     def expand(self):
         plan = self.validate_plan(_extract_json(self.store.get_task(self.sid + ':plan').result))
         if plan.get('no_change_reason'):
-            if self.engine.controller.expand_verified_plan(self.sid, [], [], metadata=plan):
-                self.save_meta(no_change_reason=plan['no_change_reason'])
+            team = self.store.get_session(self.sid).team_id
+            planner = self.store.get_agent(self.metrics['planner_id'])
+            reviewers = [a for a in self.engine.candidates(team, RoleName.REVIEWER)
+                         if a.id != planner.id
+                         and (a.provider_id, a.model) != (planner.provider_id, planner.model)]
+            if not reviewers:
+                self.engine._block(self.sid, 'INDEPENDENT_INSPECTION_REVIEWER_UNAVAILABLE')
+                return
+            reviewer = reviewers[0]
+            objective = self.store.get_session(self.sid).objective
+            reviewer, reviewer_selection = self.engine.agency_specialist(
+                team_id=team,
+                objective=(objective + '\nRevise de forma independente a conclusão de que nenhuma mudança '
+                           'é justificável. Procure um contraexemplo factual antes de confirmar.'),
+                role=RoleName.REVIEWER,
+                baseline=reviewer,
+                planner_id=planner.id,
+            )
+            task = Task(
+                self.sid + ':inspection_review', self.sid, 'Revisar conclusão da inspeção',
+                'Faça uma segunda leitura independente da fonte observada e confirme ou conteste, com fatos, '
+                'a conclusão de que nenhuma mudança deve ser feita agora.',
+                planner.id, assigned_agent_id=reviewer.id,
+                acceptance=json.dumps({'method': 'independent_inspection_review'}, ensure_ascii=False),
+                max_turns=1,
+            )
+            step = MissionStep(
+                'inspection_review', task.id, 'DELEGATE', ('plan',), 'model.text',
+                ('provider:' + reviewer.provider_id + '/' + reviewer.model,),
+            )
+            if self.engine.controller.expand_verified_plan(self.sid, [task], [step], metadata=plan):
+                self.save_meta(
+                    no_change_reason=plan['no_change_reason'],
+                    inspection_review_step='inspection_review',
+                    inspection_reviewer_id=reviewer.id,
+                    agency_selection=[reviewer_selection],
+                )
+                self.engine._metrics(self.sid, task_creation_automatic=True, plan_version=2)
             return
         team = self.store.get_session(self.sid).team_id
         planner = self.store.get_agent(self.metrics['planner_id'])
@@ -253,6 +291,9 @@ class SourceMission:
                 # simply repeated. It carries the verifier's words, never a plan.
                 prompt += '\nREJECTED_PLAN_EVIDENCE: ' + json.dumps(
                     self.meta['plan_rejections'], ensure_ascii=False)[-8000:]
+            if self.meta.get('inspection_counterexample'):
+                prompt += '\nINDEPENDENT_INSPECTION_COUNTEREXAMPLE: ' + json.dumps(
+                    self.meta['inspection_counterexample'], ensure_ascii=False)[-8000:]
             prompt += '\nOBSERVED SOURCE: ' + json.dumps(self.candidate.read_context(
                 self.meta['source_paths'], max_chars=24000,
                 on_overflow='outline', focus=self.context_focus()), ensure_ascii=False)
@@ -277,6 +318,31 @@ class SourceMission:
                     'bounded correction, return {mission,plan_version:1,tasks:[],no_change_reason:"factual explanation"}. '
                     'Never manufacture a defect to produce a change. Otherwise define the observed counterexample '
                     'and its measurable intended behavior in the task plan without writing the implementation.')
+                if self.meta.get('inspection_counterexample'):
+                    system += (' An independent reviewer already rejected the previous no-change conclusion with a '
+                        'concrete counterexample included in INDEPENDENT_INSPECTION_COUNTEREXAMPLE. Re-plan from that '
+                        'evidence using the normal patch -> tests -> review task chain. Do not return tasks:[] again.')
+        elif dispatch.step_id == self.meta.get('inspection_review_step'):
+            prompt += '\nARCHITECT_NO_CHANGE_REASON: ' + json.dumps(
+                self.meta.get('no_change_reason', ''), ensure_ascii=False)
+            prompt += '\nOBSERVED SOURCE: ' + json.dumps(self.candidate.read_context(
+                self.meta['source_paths'], max_chars=32000,
+                on_overflow='outline', focus=self.context_focus(self.meta.get('no_change_reason'))),
+                ensure_ascii=False)
+            prompt += '\nSOURCE_PATHS: ' + json.dumps(self.meta['source_paths'], ensure_ascii=False)
+            system = ('You are the independent second reviewer of a ZARA source inspection. '
+                'Write the rationale in clear Brazilian Portuguese for the owner to read in the Lab conversation. '
+                'Re-read the actual supplied source and the observation evidence. Do not trust the architect conclusion '
+                'just because it exists. Look for a concrete factual counterexample, regression risk, missing behavior or '
+                'justified bounded improvement. Never manufacture a defect. Return JSON only. '
+                'If the no-change conclusion is supported, return '
+                '{"verdict":"NO_CHANGE_CONFIRMED","rationale":"factual explanation",'
+                '"evidence_refs":{"source_paths":["reviewed relative path"]}}. '
+                'If you find a real issue, return '
+                '{"verdict":"CHANGE_NEEDED","rationale":"factual explanation",'
+                '"counterexample":"concrete observed issue and expected behavior",'
+                '"evidence_refs":{"source_paths":["reviewed relative path"]}}. '
+                'Do not write implementation code. Review only the supplied source and evidence.')
         elif dispatch.step_id == 'replan_repair':
             prompt += '\nREJECTED_COUNTEREXAMPLES: ' + json.dumps(self.meta.get('counterexamples', []), ensure_ascii=False)[-24000:]
             prompt += '\nCURRENT_SOURCE: ' + json.dumps(self.candidate.read_context(
@@ -508,6 +574,39 @@ class SourceMission:
             value = _extract_json(artifact.body)
             if dispatch.step_id == 'plan':
                 self.validate_plan(value)
+            elif dispatch.step_id == self.meta.get('inspection_review_step'):
+                allowed = {'NO_CHANGE_CONFIRMED', 'CHANGE_NEEDED'}
+                if not isinstance(value, dict) or value.get('verdict') not in allowed:
+                    raise ValueError('INSPECTION_REVIEW_SCHEMA')
+                required = ({'verdict', 'rationale', 'evidence_refs'}
+                            if value['verdict'] == 'NO_CHANGE_CONFIRMED'
+                            else {'verdict', 'rationale', 'counterexample', 'evidence_refs'})
+                if set(value) != required:
+                    raise ValueError('INSPECTION_REVIEW_SCHEMA')
+                rationale = value.get('rationale')
+                if not isinstance(rationale, str) or not 30 <= len(rationale) <= REVIEW_RATIONALE_LIMIT:
+                    raise ValueError('INSPECTION_REVIEW_RATIONALE')
+                refs = value.get('evidence_refs')
+                paths = refs.get('source_paths') if isinstance(refs, dict) else None
+                if (not isinstance(paths, list) or not paths
+                        or any(not isinstance(path, str) for path in paths)
+                        or set(paths) != set(self.meta['source_paths'])):
+                    raise ValueError('INSPECTION_REVIEW_SOURCE_REFS')
+                if value['verdict'] == 'CHANGE_NEEDED':
+                    counterexample = value.get('counterexample')
+                    if not isinstance(counterexample, str) or not 30 <= len(counterexample) <= 4000:
+                        raise ValueError('INSPECTION_REVIEW_COUNTEREXAMPLE')
+                runs = self.store.list_runs(self.sid)
+                reviewer_run = next((run for run in reversed(runs)
+                                     if run.task_id == dispatch.task_id and run.state.value == 'COMPLETED'), None)
+                planner_run = next((run for run in reversed(runs)
+                                    if run.task_id == self.sid + ':plan' and run.state.value == 'COMPLETED'), None)
+                if (reviewer_run is None or planner_run is None or reviewer_run.agent_id == planner_run.agent_id):
+                    raise ValueError('INDEPENDENT_INSPECTION_REVIEW_REQUIRED')
+                self.save_meta(inspection_review=value)
+                if value['verdict'] == 'CHANGE_NEEDED':
+                    if not self._reopen_plan_after_inspection_disagreement(value):
+                        raise ValueError('INSPECTION_REPLAN_UNAVAILABLE')
             elif dispatch.step_id == 'replan_repair':
                 if (not isinstance(value, dict) or set(value) != {'decision', 'rationale', 'instruction'}
                         or value['decision'] not in ('CHANGE_APPROACH', 'SPLIT_TASK', 'CHANGE_WORKER', 'EXPAND_TESTS', 'CORRECT_ACCEPTANCE')
@@ -674,19 +773,101 @@ class SourceMission:
         except (ValueError, KeyError, TypeError, SyntaxError) as exc:
             evidence['error'] = str(exc)[:2000]
         saved = self.artifact(dispatch, 'SOURCE_VERIFICATION', evidence)
-        if evidence['passed'] and dispatch.capability == 'model.text':
-            self._publish_agent_update(dispatch, value)
+        if evidence['passed']:
+            if dispatch.capability == 'model.text':
+                self._publish_agent_update(dispatch, value)
+            elif dispatch.capability in ('source.apply', 'source.tests'):
+                self._publish_verified_status(dispatch, value)
         return Verification('PASS' if evidence['passed'] else 'FAIL', saved.artifact_ref)
+
+    def _reopen_plan_after_inspection_disagreement(self, review):
+        """Give the architect one bounded re-plan when the second reader finds a real issue."""
+        if self.meta.get('inspection_replans', 0) >= 1:
+            return False
+        with self.engine.controller._transaction() as conn:
+            doc, _ = self.engine.controller._load(conn, self.sid)
+            plan_step = next((step for step in doc['steps'] if step['id'] == 'plan'), None)
+            review_step = next((step for step in doc['steps']
+                                if step['id'] == self.meta.get('inspection_review_step')), None)
+            if (doc['cancel_requested'] or plan_step is None or review_step is None
+                    or plan_step['status'] != 'DONE' or review_step['status'] != 'VERIFYING'
+                    or doc['used']['retries'] >= doc['limits']['max_retries']):
+                return False
+            if plan_step.get('attempt_id') or plan_step.get('receipt') or plan_step.get('verification'):
+                plan_step.setdefault('repairs', []).append({
+                    'reason': 'Independent inspection review found a concrete issue.',
+                    'receipt': plan_step.get('receipt'),
+                    'verification': plan_step.get('verification'),
+                    'attempt_id': plan_step.get('attempt_id'),
+                })
+            plan_step.update(status='PENDING', attempt_id=None, receipt=None, verification=None)
+            conn.execute("UPDATE tasks SET state='CREATED',result=NULL WHERE id=?", (plan_step['task_id'],))
+            doc['used']['retries'] += 1
+            doc['awaiting_expansion'] = True
+            doc['state'], doc['blocker'] = 'RUNNING', None
+            doc['plan_version'] += 1
+            conn.execute('INSERT INTO mission_plans VALUES(?,?,?)',
+                         (self.sid, doc['plan_version'], json.dumps(doc['steps'])))
+            self.engine.controller._save(conn, doc, 'mission.inspection_replan_authorized')
+        self.save_meta(
+            no_change_reason=None,
+            inspection_counterexample={
+                'rationale': review['rationale'],
+                'counterexample': review['counterexample'],
+                'evidence_refs': review['evidence_refs'],
+            },
+            inspection_replans=self.meta.get('inspection_replans', 0) + 1,
+        )
+        self.engine._metrics(self.sid, recovery_automatic=True)
+        return True
+
+    def _publish_verified_status(self, dispatch, value):
+        """Publish only facts that already passed deterministic verification."""
+        if dispatch.capability == 'source.apply':
+            content = ('A alteração foi aplicada somente na candidata isolada e conferida. '
+                       'Agora vou executar os testes reais antes de qualquer revisão final.')
+        elif dispatch.capability == 'source.tests' and isinstance(value, dict):
+            baseline = value.get('baseline', {}).get('counts', {})
+            candidate = value.get('candidate', {}).get('counts', {})
+            failed_before = baseline.get('failed')
+            passed_after = candidate.get('passed')
+            collected_after = candidate.get('collected')
+            reviewer = self.store.get_agent(self.meta['reviewer_id']) if self.meta.get('reviewer_id') else None
+            content = (f'Testes reais concluídos: a fonte original apresentou {failed_before} falha(s) e a candidata '
+                       f'passou {passed_after}/{collected_after}. '
+                       + (f'Agora {reviewer.name} fará a revisão independente.' if reviewer else
+                          'Agora começa a revisão independente.'))
+        else:
+            return
+        mid = 'status:' + dispatch.attempt_id + ':' + dispatch.capability
+        if not any(message.id == mid for message in self.store.list_messages(self.sid)):
+            self.store.add_message(Message(mid, self.sid, MessageKind.ZARA, 'ZARA', content[:1200]))
 
     def _publish_agent_update(self, dispatch, value):
         """Show a verified agent's work as conversation, never as raw JSON/code."""
         if not isinstance(value, dict):
             return
         if dispatch.step_id == 'plan':
-            titles = [task.get('title', '') for task in value.get('tasks', ())]
-            titles = [title.strip() for title in titles if isinstance(title, str) and title.strip()]
-            content = ('Li o objetivo e organizei o trabalho: ' + '; '.join(titles[:3]) + '.'
-                       if titles else 'Li o objetivo e concluí o plano de trabalho para a equipe.')
+            reason = value.get('no_change_reason')
+            if isinstance(reason, str) and reason.strip():
+                content = ('Revisei a fonte e, nesta primeira leitura, não encontrei uma mudança justificável: '
+                           + reason.strip() + ' Vou pedir uma segunda revisão independente antes de encerrar.')
+            else:
+                titles = [task.get('title', '') for task in value.get('tasks', ())]
+                titles = [title.strip() for title in titles if isinstance(title, str) and title.strip()]
+                prefix = ('A segunda revisão encontrou um ponto real. Reorganizei o trabalho: '
+                          if self.meta.get('inspection_counterexample') else
+                          'Li o objetivo e organizei o trabalho: ')
+                content = (prefix + '; '.join(titles[:3]) + '.'
+                           if titles else 'Li o objetivo e concluí o plano de trabalho para a equipe.')
+        elif dispatch.step_id == self.meta.get('inspection_review_step'):
+            rationale = value.get('rationale', '')
+            if value.get('verdict') == 'CHANGE_NEEDED':
+                content = ('Fiz a segunda revisão e encontrei um ponto concreto que precisa de trabalho. '
+                           + str(rationale).strip() + ' Vou devolver isso ao arquiteto para replanejamento.')
+            else:
+                content = ('Fiz a segunda revisão independente e concordo que não há mudança justificável agora. '
+                           + str(rationale).strip())
         elif dispatch.step_id == self.meta.get('patch_step'):
             summary = value.get('summary', '')
             content = ('Preparei a alteração no ambiente isolado. ' + summary.strip()

@@ -139,6 +139,110 @@ def test_source_pipeline_reopens_candidate_and_runs_real_subprocesses(source_eng
     assert proof['owner_touches'] == 1
 
 
+def test_source_inspection_no_change_gets_independent_visible_review(source_engine, monkeypatch):
+    adapter = source_engine.runtime.registry.get('unit-only')
+    original = adapter.complete
+
+    def complete(**kwargs):
+        model = kwargs['model']
+        system = kwargs.get('system', '')
+        if model == 'planner':
+            result = {
+                'mission': 'Inspecionar o comportamento atual',
+                'plan_version': 1,
+                'tasks': [],
+                'no_change_reason': ('A função observada é pequena e o comportamento atual não apresenta um '
+                                     'contraexemplo factual que justifique alteração neste momento.'),
+            }
+            return ProviderResult(True, text=json.dumps(result), availability=Availability.AVAILABLE,
+                                  model_reported=model, provider_session_id='unit-no-change')
+        if model == 'reviewer' and 'independent second reviewer' in system:
+            result = {
+                'verdict': 'NO_CHANGE_CONFIRMED',
+                'rationale': ('Reli a função completa e não encontrei perda de comportamento, risco observável '
+                              'ou caso factual que justifique uma correção agora.'),
+                'evidence_refs': {'source_paths': ['core/example.py']},
+            }
+            return ProviderResult(True, text=json.dumps(result), availability=Availability.AVAILABLE,
+                                  model_reported=model, provider_session_id='unit-second-review')
+        return original(**kwargs)
+
+    monkeypatch.setattr(adapter, 'complete', complete)
+    started = source_engine.start(
+        'Inspecione core/example.py e procure somente uma melhoria justificável.',
+        mission_kind='SELF_IMPROVEMENT', evidence={'observation_kind': 'SOURCE_INSPECTION'})
+    sid = started['session_id']
+
+    result = source_engine.run(sid)
+
+    assert result['state'] == 'COMPLETED'
+    meta = source_engine.metrics(sid)['source_work']
+    assert meta['inspection_review']['verdict'] == 'NO_CHANGE_CONFIRMED'
+    assert meta['inspection_reviewer_id'] != source_engine.metrics(sid)['planner_id']
+    messages = source_engine.store.list_messages(sid)
+    assert messages[0].author == 'ZARA'
+    assert any('segunda revisão independente antes de encerrar' in message.content for message in messages)
+    assert any('segunda revisão independente e concordo' in message.content for message in messages)
+    assert not any('"mission"' in message.content or '"plan_version"' in message.content for message in messages)
+
+
+def test_source_inspection_disagreement_replans_and_keeps_working(source_engine, monkeypatch):
+    adapter = source_engine.runtime.registry.get('unit-only')
+    original = adapter.complete
+    planner_calls = []
+
+    def complete(**kwargs):
+        model = kwargs['model']
+        system = kwargs.get('system', '')
+        prompt = kwargs.get('prompt') or kwargs.get('user') or kwargs.get('message') or ''
+        if model == 'planner':
+            planner_calls.append(prompt)
+            if 'INDEPENDENT_INSPECTION_COUNTEREXAMPLE' not in prompt:
+                result = {
+                    'mission': 'Inspecionar o comportamento atual',
+                    'plan_version': 1,
+                    'tasks': [],
+                    'no_change_reason': ('A primeira leitura não encontrou um defeito concreto suficiente para '
+                                         'autorizar uma alteração na fonte observada.'),
+                }
+                return ProviderResult(True, text=json.dumps(result), availability=Availability.AVAILABLE,
+                                      model_reported=model, provider_session_id='unit-no-change-first')
+            return original(**kwargs)
+        if model == 'reviewer' and 'independent second reviewer' in system:
+            result = {
+                'verdict': 'CHANGE_NEEDED',
+                'rationale': ('A segunda leitura encontrou um contraexemplo concreto no cálculo: para entradas '
+                              'negativas a função soma dois em vez de realmente duplicar o valor.'),
+                'counterexample': ('Em core/example.py, twice(-2) devolve 0; o comportamento esperado pelo nome e '
+                                   'pela operação é -4, portanto existe uma correção pequena e verificável.'),
+                'evidence_refs': {'source_paths': ['core/example.py']},
+            }
+            return ProviderResult(True, text=json.dumps(result), availability=Availability.AVAILABLE,
+                                  model_reported=model, provider_session_id='unit-second-review-change')
+        return original(**kwargs)
+
+    monkeypatch.setattr(adapter, 'complete', complete)
+    started = source_engine.start(
+        'Inspecione core/example.py e procure somente uma melhoria justificável.',
+        mission_kind='SELF_IMPROVEMENT', evidence={'observation_kind': 'SOURCE_INSPECTION'})
+    sid = started['session_id']
+
+    result = source_engine.run(sid)
+
+    assert result['state'] == 'COMPLETED'
+    meta = source_engine.metrics(sid)['source_work']
+    assert meta['inspection_replans'] == 1
+    assert meta['no_change_reason'] is None
+    assert meta['change_evidence']['source_files_changed'] == 1
+    assert len(planner_calls) == 2
+    assert 'INDEPENDENT_INSPECTION_COUNTEREXAMPLE' in planner_calls[1]
+    messages = source_engine.store.list_messages(sid)
+    assert any('encontrei um ponto concreto que precisa de trabalho' in message.content for message in messages)
+    assert any('Reorganizei o trabalho' in message.content for message in messages)
+    assert any('Testes reais concluídos' in message.content for message in messages)
+    assert not any('"mission"' in message.content or '"plan_version"' in message.content for message in messages)
+
+
 def test_source_mission_waits_before_creating_session_without_independent_team(source_engine):
     source_engine.runtime.registry.record_result(
         'unit-only', 'planner',

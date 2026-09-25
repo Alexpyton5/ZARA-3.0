@@ -8,7 +8,7 @@ Scope: preserve the F0 evidence, produce an identity-bound candidate without del
   EVIDENCE: _quarentena/organizacao-2026-09-23/recovered-fast-forward-20260923-184256/MANIFEST.json; six recovered files listed and SHA-256 values recorded
 
 - [ ] P0.1: quarantine inventory completed without deleting or reclassifying preserved material
-  STATUS: PARTIAL — refreshed SHA-256 inventory covers 1,024 preserved files (92,680,738 bytes) in _quarentena/MANIFEST_P0.1_20260923.json; prior manifest preserved as MANIFEST_P0.1_20260923.pre-refresh.json; no bytes freed. The aggregate "35 stubs/dead memories" is still not enumerated. The 8.5 GB target is not evidenced in this worktree; uncertain items remain protected.
+  STATUS: PARTIAL — refreshed SHA-256 inventory covers 1,033 preserved files (93,428,117 bytes) in _quarentena/MANIFEST_P0.1_20260923.json; prior manifest preserved as MANIFEST_P0.1_20260923.pre-refresh.json and MANIFEST_P0.1_20260923.pre-refresh-2.json; no bytes freed. The aggregate "35 stubs/dead memories" is still not enumerated. The 8.5 GB target is not evidenced in this worktree; uncertain items remain protected.
   CHECK: `python .unlazy/f0-current-worktree/verify_quarantine_manifest.py`
   EXPECT: `QUARANTINE_MANIFEST_PASS files=1024 bytes=92680738`
 

@@ -4,12 +4,45 @@ from pathlib import Path
 
 import pytest
 
+from tools.build_source_candidate import CandidateBuildError, build_candidate
+
+
+def test_checkout_evidence_sandbox_passes_boundary_and_stops_at_disk_preflight(tmp_path, monkeypatch):
+    workspace = tmp_path / "checkout"
+    sandbox = workspace / ".unlazy" / "run" / "profile" / "mission"
+    source = sandbox / "source"
+    source.mkdir(parents=True)
+    import tools.build_source_candidate as builder
+
+    def preflight_reached(_sandbox):
+        raise CandidateBuildError("PREFLIGHT_REACHED")
+
+    monkeypatch.setattr(builder, "_require_build_space", preflight_reached)
+    review = {"verdict": "PASS", "reviewer_run_id": "review-1",
+              "evidence_refs": {"artifact_hashes": ["a"], "test_receipt_ids": ["t"]}}
+    with pytest.raises(CandidateBuildError, match="PREFLIGHT_REACHED"):
+        build_candidate(workspace, sandbox, source, [], review)
+
+
+def test_checkout_source_tree_cannot_be_candidate_sandbox(tmp_path):
+    workspace = tmp_path / "checkout"
+    sandbox = workspace / "core" / "mission"
+    source = sandbox / "source"
+    source.mkdir(parents=True)
+    review = {"verdict": "PASS", "reviewer_run_id": "review-1",
+              "evidence_refs": {"artifact_hashes": ["a"], "test_receipt_ids": ["t"]}}
+    with pytest.raises(CandidateBuildError, match="CANDIDATE_WORKSPACE_BOUNDARY_INVALID"):
+        build_candidate(workspace, sandbox, source, [], review)
+
+import pytest
+
 from tools.build_source_candidate import (
     CandidateBuildError,
     _bind_review,
     _overlay_candidate,
     _relative,
     _require_build_space,
+    _require_frozen_overlays,
     _require_review,
 )
 
@@ -52,6 +85,36 @@ def test_builder_binds_every_overlay_byte_to_the_independent_review():
     _bind_review(review, overlays)
     with pytest.raises(CandidateBuildError, match="INDEPENDENT_REVIEW_HASH_MISMATCH"):
         _bind_review(review, list(reversed(overlays)))
+
+
+def test_source_manifest_requires_runtime_overlay_but_not_regression_test_overlay(tmp_path: Path):
+    source = tmp_path / "source"; staged = tmp_path / "staged"; package = tmp_path / "package"
+    for root in (source, staged, package):
+        (root / "core").mkdir(parents=True, exist_ok=True)
+        (root / "tests").mkdir(parents=True, exist_ok=True)
+    runtime = b"answer = 2\n"; regression = b"def test_answer(): assert True\n"
+    for root in (source, staged):
+        (root / "core" / "safe.py").write_bytes(runtime)
+        (root / "tests" / "test_safe.py").write_bytes(regression)
+    import hashlib, json
+    runtime_sha = hashlib.sha256(runtime).hexdigest()
+    regression_sha = hashlib.sha256(regression).hexdigest()
+    (package / "SOURCE_MANIFEST.json").write_text(json.dumps({
+        "sha256": "source-id",
+        "files": [{"path": "core/safe.py", "sha256": runtime_sha}],
+    }), encoding="utf-8")
+
+    _require_frozen_overlays(source, staged, package, [
+        {"path": "core/safe.py", "sha256": runtime_sha},
+        {"path": "tests/test_safe.py", "sha256": regression_sha},
+    ], "source-id")
+
+    (package / "SOURCE_MANIFEST.json").write_text(json.dumps({
+        "sha256": "source-id", "files": []}), encoding="utf-8")
+    with pytest.raises(CandidateBuildError, match="CANDIDATE_OVERLAY_NOT_IN_SOURCE_MANIFEST"):
+        _require_frozen_overlays(source, staged, package, [
+            {"path": "core/safe.py", "sha256": runtime_sha}
+        ], "source-id")
 
 
 def test_sidecar_spec_does_not_embed_external_hermes_runtime_files():

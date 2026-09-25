@@ -15,6 +15,12 @@ from core.lab_v1.store import LabStore
 from tools import build_current as build
 
 
+def test_release_manifest_gate_only_requires_packaged_overlay_files():
+    assert release_module._overlay_is_packaged_source(Path('core/lab_v1/feedback_inbox.py')) is True
+    assert release_module._overlay_is_packaged_source(Path('tests/test_zara_mission_regression.py')) is False
+    assert release_module._overlay_is_packaged_source(Path('tests/test_lab_feedback_pipeline.py')) is False
+
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -29,7 +35,8 @@ def make_package(folder, tag, source_sha):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
     (folder / 'setup.exe').write_text(tag)
-    info = {'BUILD_ID': tag, 'SOURCE_SHA256': source_sha, 'INSTALLER_NAME': 'setup.exe',
+    info = {'BUILD_ID': tag, 'SOURCE_SHA256': source_sha,
+            'EXE_PATH': str(paths['EXE_SHA256']), 'INSTALLER_NAME': 'setup.exe',
             'INSTALLER_SHA256': build.digest(folder / 'setup.exe'),
             **{key: build.digest(path) for key, path in paths.items()}}
     build.write_json(folder / 'win-unpacked/BUILD_INFO.json', info)
@@ -44,8 +51,8 @@ def lab(tmp_path, monkeypatch):
     frontend = root / 'frontend'
     frontend.mkdir(parents=True)
     current = frontend / 'ZARA CURRENT BUILD'
-    (root / 'core').mkdir()
-    (root / 'core' / 'example.py').write_text('def twice(n):\n    return n + 2\n')
+    (root / 'core' / 'lab_v1').mkdir(parents=True)
+    (root / 'core' / 'lab_v1' / 'example.py').write_text('def twice(n):\n    return n + 2\n')
     (root / 'tests').mkdir()
     sidecar = root / 'dist-sidecar' / 'zara-backend.exe'
     sidecar.parent.mkdir()
@@ -63,21 +70,26 @@ def lab(tmp_path, monkeypatch):
     monkeypatch.setattr(build, 'source_identity', source_identity)
 
     source_a = source_identity()['sha256']
-    make_package(current, 'A', source_a)
-    build.write_json(root / 'ZARA_ACTIVE_BUILD.json', {'BUILD_ID': 'A'})
-    (root / 'ZARA_ACTIVE_BUILD.txt').write_text('A-pointer\n')
+    current_info = make_package(current, 'A', source_a)
+    build.write_json(root / 'ZARA_ACTIVE_BUILD.json', current_info)
+    (root / 'ZARA_ACTIVE_BUILD.txt').write_text(current_info['EXE_PATH'] + '\n')
 
     # Candidate B: isolated staged projection with the changed source.
     staged = tmp_path / 'sandbox' / 'desktop-workspace'
-    (staged / 'core').mkdir(parents=True)
+    (staged / 'core' / 'lab_v1').mkdir(parents=True)
     (staged / 'tests').mkdir()
-    (staged / 'core' / 'example.py').write_text('def twice(n):\n    return n * 2\n')
-    (staged / 'tests' / 'test_regression.py').write_text('def test_x():\n    assert True\n')
+    (staged / 'tools').mkdir()
+    (staged / 'core' / 'lab_v1' / 'example.py').write_text('def twice(n):\n    return n * 2\n')
+    (staged / 'tests' / 'test_lab_regression.py').write_text('def test_x():\n    assert True\n')
+    builder_path = staged / 'tools' / 'build_candidate.py'
+    builder_path.write_text('# official candidate builder fixture\n')
+    builder_sha = sha(builder_path)
     overlay = [{'path': p, 'sha256': sha(staged / p)}
-               for p in ('core/example.py', 'tests/test_regression.py')]
+               for p in ('core/lab_v1/example.py', 'tests/test_lab_regression.py')]
 
     # Source identity B = workspace A with the candidate overlay applied.
-    saved = {p: (root / p).read_text() if (root / p).is_file() else None for p in ('core/example.py', 'tests/test_regression.py')}
+    saved = {p: (root / p).read_text() if (root / p).is_file() else None
+             for p in ('core/lab_v1/example.py', 'tests/test_lab_regression.py')}
     for item in overlay:
         target = root.joinpath(*Path(item['path']).parts)
         target.write_text((staged / item['path']).read_text())
@@ -90,19 +102,32 @@ def lab(tmp_path, monkeypatch):
             target.write_text(value)
     assert source_identity()['sha256'] == source_a
 
-    package = tmp_path / 'sandbox' / 'candidate-package'
+    package = staged / 'frontend' / 'release-candidate-B'
     package_info = make_package(package, 'B', source_b)
     (package / 'win-unpacked' / 'resources' / 'backend' / 'zara-backend.exe').write_text('B-BACKEND_SHA256')
+    paths = build.packaged_paths(package)
+    package_info['BACKEND_SHA256'] = build.digest(paths['BACKEND_SHA256'])
+    package_info['BUILD_TOOL_SHA256'] = builder_sha
+    build.write_json(package / 'win-unpacked/BUILD_INFO.json', package_info)
+    build.write_json(package / 'SOURCE_MANIFEST.json', {
+        'sha256': source_b,
+        'build_tool': {'path': 'tools/build_candidate.py', 'sha256': builder_sha},
+        'files': [{'path': 'core/lab_v1/example.py',
+                   'sha256': sha(staged / 'core/lab_v1/example.py')}],
+    })
+    build_receipt = tmp_path / 'sandbox' / 'desktop-build-evidence-test' / 'official_candidate_build.json'
+    build_receipt.parent.mkdir(parents=True)
+    build.write_json(build_receipt, {'timeout': False, 'exit_code': 0})
     canary_path = tmp_path / 'sandbox' / 'desktop-canary' / 'VALIDATION.json'
     canary_path.parent.mkdir(parents=True)
     canary = {'status': 'passed', 'live': False, 'runs': [],
               'asar_sha256': package_info['ASAR_SHA256'], 'backend_sha256': package_info['BACKEND_SHA256']}
     build.write_json(canary_path, canary)
-    paths = build.packaged_paths(package)
     receipt = {
         'status': 'PACKAGED_RUNTIME_CANDIDATE', 'candidate_status': 'VERIFIED_AWAITING_APPROVAL',
         'desktop_package': True, 'risk': 'LOW', 'package': str(package), 'workspace': str(staged),
         'source_sha256': source_b, 'overlay': overlay, 'build_id': 'B',
+        'build_tool_sha256': builder_sha, 'build_receipt': str(build_receipt),
         'review_evidence': {'verdict': 'PASS', 'rationale': 'isolated fixture',
                             'evidence_refs': {'artifact_hashes': [i['sha256'] for i in overlay],
                                               'test_receipt_ids': ['r1']},
@@ -114,11 +139,12 @@ def lab(tmp_path, monkeypatch):
     }
     return {'root': root, 'current': current, 'receipt': receipt, 'canary': canary_path,
             'source_a': source_a, 'source_b': source_b, 'sidecar': sidecar,
+            'pointer_a': current_info['EXE_PATH'] + '\n',
             'store': LabStore(tmp_path / 'lab.db')}
 
 
 def queued(lab, sid='s1'):
-    queue = ReleaseQueue(lab['store'])
+    queue = ReleaseQueue(lab['store'], build=build)
     queue.schedule_source_candidate(sid, lab['receipt'], lab['root'])
     receipt = lab['receipt']
     queue.package_ready(sid, receipt['package'], {
@@ -129,23 +155,23 @@ def queued(lab, sid='s1'):
 
 
 def test_readiness_refuses_unverified_or_unreviewed_candidates(lab):
-    assert promotion_readiness(lab['receipt'], lab['root'])['eligible'] is True
+    assert promotion_readiness(lab['receipt'], lab['root'], build=build)['eligible'] is True
     for change, reason in (({'candidate_status': 'DRAFT'}, 'CANDIDATE_NOT_VERIFIED'),
                            ({'review_evidence': {'verdict': 'FAIL'}}, 'INDEPENDENT_REVIEW_NOT_PASSED'),
                            ({'risk': 'MEDIUM'}, 'CANDIDATE_RISK_NOT_LOW'),
                            ({'canary': {'status': 'failed', 'live': False, 'runs': []}}, 'PACKAGED_CANARY_NOT_PASSED')):
-        assert promotion_readiness(dict(lab['receipt'], **change), lab['root'])['reason'] == reason
+        assert promotion_readiness(dict(lab['receipt'], **change), lab['root'], build=build)['reason'] == reason
 
 
 def test_readiness_refuses_when_candidate_bytes_drifted(lab):
     Path(lab['receipt']['asar_path']).write_text('tampered')
-    assert promotion_readiness(lab['receipt'], lab['root'])['reason'] == 'CANDIDATE_ARTIFACT_DRIFT'
+    assert promotion_readiness(lab['receipt'], lab['root'], build=build)['reason'] == 'CANDIDATE_ARTIFACT_DRIFT'
 
 
 def test_scenario_a_promotion_is_transactional_and_healthy(lab):
     queue = queued(lab)
-    promotion = SourcePromotion(lab['root'], lab['receipt'])
-    before = known_good()
+    promotion = SourcePromotion(lab['root'], lab['receipt'], build=build)
+    before = known_good(build)
     assert before['build_id'] == 'A'
 
     doc = queue.promote('s1', activate=promotion.activate, monitor=promotion.health,
@@ -153,48 +179,51 @@ def test_scenario_a_promotion_is_transactional_and_healthy(lab):
 
     assert doc['state'] == 'ACTIVE' and doc['build_id'] == 'B'
     # Runtime pointers, package, source and sidecar are all B.
-    assert build.verify_package(lab['current'])['BUILD_ID'] == 'B'
+    active = known_good(build)
+    assert active['available'] is True and active['build_id'] == 'B'
+    assert Path(active['path']).name == 'release-candidate-B'
     assert json.loads((lab['root'] / 'ZARA_ACTIVE_BUILD.json').read_text())['BUILD_ID'] == 'B'
-    assert (lab['root'] / 'core/example.py').read_text() == 'def twice(n):\n    return n * 2\n'
-    assert (lab['root'] / 'tests/test_regression.py').is_file()
+    assert (lab['root'] / 'core/lab_v1/example.py').read_text() == 'def twice(n):\n    return n * 2\n'
+    assert (lab['root'] / 'tests/test_lab_regression.py').is_file()
     assert build.source_identity()['sha256'] == lab['source_b']
     assert sha(lab['sidecar']) == lab['receipt']['backend_sha256']
     # The known-good A package was retained, not deleted.
     journal = json.loads(Path(promotion.journal_path).read_text())
     assert journal['state'] == 'COMMITTED'
     assert journal['before_source_sha256'] == lab['source_a']
-    assert Path(json.loads(Path(journal['build_journal']).read_text())['backup']).is_dir()
+    assert lab['current'].is_dir()
+    assert build.verify_package(lab['current'], check_source=False)['BUILD_ID'] == 'A'
 
 
 def test_scenario_b_failed_health_rolls_back_to_known_good(lab):
     queue = queued(lab)
-    promotion = SourcePromotion(lab['root'], lab['receipt'])
+    promotion = SourcePromotion(lab['root'], lab['receipt'], build=build)
     observed = {}
 
     def failing_health(info):
-        observed['during'] = {'build_id': known_good()['build_id'],
+        observed['during'] = {'build_id': known_good(build)['build_id'],
                               'source': build.source_identity()['sha256']}
         return False
 
     doc = queue.promote('s1', activate=promotion.activate, monitor=failing_health,
-                        rollback=promotion.rollback)
+                        rollback=promotion.rollback, commit=promotion.commit)
 
     assert observed['during'] == {'build_id': 'B', 'source': lab['source_b']}
     assert doc['state'] == 'ROLLED_BACK' and doc['error'] == 'POST_ACTIVATION_MONITOR_FAILED'
     # Everything is A again, from the same known-good: source, sidecar, package, pointers.
     assert build.source_identity()['sha256'] == lab['source_a']
-    assert (lab['root'] / 'core/example.py').read_text() == 'def twice(n):\n    return n + 2\n'
-    assert not (lab['root'] / 'tests/test_regression.py').exists()
+    assert (lab['root'] / 'core/lab_v1/example.py').read_text() == 'def twice(n):\n    return n + 2\n'
+    assert not (lab['root'] / 'tests/test_lab_regression.py').exists()
     assert sha(lab['sidecar']) == hashlib.sha256(b'A-BACKEND_SHA256').hexdigest()
     assert build.verify_package(lab['current'])['BUILD_ID'] == 'A'
     assert json.loads((lab['root'] / 'ZARA_ACTIVE_BUILD.json').read_text())['BUILD_ID'] == 'A'
-    assert (lab['root'] / 'ZARA_ACTIVE_BUILD.txt').read_text() == 'A-pointer\n'
+    assert (lab['root'] / 'ZARA_ACTIVE_BUILD.txt').read_text() == lab['pointer_a']
     assert json.loads(Path(promotion.journal_path).read_text())['state'] == 'ROLLED_BACK'
 
 
 def test_pointer_failure_during_activation_restores_source_and_package(lab, monkeypatch):
     queue = queued(lab)
-    promotion = SourcePromotion(lab['root'], lab['receipt'])
+    promotion = SourcePromotion(lab['root'], lab['receipt'], build=build)
     original = build.write_json
 
     def fail_pointer(path, data):
@@ -205,9 +234,10 @@ def test_pointer_failure_during_activation_restores_source_and_package(lab, monk
 
     with pytest.raises(OSError):
         queue.promote('s1', activate=promotion.activate, monitor=promotion.health,
-                      rollback=promotion.rollback)
+                      rollback=promotion.rollback, commit=promotion.commit)
 
-    assert queue.snapshot('s1')['state'] == 'BLOCKED'
+    assert queue.snapshot('s1')['state'] == 'ACTIVATING'
+    assert json.loads(Path(promotion.journal_path).read_text())['state'] == 'ACTIVATION_FAILED_RESTORED'
     assert build.source_identity()['sha256'] == lab['source_a']
     assert sha(lab['sidecar']) == hashlib.sha256(b'A-BACKEND_SHA256').hexdigest()
     assert build.verify_package(lab['current'])['BUILD_ID'] == 'A'
@@ -216,16 +246,16 @@ def test_pointer_failure_during_activation_restores_source_and_package(lab, monk
 
 def test_source_drift_blocks_activation_before_any_pointer_moves(lab, monkeypatch):
     queue = queued(lab)
-    promotion = SourcePromotion(lab['root'], lab['receipt'])
+    promotion = SourcePromotion(lab['root'], lab['receipt'], build=build)
     # A new build is required when the workspace no longer matches the candidate.
     (lab['root'] / 'core' / 'other.py').write_text('# drift after packaging\n')
 
     with pytest.raises(ValueError, match='PROMOTED_SOURCE_DOES_NOT_MATCH_CANDIDATE'):
         queue.promote('s1', activate=promotion.activate, monitor=promotion.health,
-                      rollback=promotion.rollback)
+                      rollback=promotion.rollback, commit=promotion.commit)
 
     assert build.verify_package(lab['current'], check_source=False)['BUILD_ID'] == 'A'
-    assert (lab['root'] / 'core/example.py').read_text() == 'def twice(n):\n    return n + 2\n'
+    assert (lab['root'] / 'core/lab_v1/example.py').read_text() == 'def twice(n):\n    return n + 2\n'
     assert json.loads(Path(promotion.journal_path).read_text())['state'] == 'ACTIVATION_FAILED_RESTORED'
 
 

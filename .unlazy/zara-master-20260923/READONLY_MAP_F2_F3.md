@@ -20,5 +20,5 @@ Date: 2026-09-23. This records source observations only; no new F2/F3 implementa
 
 ## Worktree hygiene note
 
-- In this worktree, `voice/` and `memory/` are source code and remain present. A separate prior audit found a `voice/` folder under quarantine in the canonical Downloads checkout; that checkout was not modified in this task.
-- The current quarantine manifest covers 1,024 files / 92,680,738 bytes. The 8.5 GB cleanup target and the claimed 35 dead stubs/memories remain unproven here.
+- In this worktree, `voice/` and `memory/` remain present. In the canonical Downloads checkout, `voice/` is absent from the source root and preserved under `_quarentena/organizacao-2026-09-23/voice`. The test `tests/test_microphone_f36.py` explicitly labels this a legacy-only fixture and imports it from quarantine; the focused search found no active core/frontend imports. Keep the quarantined copy; this evidence does not justify restoring it to production.
+- The current worktree quarantine manifest covers 1,033 files / 93,428,117 bytes. A separate read-only scan found the canonical Downloads checkout already has 26,216,236,201 bytes across 164,642 files in `_quarentena`; its largest top-level groups are `organizacao-2026-09-23` (15.2 GB), `ui-legacy` (7.1 GB), and `organizacao-2026-09-17` (3.6 GB). Contents remain preserved. The 8.5 GB cleanup target is not an itemized safe-to-remove list, and no bytes were freed.

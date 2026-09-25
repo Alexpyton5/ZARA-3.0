@@ -333,6 +333,11 @@ def _safe_lab_overlay_path(value):
     return path
 
 
+def _overlay_is_packaged_source(relative):
+    """Regression tests are reviewed/promoted source, but are not packaged inputs."""
+    return not PurePosixPath(relative.as_posix()).as_posix().startswith('tests/')
+
+
 def _reject_symlinked_path(root, relative):
     """Do not let a candidate follow a link outside its source/sandbox tree."""
     root = Path(root).resolve(strict=True)
@@ -501,7 +506,8 @@ def promotion_readiness(receipt, workspace, build=None):
             return refuse(str(exc), path=item.get('path'))
         if _file_digest(overlay_path) != item.get('sha256'):
             return refuse('CANDIDATE_OVERLAY_DRIFT', path=item.get('path'))
-        if not _same_digest(manifested.get(relative.as_posix()), item.get('sha256')):
+        if (_overlay_is_packaged_source(relative)
+                and not _same_digest(manifested.get(relative.as_posix()), item.get('sha256'))):
             return refuse('CANDIDATE_OVERLAY_NOT_IN_SOURCE_MANIFEST', path=item.get('path'))
     baseline = known_good(build)
     if not baseline.get('available'):

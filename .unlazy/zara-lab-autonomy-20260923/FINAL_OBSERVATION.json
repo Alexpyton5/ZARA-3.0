@@ -1,0 +1,84 @@
+{
+  "task_id": "ZARA-LAB-AUTONOMY-20260923",
+  "recorded_at": "2026-09-23T22:47:04.781200-03:00",
+  "evidence_level": "PACKAGED_RUNTIME",
+  "build": {
+    "build_id": "release-candidate-lab-autonomy-live-20260923-220225",
+    "exe_path": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-live-20260923-220225\\win-unpacked\\ZARA 3.0.exe",
+    "exe_sha256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
+    "asar_sha256": "2F8A6521C5A9F3FDCC05CF2D1144329D22FB31D824C58709D6FA6DD7A233FAE8",
+    "backend_sha256": "7302520933FBD9B04B722C735EE0CFD28EB140286C6A081DA7435820C45358DF",
+    "active_build_matches": true,
+    "smoke_test_flag": false,
+    "process_id": 19968,
+    "ui_screenshot": "real-packaged-run-20260923-2232/app-final.png"
+  },
+  "profile": "Disposable isolated profile under this task evidence directory; the owner profile and Lab records were not changed.",
+  "autonomy": {
+    "enabled": true,
+    "background_enabled": true,
+    "scheduler_enabled": true,
+    "daily_mission_cap": 1,
+    "daily_missions_used": 1,
+    "scheduler_state": "BUDGET_EXHAUSTED",
+    "owner_ui_prompt_after_launch": false,
+    "mission_trigger": "A feedback item was seeded in the isolated profile before app launch. Therefore automatic pickup after startup is proven; autonomous discovery with no queued feedback is NOT PROVEN."
+  },
+  "mission": {
+    "session_id": "session_a2ed62869015",
+    "kind": "SELF_IMPROVEMENT",
+    "target": "core/lab_v1/feedback_inbox.py",
+    "final_state": "FAILED",
+    "blocker": "INTERNAL_REVIEW_FAILED:REPAIR_LIMIT_AFTER_REPLAN",
+    "agents": [
+      {
+        "name": "Artemis",
+        "role": "CEO",
+        "model": "gpt-5.6-sol"
+      },
+      {
+        "name": "Vulcan",
+        "role": "BUILDER",
+        "model": "gpt-5.6-luna"
+      },
+      {
+        "name": "Íris",
+        "role": "REVIEWER",
+        "model": "gpt-5.6-terra"
+      }
+    ],
+    "model_runs": 12,
+    "input_tokens": 158319,
+    "output_tokens": 11713,
+    "provider_cost_usd": null,
+    "provider_cost_basis": "UNKNOWN",
+    "controller_usage": {
+      "turns": 12,
+      "delegations": 11,
+      "retries": 7,
+      "actions": 9
+    },
+    "pytest": {
+      "scope": [
+        "tests/test_zara_mission_regression.py"
+      ],
+      "latest_baseline": {
+        "passed": 1,
+        "failed": 1,
+        "exit_code": 1
+      },
+      "latest_candidate": {
+        "passed": 2,
+        "failed": 0,
+        "exit_code": 0
+      }
+    },
+    "review": "FAIL — reviewer found missing/regressed Portuguese praise and mixed-complaint cases. The candidate was not built, promoted, or applied to production."
+  },
+  "protected_source": {
+    "worktree_before_and_after_sha256": "DAC72F13FF288DC6A180F1B50C5C3D4E2398120E2B16818D4EA4E6D40458FD54",
+    "canonical_downloads_before_and_after_sha256": "F66594EAC6E6F2C72B4435A0EDD4BEF4EE15DC57A6523E3E604F5209EC83D8BC",
+    "matches_pre_run_baseline": true
+  },
+  "result": "Autostart and autonomous delegation/coding/testing were observed, but reliable completion and no-queued-input initiative were not proven. Do not mark F3 autonomy complete."
+}

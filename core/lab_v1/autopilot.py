@@ -414,7 +414,18 @@ class Autopilot:
             author = 'ZARA' if spontaneous else 'Alex'
             self.store.add_message(Message('owner:' + sid, sid,
                 MessageKind.ZARA if spontaneous else MessageKind.USER, author, intent.strip()))
-            resources = tuple(_resource(a) for a in self.candidates(team.id))
+            resources = [_resource(a) for a in self.candidates(team.id)]
+            if team.name == CORE_TEAM_NAME:
+                # Freeze every configured Core fallback route into the mission
+                # boundary up front. Bootstrap may migrate an existing profile
+                # after a provider failure; that migration still has to pass
+                # WorkforcePolicy + real certification before execution, but it
+                # must not require widening the mission scope mid-flight.
+                for key, config in CORE_TEAM_AGENTS.items():
+                    resources.append('provider:' + config['provider_id'] + '/' + config['model'])
+                    resources.extend('provider:' + provider_id + '/' + model
+                                     for provider_id, model in CORE_TEAM_MODEL_FALLBACKS.get(key, ()))
+            resources = tuple(dict.fromkeys(resources))
             scope = ExecutionScope((str(sandbox), *resources), ('model.text', 'files.write', 'source.prepare', 'source.apply', 'source.tests', 'source.build'),
                 authorization_state='POLICY_AUTHORIZED', authorization_ref='autopilot:internal-dynamic-v1')
             task = Task(sid + ':plan', sid, 'Planejar missão', 'Create a bounded, verifiable task plan for the objective.',
@@ -811,7 +822,7 @@ class _AutopilotPorts:
         # Source missions publish a readable update only after their structured
         # model output passes SourceMission.verify. Keep the raw answer as an
         # artifact so the verifier still sees exactly what the model returned.
-        if not self.metrics.get('source_work'):
+        if not self.metrics.get('source_work') and dispatch.step_id != 'plan':
             self.store.add_message(Message('message:' + run.id, self.sid, MessageKind.AGENT, agent.name,
                 body, author_agent_id=agent.id, run_id=run.id))
         return Receipt(artifact.id, body)
@@ -835,8 +846,22 @@ class _AutopilotPorts:
             if artifact and 0 < len(artifact.body.encode()) <= 32768:
                 try:
                     if dispatch.step_id == 'plan':
-                        self.engine.validate_plan(self.sid, _extract_json(artifact.body))
+                        plan = self.engine.validate_plan(self.sid, _extract_json(artifact.body))
                         evidence.update(passed=True, method='bounded_plan_schema_and_acceptance')
+                        titles = [item.get('title', '').strip() for item in plan.get('tasks', ())
+                                  if isinstance(item, dict) and isinstance(item.get('title'), str)
+                                  and item.get('title', '').strip()]
+                        runs = [run for run in self.store.list_runs(self.sid)
+                                if run.task_id == dispatch.task_id and run.agent_id == dispatch.agent_id]
+                        if runs:
+                            run = runs[-1]
+                            agent = self.store.get_agent(dispatch.agent_id)
+                            content = ('Li o objetivo e organizei o trabalho: ' + '; '.join(titles[:4]) + '.'
+                                       if titles else 'Li o objetivo e organizei um plano verificável para a equipe.')
+                            mid = 'message:' + run.id
+                            if not any(message.id == mid for message in self.store.list_messages(self.sid)):
+                                self.store.add_message(Message(mid, self.sid, MessageKind.AGENT, agent.name,
+                                    content[:1200], author_agent_id=agent.id, run_id=run.id))
                     else:
                         result = ArtifactVerifier().verify(json.loads(task.acceptance), artifact.body)
                         evidence.update(passed=result.state == VerificationState.VERIFIED, proof=result.proof, error=result.error)

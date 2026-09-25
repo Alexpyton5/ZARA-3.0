@@ -76,10 +76,19 @@ CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
 # GLM 5.3 returned invalid long-form builder results. GLM Flash answered a short
 # probe and remains a reserve. Profiles are callable only after certification.
 CORE_TEAM_MODEL_FALLBACKS = {
-    "ceo": (("nvidia", "z-ai/glm-5.3-flash"), ("claude_cli", "opus")),
+    "ceo": (("nvidia", "z-ai/glm-5.3-flash"),
+            ("opencode", "opencode/muse-spark-1.3-contributor-free"),
+            ("opencode", "opencode/ling-3.0-flash-fin-free"),
+            ("claude_cli", "opus")),
     "builder": (("nvidia", "moonshotai/kimi-k3"), ("nvidia", "z-ai/glm-5.3-flash"),
+                ("opencode", "opencode/mimo-v2.6-flash-free"),
+                ("opencode", "opencode/ling-3.0-flash-fin-free"),
                 ("claude_cli", "sonnet")),
+    "builder_reserve": (("opencode", "opencode/mimo-v2.6-flash-free"),
+                        ("opencode", "opencode/ling-3.0-flash-fin-free")),
     "reviewer": (("nvidia", "nvidia/nemotron-3-super-120b-a12b"),
+                 ("opencode", "opencode/nemotron-3.5-lightning-free"),
+                 ("opencode", "opencode/muse-spark-1.3-contributor-free"),
                  ("claude_cli", "haiku")),
 }
 

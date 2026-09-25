@@ -249,6 +249,23 @@ def _overlay_candidate(source_root: Path, staged: Path, allowed_paths: Iterable[
     return overlays
 
 
+def _is_packaged_source_path(path: str) -> bool:
+    """Whether an authorized overlay contributes to the packaged source identity.
+
+    Source missions may add regression tests alongside runtime code. Tests are
+    intentionally not part of ``build_current.source_identity()`` and therefore
+    never appear in ``SOURCE_MANIFEST.json``. Runtime/build inputs still must be
+    present in the manifest byte-for-byte.
+    """
+    relative = _relative(path)
+    for raw in _BACKEND_INPUTS + _FRONTEND_INPUTS:
+        root = PurePosixPath(raw)
+        if relative == root or (len(relative.parts) > len(root.parts)
+                                and relative.parts[:len(root.parts)] == root.parts):
+            return True
+    return False
+
+
 def _run(
     command: list[str], *, cwd: Path, env: dict[str, str], failure: str, timeout_seconds: int,
     receipt_dir: Path,
@@ -298,7 +315,9 @@ def _require_frozen_overlays(
     manifested = {item["path"]: item["sha256"] for item in files}
     if len(manifested) != len(files):
         raise CandidateBuildError("CANDIDATE_SOURCE_MANIFEST_INVALID")
-    if any(not _same_digest(manifested.get(item["path"]), item["sha256"]) for item in overlays):
+    packaged_overlays = [item for item in overlays if _is_packaged_source_path(item["path"])]
+    if any(not _same_digest(manifested.get(item["path"]), item["sha256"])
+           for item in packaged_overlays):
         raise CandidateBuildError("CANDIDATE_OVERLAY_NOT_IN_SOURCE_MANIFEST")
 
 
@@ -413,7 +432,13 @@ def build_candidate(
     """Build and canary-test a desktop candidate; never activate or promote it."""
     _require_review(review_evidence)
     workspace, sandbox, source_root = Path(workspace).resolve(strict=True), Path(sandbox).resolve(strict=True), Path(source_root).resolve(strict=True)
-    if not workspace.is_dir() or not source_root.is_dir() or _inside(sandbox, workspace) or not _inside(source_root, sandbox):
+    # Disposable Lab profiles may live under the checkout's .unlazy evidence
+    # tree. That tree is excluded from every build input copied below.
+    sandbox_in_workspace = _inside(sandbox, workspace)
+    isolated_evidence = _inside(sandbox, workspace / ".unlazy") and sandbox != (workspace / ".unlazy").resolve()
+    if (not workspace.is_dir() or not source_root.is_dir()
+            or (sandbox_in_workspace and not isolated_evidence)
+            or not _inside(source_root, sandbox)):
         raise CandidateBuildError("CANDIDATE_WORKSPACE_BOUNDARY_INVALID")
     completed = sandbox / "DESKTOP_CANDIDATE_RECEIPT.json"
     if completed.is_file():

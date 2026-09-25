@@ -357,7 +357,12 @@ class MissionController:
             doc['plan_version'] += 1
             doc['planner_contract'] = metadata
             doc['awaiting_expansion'] = False
-            doc['state'], doc['blocker'] = 'RUNNING', None
+            # A verified source-inspection plan may intentionally contain no
+            # follow-up tasks when the architect found no defensible change.
+            # In that case every existing step is already DONE, so keeping the
+            # mission RUNNING creates a permanent ghost mission that blocks the
+            # next real Lab objective. Empty verified expansion is terminal.
+            doc['state'], doc['blocker'] = ('COMPLETED' if not steps else 'RUNNING'), None
             conn.execute('INSERT INTO mission_plans VALUES(?,?,?)',
                 (session_id, doc['plan_version'], json.dumps({'steps': doc['steps'], 'contract': metadata})))
             self._save(conn, doc, 'mission.plan_expanded')
@@ -369,6 +374,36 @@ class MissionController:
             return self._load(conn, session_id)[0]
         finally:
             conn.close()
+
+    def reconcile_verified_empty_plan(self, session_id: str) -> bool:
+        """Close an old ghost mission created by the pre-fix empty-plan bug.
+
+        This is intentionally strict: only a verified planner contract with
+        zero follow-up tasks, a factual no-change reason, every persisted step
+        DONE, no active model run and no live lease may be reconciled.
+        """
+        with self._transaction() as conn:
+            doc, row = self._load(conn, session_id)
+            if doc['state'] in ('COMPLETED', 'FAILED', 'CANCELLED'):
+                return False
+            contract = doc.get('planner_contract')
+            if (doc.get('awaiting_expansion') or not isinstance(contract, dict)
+                    or contract.get('tasks') != []
+                    or not isinstance(contract.get('no_change_reason'), str)
+                    or not contract['no_change_reason'].strip()
+                    or not doc.get('steps')
+                    or not all(step.get('status') == 'DONE' for step in doc['steps'])):
+                return False
+            if row['lease_token'] is not None and row['lease_until'] > self.clock():
+                return False
+            if conn.execute(
+                "SELECT 1 FROM runs WHERE session_id=? AND state='STARTED' LIMIT 1",
+                (session_id,),
+            ).fetchone():
+                return False
+            doc['state'], doc['blocker'] = 'COMPLETED', None
+            self._save(conn, doc, 'mission.no_change_reconciled')
+            return True
 
     def fail_idle(self, session_id: str, reason: str):
         """Close a nonterminal mission only when no worker still owns its lease."""

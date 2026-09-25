@@ -48,8 +48,8 @@ class AutonomySupervisor:
             defaults = WorkforcePolicy.default_document() | {
                 'enabled': True, 'workspace': str(_default_workspace()),
                 'last_tick': None, 'last_state': 'READY',
-                'next_evolution_check': 0, 'cadence_seconds': 60, 'evolution_cadence_seconds': 86400,
-                'max_new_evolution_missions_per_day': 1, 'daily_date': None, 'daily_missions': 0,
+                'next_evolution_check': 0, 'cadence_seconds': 60, 'evolution_cadence_seconds': 300,
+                'max_new_evolution_missions_per_day': 288, 'daily_date': None, 'daily_missions': 0,
                 'stale_legacy_sessions': [], 'source_observer': None,
                 # Alex explicitly asked on 2026-09-23 for Lab to start bounded
                 # self-improvement on app launch. A saved False remains a pause.
@@ -57,6 +57,42 @@ class AutonomySupervisor:
             conn.execute('INSERT OR IGNORE INTO lab_autonomy_policy VALUES(1,?)', (json.dumps(defaults),))
             current = json.loads(conn.execute('SELECT document FROM lab_autonomy_policy WHERE id=1').fetchone()[0])
             merged = defaults | current
+            # Authorization lists are curated code data, not an owner pause switch.
+            # Older persisted documents used to replace these lists wholesale,
+            # which made newly proven fallback models invisible forever. Migrate
+            # only when the schema advances and preserve every older explicit
+            # entry (including legacy provider routes) while adding new defaults.
+            current_schema = int(current.get('policy_schema_version') or 0)
+            target_schema = int(defaults.get('policy_schema_version') or 0)
+            if current_schema < target_schema:
+                for field in ('authorized_models', 'authorized_providers'):
+                    merged[field] = list(dict.fromkeys(
+                        [*(current.get(field) or ()), *(defaults.get(field) or ())]))
+                merged_resources = dict(defaults.get('resource_classes') or {})
+                merged_resources.update(current.get('resource_classes') or {})
+                merged['resource_classes'] = merged_resources
+                saved_preferences = current.get('role_model_preference') or {}
+                merged_preferences = {}
+                for role, preferred in (defaults.get('role_model_preference') or {}).items():
+                    merged_preferences[role] = list(dict.fromkeys(
+                        [*(saved_preferences.get(role) or ()), *preferred]))
+                for role, preferred in saved_preferences.items():
+                    merged_preferences.setdefault(role, list(preferred or ()))
+                merged['role_model_preference'] = merged_preferences
+                # Schema 2 shipped the old "one autonomous mission per day"
+                # default. Alex later made continuous visible Lab work the product
+                # behavior: one bounded opportunity every five minutes keeps the
+                # team active all day while preserving a finite daily ceiling.
+                legacy_daily_cap = int(current.get('max_new_evolution_missions_per_day') or 1) == 1
+                legacy_daily_cadence = int(current.get('evolution_cadence_seconds') or 86400) == 86400
+                if legacy_daily_cap and legacy_daily_cadence:
+                    merged['evolution_cadence_seconds'] = defaults['evolution_cadence_seconds']
+                    merged['max_new_evolution_missions_per_day'] = defaults['max_new_evolution_missions_per_day']
+                    merged['next_evolution_check'] = 0
+                    merged['daily_date'] = None
+                    merged['daily_missions'] = 0
+                    merged['last_state'] = 'READY'
+                merged['policy_schema_version'] = target_schema
             configured_workspace = Path(merged.get('workspace') or '').resolve()
             if not ((configured_workspace / 'core' / 'lab_v1').is_dir()
                     and (configured_workspace / 'tools' / 'build_candidate.py').is_file()):

@@ -1,0 +1,135 @@
+{
+  "created_at": "2026-09-25T11:26:56.5006309-03:00",
+  "reason": "Manter somente um build canônico visível no frontend; builds anteriores preservados em quarentena para rollback/auditoria.",
+  "active_build": "release-candidate-lab-continuous-autonomy-20260925-20260925-112133",
+  "active_build_path": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-continuous-autonomy-20260925-20260925-112133\\win-unpacked\\ZARA 3.0.exe",
+  "quarantine_path": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656",
+  "moved_count": 25,
+  "items": [
+    {
+      "name": "release-candidate-f0-wt-20260923-190251-20260923-1904",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-f0-wt-20260923-190251-20260923-1904",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-f0-wt-20260923-190251-20260923-1904"
+    },
+    {
+      "name": "release-candidate-lab-agency-autopilot-20260924-221231",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-agency-autopilot-20260924-221231",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-agency-autopilot-20260924-221231"
+    },
+    {
+      "name": "release-candidate-lab-agent-bootstrap-live-20260924-001557",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-agent-bootstrap-live-20260924-001557",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-agent-bootstrap-live-20260924-001557"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-20260923-215125",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-20260923-215125",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-20260923-215125"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-bootstrap-20260923-234042",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-bootstrap-20260923-234042",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-bootstrap-20260923-234042"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-failover-20260924-115804",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-failover-20260924-115804",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-failover-20260924-115804"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-init-20260923-232414",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-init-20260923-232414",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-init-20260923-232414"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-live-20260923-220225",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-live-20260923-220225",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-live-20260923-220225"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-live-20260924-113537",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-live-20260924-113537",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-live-20260924-113537"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-modelroute-20260924-204733",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-modelroute-20260924-204733",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-modelroute-20260924-204733"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-recovery-20260925-014826",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-recovery-20260925-014826",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-recovery-20260925-014826"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-reviewer-20260924-120919",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-reviewer-20260924-120919",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-reviewer-20260924-120919"
+    },
+    {
+      "name": "release-candidate-lab-autonomy-testgate-20260924-210550",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autonomy-testgate-20260924-210550",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autonomy-testgate-20260924-210550"
+    },
+    {
+      "name": "release-candidate-lab-autopilot-buildfix-20260925-20260925-041719",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autopilot-buildfix-20260925-20260925-041719",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autopilot-buildfix-20260925-20260925-041719"
+    },
+    {
+      "name": "release-candidate-lab-autopilot-conversation-20260925-005727",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autopilot-conversation-20260925-005727",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autopilot-conversation-20260925-005727"
+    },
+    {
+      "name": "release-candidate-lab-autopilot-daily-20260925-010110",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autopilot-daily-20260925-010110",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autopilot-daily-20260925-010110"
+    },
+    {
+      "name": "release-candidate-lab-autopilot-fallbackscope-20260925-20260925-050536",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autopilot-fallbackscope-20260925-20260925-050536",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autopilot-fallbackscope-20260925-20260925-050536"
+    },
+    {
+      "name": "release-candidate-lab-autopilot-releasegatefix-20260925-20260925-043915",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autopilot-releasegatefix-20260925-20260925-043915",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autopilot-releasegatefix-20260925-20260925-043915"
+    },
+    {
+      "name": "release-candidate-lab-autopilot-strong-builder-20260925-011513",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-autopilot-strong-builder-20260925-011513",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-autopilot-strong-builder-20260925-011513"
+    },
+    {
+      "name": "release-candidate-lab-natural-autonomy-20260925-20260925-111306",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-natural-autonomy-20260925-20260925-111306",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-natural-autonomy-20260925-20260925-111306"
+    },
+    {
+      "name": "release-candidate-lab-provider-recovery-20260925-20260925-035859",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-provider-recovery-20260925-20260925-035859",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-provider-recovery-20260925-20260925-035859"
+    },
+    {
+      "name": "release-candidate-lab-quota-wait-20260925-033401",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-quota-wait-20260925-033401",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-quota-wait-20260925-033401"
+    },
+    {
+      "name": "release-candidate-lab-readonly-tests-20260923-230008",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-readonly-tests-20260923-230008",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-readonly-tests-20260923-230008"
+    },
+    {
+      "name": "release-candidate-lab-source-20260925-051603",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-source-20260925-051603",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-source-20260925-051603"
+    },
+    {
+      "name": "release-candidate-lab-visible-runtime-20260925-20260925-101623",
+      "from": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-lab-visible-runtime-20260925-20260925-101623",
+      "to": "C:\\Users\\alexp\\.codex\\worktrees\\fddb\\ZARA 3.0 CLEAN 002\\_quarentena\\builds-single-active-20260925-112656\\release-candidate-lab-visible-runtime-20260925-20260925-101623"
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from core.lab_v1.domain import Availability
+from core.lab_v1.domain import Availability, ProviderResult
 from core.lab_v1.providers.nvidia import NvidiaApiAdapter, NvidiaDiscoveryError
 from core.lab_v1.providers.registry import ProviderRegistry, default_registry
 
@@ -113,6 +113,24 @@ def test_health_update_and_secret_never_persisted(tmp_path):
     assert DUMMY_SECRET not in persisted
     assert "private prompt" not in persisted
     assert registry.health_snapshot()["provider:nvidia"]["availability"] == "AUTH_REQUIRED"
+
+
+def test_newer_provider_recovery_survives_a_stale_registry_writer(tmp_path):
+    path = tmp_path / "health.json"
+    seed = ProviderRegistry(path)
+    seed.record_result("codex_cli", "gpt-5.6-sol", ProviderResult(
+        False, availability=Availability.QUOTA_EXHAUSTED, error="old quota"), observed_at=100)
+    stale = ProviderRegistry(path)
+    fresh = ProviderRegistry(path)
+
+    fresh.record_result("codex_cli", "gpt-5.6-sol", ProviderResult(
+        True, text="ok", availability=Availability.AVAILABLE), observed_at=200)
+    stale.record_result("nvidia", "other", ProviderResult(
+        True, text="ok", availability=Availability.AVAILABLE), observed_at=300)
+
+    recovered = ProviderRegistry(path).health_snapshot()["provider:codex_cli"]
+    assert recovered["availability"] == "AVAILABLE"
+    assert recovered["timestamp"] == 200
 
 
 def test_repr_and_serialization_do_not_expose_credential(tmp_path):

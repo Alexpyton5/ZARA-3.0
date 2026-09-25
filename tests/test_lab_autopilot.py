@@ -344,6 +344,21 @@ def test_core_kimi_failure_hands_same_mission_to_certified_glm_flash_builder(tmp
     assert claude.calls == []
 
 
+def test_core_mission_scope_freezes_configured_fallback_routes_before_runtime_failover(tmp_path, monkeypatch):
+    nvidia = NvidiaBootstrapAdapter()
+    autopilot = _core_autopilot(tmp_path, BootstrapClaudeAdapter(failure=Availability.AUTH_REQUIRED),
+                                additional=(nvidia,))
+    monkeypatch.setattr('core.lab_v1.source_mission.source_requested', lambda *_: False)
+
+    sid = autopilot.start('Prepare one bounded plan')['session_id']
+    scope = autopilot.controller.snapshot(sid)['execution_scope']
+
+    assert 'provider:nvidia/z-ai/glm-5.3-flash' in scope['allowed_resources']
+    assert 'provider:opencode/opencode/muse-spark-1.3-contributor-free' in scope['allowed_resources']
+    assert 'provider:opencode/opencode/mimo-v2.6-flash-free' in scope['allowed_resources']
+    assert len(scope['allowed_resources']) == len(set(scope['allowed_resources']))
+
+
 @pytest.mark.skipif(shutil.which('claude') is None,
                     reason='claude CLI absent: provider availability cannot be asserted honestly here')
 def test_workforce_selects_a_real_claude_cli_agent_after_owner_reauthorization(tmp_path):
@@ -407,6 +422,9 @@ def test_one_intent_routes_delegates_executes_verifies_and_reports(engine):
     assert all(r.cost_usd is None and r.cost_basis.value == 'UNKNOWN' for r in runs)
     assert not engine.store.list_capability_gaps(sid)
     assert engine.runtime.submit(sid, 'Cannot bypass')['code'] == 'MISSION_CONTROLLED'
+    messages = engine.store.list_messages(sid)
+    assert any('organizei o trabalho' in message.content for message in messages if message.kind.value == 'AGENT')
+    assert not any('"mission"' in message.content or '"plan_version"' in message.content for message in messages)
     assert len([m for m in engine.store.list_messages(sid) if m.kind.value == 'ZARA']) == 1
     engine.run(sid)
     assert len(engine.store.list_runs(sid)) == 2
@@ -423,7 +441,7 @@ def test_spontaneous_observation_is_attributed_to_zara_and_owner_intent_to_alex(
     observed_sid = engine.start('Observed defect', mission_kind='SELF_IMPROVEMENT',
         evidence={'observation_kind': 'BEHAVIORAL_COUNTEREXAMPLE'})['session_id']
     observed = engine.store.list_messages(observed_sid)[0]
-    assert observed.kind.value == 'USER' and observed.author == 'ZARA'
+    assert observed.kind.value == 'ZARA' and observed.author == 'ZARA'
     engine.controller.cancel(observed_sid)
     engine.run(observed_sid)
 

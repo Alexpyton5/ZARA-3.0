@@ -22,7 +22,8 @@ def test_service_snapshot_does_not_advertise_hermes_workcell(tmp_path):
     assert result['success'] is True
     assert [cell['id'] for cell in result['workcells']] == ['manus']
     assert result['autonomy_policy']['background_task_state'] == 'STOPPED'
-    assert result['autonomy_policy']['max_new_evolution_missions_per_day'] == 1
+    assert result['autonomy_policy']['max_new_evolution_missions_per_day'] == 288
+    assert result['autonomy_policy']['evolution_cadence_seconds'] == 300
 
 
 def test_packaged_backend_resolves_checkout_from_active_build_record(tmp_path):
@@ -40,6 +41,56 @@ def test_packaged_backend_resolves_checkout_from_active_build_record(tmp_path):
     packaged_backend.write_bytes(b'backend')
 
     assert module._default_workspace(packaged_backend) == root.resolve()
+
+
+def test_saved_policy_is_migrated_without_losing_legacy_routes(tmp_path):
+    store = LabStore(tmp_path / 'policy.db'); store.initialize()
+    with store._connect() as conn:
+        conn.execute('CREATE TABLE lab_autonomy_policy(id INTEGER PRIMARY KEY, document TEXT NOT NULL)')
+        conn.execute('INSERT INTO lab_autonomy_policy VALUES(1,?)', (json.dumps({
+            'policy_schema_version': 1,
+            'authorized_models': ['codex_cli/gpt-5.6-sol', 'nine_router/alex'],
+            'authorized_providers': ['codex_cli', 'nine_router'],
+            'resource_classes': {'nine_router/*': 'OWNER_REPORTED_FREE'},
+            'role_model_preference': {'CEO': ['gpt-5.6-sol']},
+        }),))
+
+    policy = AutonomySupervisor(SimpleNamespace(store=store)).policy()
+
+    assert 'nine_router/alex' in policy['authorized_models']
+    assert 'nvidia/moonshotai/kimi-k3' in policy['authorized_models']
+    assert 'opencode/opencode/muse-spark-1.3-contributor-free' in policy['authorized_models']
+    assert {'codex_cli', 'nine_router', 'nvidia', 'opencode'} <= set(policy['authorized_providers'])
+    assert policy['resource_classes']['nine_router/*'] == 'OWNER_REPORTED_FREE'
+    assert policy['policy_schema_version'] == 3
+
+
+def test_schema2_daily_default_migrates_to_continuous_bounded_autopilot(tmp_path):
+    store = LabStore(tmp_path / 'continuous-policy.db'); store.initialize()
+    with store._connect() as conn:
+        conn.execute('CREATE TABLE lab_autonomy_policy(id INTEGER PRIMARY KEY, document TEXT NOT NULL)')
+        conn.execute('INSERT INTO lab_autonomy_policy VALUES(1,?)', (json.dumps({
+            'policy_schema_version': 2,
+            'enabled': True,
+            'background_enabled': True,
+            'scheduler_enabled': True,
+            'evolution_cadence_seconds': 86400,
+            'max_new_evolution_missions_per_day': 1,
+            'next_evolution_check': 9999999999,
+            'daily_date': '2026-09-25',
+            'daily_missions': 1,
+            'last_state': 'BUDGET_EXHAUSTED',
+        }),))
+
+    policy = AutonomySupervisor(SimpleNamespace(store=store)).policy()
+
+    assert policy['policy_schema_version'] == 3
+    assert policy['evolution_cadence_seconds'] == 300
+    assert policy['max_new_evolution_missions_per_day'] == 288
+    assert policy['next_evolution_check'] == 0
+    assert policy['daily_date'] is None
+    assert policy['daily_missions'] == 0
+    assert policy['last_state'] == 'READY'
 
 
 def test_first_supervisor_tick_without_mission_controls_is_idle_not_failed(tmp_path, monkeypatch):

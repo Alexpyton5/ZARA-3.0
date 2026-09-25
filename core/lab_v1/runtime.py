@@ -67,7 +67,7 @@ CORE_TEAM_NAME = "ZARA Core"
 
 CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
     "ceo": {"name": "Artemis", "provider_id": "nvidia", "model": "moonshotai/kimi-k3"},
-    "builder": {"name": "Vulcan", "provider_id": "nvidia", "model": "moonshotai/kimi-k3"},
+    "builder": {"name": "Vulcan", "provider_id": "codex_cli", "model": "gpt-5.6-sol"},
     "builder_reserve": {"name": "Vulcan Reserva", "provider_id": "nvidia", "model": "z-ai/glm-5.3-flash"},
     "reviewer": {"name": "Iris", "provider_id": "nvidia", "model": "nvidia/nemotron-3-ultra-550b-a55b"},
 }
@@ -77,7 +77,8 @@ CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
 # probe and remains a reserve. Profiles are callable only after certification.
 CORE_TEAM_MODEL_FALLBACKS = {
     "ceo": (("nvidia", "z-ai/glm-5.3-flash"), ("claude_cli", "opus")),
-    "builder": (("nvidia", "z-ai/glm-5.3-flash"), ("claude_cli", "sonnet")),
+    "builder": (("nvidia", "moonshotai/kimi-k3"), ("nvidia", "z-ai/glm-5.3-flash"),
+                ("claude_cli", "sonnet")),
     "reviewer": (("nvidia", "nvidia/nemotron-3-super-120b-a12b"),
                  ("claude_cli", "haiku")),
 }

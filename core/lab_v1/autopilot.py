@@ -409,7 +409,8 @@ class Autopilot:
                                'SOURCE_INSPECTION', 'BEHAVIORAL_COUNTEREXAMPLE',
                                'RUNTIME_CAPABILITY_FAILURE'})
             author = 'ZARA' if spontaneous else 'Alex'
-            self.store.add_message(Message('owner:' + sid, sid, MessageKind.USER, author, intent.strip()))
+            self.store.add_message(Message('owner:' + sid, sid,
+                MessageKind.ZARA if spontaneous else MessageKind.USER, author, intent.strip()))
             resources = tuple(_resource(a) for a in self.candidates(team.id))
             scope = ExecutionScope((str(sandbox), *resources), ('model.text', 'files.write', 'source.prepare', 'source.apply', 'source.tests', 'source.build'),
                 authorization_state='POLICY_AUTHORIZED', authorization_ref='autopilot:internal-dynamic-v1')
@@ -426,7 +427,8 @@ class Autopilot:
             self.store.save_task(task)
             initial_steps.append(MissionStep('plan', task.id, 'INVOKE',
                 depends_on=('source_prepare',) if source else (), capability='model.text', resources=(_resource(planner),)))
-            metrics = {'workflow': WORKFLOW, 'owner_touches': 1, 'sandbox': str(sandbox), 'planner_id': planner.id,
+            metrics = {'workflow': WORKFLOW, 'owner_touches': 0 if spontaneous else 1,
+                'sandbox': str(sandbox), 'planner_id': planner.id,
                 'plan_version': 1, 'agent_selection_automatic': True, 'task_creation_automatic': False,
                 'delegation_automatic': False, 'context_transfer_automatic': False,
                 'verification_automatic': False, 'recovery_automatic': False, 'final_report_automatic': False,

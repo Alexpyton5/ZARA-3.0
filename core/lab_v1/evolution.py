@@ -159,7 +159,11 @@ class EvolutionEngine:
             ).fetchone()
 
     def _inspection_batches(self, inventory):
-        return [inventory[start:start + 3] for start in range(0, len(inventory), 3)]
+        # Audit the Lab's own work loop first; the rest of the real inventory
+        # remains available for later cycles.
+        ordered = sorted(inventory, key=lambda item: (
+            not item['source_path'].startswith('core/lab_v1/'), item['source_path']))
+        return [ordered[start:start + 3] for start in range(0, len(ordered), 3)]
 
     def _dispatch(self, *, observation_id, objective, evidence, sources, observation):
         if self.autopilot is None:

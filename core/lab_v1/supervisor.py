@@ -38,6 +38,8 @@ def _default_workspace(executable=None):
 
 class AutonomySupervisor:
     SUPPORTED_WORKFLOWS = frozenset({WORKFLOW})
+    INTERNAL_REVIEW_KINDS = frozenset({
+        'DAILY_OPPORTUNITY_REVIEW', 'PRODUCT_CRITICISM_REVIEW', 'SELF_IMPROVEMENT'})
 
     def __init__(self, runtime, *, autopilot=None):
         self.runtime, self.store = runtime, runtime.store
@@ -177,9 +179,35 @@ class AutonomySupervisor:
                 has_missions = conn.execute(
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mission_controls'"
                 ).fetchone()
-                pending = ([json.loads(r[0]) for r in conn.execute('SELECT document FROM mission_controls')
-                            if json.loads(r[0])['state'] not in ('COMPLETED', 'CANCELLED', 'FAILED')]
-                           if has_missions else [])
+                has_autonomy = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mission_autonomy'"
+                ).fetchone()
+                pending = []
+                if has_missions:
+                    for row in conn.execute('SELECT session_id,document,lease_until FROM mission_controls'):
+                        mission = json.loads(row['document'])
+                        state = mission.get('state')
+                        if state in ('COMPLETED', 'CANCELLED', 'FAILED'):
+                            continue
+                        # Historical blocked work stays visible, but without a lease
+                        # or a provider run it must not freeze the global supervisor.
+                        # Keep WAITING_RESOURCE eligible here so the retry path can
+                        # resume it when the provider recovers.
+                        if (state in ('BLOCKED', 'BLOCKED_NEEDS_OWNER')
+                                and float(row['lease_until'] or 0) <= now
+                                and not conn.execute(
+                                    "SELECT 1 FROM runs WHERE session_id=? AND state='STARTED' LIMIT 1",
+                                    (row['session_id'],),
+                                ).fetchone()):
+                            if state == 'BLOCKED':
+                                continue
+                            autonomy_row = (conn.execute(
+                                'SELECT document FROM mission_autonomy WHERE session_id=?',
+                                (row['session_id'],)).fetchone() if has_autonomy else None)
+                            autonomy = json.loads(autonomy_row['document']) if autonomy_row else {}
+                            if autonomy.get('mission_kind') not in self.INTERNAL_REVIEW_KINDS:
+                                continue
+                        pending.append(mission)
             supported, legacy = [], []
             for mission in pending:
                 autonomy = self.store.autonomy_snapshot(mission['session_id'])
@@ -191,9 +219,7 @@ class AutonomySupervisor:
                 sid = mission['session_id']
                 autonomy = self.store.autonomy_snapshot(sid)
                 if mission['state'] == 'BLOCKED_NEEDS_OWNER':
-                    if (autonomy or {}).get('mission_kind') in (
-                            'DAILY_OPPORTUNITY_REVIEW', 'PRODUCT_CRITICISM_REVIEW',
-                            'SELF_IMPROVEMENT'):
+                    if (autonomy or {}).get('mission_kind') in self.INTERNAL_REVIEW_KINDS:
                         MissionController(self.store).fail_idle(
                             sid, 'INTERNAL_REVIEW_FAILED:' + str(mission.get('blocker') or 'UNKNOWN'))
                         self._save(last_state='FAILED', active_session=sid,

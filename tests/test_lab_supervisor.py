@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 import asyncio
 import json
+import time
 import pytest
 from core.lab_v1.store import LabStore
 from core.lab_v1.supervisor import AutonomySupervisor, WORKFLOW
@@ -195,7 +196,8 @@ def test_feedback_source_selection_is_specific_and_has_no_blind_fallback(supervi
     assert s._proposal_only('Tenho uma sugestão para avaliar') is True
 
 
-def test_blocked_mission_prevents_new_work(supervisor, monkeypatch):
+@pytest.mark.parametrize('state', ['BLOCKED', 'BLOCKED_NEEDS_OWNER'])
+def test_paused_blocked_mission_without_live_run_does_not_freeze_supervisor(supervisor, monkeypatch, state):
     s, root = supervisor
     s.configure(enabled=True, workspace=root)
     # Controller table requires a real Session FK.
@@ -212,10 +214,38 @@ def test_blocked_mission_prevents_new_work(supervisor, monkeypatch):
                 occurrences INTEGER, created_at REAL);
         ''')
         conn.execute('INSERT INTO mission_controls(session_id,document) VALUES(?,?)',
-            ('blocked', json.dumps({'session_id': 'blocked', 'state': 'BLOCKED'})))
+            ('blocked', json.dumps({'session_id': 'blocked', 'state': state})))
         conn.execute('INSERT INTO mission_autonomy(session_id,document) VALUES(?,?)',
             ('blocked', json.dumps({'workflow': WORKFLOW})))
-    assert s.tick()['state'] == 'BLOCKED'
+    assert s.tick()['state'] == 'MONITORING'
+    with s.store._connect() as conn:
+        stored = conn.execute('SELECT document FROM mission_controls WHERE session_id=?', ('blocked',)).fetchone()[0]
+        assert json.loads(stored)['state'] == state
+
+
+@pytest.mark.parametrize(('state', 'lease_offset'), [('RUNNING', 120), ('WAITING_RESOURCE', -1)])
+def test_live_or_resource_wait_mission_keeps_retry_priority(supervisor, state, lease_offset):
+    s, root = supervisor
+    s.configure(enabled=True, workspace=root)
+    from core.lab_v1.domain import Session, Team
+    s.store.save_team(Team('team', 'Test'))
+    s.store.save_session(Session('resumable', 'team', objective='Resume work'))
+    with s.store._connect() as conn:
+        conn.executescript('''
+            CREATE TABLE IF NOT EXISTS mission_autonomy(
+                session_id TEXT PRIMARY KEY REFERENCES sessions(id), document TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS autonomy_gaps(
+                gap_id TEXT PRIMARY KEY, session_id TEXT, stage TEXT, reason TEXT,
+                owner_action_required TEXT, candidate_automation TEXT, risk TEXT,
+                occurrences INTEGER, created_at REAL);
+        ''')
+        conn.execute('INSERT INTO mission_controls(session_id,document,lease_until) VALUES(?,?,?)',
+            ('resumable', json.dumps({'session_id': 'resumable', 'state': state}), time.time() + lease_offset))
+        conn.execute('INSERT INTO mission_autonomy(session_id,document) VALUES(?,?)',
+            ('resumable', json.dumps({'workflow': WORKFLOW})))
+    result = s.tick()
+    assert result['session_id'] == 'resumable'
+    assert result['state'] == 'COMPLETED'
 
 
 def test_failed_internal_review_is_closed_without_owner(supervisor):

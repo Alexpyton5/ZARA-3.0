@@ -46,9 +46,10 @@ O ticket antigo T-JARVIS-P0-02 fica preservado como histórico de trabalho; a pr
 - **Objetivo:** sala única ZARA Core com retomada idempotente, equipe dinâmica entre 264 perfis, inspeção proativa, pesquisa pública citada, memória compartilhada Obsidian, conversas naturais reais e pipeline seguro de código até build empacotado.
 - **Plano e prompt:** `.claude/ZARA_LAB_LIVING_TEAM_MISSION.md`.
 - **Gates:** `.unlazy/zara-lab-living-team-20260925/GATES.md`.
-- **Estado:** ATIVA. M010/M020 seguem observados no app empacotado. M030 liberou o room slot em runtime. A prova real encontrou e corrigiu o import de `datetime`; uma segunda chamada do modelo expôs o planejador usando `model.text` como capacidade de tarefa. O prompt agora lista os formatos aceitos explicitamente, com teste focado.
-- **Build ativo:** manifesto aponta para `release-candidate-lab-memory-timestamp-20260925-164953`; hashes conferidos. O app será trocado pela próxima candidata depois do build, sem manter duas janelas.
-- **Próximo:** compilar a clarificação do planejador, verificar identidade e fazer uma tentativa read-only final no Lab canônico.
+- **Estado:** ATIVA. M010/M020 e a leitura M030 de Obsidian foram observados no app empacotado. A missão real M030 completou após corrigir o carimbo de data e restringir o planejador aos tipos de artefato aceitos; eventos canônicos e a tela registram duas consultas reais de memória por GPT-5.6 Sol. Nova falha visível: o supervisor continua globalmente `Bloqueado` por missões antigas `BLOCKED`/`BLOCKED_NEEDS_OWNER`, embora não tenham lease nem execução ativa; G9 cobre corrigir isso sem apagar nem cancelar o histórico.
+- **Contrato G9:** baseline `f21ff60`; escritores únicos `core/lab_v1/supervisor.py` e `tests/test_lab_supervisor.py`, mais este registro e os gates M030. Prova necessária: casos de regressão para bloqueio pausado, execução viva e retry de `WAITING_RESOURCE`, depois build oficial, hashes e estado observado na mesma sala/DB canônicos.
+- **Build ativo:** `release-candidate-lab-planner-output-contract-20260925-165634`; manifesto e hashes conferidos. A janela única desse candidato segue aberta.
+- **Próximo:** corrigir e testar G9, empacotar pelo script oficial, reabrir uma única janela e confirmar que o supervisor sai de `Bloqueado` sem alterar as missões históricas.
 
 ### Lista de execução — cumprir em ordem, sem delegar ao Lab
 

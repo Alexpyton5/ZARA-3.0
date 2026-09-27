@@ -14,11 +14,27 @@ Layout (spec do Mentor):
 from __future__ import annotations
 
 import sqlite3
+import json
 import threading
 import time
 from pathlib import Path
 
 from core.paths import user_data_dir
+
+
+def _detect_real_obsidian_vault() -> Path | None:
+    """Locate the most recently used real Obsidian vault, if available."""
+    config_path = Path.home() / "AppData" / "Roaming" / "obsidian" / "obsidian.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        vaults = data.get("vaults", {})
+        if not vaults:
+            return None
+        most_recent = max(vaults.values(), key=lambda value: value.get("ts", 0))
+        vault_path = Path(most_recent["path"])
+        return vault_path if vault_path.is_dir() else None
+    except Exception:
+        return None
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS project_docs (

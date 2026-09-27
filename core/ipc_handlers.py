@@ -77,6 +77,15 @@ except ImportError as e:
     LabCoordinator = None  # type: ignore[assignment]
     LabWorkerRuntime = None  # type: ignore[assignment]
 
+try:
+    # ZARA-LAB-V1-001: multi-agent runtime with its own service boundary.
+    from core.lab_v1.service import LabV1Service
+    LAB_V1_AVAILABLE = True
+except ImportError as e:
+    print(f"[IPC Handlers] ZARA Lab V1 module unavailable: {e}")
+    LAB_V1_AVAILABLE = False
+    LabV1Service = None  # type: ignore[assignment]
+
 
 _chat_relay_instance = None
 
@@ -124,6 +133,7 @@ class IPCHandler:
 
     def __init__(self, send_callback: Callable[[IPCMessage], Awaitable[None]]):
         self.send = send_callback
+        self._smoke_test = os.environ.get('ZARA_SMOKE_TEST') == '1'
         self.orchestrator: ZaraOrchestrator | None = None
         self.model_router: ModelRouter | None = None
         self.memory: MemoryManager | None = None
@@ -145,6 +155,8 @@ class IPCHandler:
         self.voice_mode: str = "off"
         self.lab = None
         self._lab_background_tasks: set[asyncio.Task] = set()
+        self.lab_v1 = None
+        self._lab_v1_background_tasks: set[asyncio.Task] = set()
         self.reminder_engine = None  # initialized in async init
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self.user_memory = None      # initialized in async init
@@ -879,10 +891,13 @@ class IPCHandler:
             'supercerebro-status': self.handle_supercerebro_status,
             'send-message': self.handle_send_message,
             'interrupt': self.handle_interrupt,
+            'voice-mute': self.handle_voice_mute,
+            'voice-mic-chunk': self.handle_voice_mic_chunk,
             'action-execute': self.handle_action_execute,
             'action-confirm': self.handle_action_confirm,
             'action-confirm-cancel': self.handle_action_confirm_cancel,
             'action-list': self.handle_action_list,
+            'self-status': self.handle_self_status,
             'system-metrics': self.handle_system_metrics,
             'system-info': self.handle_system_info,
             'voice-start': self.handle_voice_start,
@@ -894,6 +909,31 @@ class IPCHandler:
             'lab-send': self.handle_lab_send,
             'lab-proposal-create': self.handle_lab_proposal_create,
             'lab-proposal-decide': self.handle_lab_proposal_decide,
+            'lab-v1-room-message': self.handle_lab_v1_room_message,
+            'lab-v1-snapshot': self.handle_lab_v1_snapshot,
+            'lab-v1-admit-operation': self.handle_lab_v1_admit_operation,
+            'lab-v1-confirm-operation': self.handle_lab_v1_confirm_operation,
+            'lab-v1-create-session': self.handle_lab_v1_create_session,
+            'lab-v1-submit': self.handle_lab_v1_submit,
+            'lab-v1-autopilot': self.handle_lab_v1_autopilot,
+            'lab-v1-autopilot-activate': self.handle_lab_v1_autopilot_activate,
+            'lab-v1-autonomy-configure': self.handle_lab_v1_autonomy_configure,
+            'lab-v1-cancel-mission': self.handle_lab_v1_cancel_mission,
+            'lab-v1-delete-session': self.handle_lab_v1_delete_session,
+            'lab-v1-providers': self.handle_lab_v1_providers,
+            'lab-v1-proposal-list': self.handle_lab_v1_proposal_list,
+            'lab-v1-proposal-register': self.handle_lab_v1_proposal_register,
+            'lab-v1-proposal-update': self.handle_lab_v1_proposal_update,
+            'lab-v1-agent-inventory': self.handle_lab_v1_agent_inventory,
+            'lab-v1-create-agent': self.handle_lab_v1_create_agent,
+            'lab-v1-configure-agent': self.handle_lab_v1_configure_agent,
+            'lab-v1-agent-profiles': self.handle_lab_v1_agent_profiles,
+            'lab-v1-agent-profile-update': self.handle_lab_v1_agent_profile_update,
+            'lab-v1-agent-profile-rollback': self.handle_lab_v1_agent_profile_rollback,
+            'lab-v1-archive-agent': self.handle_lab_v1_archive_agent,
+            'lab-v1-rebind-role': self.handle_lab_v1_rebind_role,
+            'lab-v1-research-skill': self.handle_lab_v1_research_skill,
+            'lab-v1-team-chat': self.handle_lab_v1_team_chat,
             'lab-mission-state': self.handle_lab_mission_state,
             'lab-mission-verify': self.handle_lab_mission_verify,
             'lab-mission-cycle': self.handle_lab_mission_cycle,
@@ -918,6 +958,8 @@ class IPCHandler:
             'memory-user-forget': self.handle_memory_user_forget,
             'project-memory-get': self.handle_project_memory_get,
             'project-memory-list': self.handle_project_memory_list,
+            'project-memory-context': self.handle_project_memory_context,
+            'memory-galaxy-list': self.handle_memory_galaxy_list,
             'conversation-history-list': self.handle_conversation_history_list,
             'conversation-history-clear': self.handle_conversation_history_clear,
         }
@@ -1062,6 +1104,602 @@ class IPCHandler:
         except Exception as exc:
             await self.send_error(msg, str(exc))
 
+    async def handle_voice_mic_chunk(self, msg: IPCMessage):
+        """Forward renderer microphone PCM to the active Gemini voice session."""
+        voice = self.gemini_live_voice
+        pcm = (msg.payload or {}).get('pcm') or ''
+        if voice is None or not pcm or not getattr(voice, 'usa_renderer', False):
+            return
+        try:
+            import base64
+            voice.push_mic_pcm(base64.b64decode(pcm))
+        except Exception as exc:
+            print(f"[IPC] chunk de microfone invalido: {exc}", flush=True)
+
+    async def handle_voice_mute(self, msg: IPCMessage):
+        """Mute only speech output while keeping the assistant running."""
+        requested = (msg.payload or {}).get('mudo')
+        if requested is None:
+            await self.send_response(msg.request_id, {'success': True, 'mudo': bool(getattr(self, '_silenciada', False))})
+            return
+        self._silenciada = bool(requested)
+        if self._silenciada:
+            if self.tts_manager and hasattr(self.tts_manager, 'interrupt'):
+                self.tts_manager.interrupt()
+            if self.gemini_live_voice and getattr(self.gemini_live_voice, 'active', False):
+                await self.gemini_live_voice.interrupt_speech()
+            self._voice_speaking = False
+        await self.send_response(msg.request_id, {'success': True, 'mudo': self._silenciada})
+        await self.send_event('voice-mute-change', {'mudo': self._silenciada})
+
+    async def handle_project_memory_context(self, msg: IPCMessage):
+        if not self.project_memory:
+            await self.send_error(msg, "Project Memory indisponível")
+            return
+        try:
+            response: dict[str, Any] = {'success': True, 'keys': self.project_memory.list_docs()}
+            payload = msg.payload or {}
+            if payload.get('build') and hasattr(self.project_memory, 'build_project_context'):
+                envelope = self.project_memory.build_project_context(
+                    payload.get('project_id'),
+                    keys=tuple(payload.get('keys')) if isinstance(payload.get('keys'), list) else None,
+                    budget_bytes=payload.get('budget_bytes', 4096),
+                )
+                response['context'] = json.loads(envelope.to_json())
+            await self.send_response(msg.request_id, response)
+        except Exception as exc:
+            await self.send_error(msg, f"project-memory-context: {exc}")
+
+    async def handle_memory_galaxy_list(self, msg: IPCMessage):
+        """Return a bounded, read-only view of local project and user memory."""
+        nodes: list[dict[str, Any]] = []
+        if self.project_memory:
+            for key in self.project_memory.list_docs()[:50]:
+                doc = self.project_memory.get_doc(key)
+                if doc and str(doc.get('content', '')).strip():
+                    nodes.append({
+                        'id': f'project:{key}',
+                        'kind': 'project',
+                        'title': str(doc.get('title') or key)[:120],
+                        'content': str(doc.get('content', ''))[:12000],
+                        'source': f'Project Memory · {key}',
+                    })
+        if self.user_memory:
+            for fact in self.user_memory.list()[:100]:
+                if fact.get('status') != 'forgotten' and str(fact.get('fact', '')).strip():
+                    nodes.append({
+                        'id': f"user:{fact.get('id', '')}",
+                        'kind': 'user',
+                        'title': str(fact.get('category') or 'Memória do usuário')[:120],
+                        'content': str(fact.get('fact', ''))[:12000],
+                        'source': f"User Memory · {fact.get('source') or 'local'}",
+                    })
+        await self.send_response(msg.request_id, {
+            'success': True, 'nodes': nodes, 'count': len(nodes), 'read_only': True, 'links': [],
+        })
+
+    async def handle_self_status(self, msg: IPCMessage):
+        await self.send_response(msg.request_id, {
+            'success': True,
+            'current_engine': self.current_engine,
+            'supercerebro_active': self.supercerebro_active,
+            'voice_active': self.voice_active,
+            'lab_available': bool(self.lab),
+            'lab_v1_available': bool(LAB_V1_AVAILABLE),
+        })
+
+    # ------------------------------------------------------------
+    # ZARA Lab V1 -- new multi-agent runtime (ZARA-LAB-V1-001)
+    # ------------------------------------------------------------
+
+    _LAB_V1_TEXT_LIMIT = 12000
+    _LAB_V1_ADMISSIBLE_COMMANDS = frozenset({
+        'lab.v1.submit', 'lab.v1.message', 'lab.v1.room', 'lab.v1.cancel', 'lab.v1.resume',
+    })
+
+    async def _ensure_lab_v1(self, msg: IPCMessage):
+        """Lazily construct the LabV1Service facade, or ACK a clear failure.
+
+        Returns the service instance, or None after already sending the
+        "indisponível" error -- callers must return immediately when None.
+        """
+        if not LAB_V1_AVAILABLE or LabV1Service is None:
+            await self.send_error(msg, "ZARA Lab V1 indisponível")
+            return None
+        if self.lab_v1 is None:
+            try:
+                self.lab_v1 = LabV1Service()
+                # O Lab V1 só era criado sob demanda, mas seu ciclo de
+                # supervisor/scheduler ficava parado até uma segunda ação.
+                # Ao abrir qualquer superfície do Lab, inicia o background
+                # persistente; a própria WorkforcePolicy continua decidindo
+                # se ele pode rodar, com orçamento, escopo e verificação.
+                background = await self.lab_v1.start_background()
+                print(
+                    f"[IPC] ZARA Lab V1 background state={background.get('state')}",
+                    flush=True,
+                )
+            except Exception as exc:
+                print(f"[IPC] ZARA Lab V1 failed to initialize: {exc}")
+                traceback.print_exc()
+                self.lab_v1 = None
+                await self.send_error(msg, "ZARA Lab V1 indisponível")
+                return None
+        return self.lab_v1
+
+    async def handle_lab_v1_room_message(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        session_id = str(payload.get('session_id') or '').strip()
+        content = str(payload.get('content') or '').strip()[:self._LAB_V1_TEXT_LIMIT]
+        if not session_id or not content:
+            await self.send_error(msg, 'session_id e content são obrigatórios')
+            return
+        try:
+            await self.send_response(msg.request_id, await svc.room_message(session_id, content))
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_snapshot(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        session_id = payload.get('session_id')
+        team_id = payload.get('team_id')
+        if session_id is not None and not isinstance(session_id, str):
+            await self.send_error(msg, "session_id inválido")
+            return
+        if team_id is not None and not isinstance(team_id, str):
+            await self.send_error(msg, "team_id inválido")
+            return
+        try:
+            result = await svc.snapshot(session_id, team_id)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_create_session(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        objective = str(payload.get('objective') or '').strip()[:self._LAB_V1_TEXT_LIMIT]
+        team_id = payload.get('team_id')
+        if not objective:
+            await self.send_error(msg, "Objetivo vazio")
+            return
+        if team_id is not None and not isinstance(team_id, str):
+            await self.send_error(msg, "team_id inválido")
+            return
+        try:
+            result = await svc.create_session(objective, team_id=team_id)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_admit_operation(self, msg: IPCMessage):
+        """Return a durable admission ACK; the renderer confirms receipt next."""
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        envelope = msg.payload or {}
+        if not isinstance(envelope, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        command = envelope.get('command')
+        if command not in self._LAB_V1_ADMISSIBLE_COMMANDS:
+            await self.send_error(msg, 'Comando do Lab inválido')
+            return
+        payload = envelope.get('payload')
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload do comando inválido')
+            return
+        result, _newly_admitted = await svc.admit_operation_for_dispatch(
+            msg.request_id, command, payload
+        )
+        await self.send_response(msg.request_id, result)
+
+    async def handle_lab_v1_confirm_operation(self, msg: IPCMessage):
+        """Release work only after the renderer proves it received admission.
+
+        A separate confirmation removes the unobservable crash interval between
+        writing an ACK to stdout and committing a release in SQLite. Replaying
+        either message is safe: admission and authorization are idempotent.
+        """
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        operation_id = str(payload.get('operation_id') or '').strip()
+        if not operation_id:
+            await self.send_error(msg, 'operation_id ausente')
+            return
+        try:
+            await svc.authorize_operation_dispatch(operation_id)
+        except ValueError as exc:
+            await self.send_error(msg, str(exc))
+            return
+        await self.send_response(msg.request_id, {
+            'success': True,
+            'confirmed': True,
+            'operation_id': operation_id,
+            'state': 'DISPATCH_AUTHORIZED',
+        })
+        self._schedule_lab_v1_task(
+            self._dispatch_lab_v1_operation(svc, operation_id),
+            name=f"zara-lab-v1-operation:{operation_id}",
+        )
+
+    def _schedule_lab_v1_task(self, coroutine, *, name: str):
+        task = asyncio.create_task(coroutine, name=name)
+        self._lab_v1_background_tasks.add(task)
+
+        def _observe(completed):
+            self._lab_v1_background_tasks.discard(completed)
+            try:
+                completed.exception()
+            except asyncio.CancelledError:
+                pass
+
+        task.add_done_callback(_observe)
+        return task
+
+    async def _dispatch_lab_v1_operation(self, svc, operation_id: str):
+        try:
+            result = await svc.dispatch_operation(operation_id)
+        except Exception as exc:
+            print(f"[IPC] Lab operation dispatch failed {operation_id}: {exc}", flush=True)
+            return
+        if result.get('state') in {'COMPLETED', 'FAILED', 'INTERRUPTED'}:
+            await self._publish_lab_v1_operation_results(svc)
+
+    async def _drain_lab_v1_operation_outbox(self, svc):
+        await svc.dispatch_pending_operations()
+        await self._publish_lab_v1_operation_results(svc)
+
+    async def _publish_lab_v1_operation_results(self, svc):
+        while True:
+            results = await svc.claim_operation_result_publications()
+            if not results:
+                return
+            for result in results:
+                operation_id = result.get('operation_id')
+                event = {**result, 'event_id': f'operation-result:{operation_id}'}
+                try:
+                    await self.send_event('lab-v1-operation-result', event)
+                    await svc.mark_operation_result_published(operation_id)
+                except Exception as exc:
+                    print(f"[IPC] Lab operation result publish failed {operation_id}: {exc}", flush=True)
+                    try:
+                        await svc.release_operation_result_publication(operation_id)
+                    except Exception as release_exc:
+                        print(
+                            f"[IPC] Lab operation result release failed {operation_id}: {release_exc}",
+                            flush=True,
+                        )
+                    return
+
+    async def handle_lab_v1_submit(self, msg: IPCMessage):
+        # Do not ACK QUEUED before a policy-approved mission exists.
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            await self.send_response(msg.request_id, svc.workforce_refusal())
+
+    async def handle_lab_v1_autopilot(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        intent = payload.get('intent')
+        if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= self._LAB_V1_TEXT_LIMIT:
+            await self.send_error(msg, 'Objetivo invalido')
+            return
+        result = await svc.start_autopilot(intent.strip())
+        entry_canary = self._smoke_test and os.environ.get('ZARA_LAB_ENTRY_CANARY') == '1'
+        if result.get('success') and not entry_canary:
+            task = asyncio.create_task(svc.run_autopilot(result['session_id']))
+            self._lab_v1_background_tasks.add(task)
+            task.add_done_callback(self._lab_v1_background_tasks.discard)
+        # The ACK follows persistence, never claims that the mission has finished.
+        await self.send_response(msg.request_id, result)
+
+    async def handle_lab_v1_cancel_mission(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            session_id = str((msg.payload or {}).get('session_id') or '')
+            await self.send_response(msg.request_id, await svc.cancel_autopilot(session_id))
+
+    async def handle_lab_v1_autonomy_configure(self, msg: IPCMessage):
+        if self._smoke_test:
+            await self.send_error(msg, 'Autonomia desabilitada no canary isolado')
+            return
+        svc = await self._ensure_lab_v1(msg)
+        enabled = (msg.payload or {}).get('enabled')
+        if type(enabled) is not bool:
+            await self.send_error(msg, 'Estado de autonomia invalido')
+            return
+        if svc is not None:
+            await self.send_response(msg.request_id, await svc.configure_autonomy(enabled))
+
+    async def handle_lab_v1_autopilot_activate(self, msg: IPCMessage):
+        if self._smoke_test:
+            await self.send_error(msg, 'Autonomia desabilitada no canary isolado')
+            return
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            await self.send_response(msg.request_id, await svc.activate_autopilot())
+
+    async def handle_lab_v1_providers(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        try:
+            result = await svc.providers()
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_proposal_list(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        state = payload.get('state')
+        if state is not None and not isinstance(state, str):
+            await self.send_error(msg, 'state invalido')
+            return
+        try:
+            limit = min(max(int(payload.get('limit', 100)), 1), 500)
+            await self.send_response(msg.request_id, await svc.proposal_feed_list(state, limit))
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_proposal_register(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        proposal = msg.payload or {}
+        if not isinstance(proposal, dict) or not str(proposal.get('proposal_id') or proposal.get('id') or '').strip():
+            await self.send_error(msg, 'proposal_id obrigatorio')
+            return
+        try:
+            await self.send_response(msg.request_id, await svc.proposal_feed_register(proposal))
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_proposal_update(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        proposal_id = str(payload.get('proposal_id') or payload.get('id') or '').strip()
+        state = payload.get('state') or payload.get('status')
+        if not proposal_id or not isinstance(state, str) or not state.strip():
+            await self.send_error(msg, 'proposal_id e state sao obrigatorios')
+            return
+        try:
+            await self.send_response(msg.request_id, await svc.proposal_feed_update(proposal_id, state))
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_agent_inventory(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        refresh = bool((msg.payload or {}).get('refresh', False))
+        await self.send_response(msg.request_id, await svc.agent_inventory(refresh=refresh))
+
+    async def handle_lab_v1_research_skill(self, msg: IPCMessage):
+        """Bounded research/skill gates; activation still needs owner approval."""
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        operation = str(payload.get('operation') or '').strip().lower()
+        if operation not in {'snapshot', 'research', 'candidate', 'test', 'activate', 'rollback'}:
+            await self.send_error(msg, 'Operação de pesquisa/skill inválida')
+            return
+        if len(payload) > 16:
+            await self.send_error(msg, 'Payload de pesquisa excede o limite')
+            return
+        if operation == 'research':
+            topic = payload.get('topic')
+            sources = payload.get('sources')
+            if not isinstance(topic, str) or not topic.strip() or len(topic) > 500:
+                await self.send_error(msg, 'Tema de pesquisa inválido')
+                return
+            if not isinstance(sources, list) or not 1 <= len(sources) <= 8 or any(
+                not isinstance(source, str) or not source.strip() or len(source) > 2000 for source in sources
+            ):
+                await self.send_error(msg, 'Fontes de pesquisa inválidas')
+                return
+        try:
+            result = await svc.research_skill_pipeline(operation, payload)
+            await self.send_response(msg.request_id, result)
+        except Exception:
+            await self.send_error(msg, 'Falha controlada na operação de pesquisa/skill')
+
+    async def handle_lab_v1_team_chat(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        allowed_roles = {'RESEARCHER', 'ARCHITECT', 'ENGINEER', 'CODER', 'TESTER', 'REVIEWER', 'CEO', 'ZARA'}
+        allowed_states = {'OBSERVED', 'ANALYZING', 'PLANNED', 'IMPLEMENTING', 'TESTING', 'REVIEWING', 'WAITING_CEO', 'APPROVED', 'REJECTED', 'ROLLED_BACK'}
+        required = ('mission_id', 'role', 'state', 'summary')
+        if len(payload) > 6 or any(key not in payload for key in required):
+            await self.send_error(msg, 'Payload de chat inválido')
+            return
+        if not all(isinstance(payload[key], str) and payload[key].strip() for key in required):
+            await self.send_error(msg, 'Campos obrigatórios do chat inválidos')
+            return
+        if payload['role'].strip().upper() not in allowed_roles or payload['state'].strip().upper() not in allowed_states:
+            await self.send_error(msg, 'Papel ou estado do chat inválido')
+            return
+        if len(payload['mission_id']) > 160 or len(payload['summary']) > 4000 or len(payload.get('next_action', '')) > 1000:
+            await self.send_error(msg, 'Mensagem de chat excede o limite')
+            return
+        refs = payload.get('evidence_refs', [])
+        if not isinstance(refs, list) or len(refs) > 20 or any(not isinstance(ref, str) or len(ref) > 200 for ref in refs):
+            await self.send_error(msg, 'Referências de evidência inválidas')
+            return
+        try:
+            await self.send_response(msg.request_id, await svc.append_team_chat(payload))
+        except Exception:
+            await self.send_error(msg, 'Falha controlada ao gravar chat do Lab')
+
+    async def handle_lab_v1_create_agent(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, "Payload inválido")
+            return
+        name = str(payload.get('name') or '').strip()[:self._LAB_V1_TEXT_LIMIT]
+        provider_id = str(payload.get('provider_id') or '').strip()
+        model = str(payload.get('model') or '').strip()
+        if not name or not provider_id or not model:
+            await self.send_error(msg, "Nome, provedor e modelo são obrigatórios")
+            return
+        instructions = str(payload.get('instructions') or '')[:self._LAB_V1_TEXT_LIMIT]
+        # Only forward keys LabV1Service.create_agent actually accepts
+        # (core/lab_v1/service.py): name, provider_id, model, role, team_id,
+        # lifecycle, instructions, fallback_agent_id. Unknown extras are
+        # dropped rather than passed through, so a stray renderer field can
+        # never turn into a TypeError deep in the service.
+        kwargs: dict[str, Any] = {
+            'name': name,
+            'provider_id': provider_id,
+            'model': model,
+            'instructions': instructions,
+        }
+        role = payload.get('role')
+        if isinstance(role, str) and role.strip():
+            kwargs['role'] = role.strip()
+        lifecycle = payload.get('lifecycle')
+        if isinstance(lifecycle, str) and lifecycle.strip():
+            kwargs['lifecycle'] = lifecycle.strip()
+        team_id = payload.get('team_id')
+        if isinstance(team_id, str) and team_id.strip():
+            kwargs['team_id'] = team_id.strip()
+        fallback_agent_id = payload.get('fallback_agent_id')
+        if isinstance(fallback_agent_id, str) and fallback_agent_id.strip():
+            kwargs['fallback_agent_id'] = fallback_agent_id.strip()
+        try:
+            result = await svc.create_agent(**kwargs)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_delete_session(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is not None:
+            await self.send_response(msg.request_id, await svc.delete_session(str((msg.payload or {}).get('session_id') or '')))
+
+    async def handle_lab_v1_configure_agent(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None: return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido'); return
+        values = {k: str(payload.get(k) or '').strip() for k in ('agent_id', 'provider_id', 'model')}
+        if not all(values.values()):
+            await self.send_error(msg, 'Participante, provedor e modelo são obrigatórios'); return
+        await self.send_response(msg.request_id, await svc.configure_agent(**values))
+
+    async def handle_lab_v1_agent_profiles(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        agent_id = str(payload.get('agent_id') or '').strip() if isinstance(payload, dict) else ''
+        result = await svc.agent_profile(agent_id) if agent_id else await svc.agent_profiles()
+        await self.send_response(msg.request_id, result)
+
+    async def handle_lab_v1_agent_profile_update(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        if not isinstance(payload, dict):
+            await self.send_error(msg, 'Payload inválido')
+            return
+        agent_id = str(payload.get('agent_id') or '').strip()
+        if not agent_id:
+            await self.send_error(msg, 'Participante obrigatório')
+            return
+        permissions = payload.get('permissions')
+        if permissions is not None and not isinstance(permissions, list):
+            await self.send_error(msg, 'Permissões inválidas')
+            return
+        await self.send_response(msg.request_id, await svc.update_agent_profile(
+            agent_id=agent_id,
+            soul=payload.get('soul') if 'soul' in payload else None,
+            provider_id=payload.get('provider_id') if 'provider_id' in payload else None,
+            model=payload.get('model') if 'model' in payload else None,
+            permissions=permissions,
+        ))
+
+    async def handle_lab_v1_agent_profile_rollback(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        try:
+            agent_id = str(payload.get('agent_id') or '').strip()
+            version = int(payload.get('version'))
+        except (AttributeError, TypeError, ValueError):
+            await self.send_error(msg, 'Participante e versão são obrigatórios')
+            return
+        await self.send_response(msg.request_id, await svc.rollback_agent_profile(
+            agent_id=agent_id, version=version,
+        ))
+
+    async def handle_lab_v1_archive_agent(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        agent_id = str(payload.get('agent_id') or '').strip()
+        if not agent_id:
+            await self.send_error(msg, "agent_id ausente")
+            return
+        try:
+            result = await svc.archive_agent(agent_id)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
+
+    async def handle_lab_v1_rebind_role(self, msg: IPCMessage):
+        svc = await self._ensure_lab_v1(msg)
+        if svc is None:
+            return
+        payload = msg.payload or {}
+        team_id = str(payload.get('team_id') or '').strip()
+        role = str(payload.get('role') or '').strip()
+        agent_id = str(payload.get('agent_id') or '').strip()
+        reason = str(payload.get('reason') or '').strip()[:self._LAB_V1_TEXT_LIMIT]
+        if not team_id or not role or not agent_id:
+            await self.send_error(msg, "team_id, role e agent_id são obrigatórios")
+            return
+        try:
+            result = await svc.rebind_role(team_id, role, agent_id, reason)
+            await self.send_response(msg.request_id, result)
+        except Exception as exc:
+            await self.send_error(msg, str(exc))
     # ------------------------------------------------------------
     # Living Team mission (ZARA-LAB-LIVING-TEAM-20260925)
     # ------------------------------------------------------------

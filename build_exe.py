@@ -115,6 +115,7 @@ HIDDEN_IMPORTS = [
     "pvporcupine",
     "kokoro_onnx",
     "sounddevice",
+    "_sounddevice_data",
     "PIL",          # Correcao: main.py exige PIL (find_spec); nao pode ser excluido
     "playwright",   # main.py testa com find_spec(); coletar como hidden import
 ]
@@ -166,12 +167,17 @@ def create_pyinstaller_spec() -> Path:
     kokoro_datas = collect_data_files("kokoro_onnx")
     language_tags_datas = collect_data_files("language_tags")
     genai_datas = collect_data_files("google.genai")
-    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas
+    sounddevice_datas = collect_data_files("_sounddevice_data")
+    jsonschema_specifications_datas = collect_data_files("jsonschema_specifications")
+    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas + sounddevice_datas + jsonschema_specifications_datas
 
     # google-genai has a broad async/live module tree; collect it explicitly so
     # PyInstaller cannot miss modules imported dynamically by the SDK.
     genai_hidden = collect_submodules("google.genai")
-    all_hidden_imports = sorted(set(HIDDEN_IMPORTS + genai_hidden))
+    # ZARA Lab V1 is loaded lazily by the IPC handler. Collect the complete
+    # package so the frozen sidecar keeps every runtime service and worker.
+    lab_v1_hidden = collect_submodules("core.lab_v1")
+    all_hidden_imports = sorted(set(HIDDEN_IMPORTS + genai_hidden + lab_v1_hidden))
 
     # Bibliotecas nativas do vosk (libvosk.dll + deps) com destino dentro de vosk/
     vosk_binaries = collect_dynamic_libs("vosk")

@@ -1,24 +1,26 @@
-# CICLO #1
+# CICLO #2
 
 ## FEITO
 
-- Ponte IPC do frontend corrigida com os canais reais do preload compilado.
-- Build completo 5/5 concluído, typecheck sem erros e instalador NSIS gerado.
-- Commit-base `c53254d` publicado na branch `lab/autonomia-20260911`.
-- Canal direto por `LOOP_INBOX.md` e Gmail preparado para o próximo ciclo.
+- Lab V1 religado no backend: handlers `lab-v1-*`, dispatch e forwarders do frontend restaurados; preload/main ficaram em 78/78 canais, sem lacunas.
+- `core.lab_v1.*`, PortAudio, schemas `jsonschema-specifications` e a detecção compatível do vault foram incluídos/recuperados para o EXE.
+- Instalador completo 5/5 e typecheck passaram; smoke do backend empacotado confirmou snapshot Lab V1, autonomia/status, missão/verificação e parada sem erro de handler.
 
 ## ESTADO
 
 - Projeto: `C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002`.
 - Branch: `lab/autonomia-20260911`.
-- Instalador: `frontend/release/ZARA 3.0 Setup 3.0.0.exe`.
-- Próxima entrada esperada: e-mail mais recente com assunto `[ZARA-LOOP]`.
+- Candidato exato: `frontend/release/win-unpacked/ZARA 3.0.exe`.
+- Backend empacotado e `dist-sidecar` têm o mesmo SHA256: `F7380774ED1F6D402B2F06D5316558DF1FE32CB2626193BF15F3E5018131565E`.
+- A validação física de cliques na janela Electron continua `NÃO PROVADA`; o smoke foi automatizado no candidato exato.
 
 ## ERRO
 
-- O `CORRIGIR-PONTE.bat` original falhou no parser de chaves; a correção manual foi feita usando os canais reais compilados e os backups foram preservados.
-- O npm reportou 16 vulnerabilidades durante a instalação; nenhuma dependência foi alterada neste ciclo.
+- O primeiro smoke do pacote revelou DLL PortAudio ausente; corrigido.
+- O segundo smoke revelou schemas `jsonschema-specifications` ausentes; corrigido.
+- Permanece apenas o aviso conhecido de integração opcional Hermes indisponível; não impede a inicialização nem os canais testados.
+- `npm install` reporta 16 vulnerabilidades existentes; dependências não foram alteradas.
 
 ## SUGESTÃO
 
-- Consultar o Gmail e executar a próxima tarefa técnica concreta enviada pela Zoe.
+- Ler o e-mail mais recente com assunto `[ZARA-LOOP]` e executar a próxima tarefa concreta da Zoe.

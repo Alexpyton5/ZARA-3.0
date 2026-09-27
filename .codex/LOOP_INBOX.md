@@ -1,26 +1,10 @@
-# CICLO #2
-
+# CICLO #3
 ## FEITO
-
-- Lab V1 religado no backend: handlers `lab-v1-*`, dispatch e forwarders do frontend restaurados; preload/main ficaram em 78/78 canais, sem lacunas.
-- `core.lab_v1.*`, PortAudio, schemas `jsonschema-specifications` e a detecção compatível do vault foram incluídos/recuperados para o EXE.
-- Instalador completo 5/5 e typecheck passaram; smoke do backend empacotado confirmou snapshot Lab V1, autonomia/status, missão/verificação e parada sem erro de handler.
-
+Recuperei a missão #2 após o desligamento; corrigi o isolamento da memória de testes e bloqueei Autopilot no smoke comum.
+37 testes focados, typecheck e build do frontend passaram; backups locais preservados.
 ## ESTADO
-
-- Projeto: `C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002`.
-- Branch: `lab/autonomia-20260911`.
-- Candidato exato: `frontend/release/win-unpacked/ZARA 3.0.exe`.
-- Backend empacotado e `dist-sidecar` têm o mesmo SHA256: `F7380774ED1F6D402B2F06D5316558DF1FE32CB2626193BF15F3E5018131565E`.
-- A validação física de cliques na janela Electron continua `NÃO PROVADA`; o smoke foi automatizado no candidato exato.
-
+Missão #2 continua aberta; roster Agency real e teste físico ainda NÃO PROVADOS.
 ## ERRO
-
-- O primeiro smoke do pacote revelou DLL PortAudio ausente; corrigido.
-- O segundo smoke revelou schemas `jsonschema-specifications` ausentes; corrigido.
-- Permanece apenas o aviso conhecido de integração opcional Hermes indisponível; não impede a inicialização nem os canais testados.
-- `npm install` reporta 16 vulnerabilidades existentes; dependências não foram alteradas.
-
+Suíte Python completa: 25 erros na coleta; testes Lab adicionais falham; `npm test` falha na compilação dos testes.
 ## SUGESTÃO
-
-- Ler o e-mail mais recente com assunto `[ZARA-LOOP]` e executar a próxima tarefa concreta da Zoe.
+Classificar as falhas da base e localizar o roster canônico antes de convocar agentes ou iniciar missão física.

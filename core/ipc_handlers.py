@@ -884,6 +884,10 @@ class IPCHandler:
 
     async def handle_message(self, msg: IPCMessage):
         """Route message to appropriate handler"""
+        if (self._smoke_test and msg.type == 'lab-v1-autopilot'
+                and os.environ.get('ZARA_LAB_ENTRY_CANARY') != '1'):
+            await self.send_error(msg, 'SMOKE_READ_ONLY: Autopilot desabilitado no smoke test')
+            return
         handler_map = {
             'engine-change': self.handle_engine_change,
             'engine-list': self.handle_engine_list,

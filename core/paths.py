@@ -14,9 +14,11 @@ def project_root() -> Path:
 
 
 def user_data_dir() -> Path:
-    """Writable per-user data directory (LOCALAPPDATA on Windows)."""
-    base = Path(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share"))
-    base = base / "ZARA3"
+    """Writable per-user data directory, with an explicit isolation override."""
+    override = os.environ.get("ZARA3_HOME")
+    base = Path(override) if override else Path(
+        os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share")
+    ) / "ZARA3"
     base.mkdir(parents=True, exist_ok=True)
     return base
 

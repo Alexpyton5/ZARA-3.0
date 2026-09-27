@@ -106,20 +106,26 @@ class OpenCodeAdapter(ProviderAdapter):
         self._last_catalog_load = 0.0
         self._catalog_ttl = 300.0  # 5 min
         self._last_success_at = 0.0
-        self._load_catalog()
+        # A read-only Lab snapshot constructs this adapter. Never start a CLI
+        # child process there: Windows command shims can keep inherited pipes
+        # open even after subprocess.run reaches its timeout.
+        self._catalog = self._read_catalog_cache() or {}
 
     # -----------------------------------------------------------------
     # Catalog management
     # -----------------------------------------------------------------
 
-    def _load_catalog(self) -> None:
-        """Carrega catálogo de modelos do OpenCode (arquivo cache ou CLI)."""
+    def _load_catalog(self, *, force: bool = False, timeout_s: int = 3) -> None:
+        """Refresh the CLI catalog only on explicit discovery or use."""
         now = time.time()
-        if now - self._last_catalog_load < self._catalog_ttl and self._catalog:
+        if not force and now - self._last_catalog_load < self._catalog_ttl:
             return
+        # A failed/slow probe also needs a cooldown: otherwise each read-only
+        # snapshot can repeat the same blocking CLI call.
+        self._last_catalog_load = now
         try:
             # Tenta obter modelos via CLI OpenCode
-            models = self._fetch_models_from_cli()
+            models = self._fetch_models_from_cli(timeout_s=timeout_s)
             if models is None:
                 # CLI indisponivel (ex: PATH divergente no empacotado): leio o
                 # cache gravado por uma sessao anterior — o caminho do cache e
@@ -128,7 +134,6 @@ class OpenCodeAdapter(ProviderAdapter):
                 models = self._read_catalog_cache()
             if models is not None:
                 self._catalog = self._own_models(models)
-                self._last_catalog_load = now
                 # Grava cache para próxima vez
                 try:
                     self._cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,7 +152,7 @@ class OpenCodeAdapter(ProviderAdapter):
         except (OSError, ValueError, TypeError):
             return None
 
-    def _fetch_models_from_cli(self) -> dict[str, Any] | None:
+    def _fetch_models_from_cli(self, *, timeout_s: int | None = None) -> dict[str, Any] | None:
         """Chama `opencode models` e retorna dicionário {id: info}.
 
         O CLI pode retornar JSON (dict/list) ou linhas simples de texto
@@ -159,7 +164,8 @@ class OpenCodeAdapter(ProviderAdapter):
         try:
             result = subprocess.run(
                 [_OPENCODE_CLI, "models"],
-                capture_output=True, text=True, timeout=self._timeout_s,
+                capture_output=True, text=True,
+                timeout=timeout_s if timeout_s is not None else self._timeout_s,
             )
             if result.returncode != 0:
                 return None
@@ -238,8 +244,6 @@ class OpenCodeAdapter(ProviderAdapter):
                 return ProviderInfo(self.id, self.label, "opencode", Availability.OFFLINE,
                                     "OpenCode CLI não encontrado.", models=list(self.declared_models),
                                     installed=False, authenticated=None)
-            if not self._catalog:
-                self._load_catalog()
             model_count = len(self._catalog)
             recently_verified = time.monotonic() - self._last_success_at < 300 if self._last_success_at else False
             return ProviderInfo(
@@ -277,7 +281,7 @@ class OpenCodeAdapter(ProviderAdapter):
         if self._catalog and api_model not in self._catalog:
             # Tenta descobrir novamente
             try:
-                self._load_catalog()
+                self._load_catalog(force=True, timeout_s=min(self._timeout_s, 15))
             except Exception:
                 pass
         if self._catalog and api_model not in self._catalog:
@@ -412,5 +416,5 @@ class OpenCodeAdapter(ProviderAdapter):
 
     def discover_models(self, *, timeout_s: int = 15) -> list[ModelDescriptor]:
         """Revalida catálogo e retorna lista de ModelDescriptor."""
-        self._load_catalog()
+        self._load_catalog(force=True, timeout_s=timeout_s)
         return list(self.declared_models)

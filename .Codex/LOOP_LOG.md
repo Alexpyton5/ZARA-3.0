@@ -53,3 +53,4 @@
 - Validação focada: 40/40 testes passaram (`test_lab_agency_catalog`, `test_lab_autopilot`, `test_lab_v1_safe_contracts`). Typecheck e build frontend passaram. `npm test` falhou na compilação pré-existente de `aecAudio.test.ts` e `autoScroll.test.ts`.
 - Suíte Python completa executada e interrompida na coleta com os **mesmos 22 erros** do ciclo #4, sem falha nova observada. O pacote Electron/backend e o teste físico da missão #2 continuam NÃO PROVADOS.
 - Próximo delta: confirmar contrato contra roster real quando ele aparecer; construir gate explícito de convite e turno/11 papéis em V1 antes de qualquer despacho, mantendo custo R$0.
+- Publicação: commit `8e1323b` enviado para `origin/lab/autonomia-20260911`; `git ls-remote` coincidiu com o commit local e `.Codex/LOOP_INBOX.md` existe no caminho exato. A aba oficial do Gmail foi conferida após o push; não havia novo `[ZARA-LOOP]` além da diretriz de 01:37.

@@ -1,12 +1,11 @@
-# CICLO #6
+# CICLO #7 — checkpoint interface e limpeza
 ## FEITO
-11 assentos fixos no Lab; só agente real, vinculado, ativo e convidado pode falar.
-Fallback por configuração; Astra bloqueada por padrão. Turno fake logado: 2 falaram, 9 calados.
+Três missões antigas arquivadas sem apagar o histórico. Interface emerald titanium empacotada; o EXE ativo abriu em “Bom dia, Alex” e mostrou os 11 assentos do Lab.
+Interface velha e executáveis anteriores saíram da rota ativa para backups datados. Código publicado na branch em `b599457`.
 ## ESTADO
-Código publicado na branch em `f3f39a6`; 86 testes focados, typecheck e build passaram.
-Assentos sem agente real seguem vagos; 313 dormentes; pacote e teste físico NÃO PROVADOS.
+Instalador e app atual estão em `frontend/release/`; teste físico do despacho CEO + REVIEWER com uma chamada NVIDIA ainda NÃO EXECUTADO.
 ## ERRO
-Nenhum erro novo no foco; suíte Python ainda tem 22 erros de coleta legados.
-`npm test` segue falhando em `aecAudio.test.ts` e `autoScroll.test.ts` (pré-existente).
+Typecheck e build passaram, mas a suíte completa não está verde: 22 erros de coleta Python e falhas legadas nos testes JS/CJS.
 ## SUGESTÃO
-Zoe indicar próximo passo; validar roster real quando existir e provar pacote/uso físico antes de declarar missão #2 concluída.
+Executar o teste físico #7 com custo zero e manter ENGINEER e os demais assentos vagos/silenciosos; corrigir as falhas de teste por causa raiz antes de declarar o ciclo concluído.
+Limpeza: OK

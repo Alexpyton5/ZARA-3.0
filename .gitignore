@@ -54,3 +54,7 @@ data/
 ZARA 4/
 zara app/
 *.bak-build-publish-*
+*.bak
+*.bak-*
+BACKUP-RAIZ-*/
+.zara-tests/runs/

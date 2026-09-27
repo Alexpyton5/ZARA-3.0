@@ -1,10 +1,12 @@
 import React from 'react';
 import { RendererErrorBoundary } from './components/RendererErrorBoundary';
-import { ZaraControlCenter } from './components/zara/ZaraControlCenter';
+import { ZaraHome } from './components/zara-home/ZaraHome';
 
 const App: React.FC = () => (
   <RendererErrorBoundary>
-    <ZaraControlCenter />
+    <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
+      <ZaraHome />
+    </div>
   </RendererErrorBoundary>
 );
 

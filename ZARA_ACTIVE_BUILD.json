@@ -1,15 +1,15 @@
 {
-  "BUILD_ID": "release-candidate-f1-voice-interrupt-20260923-1756",
-  "BUILD_TIMESTAMP": "2026-09-23T17:56:38.863433-03:00",
+  "BUILD_ID": "release-emerald-20260927",
+  "BUILD_TIMESTAMP": "2026-09-27T10:25:11-03:00",
   "BASE_BUILD": "release-candidate-f1-notepad-control-20260923-1703",
-  "BUILD_METHOD": "sidecar-swap (frontend do base preservado, backend recompilado)",
+  "BUILD_METHOD": "electron-builder nsis (frontend emerald titanium e sidecar atual)",
   "GIT_BRANCH": "lab/autonomia-20260911",
-  "GIT_COMMIT": "855f835538e047b911b727603598010a881a8373",
+  "GIT_COMMIT": "4b7edff5f949a9ddd1912e94318b00d067b20ea3",
   "GIT_DIRTY": true,
-  "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release-candidate-f1-voice-interrupt-20260923-1756\\win-unpacked\\ZARA 3.0.exe",
+  "EXE_PATH": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\frontend\\release\\win-unpacked\\ZARA 3.0.exe",
   "EXE_SHA256": "67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89",
-  "BACKEND_SHA256": "F1F8EC11397EB613B222144DFEDF74E054B96BAF2C6645E227FAD1B1243F8EED",
-  "BACKEND_SHA256_ANTERIOR": "696BEF30954613E5AD9BAAFAD7FFC5D9ECF8DA9FB5ADC5A7791EECE83691994D",
-  "ASAR_SHA256": "2E2DA47E5D6F2781AC86F24227B98B14EEC214BCCF26BF406AF49811C5B5623C",
-  "DELTA": "Keep Kore playback alive when Gemini Live reports the expected client turn replacement after an executor action; preserve genuine interruption handling."
+  "BACKEND_SHA256": "5604C9D504ED237FE73A5AFB5D45310E787773D1049217EBBD07EDF0902346F5",
+  "ASAR_SHA256": "3AD0416C21ABF610A736254208953F16CC3C662F2DD8B1E56EC074C100D9F390",
+  "INSTALLER_SHA256": "3E4969887A21958FC2ECD98517601B8CEF95D743EAEAA8B9EE09E52BC5D197A2",
+  "DELTA": "Entrada do renderer na emerald titanium; interface legada removida do source e do pacote; leitura de memória tolera o contrato IPC atual."
 }

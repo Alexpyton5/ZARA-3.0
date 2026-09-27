@@ -6,9 +6,10 @@ import { formatDate } from './homeActions';
 
 type ProjectContext = {
   success: boolean;
-  active_project_id: string | null;
-  projects: Array<{ id: string; keys: string[]; updated_at: number | null }>;
-  legacy_document_keys: string[];
+  active_project_id?: string | null;
+  projects?: Array<{ id: string; keys: string[]; updated_at: number | null }>;
+  legacy_document_keys?: string[];
+  keys?: string[];
 };
 
 export function ActiveProjectCard({ onNavigate }: { onNavigate: (section: string) => void }) {
@@ -23,8 +24,12 @@ export function ActiveProjectCard({ onNavigate }: { onNavigate: (section: string
       .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, []);
-  const active = context?.projects.find((project) => project.id === context.active_project_id);
-  const documentCount = active?.keys.length ?? context?.legacy_document_keys.length ?? 0;
+  const active = Array.isArray(context?.projects)
+    ? context.projects.find((project) => project.id === context.active_project_id)
+    : undefined;
+  const documentCount = active?.keys.length
+    ?? (Array.isArray(context?.legacy_document_keys) ? context.legacy_document_keys.length : undefined)
+    ?? (Array.isArray(context?.keys) ? context.keys.length : 0);
   const name = active ? (active.id.toLowerCase() === 'zara' ? 'ZARA' : active.id) : 'Nenhum projeto selecionado';
   return (
     <section className="zh-section zh-glass-panel zh-project-card" aria-label="Projeto ativo">

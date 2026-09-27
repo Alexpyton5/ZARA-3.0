@@ -155,7 +155,11 @@ export function HomeDrawer({ section, onClose, onNavigate }: { section: string; 
       if (section === 'Projetos') {
         result = await api?.projectMemory?.context?.();
         if (!result?.success) throw new Error('Projetos não conectados.');
-        return { projects: result.projects, keys: result.legacy_document_keys, summary: result.active_project_id ? `Projeto selecionado: ${result.active_project_id}` : 'Selecione um documento para recuperar o contexto.' };
+        return {
+          projects: Array.isArray(result.projects) ? result.projects : [],
+          keys: Array.isArray(result.legacy_document_keys) ? result.legacy_document_keys : Array.isArray(result.keys) ? result.keys : [],
+          summary: result.active_project_id ? `Projeto selecionado: ${result.active_project_id}` : 'Selecione um documento para recuperar o contexto.',
+        };
       }
       if (section === 'Configurações') {
         result = await api?.engine?.list?.();

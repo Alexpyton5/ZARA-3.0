@@ -1,1 +1,1 @@
-C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\release-candidate-f1-voice-interrupt-20260923-1756\win-unpacked\ZARA 3.0.exe
+C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\release\win-unpacked\ZARA 3.0.exe

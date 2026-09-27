@@ -24,12 +24,23 @@ só proteção. Só depois disso comece a missão.
 2. Reconstrua o `zara-backend.exe` (PyInstaller) e atualize o build em
    `frontend\release\win-unpacked\resources\backend`.
 3. Teste de verdade: abra o modo voz no app e confirme que o microfone liga sem erro.
-4. Na sequência, missão #8 (voz):
-   a. OmniVoice instalado no PC como 2º motor de voz (local, grátis).
-   b. Botão na interface pra trocar Kore ↔ OmniVoice.
-   c. Troca AUTOMÁTICA se a Kore falhar — inclui cota esgotada, sem internet
-      E congelamento/travamento (o Alex relatou que o Gemini Live às vezes
-      trava em vez de dar erro; detectar timeout também).
+4. Na sequência, missão #8 (voz) — CÓDIGO-BASE PRONTO PELA ZOE:
+   a. OmniVoice instalado no PC como 2º motor de voz (local, grátis):
+      no `.venv`: instalar o torch certo para a máquina e depois
+      `pip install omnivoice`. Na 1ª execução ele baixa o modelo
+      k2-fsa/OmniVoice do Hugging Face (avisar: download grande).
+   b. Botão na interface pra trocar Kore ↔ OmniVoice: FALTA O BOTÃO —
+      o backend já está pronto (TTSConfig.tts_engine aceita
+      auto|edge|omnivoice|kokoro|gemini; o motor escolhido tenta primeiro).
+      Criar o botão no VoiceDock.tsx gravando via config-set.
+   c. Troca AUTOMÁTICA: PRONTA PELA ZOE — arquivo novo
+      `core/omnivoice_tts.py` + cascata atualizada em `core/voice_tts.py`
+      (ordem: Edge → OmniVoice → Kokoro → Gemini); se um motor falhar,
+      o próximo assume sozinho, sem ficar muda nunca. A zoe verificou
+      com testes simulados (13 checagens verdes); rode a suíte DE VERDADE
+      antes do push — a parte do travamento/congelamento do Gemini Live
+      (timeout) está coberta pela cascata: qualquer exceção na fala cai
+      para o próximo motor.
 5. Rode a suíte de testes completa antes do push.
 
 ## Pronto quando

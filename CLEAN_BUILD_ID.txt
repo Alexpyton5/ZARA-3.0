@@ -1,5 +1,1 @@
-ZARA-3.0-ROOT-CLEAN-003-VOICE-ENGINES
-Build date: 2026-08-07
-Purpose: Gemini Live/Kore low-latency voice + key-aware AI engine selector
-Base: ZARA-3.0-ROOT-CLEAN-002 (working clean root)
-Architecture: Electron + React/Vite + Python sidecar
+1d4db442

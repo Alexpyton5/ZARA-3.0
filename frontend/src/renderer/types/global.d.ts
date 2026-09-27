@@ -33,7 +33,7 @@ declare global {
       };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
       system?: { metrics?: () => Promise<any>; info?: () => Promise<any>; selfStatus?: () => Promise<any> };
-      voice?: { start?: () => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any>; mute?: (muted?: boolean) => Promise<any>; sendMicChunk?: (pcm: any) => void };
+      voice?: { start?: () => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any>; getEngine?: () => Promise<any>; setEngine?: (engine: 'kore' | 'omnivoice') => Promise<any>; mute?: (muted?: boolean) => Promise<any>; sendMicChunk?: (pcm: any) => void };
       config?: { get?: () => Promise<any>; set?: (key: string, value: any) => Promise<any> };
       // Atalhos de desktop (abrir apps, pastas, links externos, configurações)
       desktop?: {

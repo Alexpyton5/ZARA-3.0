@@ -15,6 +15,8 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [playing, setPlaying] = useState(false);
+  const [voiceEngine, setVoiceEngine] = useState<'kore' | 'omnivoice'>('kore');
+  const [omnivoiceAvailable, setOmnivoiceAvailable] = useState(false);
   const operation = useRef(false);
   const mounted = useRef(true);
   const ownsSession = useRef(false);
@@ -22,6 +24,12 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
 
   useEffect(() => {
     mounted.current = true;
+    void window.zaraIPC?.voice?.getEngine?.().then((result) => {
+      if (mounted.current && result?.success) {
+        setVoiceEngine(result.engine === 'omnivoice' ? 'omnivoice' : 'kore');
+        setOmnivoiceAvailable(Boolean(result.omnivoice_available));
+      }
+    }).catch(() => undefined);
     const unsubscribePlayback = observarKore(setPlaying);
     const unsubscribe = window.zaraIPC?.on?.voiceOutputAudio?.((data) => {
       try {
@@ -104,6 +112,20 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
     }
   }
 
+  async function changeVoiceEngine(engine: 'kore' | 'omnivoice') {
+    const previous = voiceEngine;
+    setVoiceEngine(engine);
+    setError('');
+    try {
+      const result = await window.zaraIPC?.voice?.setEngine?.(engine);
+      if (result?.success !== true) throw new Error(result?.error || 'Não foi possível trocar a voz.');
+      setOmnivoiceAvailable(Boolean(result.omnivoice_available ?? engine === 'omnivoice'));
+    } catch (cause) {
+      setVoiceEngine(previous);
+      setError(errorMessage(cause, 'Não foi possível trocar a voz.'));
+    }
+  }
+
   const label = pending ? 'Conectando voz…' : !voiceAvailable ? 'Modo voz indisponível'
     : coreState === 'speaking' || playing ? 'Interromper fala' : listening ? 'Parar modo voz' : 'Abrir modo voz';
 
@@ -119,6 +141,14 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
         <button className="zh-dock-btn" type="button" aria-label="Histórico" title="Histórico" onClick={() => onNavigate('Histórico')}><Clock3 size={25} strokeWidth={1.7} /></button>
         <button className="zh-dock-btn" type="button" aria-label="Mais opções" title="Mais opções" onClick={() => onNavigate('Mais opções')}><MoreHorizontal size={27} strokeWidth={1.7} /></button>
       </nav>
+      <label className="zh-voice-engine-picker">
+        Voz
+        <select aria-label="Motor de voz" value={voiceEngine}
+          onChange={(event) => void changeVoiceEngine(event.target.value as 'kore' | 'omnivoice')}>
+          <option value="kore">Kore</option>
+          <option value="omnivoice" disabled={!omnivoiceAvailable}>OmniVoice local</option>
+        </select>
+      </label>
       {error && <div className="zh-dock-feedback" role="alert">{error}</div>}
     </div>
   );

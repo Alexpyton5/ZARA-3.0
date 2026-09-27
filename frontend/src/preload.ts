@@ -75,6 +75,8 @@ const zaraAPI = {
     start: () => ipcRenderer.invoke('voice-start'),
     stop: () => ipcRenderer.invoke('voice-stop'),
     status: () => ipcRenderer.invoke('voice-status'),
+    getEngine: () => ipcRenderer.invoke('voice-engine-get'),
+    setEngine: (engine: 'kore' | 'omnivoice') => ipcRenderer.invoke('voice-engine-set', { engine }),
     sendMicChunk: (pcm: any) => ipcRenderer.send('voice-mic-chunk', pcm),
     mute: (mudo?: boolean) => ipcRenderer.invoke('voice-mute', mudo),
   },

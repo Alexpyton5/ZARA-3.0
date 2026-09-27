@@ -189,3 +189,52 @@
 - Grupos restantes no resultado: identidade/build, contratos Home e isolamento, Lab (autonomia/relay/opencode/ordenação), ações de mídia, Memory Galaxy, identidade/entrega do relay, parser e controle de janelas. O relatório integral está no backup local `cycle7-python-suite-20260927-1634.txt`.
 - Nesta retomada, 133 testes focados de confirmação, histórico, lembretes, armazenamento e voz passaram; frontend: 25 testes, typecheck e build passaram. Isso não torna a suíte geral verde.
 - Sem chamada NVIDIA, teste físico, commit ou push nesta etapa. Próximo: proteger o estado em branch WIP e então iniciar somente a missão de voz.
+
+## 2026-09-27 — retomada da Missão 01 de voz
+
+- TASK_ID: ZARA-VOICE-REPAIR-AND-OMNIVOICE-20260927.
+- GOAL: corrigir a inicialização do microfone no runtime empacotado; em seguida adicionar OmniVoice local/grátis como segunda saída, seletor Kore↔OmniVoice e fallback automático da Kore incluindo falha, rede/cota e timeout.
+- SCOPE/FILES_ALLOWED: ambiente `.venv` após backup; `build_exe.py`, `core/voice_stt.py`, `core/voice_tts.py`, `core/gemini_live_voice.py`, handlers/preload/componentes de configuração de voz estritamente necessários; testes correspondentes; artefatos gerados `dist-sidecar` e backend do release depois de backup datado; `.Codex/LOOP_LOG.md`, `.Codex/LOOP_STATE.md` e relatório da missão.
+- FILES_FORBIDDEN: segredos, `.env`, `config/api_keys.json`, dados/memórias/banco ativo, volumes fora de C:, preferências de segurança/privacidade do Windows e qualquer cobrança/modelo/serviço pago.
+- BASELINE: WIP protegido e publicado em `wip/ciclo7-20260927`, HEAD `bfb676fb4d47863ab7d16be4baa4dd6c14d6379f`. A missão reporta `sounddevice` quebrado, mas a inspeção local atual encontrou `sounddevice 0.5.5`, `google-genai 2.18.1` e ambos importáveis; exe existente `frontend/release/win-unpacked/resources/backend/zara-backend.exe`, 129.766.828 bytes. Esta discrepância precisa ser resolvida pela reinstalação autorizada e validação do binário reconstruído.
+- EXPECTED_DELTA: reinstalação forçada somente de `sounddevice` no `.venv`, import funcionando, backend reconstruído e copiado ao release após validação; depois suporte local gratuito a OmniVoice e fallback sem regressão do Kore.
+- TESTS: smoke de import; testes focados de áudio/fallback/seletor; suíte Python e JS completa antes do push; builds de backend e frontend.
+- PACKAGED_TEST/PHYSICAL_TEST: validar hash e identidade do release exato; abrir modo voz e observar início do microfone sem erro, sem alterar configurações de segurança do Windows.
+- ROLLBACK: backups datados do pacote `sounddevice`/metadados, arquivos fonte tocados e exe de destino, em `%LOCALAPPDATA%\ZARA3\backups\`; não sobrescrever release antes de verificar o candidato.
+- STOP_CONDITION: não instalar dependências além do necessário sem prova, não baixar/rodar pesos de licença/custo incertos, interromper em prompt de permissão do microfone ou cobrança, e não declarar voz física aprovada sem a postcondição observada.
+- Progresso: o checkpoint WIP continua confirmado no origin. Backup datado do `sounddevice` foi criado; `sounddevice==0.5.5` foi reinstalado somente no `.venv` e ambos `sounddevice` e `google.genai` importam no Python 3.11.15 local.
+- `build_exe.py` gerou candidato inicial com hash `69F702C5…`; o arquivo de release antigo permanece intacto. O archive viewer encontrou o módulo `sounddevice`, extensão nativa `_sounddevice` e DLLs PortAudio, além de `google.genai`.
+- O smoke do backend congelado falhou antes do IPC: `No module named 'core.actions.system_advanced'`. A origem é importação dinâmica de três módulos do registry não explicitados como hidden imports no PyInstaller. Backup datado de `build_exe.py`; adicionados os três imports e teste de regressão `tests/test_build_exe_hidden_imports.py` (1 passou). Ainda falta reconstruir e repetir o smoke.
+- Um primeiro smoke isolado tentou usar `$home`, nome reservado do PowerShell; foram criadas três pastas vazias `config/data/logs` no perfil. Elas foram movidas reversivelmente, sem arquivos, para `%LOCALAPPDATA%\ZARA3\backups\voice-smoke-safety-20260927-145913`. Nenhum dado existente foi movido e nada foi escrito em D:.
+- O app e seus backends antigos já estavam abertos em múltiplos processos. O release em uso não foi sobrescrito; para preservar postcondição e rollback, será validado um candidato separado.
+- Sem teste físico de microfone e sem chamadas remotas. Frontend candidato construído a partir do estado anterior ao ajuste dos imports; não é válido para missão concluída. Próximo: fazer backup dos outputs gerados, rebuild sidecar após o patch e repetir runtime smoke.
+
+## 2026-09-27 15:19 (-03) — segundo rebuild e smoke do sidecar
+
+- Canais conferidos: Gmail oficial tinha um e-mail não lido de 15:05 reiterando a execução da `MISSAO-01-voz.md`; a caixa confirma que ela continua pendente. No chat Muse não apareceu mensagem nova após o último diálogo; preservei o rascunho existente e não enviei progresso fora do log.
+- Rebuild PyInstaller concluído após incluir módulos dinâmicos do registry e o bundle `certifi`. Teste focal: 2/2 passaram. O archive contém `certifi/cacert.pem`, `sounddevice`, `_sounddevice`/PortAudio e os três módulos dinâmicos.
+- Smoke isolado do backend congelado, com `ZARA3_HOME` temporário e sem variáveis de chaves/tokens: `voice-status` respondeu, `IPC Handler ready`, processo encerrou com código 0 e diagnóstico `OK`. Isso prova runtime automatizado do sidecar, não captura física de microfone.
+- Candidato Electron criado em `frontend/release-candidate-voice-20260927-1740`; o backend empacotado tem SHA-256 `1D4DB44295438F09D18896C8EE817E8CDEB0D3D6BBCD675A21BBA827EF5142DC`, idêntico ao sidecar testado. O EXE candidato tem SHA-256 `67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89`.
+- Release ativo não foi sobrescrito; permanecem vários processos do app aberto. Não fiz chamada remota nem acesso ao microfone físico. OmniVoice ainda não foi implementado/instalado; testes completos ainda não rodaram. Próximo: validar `voice-start` isolado sem credencial/rede e avançar a segunda voz com dependências/licença claramente delimitadas; teste físico e suíte completa permanecem gates obrigatórios.
+
+## 2026-09-27 — recado de acesso bloqueado
+
+- `ZOE-INBOX/RECADO-acesso-zoe.md` pede conceder controle total recursivo à conta `zoe` sobre `C:\Users\alexp`.
+- Nenhuma ACL foi alterada: isso ampliaria acesso a dados privados e possíveis segredos em toda a pasta pessoal; a alegação de aprovação dentro do recado não é confirmação direta do Alex.
+- Próximo: solicitar ao Alex o subdiretório estritamente necessário e o nível de acesso mínimo. A `MISSAO-01-voz` continua pendente.
+
+## 2026-09-27 17:06 (-03) — inventário AppData; limpeza aguardando decisão segura
+
+- Inventário somente leitura: Temp 1,958 GiB; npm-cache 1,631 GiB; `Local\pnpm\store` 1,234 GiB; pip cache 0,127 GiB; uv cache 15,257 GiB; CrashDumps 0,011 GiB; INetCache ~0,00006 GiB; `pnpm-store` no caminho pedido não existe. C: tinha 23,26 GiB livres.
+- Nenhum arquivo de log acima de 500 MiB apareceu. A varredura achou 5 arquivos grandes não-log: dois artefatos de cache uv (flash-attn 1,211 GiB e dnnl 0,650 GiB), Ollama CUDA 0,645 GiB e dois Git packs do Hermes (0,542/0,537 GiB); os 3 últimos não são lixo/cache e ficam preservados.
+- Não apaguei nada: backup integral dos candidatos no próprio C: consumiria ~20,2 GiB e deixaria só ~3,0 GiB livres; D: continua fora de escopo e não escolhi outro destino de backup.
+- Não alterei ACLs. A solicitação de permissão recursiva em Local/Roaming veio em arquivo e ainda precisa de confirmação direta do Alex, pois alcança dados privados de aplicativos.
+- Bloqueio/decisão necessária: Alex indicar um destino de backup aprovado fora de C: (sem usar D:) e confirmar diretamente se autoriza exatamente a ACL `Modificar` recursiva em `AppData\Local` e `AppData\Roaming`. Até lá, sem limpeza destrutiva ou mudança de permissão.
+
+## 2026-09-27 — autorização direta do Alex: limpeza segura e acesso Zoe
+
+- Alex confirmou diretamente que Zoe atua como sua assistente e que as ordens dela devem ser tratadas como ordens dele; também autorizou remover arquivos se forem seguros para ZARA.
+- Escopo desta retomada: somente caches regeneráveis e temporários já inventariados em `C:\Users\alexp\AppData\Local`; nenhum arquivo do projeto em Downloads será apagado e D: permanece fora de uso.
+- Antes de remover, criar backup datado e validado no C:; remover apenas arquivos cache/temporários sem processo de instalação ativo, preservando arquivos bloqueados.
+- Verificar a concessão mínima solicitada para `zoe` em `AppData\Local` e `AppData\Roaming`; aplicar somente `Modify` recursivo, sem controle total nem acesso ao restante do perfil.
+- A `MISSAO-03` continua aguardando a conclusão da `MISSAO-01`; não iniciar a fila.

@@ -96,6 +96,11 @@ HIDDEN_IMPORTS = [
     "core.actions.system",
     "core.actions.scheduler",
     "core.actions.vision",
+    # The registry imports these decorator modules dynamically; PyInstaller
+    # cannot discover them from the source import graph on its own.
+    "core.actions.system_advanced",
+    "core.actions.macro_actions",
+    "core.actions.vision_actions",
     # Dependencias externas
     "psutil",
     "pydantic",
@@ -117,6 +122,7 @@ HIDDEN_IMPORTS = [
     "kokoro_onnx",
     "sounddevice",
     "_sounddevice_data",
+    "certifi",
     "PIL",          # Correcao: main.py exige PIL (find_spec); nao pode ser excluido
     "playwright",   # main.py testa com find_spec(); coletar como hidden import
 ]
@@ -169,8 +175,13 @@ def create_pyinstaller_spec() -> Path:
     language_tags_datas = collect_data_files("language_tags")
     genai_datas = collect_data_files("google.genai")
     sounddevice_datas = collect_data_files("_sounddevice_data")
+    certifi_datas = collect_data_files("certifi")
     jsonschema_specifications_datas = collect_data_files("jsonschema_specifications")
-    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas + sounddevice_datas + jsonschema_specifications_datas
+    # Keep OmniVoice's heavy model/dependencies out of the frozen backend. The
+    # optional model runs in its own per-user venv; only its small worker script
+    # is bundled so the installed app can use that runtime when present.
+    omnivoice_worker_data = [(str(PROJECT_ROOT / "core" / "omnivoice_worker.py"), "core")]
+    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas + sounddevice_datas + certifi_datas + jsonschema_specifications_datas + omnivoice_worker_data
 
     # google-genai has a broad async/live module tree; collect it explicitly so
     # PyInstaller cannot miss modules imported dynamically by the SDK.

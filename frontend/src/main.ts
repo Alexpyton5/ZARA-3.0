@@ -626,6 +626,8 @@ function setupIPC(): void {
   ipcMain.handle('voice-start', () => sendToPython('voice-start'))
   ipcMain.handle('voice-stop', () => sendToPython('voice-stop'))
   ipcMain.handle('voice-status', () => sendToPython('voice-status'))
+  ipcMain.handle('voice-engine-get', () => sendToPython('voice-engine-get'))
+  ipcMain.handle('voice-engine-set', (_event, payload) => sendToPython('voice-engine-set', payload))
   ipcMain.handle('config-get', () => sendToPython('config-get'))
   ipcMain.handle('config-set', (_event, key: string, value: any) => sendToPython('config-set', { key, value }))
 

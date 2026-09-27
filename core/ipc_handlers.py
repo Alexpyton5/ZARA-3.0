@@ -685,7 +685,8 @@ IPC_REQUEST_ALLOWLIST = frozenset({
     "engine-change", "engine-list", "send-message", "interrupt", "voice-mute",
     "voice-mic-chunk", "action-execute", "action-confirm", "action-confirm-cancel",
     "action-list", "self-status", "system-metrics", "latencia-resumo", "system-info",
-    "voice-start", "voice-stop", "voice-status", "config-get", "config-set",
+    "voice-start", "voice-stop", "voice-status", "voice-engine-get", "voice-engine-set",
+    "config-get", "config-set",
     "lab-state", "lab-send", "lab-proposal-create", "lab-proposal-decide",
     "lab-v1-snapshot", "lab-v1-create-session", "lab-v1-admit-operation",
     "lab-v1-confirm-operation", "lab-v1-submit", "lab-v1-autopilot",
@@ -1653,8 +1654,14 @@ class IPCHandler:
 
         if VOICE_AVAILABLE and TTSManager and TTSConfig:
             try:
-                tts_config = TTSConfig(default_voice="pf_dora")
+                from core.voice_preferences import load_voice_output_engine
+                tts_config = TTSConfig(
+                    default_voice="pf_dora",
+                    output_engine=load_voice_output_engine(),
+                )
                 self.tts_manager = TTSManager(tts_config)
+                self._voice_output_engine = tts_config.output_engine
+                self._omnivoice_runtime = self.tts_manager.omnivoice
                 self._tts_initialized = False
                 print("[IPC] Voice TTS prepared (lazy initialization)")
             except Exception as exc:
@@ -3563,7 +3570,9 @@ class IPCHandler:
             return
 
         live_voice_available = bool(
-            prefer_live and self.gemini_live_voice and self.gemini_live_voice.active
+            prefer_live
+            and getattr(self, "_voice_output_engine", "kore") != "omnivoice"
+            and self.gemini_live_voice and self.gemini_live_voice.active
         )
         if self.tts_manager and not self._tts_initialized and not live_voice_available:
             try:
@@ -3640,7 +3649,14 @@ class IPCHandler:
                 return
             self._fala_interrompida = False
             if live_voice_available and self.gemini_live_voice:
-                spoken = await self.gemini_live_voice.speak(value)
+                try:
+                    spoken = await self.gemini_live_voice.speak(value)
+                except Exception as exc:
+                    spoken = False
+                    print(
+                        f"[VOICE_TRACE] stage=TTS_FALLBACK result=KORE_FAILED reason={type(exc).__name__}",
+                        flush=True,
+                    )
                 if not spoken and self.gemini_live_voice.active:
                     delivered_at = self.gemini_live_voice.ultimo_audio_entregue()
                     live_audio_started = delivered_at is not None
@@ -3650,7 +3666,14 @@ class IPCHandler:
                     # mais um instante.
                     if not live_audio_started:
                         print("[VOICE_TRACE] stage=TTS_RETRY result=KORE_SEGUNDA_TENTATIVA", flush=True)
-                        spoken = await self.gemini_live_voice.speak(value)
+                        try:
+                            spoken = await self.gemini_live_voice.speak(value)
+                        except Exception as exc:
+                            spoken = False
+                            print(
+                                f"[VOICE_TRACE] stage=TTS_FALLBACK result=KORE_RETRY_FAILED reason={type(exc).__name__}",
+                                flush=True,
+                            )
                         delivered_at = self.gemini_live_voice.ultimo_audio_entregue()
                         live_audio_started = delivered_at is not None
                     if live_audio_started:
@@ -3680,7 +3703,8 @@ class IPCHandler:
                 not spoken
                 and self.tts_manager
                 and not self._tts_initialized
-                and not any((self.tts_manager.edge, self.tts_manager.kokoro, self.tts_manager.gemini))
+                and not any((self.tts_manager.edge, self.tts_manager.kokoro, self.tts_manager.gemini,
+                             getattr(self.tts_manager, "omnivoice", None)))
             ):
                 try:
                     await asyncio.to_thread(self.tts_manager.initialize)
@@ -3694,7 +3718,23 @@ class IPCHandler:
                         flush=True,
                     )
                     return
-            # Edge neural (gratuita, sem cota) assume quando a Kore nao fala.
+            # Isolated local worker takes over when Kore fails, is unavailable,
+            # or the user explicitly selects OmniVoice. Partial Kore playback
+            # was already marked spoken above and is never replayed here.
+            omni = getattr(self.tts_manager, "omnivoice", None) if self.tts_manager else None
+            omni_ready = bool(omni and getattr(omni, "available", False) is True)
+            if not spoken and omni_ready:
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, lambda: omni.play(value, blocking=True))
+                    spoken = True
+                    engine_used = "omnivoice/local-worker"
+                except Exception as exc:
+                    print(
+                        f"[VOICE_TRACE] stage=TTS_FALLBACK result=OMNIVOICE_FAILED reason={type(exc).__name__}",
+                        flush=True,
+                    )
+            # Edge neural (gratuita, sem cota) follows the local model.
             if not spoken and self.tts_manager and self.tts_manager.edge:  # type: ignore[union-attr]
                 try:
                     loop = asyncio.get_event_loop()
@@ -3854,6 +3894,8 @@ class IPCHandler:
             'voice-start': self.handle_voice_start,
             'voice-stop': self.handle_voice_stop,
             'voice-status': self.handle_voice_status,
+            'voice-engine-get': self.handle_voice_engine_get,
+            'voice-engine-set': self.handle_voice_engine_set,
             'config-get': self.handle_config_get,
             'config-set': self.handle_config_set,
             'lab-state': self.handle_lab_state,
@@ -6037,6 +6079,41 @@ class IPCHandler:
                 'current_engine': self.current_engine, 'voice_active': self.voice_active})
         except Exception:
             await self.send_error(msg, 'Nao foi possivel ler o modelo selecionado.')
+
+    async def handle_voice_engine_get(self, msg: IPCMessage):
+        from core.voice_preferences import load_voice_output_engine
+        engine = load_voice_output_engine()
+        runtime = getattr(getattr(self, 'tts_manager', None), 'omnivoice', None)
+        await self.send_response(msg.request_id, {
+            'success': True, 'engine': engine,
+            'omnivoice_available': bool(runtime and getattr(runtime, 'available', False)),
+        })
+
+    async def handle_voice_engine_set(self, msg: IPCMessage):
+        payload = msg.payload or {}
+        engine = str(payload.get('engine') or '').strip().casefold()
+        if engine not in {'kore', 'omnivoice'}:
+            await self.send_error(msg, 'Motor de voz inválido.')
+            return
+        runtime = getattr(self, '_omnivoice_runtime', None)
+        if runtime is None:
+            runtime = getattr(getattr(self, 'tts_manager', None), 'omnivoice', None)
+        if engine == 'omnivoice' and not bool(runtime and getattr(runtime, 'available', False)):
+            await self.send_error(msg, 'OmniVoice indisponível: instale o runtime local primeiro.')
+            return
+        try:
+            from core.voice_preferences import save_voice_output_engine
+            selected = save_voice_output_engine(engine)
+            self._voice_output_engine = selected
+            manager = getattr(self, 'tts_manager', None)
+            if manager is not None:
+                manager.config.output_engine = selected
+            await self.send_response(msg.request_id, {
+                'success': True, 'engine': selected,
+                'omnivoice_available': bool(runtime and getattr(runtime, 'available', False)),
+            })
+        except OSError:
+            await self.send_error(msg, 'Não foi possível salvar a preferência de voz.')
 
 
     async def handle_config_set(self, msg: IPCMessage):

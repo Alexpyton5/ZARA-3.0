@@ -1,7 +1,7 @@
 # ZARA 3.0 — LOOP STATE
 
-- Último ciclo: 5 (contrato do catálogo Agency no Lab V1)
-- Resultado: leitura read-only em caminho configurável, estado `DORMANT/INVALID/READY` no snapshot e painel, sem despacho; 40 testes focados, typecheck e build frontend passaram. Suíte completa continua vermelha nos mesmos 22 erros de coleta; `npm test` continua falhando por testes legados.
-- Estado atual: missão #2 em andamento; roster real dos 313 ainda não localizado, não há convite/turno nem missão física. Canal oficial da Zoe: aba Gmail do navegador em `zoeeproject@gmail.com`, não a conexão automática.
-- Próximo passo: validar o arquivo real quando Zoe/Alex o localizarem; até lá implementar apenas o gate de convite/turno e os 11 papéis em deltas seguros, sem despachar agentes ausentes. Conferir Gmail no início e fim de cada ciclo.
+- Último ciclo: 6 (11 assentos e trava de invocação no Lab V1)
+- Resultado: 11 papéis no catálogo e painel, convite e vínculo exigidos nos caminhos de sala/Autopilot, fallback configurável por assento e Astra bloqueada por padrão; prova isolada com 2 falas e 9 silêncios. 86 testes focados, typecheck e build frontend passaram. Suíte completa continua nos 22 erros de coleta conhecidos; `npm test` continua falhando por testes legados.
+- Estado atual: código do ciclo #6 publicado no origin em `f3f39a6`; missão #2 ainda em andamento, roster real dos 313 ausente, nenhum agente fictício ou pago ativado, pacote e teste físico NÃO PROVADOS. Canal oficial da Zoe: aba Gmail do navegador em `zoeeproject@gmail.com`, não a conexão automática.
+- Próximo passo: conferir Gmail oficial após o relatório e seguir a nova diretriz da Zoe. Sem nova tarefa, manter 313 dormentes e aguardar roster real/validação física; não inventar participantes.
 - Restrições ativas: R$ 0; não usar o volume D:; não versionar segredos; manter backups antes de alterações destrutivas.

@@ -1,10 +1,12 @@
-# CICLO #5
+# CICLO #6
 ## FEITO
-Lab V1 agora lê o catálogo Agency por caminho configurável e mostra o estado real.
-Sem arquivo, fica dormente; 40 testes focados, typecheck e build frontend passaram.
+11 assentos fixos no Lab; só agente real, vinculado, ativo e convidado pode falar.
+Fallback por configuração; Astra bloqueada por padrão. Turno fake logado: 2 falaram, 9 calados.
 ## ESTADO
-Missão #2 aberta; nenhum dos 313 foi integrado ou chamado; teste físico NÃO PROVADO.
+Código publicado na branch em `f3f39a6`; 86 testes focados, typecheck e build passaram.
+Assentos sem agente real seguem vagos; 313 dormentes; pacote e teste físico NÃO PROVADOS.
 ## ERRO
-Suíte Python mantém os mesmos 22 erros de coleta; `npm test` mantém erros antigos.
+Nenhum erro novo no foco; suíte Python ainda tem 22 erros de coleta legados.
+`npm test` segue falhando em `aecAudio.test.ts` e `autoScroll.test.ts` (pré-existente).
 ## SUGESTÃO
-Quando Zoe localizar o roster real, validar o formato; depois criar convite e turno antes de despachar.
+Zoe indicar próximo passo; validar roster real quando existir e provar pacote/uso físico antes de declarar missão #2 concluída.

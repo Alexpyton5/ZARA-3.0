@@ -10,7 +10,6 @@ These tests verify that:
 
 import asyncio
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 import pytest
@@ -311,73 +310,41 @@ class TestMicrophoneMissingOrDenied:
         assert pipeline._running is True
         pipeline.stop()
 
-    @pytest.mark.asyncio
-    async def test_local_engine_pyaudio_failure(self, monkeypatch):
-        """Test LocalVoiceEngine handles PyAudio failure gracefully."""
-        # Keep this legacy-only regression fixture available after its package
-        # leaves the production source tree.
-        legacy_voice_root = (
-            Path(__file__).resolve().parents[1]
-            / "_quarentena" / "organizacao-2026-09-23"
-        )
-        sys.path.insert(0, str(legacy_voice_root))
-        from voice.local_engine import LocalVoiceEngine
-        from voice.voice_manager import VoiceConfig as LocalVoiceConfig
-        
-        config = LocalVoiceConfig(
-            stt_model="base",
-            tts_engine="kokoro",
-            tts_voice="pf_dora",
-        )
-        
-        engine = LocalVoiceEngine()
-        
-        # Mock all init methods to succeed except _start_simple_loop
-        async def mock_init_whisper():
-            pass
-        async def mock_init_kokoro():
-            pass
-        async def mock_init_vad():
-            pass
-            
-        monkeypatch.setattr(engine, "_init_whisper", mock_init_whisper)
-        monkeypatch.setattr(engine, "_init_kokoro", mock_init_kokoro)
-        monkeypatch.setattr(engine, "_init_vad", mock_init_vad)
-        
-        await engine.initialize(config)
-        
-        # Mock pyaudio to fail
-        class MockPyAudio:
-            def __init__(self):
+    def test_current_pipeline_reports_native_audio_failure_without_false_listening(
+        self, monkeypatch
+    ):
+        """The removed legacy LocalVoiceEngine is not part of the current runtime."""
+        class MockVosk:
+            def __init__(self, _config):
+                pass
+
+            def reset(self):
+                pass
+
+        class BrokenAudio:
+            stopped = False
+
+            def __init__(self, _config):
+                pass
+
+            def start(self):
                 raise OSError("No audio input device")
-        
-        import voice.local_engine as le
-        # Mock the import inside _start_simple_loop
-        import builtins
-        original_import = builtins.__import__
-        
-        def mock_import(name, *args, **kwargs):
-            if name == "pyaudio":
-                mock_pyaudio = Mock()
-                mock_pyaudio.PyAudio = MockPyAudio
-                mock_pyaudio.paInt16 = 8
-                return mock_pyaudio
-            return original_import(name, *args, **kwargs)
-        
-        monkeypatch.setattr(builtins, "__import__", mock_import)
-        
-        # Start listening should handle failure gracefully
-        transcripts = []
-        async def on_transcript(text):
-            transcripts.append(text)
-        
-        await engine.start_listening(on_transcript, lambda: None)
-        
-        # Give it time to try
-        await asyncio.sleep(0.1)
-        
-        # Should not crash, should signal failure
-        assert engine.is_listening is True  # Still listening state, but no audio
+
+            def stop(self):
+                self.stopped = True
+
+        monkeypatch.setattr("core.voice_stt.VoskSTT", MockVosk)
+        monkeypatch.setattr("core.voice_stt.AudioInput", BrokenAudio)
+        errors = []
+        pipeline = VoicePipeline(VoiceConfig(), lambda: None, lambda _text: None)
+        pipeline.on_error = errors.append
+
+        pipeline.start()
+
+        assert pipeline.state == "ERROR"
+        assert pipeline._running is False
+        assert isinstance(errors[0], OSError)
+        assert pipeline.audio.stopped is True
 
 
 def _install_live_dependencies(monkeypatch):

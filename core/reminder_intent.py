@@ -18,6 +18,7 @@ Retorno:
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from core.reminder_engine import ReminderEngine, parse_natural_due
@@ -26,6 +27,16 @@ _INTRO = re.compile(
     r"^\s*(?:zara[\s,]*)?(?:me\s+)?(?:lembre|lembra|lembrar)\s+(?:de\s+|me\s+)?(?:de\s+)?",
     re.IGNORECASE,
 )
+
+_LIST = re.compile(
+    r"^\s*(?:zara[, ]*)?(?:quais\s+sao\s+(?:(?:os|meus)\s+)?lembretes|"
+    r"liste?\s+(?:(?:os|meus)\s+)?lembretes|"
+    r"mostre\s+(?:(?:os|meus)\s+)?lembretes)\b",
+    re.IGNORECASE,
+)
+_CANCEL = re.compile(r"^\s*(?:zara[, ]*)?cancele?\s+(?:o\s+)?lembrete\b", re.IGNORECASE)
+_COMPLETE = re.compile(r"^\s*(?:zara[, ]*)?conclua?\s+(?:o\s+)?lembrete\b", re.IGNORECASE)
+_REMINDER_ID = re.compile(r"\bREM-[A-Z0-9]+-[A-F0-9]+\b", re.IGNORECASE)
 
 _TIME_PATTERNS = [
     # daqui a N minutos/horas
@@ -53,6 +64,45 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
     raw = (text or "").strip()
     if not raw:
         return IntentResult(kind="not_reminder", raw=raw)
+
+    plain = "".join(
+        char for char in unicodedata.normalize("NFD", raw)
+        if unicodedata.category(char) != "Mn"
+    )
+
+    if _LIST.match(plain):
+        if engine is None:
+            return _failed(raw, "Não consigo consultar os lembretes agora.")
+        try:
+            reminders = engine.list()
+            if not reminders:
+                return IntentResult(kind="list", reply="Você não tem lembretes registrados.", raw=raw)
+            lines = [f"{item.id}: {item.message} ({item.state})" for item in reminders]
+            return IntentResult(kind="list", reply="Seus lembretes:\n" + "\n".join(lines), raw=raw)
+        except Exception:
+            return _failed(raw, "Não consegui consultar os lembretes agora.")
+
+    action = "cancel" if _CANCEL.match(plain) else "complete" if _COMPLETE.match(plain) else None
+    if action:
+        match = _REMINDER_ID.search(raw)
+        if not match:
+            return IntentResult(kind="not_reminder", raw=raw)
+        reminder_id = match.group(0)
+        if engine is None:
+            return _failed(raw, "Não consegui atualizar esse lembrete.")
+        expected_state = "CANCELLED" if action == "cancel" else "COMPLETED"
+        try:
+            changed = engine.cancel(reminder_id) if action == "cancel" else engine.complete(reminder_id)
+            stored = engine.get(reminder_id)
+            if not changed or stored is None or stored.state != expected_state:
+                return _failed(raw, "Não consegui confirmar a atualização desse lembrete.")
+            verb = "cancelado" if action == "cancel" else "concluído"
+            return IntentResult(
+                kind=action, reminder_id=reminder_id, message=stored.message,
+                reply=f"Lembrete {verb}: {reminder_id}.", raw=raw,
+            )
+        except Exception:
+            return _failed(raw, "Não consegui confirmar a atualização desse lembrete.")
 
     # precisa comecar com "lembre de ..." (apos opcional "zara")
     m = _INTRO.match(raw)
@@ -101,24 +151,17 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
                 message=message,
                 due_at_utc=due,
                 human_due=human_due,
-                reply=f"Certo. Vou te lembrar de {message} {human_due}.",
+                reply=f"Certo. Vou te lembrar de {message} {human_due}. ID: {reminder.id}.",
                 raw=raw,
             )
         except Exception:
-            return IntentResult(
-                kind="not_reminder",
-                reply="Não consegui criar esse lembrete.",
-                raw=raw,
-            )
+            return _failed(raw, "Não consegui criar esse lembrete. Ele não está agendado.")
 
-    return IntentResult(
-        kind="reminder",
-        message=message,
-        due_at_utc=due,
-        human_due=human_due,
-        reply=f"Certo. Vou te lembrar de {message} {human_due}.",
-        raw=raw,
-    )
+    return _failed(raw, "Não consigo salvar esse lembrete agora. Ele não está agendado.")
+
+
+def _failed(raw: str, reply: str) -> IntentResult:
+    return IntentResult(kind="reminder_failed", reply=reply, raw=raw)
 
 
 def _humanize_due(time_text: str, due_epoch: float) -> str:

@@ -1,4 +1,14 @@
-//@@ This test was removed because it spawns external processes which are blocked by the current sandbox policy.
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  NEAR_BOTTOM_THRESHOLD,
+  initialAutoScrollState,
+  isNearBottom,
+  onJumpToLatest,
+  onMessages,
+  onScroll,
+} from '../src/renderer/lib/autoScroll';
 const atBottom = { scrollTop: 920, scrollHeight: 1000, clientHeight: 80 };
 const nearBottom = { scrollTop: 880, scrollHeight: 1000, clientHeight: 80 }; // 40px do fim
 const scrolledUp = { scrollTop: 200, scrollHeight: 1000, clientHeight: 80 }; // 720px do fim

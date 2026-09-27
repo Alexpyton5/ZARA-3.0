@@ -111,3 +111,23 @@ complete only when requested.
 
 Goal: LESS CHAT NOISE · MORE CLEAR DECISIONS · LOWER TOKEN USAGE ·
 EASIER PROJECT MANAGEMENT.
+
+---
+
+## ZOE -> CODEX HANDOFF (pilot -> copilot)
+
+zoe is now the pilot of this project; the Codex is the copilot. She codes
+directly on this PC via SSH and only hands off what she cannot do herself:
+rebuilding the .exe, physical mic/screen tests, GitHub pushes.
+
+BEFORE starting any work in a new session, the Codex MUST check for new
+missions from zoe, in this order:
+1. Email: unread [ZARA-LOOP] messages in the zoeeproject@gmail.com mailbox
+   (browser tab). zoe sends wall-tasks there the moment she hits one.
+2. Files: the newest pending MISSAO-NN-*.md in ZOE-INBOX\ (repo root).
+3. Chat: new messages in the already-open Zoe conversation on muse.ai, for
+   urgent handoffs and mission updates.
+
+Work in silent mode. On completion, move the mission file to
+ZOE-INBOX\concluidas\ with the FEITO/ESTADO/ERRO/SUGESTAO report appended
+(max 10 lines). Full protocol: ZOE-INBOX\LEIA-ME.md.

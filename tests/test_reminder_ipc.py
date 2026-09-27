@@ -35,14 +35,18 @@ async def test_text_reminder_is_created_once_and_confirmation_is_not_duplicated(
     reminders = handler.reminder_engine.list()
     assert len(reminders) == 1
     assert reminders[0].message == "comprar pão"
-    assert [message.type for message in sent] == ["reminder-created", "response"]
-    assert sent[0].data == {
+    reminder_events = [message for message in sent if message.type == "reminder-created"]
+    responses = [message for message in sent if message.type == "response"]
+    assert len(reminder_events) == 1
+    assert len(responses) == 1
+    assert reminder_events[0].data == {
         "id": reminders[0].id,
         "text": "comprar pão",
         "due_at": reminders[0].due_at_utc,
         "state": "SCHEDULED",
     }
-    assert sent[1].response["response"].startswith("Certo. Vou te lembrar de comprar pão")
+    assert responses[0].response["response"].startswith("Certo. Vou te lembrar de comprar pão")
+    assert reminders[0].id in responses[0].response["response"]
 
 
 @pytest.mark.asyncio

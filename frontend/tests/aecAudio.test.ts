@@ -8,7 +8,7 @@ import {
   iniciarAudioAec,
   pararAudioAec,
   tocarKore,
-} from '../src/renderer/lib/aecAudio.ts';
+} from '../src/renderer/lib/aecAudio';
 
 type FakeTrack = { stopped: boolean; stop: () => void; getSettings: () => { echoCancellation: boolean } };
 

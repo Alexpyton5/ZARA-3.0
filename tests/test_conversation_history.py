@@ -97,9 +97,15 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
     class Orchestrator:
         last_engine_used = "fake_engine"
 
-        async def process_message(self, text: str, engine: str) -> str:
+        async def process_message(
+            self, text: str, engine: str, history: list[dict] | None = None
+        ) -> str:
             assert text == "Como está o projeto?"
             assert engine == "auto_smart"
+            assert history is not None
+            assert [(item["role"], item["content"]) for item in history] == [
+                ("user", "Como está o projeto?"),
+            ]
             return "Tudo certo, Alex."
 
     path = tmp_path / "history.sqlite3"
@@ -115,7 +121,9 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
         )
     )
 
-    assert sent[-1].response["response"] == "Tudo certo, Alex."
+    responses = [message for message in sent if message.type == "response"]
+    assert len(responses) == 1
+    assert responses[0].response["response"] == "Tudo certo, Alex."
     restarted = ConversationHistory(path)
     assert [(item["role"], item["content"]) for item in restarted.list_recent()] == [
         ("user", "Como está o projeto?"),

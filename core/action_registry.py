@@ -31,6 +31,12 @@ class ActionResult:
     error: str = ""
     data: Any = None
     duration_ms: float = 0
+    verificado: bool = True
+
+    @property
+    def incerto(self) -> bool:
+        """An action was dispatched but its postcondition was not observed."""
+        return bool(self.success) and not self.verificado
 
     def __bool__(self) -> bool:
         return self.success
@@ -247,8 +253,10 @@ class ActionRegistry:
         if spec is None:
             return ActionResult(success=False, error="ACTION_POLICY_METADATA_MISSING")
 
-        # Capability is checked before issuing or consuming a challenge.
-        if spec.capability != "READ_ONLY" and not self.pc_control_allowed:
+        # The Supercérebro gate grants local computer control only. Other
+        # capabilities keep their own risk/confirmation policy and must not
+        # be intercepted by this gate.
+        if spec.capability == "PC_CONTROL" and not self.pc_control_allowed:
             if isinstance(proof, ConfirmationProof):
                 self._confirmation_broker.cancel(proof.confirmation_id)
             return ActionResult(
@@ -259,6 +267,7 @@ class ActionRegistry:
                     "Para controlar o computador, ative o Supercérebro."
                 ),
                 duration_ms=0.0,
+                verificado=False,
             )
 
         # Legacy confirmation remains valid only for MEDIUM actions. HIGH
@@ -539,6 +548,24 @@ def action(
 def get_registry() -> ActionRegistry:
     """Get the global action registry."""
     return registry
+
+
+ADVANCED_ACTION_MODULES = (
+    "core.actions.system_advanced",
+    "core.actions.macro_actions",
+    "core.actions.vision_actions",
+)
+
+
+def load_advanced_action_exports() -> tuple[str, ...]:
+    """Import advanced modules explicitly; decorators populate this registry."""
+    import importlib
+
+    loaded = []
+    for module_name in ADVANCED_ACTION_MODULES:
+        importlib.import_module(module_name)
+        loaded.append(module_name)
+    return tuple(loaded)
 
 
 # Context passed to actions

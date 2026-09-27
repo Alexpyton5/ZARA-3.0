@@ -59,4 +59,4 @@ def test_notification_metadata_is_low_risk_local_control():
     spec = get_registry().get_spec("os_notify")
 
     assert spec.risk == "LOW"
-    assert spec.capability == "LOCAL_PC_CONTROL"
+    assert spec.capability == "PC_CONTROL"

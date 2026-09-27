@@ -140,7 +140,7 @@ def test_capability_gate_runs_before_challenge_and_again_before_consumption():
         "terminal",
         lambda command: calls.append(command) or "done",
         risk="HIGH",
-        capability="CODE_EXECUTION",
+        capability="PC_CONTROL",
     )
 
     blocked = registry.execute("terminal", command="echo safe")

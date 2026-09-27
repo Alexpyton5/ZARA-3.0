@@ -146,7 +146,8 @@ def test_ipc_cannot_bypass_supercerebro_off_with_confirm_true(capsys):
     finally:
         registry.unregister(action_name)
 
-    result = sent[-1].response["result"]
+    response = next(message for message in reversed(sent) if message.type == "response")
+    result = response.response["result"]
     assert not result.success
     assert calls == []
     assert "must-not-be-logged" not in capsys.readouterr().out

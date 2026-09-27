@@ -24,6 +24,13 @@ def registry(foundation):
     return get_registry()
 
 
+@pytest.fixture(autouse=True)
+def _enable_pc_control_for_foundation_contract(monkeypatch):
+    # These tests exercise platform and risk behavior behind the
+    # Supercérebro gate. IPC safety tests cover the gate itself.
+    monkeypatch.setattr(get_registry(), "pc_control_allowed", True)
+
+
 def test_actions_register_in_existing_action_registry_and_route_without_new_router(foundation, registry, monkeypatch):
     expected = {
         "windows_app_open",
@@ -34,7 +41,7 @@ def test_actions_register_in_existing_action_registry_and_route_without_new_rout
     assert expected.issubset(set(registry.list_actions("windows")))
     assert registry.get_spec("windows_state").risk == "LOW"
     assert registry.get_spec("windows_app_open").risk == "MEDIUM"
-    assert registry.get_spec("windows_app_open").capability == "LOCAL_PC_CONTROL"
+    assert registry.get_spec("windows_app_open").capability == "PC_CONTROL"
 
     monkeypatch.setattr(foundation, "_is_windows", lambda: True)
     monkeypatch.setattr(foundation, "_window_snapshot", lambda: [])

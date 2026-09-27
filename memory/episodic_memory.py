@@ -108,6 +108,22 @@ class EpisodicMemory:
             connection.commit()
         return episode_id
 
+    def remove(self, episode_id: str, *, kind: str | None = None) -> bool:
+        """Remove one identified episode, optionally restricted to its kind."""
+        identifier = str(episode_id or "").strip()
+        if not identifier:
+            return False
+        with self._lock, closing(self._connect()) as connection:
+            if kind is None:
+                cursor = connection.execute("DELETE FROM episodes WHERE id = ?", (identifier,))
+            else:
+                cursor = connection.execute(
+                    "DELETE FROM episodes WHERE id = ? AND kind = ?",
+                    (identifier, str(kind)[:48]),
+                )
+            connection.commit()
+            return cursor.rowcount > 0
+
     def search(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
         query_vector = _embed(query)
         if not any(query_vector):
@@ -173,6 +189,11 @@ def record_episode(content: str, *, kind: str = "session_summary", metadata: dic
     except Exception as exc:
         print(f"[EpisodicMemory] Could not save episode: {exc}")
         return None
+
+
+def remove_episode(episode_id: str, *, kind: str | None = None) -> bool:
+    """Remove a single episode from the local store; never clear unrelated memory."""
+    return _default_store.remove(episode_id, kind=kind)
 
 
 def episodic_context(query: str, limit: int = 3, max_chars: int = 700) -> str:

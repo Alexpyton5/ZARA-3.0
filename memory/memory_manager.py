@@ -24,6 +24,7 @@ except Exception:
     _MEMORY_DIR = BASE_DIR / "memory"
 
 MEMORY_PATH = _MEMORY_DIR / "long_term.json"
+MEMORY_BACKUP_PATH = _MEMORY_DIR / "long_term.backup.json"
 MEMORY_EXPORT_DIR = _MEMORY_DIR / "exports"
 LEGACY_MEMORY_PATH = BASE_DIR / "memory" / "long_term.json"
 _lock            = Lock()
@@ -75,9 +76,20 @@ def load_memory() -> dict:
                     if key not in data:
                         data[key] = {}
                 return data
-            return _empty_memory()
-        except Exception as e:
-            print(f"[Memory] ⚠️ Load error: {e}")
+            raise ValueError("root is not an object")
+        except (OSError, json.JSONDecodeError, ValueError):
+            print("[Memory] CORRUPTED long_term.json; attempting recovery backup")
+            try:
+                recovered = json.loads(MEMORY_BACKUP_PATH.read_text(encoding="utf-8"))
+                if not isinstance(recovered, dict):
+                    raise ValueError("backup root is not an object")
+                base = _empty_memory()
+                for key in base:
+                    recovered.setdefault(key, {})
+                _persist_memory(recovered)
+                return recovered
+            except (OSError, json.JSONDecodeError, ValueError):
+                print("[Memory] CORRUPTED recovery backup unavailable; using empty memory")
             return _empty_memory()
 
 def _all_entries(memory: dict) -> list[tuple]:
@@ -107,12 +119,17 @@ def save_memory(memory: dict) -> None:
     if not isinstance(memory, dict):
         return
     memory = _trim_to_limit(memory)
-    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with _lock:
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        _persist_memory(memory)
+
+
+def _persist_memory(memory: dict) -> None:
+    """Atomically keep a recovery copy and the current memory document."""
+    from core.storage import atomic_write_json
+
+    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(MEMORY_BACKUP_PATH, memory)
+    atomic_write_json(MEMORY_PATH, memory)
 
 
 def _truncate_value(val: str) -> str:
@@ -376,11 +393,7 @@ def save_session_summary(summary: str, language: str = "") -> None:
     sessions.append(entry)
     memory["sessions"] = sessions[-_SESSION_MAX:]
     with _lock:
-        MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        _persist_memory(memory)
     try:
         from memory.episodic_memory import record_episode
 
@@ -408,10 +421,7 @@ def pop_last_session() -> dict | None:
                 return None
             entry = sessions.pop()          # remove the last entry
             memory["sessions"] = sessions
-            MEMORY_PATH.write_text(
-                json.dumps(memory, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            _persist_memory(memory)
             return entry
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")
@@ -475,6 +485,14 @@ class MemoryManager:
             )
 
         return await asyncio.to_thread(_record)
+
+    async def remove_conversation_episode(self, episode_id: str) -> bool:
+        """Remove only the identified conversation episode after a stale turn."""
+        from memory.episodic_memory import remove_episode
+
+        return await asyncio.to_thread(
+            remove_episode, episode_id, kind="conversation"
+        )
 
     def load(self) -> dict:
         return load_memory()

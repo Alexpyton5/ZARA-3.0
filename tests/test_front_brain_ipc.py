@@ -229,14 +229,17 @@ def test_lab_submit_is_not_falsely_queued(handler):
     assert not h._lab_v1_background_tasks and not adapter.calls
 
 
-def test_real_voice_entry_accepts_direct_live_answer_without_front_brain(handler):
+def test_real_voice_entry_routes_through_selected_front_brain(handler):
     h, _, adapter = handler
     assert h._voice_is_authorized_conversation('Zara, qual e o projeto?') is True
-    assert h._voice_can_answer_directly('Zara, qual e o projeto?') is True
+    assert h._voice_can_answer_directly('Zara, qual e o projeto?') is False
     asyncio.run(h._on_gemini_live_turn('Zara, qual e o projeto?', 'Resposta direta Live', direct=True))
-    assert adapter.calls == []
-    assert any(call.args == ('assistant', 'Resposta direta Live', 'gemini_live') for call in h._append_conversation_message.call_args_list)
-    assert h._speak_response.await_count == 0
+    assert len(adapter.calls) == 1
+    assert not any(
+        call.args == ('assistant', 'Resposta direta Live', 'gemini_live')
+        for call in h._append_conversation_message.call_args_list
+    )
+    assert h._speak_response.await_count == 1
 
 
 def test_canonical_old_history_and_large_mentor_survive_both_channels(handler):

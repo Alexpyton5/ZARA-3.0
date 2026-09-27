@@ -20,12 +20,14 @@ def clipboard(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "pyperclip", fake)
     get_registry().medium_risk_open = False
+    monkeypatch.setattr(get_registry(), "pc_control_allowed", True)
     return state
 
 
 @pytest.mark.asyncio
 async def test_voice_write_requires_natural_confirmation_then_readback(clipboard):
     handler = IPCHandler(AsyncMock())
+    get_registry().pc_control_allowed = True
     preview = await handler._try_pc_intent(
         "Zara, coloque ‘reunião amanhã às 10’ na área de transferência"
     )

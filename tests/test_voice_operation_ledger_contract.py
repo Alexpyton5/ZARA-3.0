@@ -10,10 +10,9 @@ from core.lab_v1.operation_ledger import OperationLedger
 from core.lab_v1.service import LabV1Service
 from core.lab_v1.store import LabStore
 
-# This compatibility contract belongs to the archived test-only voice package.
-_LEGACY_VOICE_TEST_ROOT = (
-    Path(__file__).resolve().parents[1] / "_quarentena" / "organizacao-2026-09-23"
-)
+# Keep the archived compatibility contract as a portable test fixture, not
+# as a second live voice package in the application root.
+_LEGACY_VOICE_TEST_ROOT = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(_LEGACY_VOICE_TEST_ROOT))
 
 from voice.operation_ledger_contract import (

@@ -23,6 +23,7 @@ logs, frontend ou Electron.
 console=True: o sidecar comunica com Electron via stdin/stdout/stderr.
 """
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -290,6 +291,26 @@ def verify_build() -> bool:
     return True
 
 
+def update_sidecar_manifests(exe_path: Path) -> str:
+    """Record the built sidecar digest with a project-relative path."""
+    exe_path = exe_path.resolve()
+    relative = exe_path.relative_to(PROJECT_ROOT.resolve()).as_posix()
+    digest = hashlib.sha256()
+    with exe_path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    value = digest.hexdigest()
+    manifest = f"{value}  {relative}\n"
+    for name, content in (
+        ("CLEAN_BUILD_ID.txt", value[:8] + "\n"),
+        ("SHA256_MANIFEST.txt", manifest),
+        ("PATCH_SHA256_MANIFEST.txt", manifest),
+    ):
+        with (PROJECT_ROOT / name).open("w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+    return value
+
+
 def build() -> int:
     """Sidecar build entry (public function; used by pyproject zara-build)."""
     print("=" * 60)
@@ -314,6 +335,8 @@ def build() -> int:
     # Verifica
     if not verify_build():
         return 1
+
+    update_sidecar_manifests(DIST_DIR / f"{APP_NAME}.exe")
 
     print("=" * 60)
     print("SIDECAR BUILD COMPLETE!")

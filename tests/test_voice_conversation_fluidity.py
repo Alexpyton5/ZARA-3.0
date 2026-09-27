@@ -42,10 +42,10 @@ def _handler() -> IPCHandler:
     "Zara, o que voce acha disso?",
     "Zara, obrigado",
 ])
-def test_conversa_autorizada_responde_direto_pelo_gemini_live(frase):
+def test_conversa_autorizada_usa_front_brain_sem_resposta_live_nao_precificada(frase):
     handler = _handler()
     assert handler._voice_is_authorized_conversation(frase) is True
-    assert handler._voice_can_answer_directly(frase) is True
+    assert handler._voice_can_answer_directly(frase) is False
 
 
 @pytest.mark.parametrize("frase", [
@@ -137,18 +137,18 @@ def test_classificador_nao_arma_nem_desarma_a_janela_de_continuacao():
 # --------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_turno_de_conversa_registra_resposta_gemini_live_sem_front_brain():
+async def test_turno_de_conversa_descarta_rascunho_live_e_rota_para_front_brain():
     handler = _handler()
     await handler._on_gemini_live_turn(
         "Zara, tudo bem?", "Tudo otimo, Alex.", direct=True
     )
-    handler._process_voice_message.assert_not_awaited()
-    assert any(
+    handler._process_voice_message.assert_awaited_once_with("tudo bem?")
+    assert not any(
         call.args == ("assistant", "Tudo otimo, Alex.", "gemini_live")
         for call in handler._append_conversation_message.await_args_list
     )
-    assert any(
-        call.args[0] == "message" and call.args[1]["content"] == "Tudo otimo, Alex."
+    assert not any(
+        call.args[0] == "message" and call.args[1].get("content") == "Tudo otimo, Alex."
         for call in handler.send_event.await_args_list
     )
 
@@ -655,5 +655,3 @@ async def test_eco_nao_cancela_turno_anterior_valido():
     assert previous.cancelled() is False
     previous.cancel()
     await asyncio.gather(previous, return_exceptions=True)
-
-\n

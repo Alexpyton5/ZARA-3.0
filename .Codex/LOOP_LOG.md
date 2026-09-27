@@ -151,3 +151,41 @@
 - Os hashes do EXE ativo, `app.asar`, sidecar e instalador foram conferidos novamente contra `ZARA_ACTIVE_BUILD.json`. A abertura visual do EXE ativo e a entrada no Lab já haviam sido observadas.
 - Commit `b599457` publicou no origin a troca da interface, o reparo de contrato IPC e a remoção rastreada do legado. A suíte geral permanece vermelha por 22 erros de coleta Python e falhas JS/CJS conhecidas; teste físico #7 com NVIDIA segue pendente. Arquivos antigos e backups estão fora da rota ativa, em backups datados no C:.
 - `.Codex/LOOP_INBOX.md` foi atualizado como checkpoint parcial, sem declarar o ciclo #7 concluído; próximo passo é publicar este relatório, conferir Gmail oficial e então continuar o teste físico autorizado dentro do custo zero.
+
+## 2026-09-27 — retorno da Zoe e triagem inicial da suíte
+
+- Checkpoint de código e relatório publicados: commits `b599457` e `fc4336a` enviados ao origin; worktree limpo. Gmail oficial conferido depois do push: a mensagem mais recente `[ZARA-LOOP]` era um pulso de status às 10:28 (-03), sem nova tarefa técnica. Respondi no chat Muse com o estado honesto e a pendência do teste físico.
+- Zoe respondeu no Muse que aceita código, relatório e limpeza, mas não fecha o ciclo enquanto a suíte estiver vermelha. Ordem: corrigir os 22 erros de coleta Python por causa raiz, depois falhas JS, e só então executar o teste físico #7 com CEO + REVIEWER, uma chamada NVIDIA gratuita comprovada e demais assentos calados.
+- Triagem read-only com `.venv/Scripts/python.exe`: 2431 testes coletados, 22 erros; grupos: 20 imports de símbolos ausentes em módulos existentes, um módulo `voice` ausente e um teste com `SyntaxError` literal. O mesmo resultado apareceu no intérprete global; não é simplesmente escolha de Python. Alguns imports ausentes são usados também em source (`core.actions.media_apps` importa `_eligible_windows`), logo não se pode classificar tudo como teste obsoleto nem criar shims cegos.
+- Próximo: identificar quais contratos foram removidos por regressão e quais testes são legados, escrever critérios de sucesso e reparar por grupo com backup e testes focados. Não declarar suíte verde nem fazer chamada de modelo antes de provar custo zero.
+
+## 2026-09-27 — causa comum dos erros de coleta
+
+- Gmail oficial `[ZARA-LOOP]` revisto ao retomar; não havia diretriz nova além do pulso de 10:28 (-03). O chat Muse trouxe a orientação de Zoe para tornar as suítes verdes antes do teste físico.
+- Critérios verificáveis para Python, frontend, despacho físico e custo zero foram registrados em `.Codex/GATES.md`; a checagem estrutural mostrou seis gates não concluídos e o lint não acusou erro de formato. Nenhum gate foi marcado como aprovado sem prova.
+- `git log -S` atribuiu **todos os 15 símbolos ausentes investigados** ao mesmo commit `c53254d`, que substituiu arquivos centrais e removeu milhares de linhas. A pasta `voice/` também desapareceu nesse commit, e `git blame` atribuiu a linha literal de escape inválida no teste de voz a ele. Isto é uma regressão agrupada, não 22 dependências diferentes faltando.
+- Correção mínima e com backup: removida somente a linha literal `\\n` ao fim de `tests/test_voice_conversation_fluidity.py`, ausente na versão anterior ao commit. Parser Python passou; 59 testes desse arquivo voltaram a ser coletados. Coleta global agora mostra **2490 testes e 21 erros**. Nenhum código de produção foi restaurado ainda: a baseline anterior exige seleção e validação para não desfazer Lab/IPC atuais.
+- Próximo: comparar contratos do estado anterior a `c53254d` com o source atual por módulo e restaurar apenas o necessário, um grupo causal por vez. A suíte JS e o teste físico continuam pendentes.
+
+## 2026-09-27 — contrato de recuperação da suíte, ciclo #7
+
+- TASK_ID: ZARA-CYCLE7-SUITE-PHYSICAL-20260927.
+- GOAL: eliminar os erros de coleta pela causa comum, deixar Python/JS verdes e só então provar o despacho físico CEO + REVIEWER com uma chamada NVIDIA comprovadamente sem cobrança.
+- SCOPE: contratos removidos pelo commit `c53254d`, testes da suíte, despacho do Lab e relatório do ciclo; sem redesenho de produto ou troca de dependências.
+- FILES_ALLOWED: módulos `core/`, `memory/`, `voice/` comprovadamente envolvidos; testes correspondentes; `frontend` apenas para corrigir testes JS; `.Codex/LOOP_*` e gates.
+- FILES_FORBIDDEN: credenciais e `.env`, banco Lab ativo salvo operação de teste explicitamente reversível, dados de memória do usuário, builds antigos em backup e volume D:.
+- BASELINE: `fc4336a` no origin; release emerald visualmente aberto; worktree com seis alterações locais de recuperação já iniciadas. Antes de novas restaurações, preservar cada arquivo em backup datado.
+- EXPECTED_DELTA: restaurar APIs/semânticas retiradas, sem reativar modelo pago ou remover trava de invocação; registrar qualquer teste que continue falhando.
+- TESTS: coleta integral, suíte Python integral, testes JS/CJS, typecheck e build. PACKAGED_TEST: identificar EXE e sidecar exatos e observar despacho do Lab no pacote.
+- PHYSICAL_TEST: CEO aciona REVIEWER real uma vez; os nove demais ficam vagos/silenciosos; nenhuma chamada externa antes da prova de custo zero.
+- ROLLBACK: backups datados no C: e conteúdo versionado do commit anterior, sem reset/clean amplo.
+- STOP_CONDITION: não chamar endpoint com custo não comprovado, não publicar segredo, não declarar ciclo fechado com suíte vermelha ou sem prova do despacho.
+- Coleta após reparos anteriores: 2592 testes coletados e 17 erros; todas as 17 falhas restantes são imports de contratos removidos ou módulo `voice` ausente. Gmail `[ZARA-LOOP]` revisto ao retomar: último pulso às 10:28 (-03), sem diretriz técnica nova.
+
+## 2026-09-27 — validação Python encerrada antes da missão de voz
+
+- Coleta atual: 2.761 testes, zero erros de coleta.
+- Suíte Python completa: **2.686 passaram, 43 falharam e 33 foram ignorados**. A validação terminou; não iniciei nova suíte após a instrução de mudar para a Missão 01 (voz).
+- Grupos restantes no resultado: identidade/build, contratos Home e isolamento, Lab (autonomia/relay/opencode/ordenação), ações de mídia, Memory Galaxy, identidade/entrega do relay, parser e controle de janelas. O relatório integral está no backup local `cycle7-python-suite-20260927-1634.txt`.
+- Nesta retomada, 133 testes focados de confirmação, histórico, lembretes, armazenamento e voz passaram; frontend: 25 testes, typecheck e build passaram. Isso não torna a suíte geral verde.
+- Sem chamada NVIDIA, teste físico, commit ou push nesta etapa. Próximo: proteger o estado em branch WIP e então iniciar somente a missão de voz.

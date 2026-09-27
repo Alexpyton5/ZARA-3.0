@@ -37,8 +37,14 @@ def safe_user_path(*parts: str) -> Path:
     Resolve a path under the user's data directory (LOCALAPPDATA on Windows),
     creating parent directories. Never follows symlinks outside the base.
     """
-    base = Path(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share"))
-    base = base / "ZARA3"
+    override = os.environ.get("ZARA3_HOME")
+    if override:
+        base = Path(override)
+    else:
+        base = Path(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share"))
+        base = base / "ZARA3"
+    base.mkdir(parents=True, exist_ok=True)
+    base = base.resolve()
     target = base.joinpath(*parts).resolve()
     # Ensure we stay within base
     try:
@@ -56,7 +62,3 @@ def resource_dir() -> Path:
         return Path(sys._MEIPASS)
     return Path(__file__).resolve().parent.parent
 
-
-def user_data_dir() -> Path:
-    """User-writable data directory."""
-    return safe_user_path("data")

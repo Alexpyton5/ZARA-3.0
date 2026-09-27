@@ -87,3 +87,9 @@
 - Identidade do candidato v2: `ZARA 3.0.exe` SHA256 `67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89`; sidecar SHA256 `5604C9D504ED237FE73A5AFB5D45310E787773D1049217EBBD07EDF0902346F5`; `app.asar` SHA256 `4335924D0F163B729886F192F947C4B992148F23CD7AF2937AF58781EB2B5DD3`. O EXE do Electron é idêntico ao candidato anterior; a mudança está no sidecar.
 - Validação: 53 testes focados passaram; coleta global: 2431 itens e os mesmos 22 erros legados, 1 skip. Nenhum arquivo de teste físico foi criado. No banco ativo há três missões não terminais (duas `BLOCKED/UNCERTAIN_EFFECT`, uma `BLOCKED_NEEDS_OWNER/REPAIR_LIMIT`); `Autopilot.start` recusa nova missão com `MISSION_BUSY`. Não cancelar nem arquivar missões existentes sem decisão do Alex; Zoe pediu a aprovação a ele no Muse. Banco ativo permaneceu somente leitura.
 - Próximo: publicar o reparo pequeno sem declarar ciclo #7 concluído; aguardar decisão sobre as três missões, identificar o caminho real de despacho e só então tentar o arquivo reversível. `.Codex/LOOP_INBOX.md` permanece no ciclo #6 até haver resultado honesto do #7.
+
+## 2026-09-27 — publicação parcial e nova diretriz das 06:36
+
+- Reparo OpenCode publicado em `de04ee0`; push confirmado por `git ls-remote` na branch autorizada. Ciclo #7 não concluído.
+- Gmail oficial trouxe `[ZARA-LOOP] Missão: unificar na interface nova`: primeiro localizar interfaces velha (ZARA AI CONTROL CENTER) e nova (Bom dia, Alex / Produtividade com inteligência), reportar antes de alterar; depois preservar obsoletos em BACKUP-RAIZ-20260927, empacotar a nova e verificar visualmente o app. Nenhuma limpeza/movimentação executada neste checkpoint; inventário necessário antes de definir o que é obsoleto.
+- A própria mensagem mantém o teste físico #7 pendente da decisão do Alex sobre as três missões. Não interpretar a nova missão como autorização para arquivá-las.

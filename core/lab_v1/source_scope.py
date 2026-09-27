@@ -17,9 +17,9 @@ Two ways in, tried in this order:
    in the project (``core.local_rag``, built for RAG-local search) instead of
    inventing a second search implementation. The objective text is matched
    against the real content of every real ``.py`` module under ``core/`` and
-   ``memory/`` (excluding ``core/lab_v1/**``, which is the Lab's own engine
-   and stays an explicit-path-only target on purpose, and anything with
-   "hermes" in the path, per the removed-Hermes rule).
+   ``memory/``. Generic ranking excludes ``core/lab_v1/**`` (the Lab's own
+   engine) and paths containing "hermes". A narrowly identified OpenCode
+   integration request can select its relevant Lab modules explicitly.
 
    Generic Portuguese words (articles, pronouns, "melhore", "conserte",
    "zara" itself, etc.) are stripped from the objective before matching so
@@ -196,6 +196,27 @@ def _ranked_modules(workspace: Path, intent: str) -> list[str]:
     return _bm25_rank(index, terms, _MAX_MODULES)
 
 
+def _focused_modules(workspace: Path, intent: str) -> list[str] | None:
+    """Keep two observed repair requests on their actual subsystem files.
+
+    Generic keyword ranking sends these requests to unrelated PC-action files.
+    Only the paired symptom and subsystem cues below use a fixed scope; all
+    other requests retain the existing natural-language ranking.
+    """
+    if (re.search(r"\btempo\s+de\s+resposta\b", intent, re.I)
+            and re.search(r"\bvoz\b", intent, re.I)
+            and re.search(r"\bquase\s+instant[aâ]ne", intent, re.I)):
+        paths = ("core/gemini_live_voice.py", "core/voice_tts.py", "core/model_router.py")
+    elif (re.search(r"\bmodelos?\b", intent, re.I)
+            and re.search(r"\bn[aã]o\s+verificados?\b", intent, re.I)
+            and re.search(r"\bopen\s*code\b", intent, re.I)):
+        paths = ("core/lab_v1/providers/opencode.py", "core/lab_v1/front_brain.py",
+                 "core/lab_v1/providers/registry.py")
+    else:
+        return None
+    return [relative for relative in paths if (workspace / relative).is_file()]
+
+
 SCOPE_NOT_IDENTIFIED_MESSAGE = (
     "não consegui identificar qual parte da ZARA mexer a partir dessa descrição. "
     "Tente descrever o sintoma com mais detalhe (o que ela fez de errado), "
@@ -209,4 +230,7 @@ def select_source_scope(workspace: Path, intent: str) -> list[str]:
     explicit = _explicit_paths(workspace, intent)
     if explicit:
         return explicit
+    focused = _focused_modules(workspace, intent)
+    if focused is not None:
+        return focused
     return _ranked_modules(workspace, intent)

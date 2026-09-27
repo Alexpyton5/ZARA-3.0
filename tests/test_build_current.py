@@ -10,12 +10,12 @@ from tools import build_current as current
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_clickable_packager_delegates_to_single_candidate_pipeline() -> None:
-    text = (PROJECT_ROOT / 'ZARA_EMPACOTAR.bat').read_text(encoding='utf-8').casefold()
-    assert 'zara_build_atual.bat' in text
-    assert 'frontend\\release' not in text
-    assert 'pip install' not in text
-    assert 'zara_active_build.txt' not in text
+def test_approved_candidate_builder_writes_build_identity() -> None:
+    source = (PROJECT_ROOT / 'tools' / 'build_candidate.py').read_text(encoding='utf-8')
+    assert '"--full", action="store_true"' in source
+    assert '"BUILD_INFO.json"' in source
+    assert '"ZARA_ACTIVE_BUILD.json"' in source
+    assert '"ZARA_ACTIVE_BUILD.txt"' in source
 
 
 @pytest.fixture
@@ -97,3 +97,27 @@ def test_activation_preserves_previous_package_and_writes_agreeing_pointers(pack
 def test_paths_outside_build_area_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="inside frontend"):
         current.confined_package(tmp_path)
+
+
+def test_run_streams_both_outputs_and_appends_incremental_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    log = tmp_path / "build-current.log"
+    monkeypatch.setattr(current, "ROOT", tmp_path)
+    monkeypatch.setenv("ZARA_BUILD_LOG", str(log))
+    result = current.run([__import__("sys").executable, "-c", "import sys; print('out', flush=True); print('err', file=sys.stderr, flush=True)"], cwd=tmp_path, timeout_seconds=5, heartbeat_seconds=0.1, stage="diagnostic-stream")
+    assert set(result.splitlines()) == {"out", "err"}
+    captured = capsys.readouterr().out
+    logged = log.read_text(encoding="utf-8")
+    assert "[HEARTBEAT] stage=diagnostic-stream status=started" in captured
+    assert "[stdout] out" in logged and "[stderr] err" in logged
+    assert "[DONE] stage=diagnostic-stream" in logged
+
+
+def test_run_reports_observable_timeout_in_incremental_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log = tmp_path / "timeout.log"
+    monkeypatch.setattr(current, "ROOT", tmp_path)
+    monkeypatch.setenv("ZARA_BUILD_LOG", str(log))
+    with pytest.raises(TimeoutError, match="timed out"):
+        current.run([__import__("sys").executable, "-c", "import time; time.sleep(2)"], cwd=tmp_path, timeout_seconds=0.2, heartbeat_seconds=0.05, stage="diagnostic-timeout")
+    logged = log.read_text(encoding="utf-8")
+    assert "[HEARTBEAT] stage=diagnostic-timeout" in logged
+    assert "[TIMEOUT] stage=diagnostic-timeout" in logged

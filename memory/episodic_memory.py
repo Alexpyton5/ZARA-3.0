@@ -28,39 +28,25 @@ try:
     DATABASE_PATH = _memory_dir() / "zara_episodes.sqlite3"
 except Exception:
     DATABASE_PATH = _base_dir() / "memory" / "zara_episodes.sqlite3"
-VECTOR_SIZE = 768
+VECTOR_SIZE = 256
 MAX_EPISODE_CHARS = 1_200
-_TOKEN_RE = re.compile(r"[\\wÀ-ÿ]+", re.UNICODE)
+_TOKEN_RE = re.compile(r"[\wÀ-ÿ]+", re.UNICODE)
 
 
 def _tokens(text: str) -> list[str]:
     return [token.lower() for token in _TOKEN_RE.findall(text or "") if len(token) > 1]
 
 
-_EMBED_TIMEOUT_SECONDS = 3
-
-
 def _embed(text: str) -> array:
-    """Get embedding from Ollama's nomic-embed-text model."""
-    # Try to use the Ollama Python package
-    try:
-        from ollama import Client
-        client = Client(timeout=_EMBED_TIMEOUT_SECONDS)
-        response = client.embeddings(model='nomic-embed-text', prompt=text)
-        vector = array('f', response['embedding'])
-    except Exception as e:
-        # Fallback to HTTP
-        import urllib.request
-        import json
-        url = "http://localhost:11434/api/embeddings"
-        data = json.dumps({"model": "nomic-embed-text", "prompt": text})
-        data = data.encode('utf-8')
-        req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
-        response = urllib.request.urlopen(req, timeout=_EMBED_TIMEOUT_SECONDS)
-        result = json.load(response)
-        vector = array('f', result['embedding'])
-
-    # Normalize the vector
+    """Create a deterministic local vector without downloading a model."""
+    vector = array("f", [0.0]) * VECTOR_SIZE
+    tokens = _tokens(text)
+    for index, token in enumerate(tokens):
+        features = (token, f"{tokens[index - 1]}:{token}" if index else token)
+        for feature in features:
+            digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
+            bucket = int.from_bytes(digest[:4], "little") % VECTOR_SIZE
+            vector[bucket] += 1.0 if digest[4] & 1 else -1.0
     magnitude = math.sqrt(sum(value * value for value in vector))
     if magnitude:
         for index, value in enumerate(vector):
@@ -136,10 +122,6 @@ class EpisodicMemory:
             vector = array("f")
             vector.frombytes(raw_vector)
             if len(vector) != VECTOR_SIZE:
-                print(
-                    f"[EpisodicMemory] Skipping episode {episode_id}: vector size "
-                    f"{len(vector)} != expected {VECTOR_SIZE} (embedding model mismatch?)"
-                )
                 continue
             lexical_overlap = len(query_tokens.intersection(_tokens(content))) / max(1, len(query_tokens))
             score = _cosine(query_vector, vector) + (0.35 * lexical_overlap)
@@ -180,13 +162,6 @@ class EpisodicMemory:
             connection.commit()
         return count
 
-    def delete(self, episode_id: str) -> bool:
-        """Delete one exact episode, used to roll back an interrupted turn."""
-        with self._lock, closing(self._connect()) as connection:
-            cursor = connection.execute("DELETE FROM episodes WHERE id=?", (str(episode_id),))
-            connection.commit()
-            return cursor.rowcount == 1
-
 
 _default_store = EpisodicMemory()
 
@@ -198,11 +173,6 @@ def record_episode(content: str, *, kind: str = "session_summary", metadata: dic
     except Exception as exc:
         print(f"[EpisodicMemory] Could not save episode: {exc}")
         return None
-
-
-def delete_episode(episode_id: str) -> bool:
-    """Remove one episode by its opaque identifier."""
-    return _default_store.delete(episode_id)
 
 
 def episodic_context(query: str, limit: int = 3, max_chars: int = 700) -> str:

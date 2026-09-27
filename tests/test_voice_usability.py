@@ -75,7 +75,11 @@ async def test_text_message_emits_renderer_response(harness: Harness) -> None:
             IPCMessage(type="send-message", request_id="one", payload={"message": "Olá"})
         )
     response = harness.response()
-    assert response.response == {"response": "Tudo certo, Alex.", "engine": "fake_engine"}
+    assert response.response == {
+        "response": "Tudo certo, Alex.",
+        "engine": "fake_engine",
+        "cost_status": "UNKNOWN_COST",
+    }
 
 
 @pytest.mark.asyncio
@@ -101,8 +105,14 @@ async def test_empty_message_returns_explicit_error(harness: Harness) -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_backend_returns_friendly_response(harness: Harness) -> None:
-    harness.handler.orchestrator = None
+async def test_unavailable_front_brain_returns_friendly_response(
+    harness: Harness,
+) -> None:
+    harness.handler._front_conversation_reply = AsyncMock(return_value={
+        "success": False,
+        "engine": "unavailable",
+        "response": "O cérebro conversacional está temporariamente indisponível.",
+    })
     with _neutral_routes(harness.handler):
         await harness.handler.handle_send_message(
             IPCMessage(type="send-message", request_id="offline", payload={"message": "Olá"})

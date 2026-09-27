@@ -169,6 +169,44 @@ async def test_ligar_telegram_initializes_private_bridge_and_approval_adapter_of
 
 
 @pytest.mark.asyncio
+async def test_ligar_telegram_passa_dono_configurado_para_ponte_privada(
+    monkeypatch, tmp_path
+):
+    private_module = importlib.import_module("core.telegram_ponte")
+    from core import paths
+
+    config = tmp_path / "api_keys.json"
+    config.write_text(json.dumps({
+        "telegram_bot_token": "test-token",
+        "telegram_owner_chat_id": 987,
+    }), encoding="utf-8")
+    monkeypatch.setattr(paths, "config_dir", lambda: tmp_path)
+
+    class FakePrivateBridge:
+        dono_recebido = None
+
+        def __init__(self, token, executar, *, dono=None, interceptar=None):
+            self.token = token
+            self.dono = dono
+            self.dono_recebido = dono
+            self.started = False
+
+        async def iniciar(self):
+            self.started = True
+            return True
+
+    monkeypatch.setattr(private_module, "PonteTelegram", FakePrivateBridge)
+    handler = object.__new__(IPCHandler)
+    handler._telegram = None
+    handler._telegram_grupo = None
+    handler._telegram_adapter = None
+
+    await IPCHandler._ligar_telegram(handler)
+
+    assert handler._telegram.dono == 987
+
+
+@pytest.mark.asyncio
 async def test_ligar_telegram_failure_does_not_claim_bridge_started(monkeypatch, tmp_path, capsys):
     private_module = importlib.import_module("core.telegram_ponte")
     from core import paths

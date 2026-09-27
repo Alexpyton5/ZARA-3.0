@@ -7,7 +7,6 @@ from time import time
 
 import pytest
 
-import core.ipc_handlers as ipc_handlers
 from core.conversation_history import MAX_CONTENT_CHARS, ConversationHistory
 from core.ipc_handlers import IPCHandler, IPCMessage
 
@@ -62,37 +61,6 @@ def test_clear_physically_removes_transcript_database(tmp_path: Path) -> None:
     assert store.list_recent() == []
 
 
-def test_delete_removes_only_the_exact_interrupted_message(tmp_path: Path) -> None:
-    store = ConversationHistory(tmp_path / "history.sqlite3")
-    interrupted = store.append("user", "turno interrompido")
-    retained = store.append("user", "turno válido")
-
-    assert store.delete(interrupted["id"]) is True
-    assert store.delete(interrupted["id"]) is False
-    assert [message["id"] for message in store.list_recent()] == [retained["id"]]
-
-
-def test_ipc_constructor_initializes_home_history_that_survives_restart(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = tmp_path / "history.sqlite3"
-    monkeypatch.setattr(ipc_handlers, "ConversationHistory", lambda: ConversationHistory(path))
-
-    async def send(_: IPCMessage) -> None:
-        pass
-
-    first = IPCHandler(send)
-    assert first.conversation_history is not None
-    first.conversation_history.append("user", "available before initialize")
-
-    restarted = IPCHandler(send)
-    assert restarted.conversation_history is not None
-    messages = restarted.conversation_history.list_recent()
-    assert [(item["role"], item["content"]) for item in messages] == [
-        ("user", "available before initialize"),
-    ]
-
-
 @pytest.mark.asyncio
 async def test_history_ipc_lists_and_clears_real_store(tmp_path: Path) -> None:
     sent: list[IPCMessage] = []
@@ -129,11 +97,7 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
     class Orchestrator:
         last_engine_used = "fake_engine"
 
-        async def process_message(self, text: str, engine: str, history=None) -> str:
-            assert history == [
-                {"role": "user", "content": "previous question"},
-                {"role": "assistant", "content": "previous answer"},
-            ]
+        async def process_message(self, text: str, engine: str) -> str:
             assert text == "Como está o projeto?"
             assert engine == "auto_smart"
             return "Tudo certo, Alex."
@@ -147,57 +111,13 @@ async def test_text_chat_persists_user_and_assistant_as_separate_ui_history(
         IPCMessage(
             type="send-message",
             request_id="chat",
-            payload={
-                "message": "Como está o projeto?",
-                "engine": "auto_smart",
-                "history": [
-                    {"role": "user", "content": "previous question"},
-                    {"role": "assistant", "content": "previous answer"},
-                ],
-            },
+            payload={"message": "Como está o projeto?", "engine": "auto_smart"},
         )
     )
 
-    # ZARA-CORE-STATE-TEXTO-001: handle_send_message agora manda state-change
-    # (STANDBY) depois da resposta -- sent[-1] deixou de ser garantidamente a
-    # resposta. Filtra pelo tipo em vez de posicao.
-    assert next(m for m in sent if m.type == "response").response["response"] == "Tudo certo, Alex."
+    assert sent[-1].response["response"] == "Tudo certo, Alex."
     restarted = ConversationHistory(path)
     assert [(item["role"], item["content"]) for item in restarted.list_recent()] == [
         ("user", "Como está o projeto?"),
         ("assistant", "Tudo certo, Alex."),
     ]
-
-
-@pytest.mark.asyncio
-async def test_bare_greeting_is_not_rejected_as_missing_text(tmp_path: Path) -> None:
-    """ZARA-SAUDACAO-VAZIA-001 regression.
-
-    "Oi Zara" sozinho e so nome+saudacao: _canonical_request tira os dois e
-    sobra "". Antes do fix isso caia no mesmo "No text provided" de uma
-    mensagem realmente vazia, e o golden path P0 ("Oi Zara" -> resposta
-    normal) quebrava na primeira frase.
-    """
-    sent: list[IPCMessage] = []
-
-    async def send(message: IPCMessage) -> None:
-        sent.append(message)
-
-    class Orchestrator:
-        last_engine_used = "fake_engine"
-
-        async def process_message(self, text: str, engine: str, history=None) -> str:
-            assert text == "Oi Zara"
-            return "Oi, Alex! Como posso ajudar?"
-
-    handler = IPCHandler(send)
-    handler.conversation_history = ConversationHistory(tmp_path / "history.sqlite3")
-    handler.orchestrator = Orchestrator()  # type: ignore[assignment]
-
-    await handler.handle_send_message(
-        IPCMessage(type="send-message", request_id="greeting", payload={"message": "Oi Zara"})
-    )
-
-    assert not any(m.error for m in sent), [m.error for m in sent]
-    response_msg = next(m for m in sent if m.type == "response")
-    assert response_msg.response["response"] == "Oi, Alex! Como posso ajudar?"

@@ -269,6 +269,9 @@ class _StubAdapter:
         return ProviderInfo(id=self.id, label=self.label, adapter=self.id,
                             availability=Availability.AVAILABLE, detail="stub")
 
+    def identifies_model(self, requested, reported):
+        return reported == f"stub-{requested}"
+
     def complete(self, *, prompt, model, **kwargs):
         from core.lab_v1.domain import CostBasis, ProviderResult
         self.calls.append(model)
@@ -363,3 +366,79 @@ def test_self_delegation_offers_another_agent_when_one_exists(store):
     assert result["delegation_refusal"] == "SELF_DELEGATION"
     # The caller must be able to route around it rather than just be told no.
     assert spare.id in result["delegation_candidate_agent_ids"]
+
+
+# --------------------------------------------------------------------------
+# Phase 1 "Organization": addressing columns, role filter, get_artifact
+# --------------------------------------------------------------------------
+
+def test_message_addressing_roundtrips_and_legacy_rows_stay_readable(store, team_with_two_agents):
+    from core.lab_v1.domain import new_id as _id
+    team, _, _ = team_with_two_agents
+    session = Session(id=_id("sess"), team_id=team.id, objective="enderecamento")
+    store.save_session(session)
+    store.add_message(Message(id="m-legacy", session_id=session.id,
+                              kind=MessageKind.AGENT, author="Vulcan", content="antiga"))
+    store.add_message(Message(id="m-new", session_id=session.id,
+                              kind=MessageKind.REVIEW, author="Minerva",
+                              content='{"verdict":"APPROVED"}',
+                              to_agent_id="agent-b", to_role="BUILDER",
+                              reply_to="m-legacy", correlation_id="v1turn_x"))
+    legacy = next(m for m in store.list_messages(session.id) if m.id == "m-legacy")
+    assert legacy.to_agent_id is None and legacy.correlation_id is None
+    addressed = next(m for m in store.list_messages(session.id) if m.id == "m-new")
+    assert addressed.to_role == "BUILDER" and addressed.correlation_id == "v1turn_x"
+
+    # CEO role view: legacy rows stay visible, addressed worker traffic does not.
+    ceo_view = [m.id for m in store.list_messages(session.id, for_role="CEO")]
+    assert "m-legacy" in ceo_view and "m-new" not in ceo_view
+
+
+def test_review_escalated_to_owner_enters_the_ceo_context(store, team_with_two_agents):
+    store.add_message(Message(id="m-esc", session_id="s", kind=MessageKind.REVIEW,
+                              author="Minerva", content="escalado", to_role="OWNER"))
+    assert any(m.id == "m-esc" for m in store.list_messages("s", for_role="CEO"))
+
+
+def test_get_artifact_roundtrip(store):
+    from core.lab_v1.domain import Artifact
+    artifact = Artifact(id="art-1", session_id="s", task_id="t", kind="BUILDER_RESULT",
+                        title="t", body="corpo")
+    store.save_artifact(artifact)
+    got = store.get_artifact("art-1")
+    assert got is not None and got.body == "corpo" and got.kind == "BUILDER_RESULT"
+    assert store.get_artifact("missing") is None
+
+
+def test_handoff_verify_artifact_rejects_unresolvable_refs(tmp_path):
+    from core.lab_v1.agent_continuity import AgentContinuity
+    from core.lab_v1.domain import Session as _S, Team as _T
+    from core.lab_v1.domain import Artifact as _A
+    s = LabStore(tmp_path / "lab.db")
+    s.initialize()
+    s.save_team(_T(id="team", name="ZARA Core"))
+    s.save_session(_S(id="mission", team_id="team", objective="ship"))
+    c = AgentContinuity(s)
+    with pytest.raises(ValueError, match="does not resolve"):
+        c.save_handoff_checkpoint(
+            "mission", "agent", stage="STRATEGIST", artifact_ref="artifact:missing",
+            evidence_refs=["e"], provenance={"run_id": "r", "model": "m"},
+            cursor="x", summary="x", verify_artifact=True,
+        )
+    # The same ref resolves once the artifact exists (opt-in path).
+    s.save_artifact(_A(id="real", session_id="mission", task_id=None, kind="BUILDER_RESULT",
+                       title="t", body="b"))
+    saved = c.save_handoff_checkpoint(
+        "mission", "agent", stage="STRATEGIST", artifact_ref="artifact:real",
+        evidence_refs=["e"], provenance={"run_id": "r", "model": "m"},
+        cursor="x", summary="x", verify_artifact=True,
+    )
+    assert saved.state["handoff"]["artifact_ref"] == "artifact:real"
+    # Default stays opt-out: an unresolvable ref is still accepted (the +1
+    # stage rule still applies, so this continuation uses EXECUTOR).
+    c2 = AgentContinuity(s)
+    assert c2.save_handoff_checkpoint(
+        "mission", "agent2", stage="EXECUTOR", artifact_ref="artifact:missing",
+        evidence_refs=["e"], provenance={"run_id": "r", "model": "m"},
+        cursor="x", summary="x",
+    ) is not None

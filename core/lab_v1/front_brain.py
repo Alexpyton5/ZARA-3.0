@@ -6,7 +6,7 @@ authorized fallback transport answers once. The existing V1 authority protects
 turns across processes.
 """
 from dataclasses import replace
-from core.lab_v1.domain import MessageKind, RoleName, SessionState, new_id, now
+from core.lab_v1.domain import Availability, MessageKind, RoleName, SessionState, new_id, now
 
 DEFAULT_BRAIN = 'gpt-5.6-luna'
 BRAINS = {DEFAULT_BRAIN: 'Luna', 'gpt-6-astra': 'Astra',
@@ -103,14 +103,22 @@ class FrontBrain:
         """
         provider = self._provider_for(model)
         status = self.runtime.registry.model_status(provider, model)['availability']
-        if status != 'DISCOVERED_UNPROVEN':
-            return status
-        adapter = self.runtime.registry.get(provider)
-        if adapter is None:
-            return status
-        info = adapter.probe()
-        discovered = {item.model_id for item in adapter.declared_models}
-        return 'AVAILABLE' if info.availability.can_work and model in discovered else status
+        if status == 'UNKNOWN' and provider == OPENCODE_PROVIDER:
+            adapter = self.runtime.registry.get(provider)
+            if adapter is None:
+                return status
+            # A catalog entry plus configured transport permits one real
+            # proving attempt; it does not claim the model is already usable.
+            # Auth/offline/quota states remain hard blocks.
+            info = adapter.probe()
+            discovered = {item.model_id for item in adapter.declared_models}
+            if info.availability is Availability.UNKNOWN and model in discovered:
+                return 'DISCOVERED_UNPROVEN'
+        if status == 'DISCOVERED_UNPROVEN':
+            adapter = self.runtime.registry.get(provider)
+            if adapter is None or model not in {item.model_id for item in adapter.declared_models}:
+                return 'UNKNOWN'
+        return status
 
     def snapshot(self):
         engines = [
@@ -133,7 +141,7 @@ class FrontBrain:
         if model not in BRAINS and model not in self._opencode_models():
             return _failure('FRONT_MODEL_NOT_ALLOWED',
                             'Escolha Luna, Astra, Sol, Terra ou um cérebro do OpenCode.')
-        if self._model_status(model) != 'AVAILABLE':
+        if self._model_status(model) not in {'AVAILABLE', 'DISCOVERED_UNPROVEN'}:
             return _failure('FRONT_MODEL_UNAVAILABLE', 'Este modelo esta indisponivel. A selecao foi mantida.')
         with self.store._connect() as conn:
             conn.execute('BEGIN IMMEDIATE')
@@ -172,7 +180,7 @@ class FrontBrain:
             chosen_provider = self._provider_for(model)
             agent = None
             fallback_used = None
-            if status == 'AVAILABLE':
+            if status in {'AVAILABLE', 'DISCOVERED_UNPROVEN'}:
                 agent = next((a for a in self.store.list_agents() if a.provider_id == chosen_provider
                               and a.model == model and not a.archived and 'model.text' in a.capabilities), None)
                 if agent is None and chosen_provider == OPENCODE_PROVIDER:
@@ -195,7 +203,7 @@ class FrontBrain:
                 # sempre sem nunca provar um modelo gratuito.
                 for fid in self._opencode_models():
                     s = self._model_status(fid)
-                    if s != 'AVAILABLE':
+                    if s not in {'AVAILABLE', 'DISCOVERED_UNPROVEN'}:
                         continue
                     agent = next((a for a in self.store.list_agents()
                                   if a.provider_id == OPENCODE_PROVIDER and a.model == fid

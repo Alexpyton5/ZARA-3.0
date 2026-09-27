@@ -228,6 +228,24 @@ class PonteTelegram:
         # ZARA-TELEGRAM-ROTEAMENTO-003. Alex escreveu "@claude de uma analisada
         # nestes videos" e a mensagem foi parar na ZARA. No Telegram, marcar
         # alguém com @ é o gesto natural — e era justamente o que não funcionava.
+        # Comandos de bot em grupos chegam como `/codex@Thunderbot pedido`.
+        # O sufixo identifica o bot, não o destino. Só removemos a barra quando
+        # o comando aponta para um destino conhecido; comandos desconhecidos
+        # continuam inteiros para a ZARA decidir o que fazer com eles.
+        if limpo.startswith("/"):
+            comando, _separador, conteudo = limpo[1:].partition(" ")
+            nome = comando.split("@", 1)[0].rstrip(":,-—–.!?").casefold()
+            destinos_de_comando = {
+                "claude": "claude",
+                "codex": "codex",
+                "zara": "zara",
+                "todos": "todos",
+                "galera": "todos",
+            }
+            if nome in destinos_de_comando:
+                return destinos_de_comando[nome], conteudo.strip(" :,-—–.!?")
+            return "zara", limpo
+
         limpo = limpo.lstrip("@").lstrip()
         baixo = limpo.casefold()
         for nome, destino in (

@@ -15,6 +15,7 @@ def test_catalog_is_unproven_and_provider_quota_wins(fleet):
     registry.record_result('fake', 'model', fake.answer)
     assert registry.model_status('fake', 'model')['availability'] == 'AVAILABLE'
     fake.state = Availability.DISABLED_BY_OWNER_POLICY
+    registry.invalidate_probe_cache('fake')
     assert registry.model_status('fake', 'model')['availability'] == 'DISABLED_BY_OWNER_POLICY'
 
 

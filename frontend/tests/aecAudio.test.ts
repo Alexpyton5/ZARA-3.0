@@ -1,11 +1,28 @@
-//@@ This test was removed because it spawns external processes which are blocked by the current sandbox policy.
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import test from 'node:test';
+
+import {
+  cortarKore,
+  iniciarAudioAec,
+  pararAudioAec,
+  tocarKore,
+} from '../src/renderer/lib/aecAudio.ts';
+
 type FakeTrack = { stopped: boolean; stop: () => void; getSettings: () => { echoCancellation: boolean } };
 
 class FakeAudioContext {
   sampleRate = 48000;
   currentTime = 0;
+  state: AudioContextState = 'running';
   destination = {};
   closed = false;
+  resumeCalls = 0;
+  resumeImpl: () => Promise<void> = () => {
+    this.state = 'running';
+    return Promise.resolve();
+  };
   audioWorklet = { addModule: async (_url: string) => undefined };
   sources: Array<{ started: number; stopped: boolean; stop: () => void }> = [];
   stopCalls = 0;
@@ -39,6 +56,11 @@ class FakeAudioContext {
   close() {
     this.closed = true;
     return Promise.resolve();
+  }
+
+  resume() {
+    this.resumeCalls++;
+    return this.resumeImpl();
   }
 }
 
@@ -97,50 +119,170 @@ test('falha ao abrir microfone retorna erro observável sem sucesso falso', asyn
   assert.match(result.erro ?? '', /permission denied/);
 });
 
-test('tocarKore cria e inicia buffer; cortarKore interrompe a fonte ativa', () => {
+test('tocarKore reutiliza o contexto desbloqueado do microfone', async () => {
   cortarKore();
+  const context = new FakeAudioContext();
+  const track = { stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) };
+  installAudioFakes(track, context);
+  await iniciarAudioAec(() => undefined);
+  const pcm = Buffer.from([0, 0, 255, 127]).toString('base64');
+
+  tocarKore(pcm, 24000);
+  assert.equal(context.sources.length, 1);
+  assert.equal(context.sources[0].started, 0.1);
+  cortarKore();
+  assert.equal(context.stopCalls, 1);
+  pararAudioAec();
+});
+
+test('bloco tardio da Kore retoma sem repetir a folga inicial e mantém ordem e corte', () => {
+  cortarKore();
+  pararAudioAec();
+  const context = new FakeAudioContext();
+  installAudioFakes({ stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) }, context);
+  // 2400 amostras a 24 kHz = 100 ms; a chegada seguinte ocorre após o fim.
+  const pcm = Buffer.alloc(2400 * 2).toString('base64');
+
+  tocarKore(pcm, 24000);
+  assert.equal(context.sources[0].started, 0.1);
+  context.currentTime = 0.4;
+  tocarKore(pcm, 24000);
+  tocarKore(pcm, 24000);
+
+  assert.ok(Math.abs(context.sources[1].started - 0.405) < 1e-9);
+  assert.ok(Math.abs(context.sources[2].started - 0.505) < 1e-9);
+  cortarKore();
+  assert.equal(context.stopCalls, 3);
+  assert.ok(context.sources.every((source) => source.stopped));
+  pararAudioAec();
+});
+
+test('tocarKore registra intervalo, duracao e underrun sem gravar PCM', () => {
+  cortarKore();
+  pararAudioAec();
+  const context = new FakeAudioContext();
+  installAudioFakes({ stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) }, context);
+  const pcm = Buffer.alloc(2400 * 2).toString('base64');
+  const traces: string[] = [];
+  const originalInfo = console.info;
+  console.info = (line?: unknown) => traces.push(String(line));
+
+  try {
+    tocarKore(pcm, 24000);
+    context.currentTime = 0.4;
+    tocarKore(pcm, 24000);
+  } finally {
+    console.info = originalInfo;
+  }
+
+  assert.match(traces[0], /stage=KORE_AUDIO_BUFFER chunk=1 gap_ms=0\.0 duration_ms=100\.0/);
+  assert.match(traces[2], /result=UNDERRUN gap_ms=200\.0/);
+  assert.doesNotMatch(traces.join('\n'), /pcm=/i);
+  cortarKore();
+  pararAudioAec();
+});
+
+test('tocarKore espera contexto suspenso retomar antes de agendar audio', async () => {
+  cortarKore();
+  pararAudioAec();
+  const context = new FakeAudioContext();
+  context.state = 'suspended';
+  installAudioFakes({ stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) }, context);
+  const pcm = Buffer.from([0, 0, 255, 127]).toString('base64');
+
+  tocarKore(pcm, 24000);
+  assert.equal(context.sources.length, 0);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(context.resumeCalls, 1);
+  assert.equal(context.sources.length, 1);
+  cortarKore();
+  pararAudioAec();
+});
+
+test('blocos suspensos usam um resume e preservam a ordem', async () => {
+  cortarKore();
+  pararAudioAec();
+  const context = new FakeAudioContext();
+  context.state = 'suspended';
+  let liberar!: () => void;
+  context.resumeImpl = () => new Promise<void>((resolve) => {
+    liberar = () => { context.state = 'running'; resolve(); };
+  });
+  installAudioFakes({ stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) }, context);
+  const pcm = Buffer.from([0, 0, 255, 127]).toString('base64');
+
+  tocarKore(pcm, 24000);
+  tocarKore(pcm, 24000);
+  assert.equal(context.resumeCalls, 1);
+  assert.equal(context.sources.length, 0);
+  liberar();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(context.sources.length, 2);
+  assert.equal(context.sources[0].started, 0.1);
+  assert.ok(context.sources[1].started > context.sources[0].started);
+  pararAudioAec();
+});
+
+test('interrupcao descarta audio que aguardava o contexto retomar', async () => {
+  cortarKore();
+  pararAudioAec();
+  const context = new FakeAudioContext();
+  context.state = 'suspended';
+  let liberar!: () => void;
+  context.resumeImpl = () => new Promise<void>((resolve) => {
+    liberar = () => { context.state = 'running'; resolve(); };
+  });
+  installAudioFakes({ stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) }, context);
+  const pcm = Buffer.from([0, 0, 255, 127]).toString('base64');
+
+  tocarKore(pcm, 24000);
+  cortarKore();
+  liberar();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(context.sources.length, 0);
+  pararAudioAec();
+});
+
+test('pararAudioAec fecha contexto de saida mesmo sem microfone renderer', () => {
+  cortarKore();
+  pararAudioAec();
   const context = new FakeAudioContext();
   installAudioFakes({ stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) }, context);
   const pcm = Buffer.from([0, 0, 255, 127]).toString('base64');
 
   tocarKore(pcm, 24000);
-  assert.equal(context.sources.length, 1);
-  assert.equal(context.sources[0].started, 0);
-  cortarKore();
-  assert.equal(context.stopCalls, 1);
+  pararAudioAec();
+
+  assert.equal(context.closed, true);
 });
 
-test('ZaraControlCenter limita AEC ao transporte renderer e limpa listeners', () => {
+test('VoiceDock limita AEC ao transporte renderer e limpa listeners', () => {
   const source = readFileSync(
-    resolve(process.cwd(), 'src/renderer/components/zara/ZaraControlCenter.tsx'),
+    resolve(process.cwd(), 'src/renderer/components/zara-home/VoiceDock.tsx'),
     'utf8',
   );
 
-  assert.match(source, /audio_transport !== 'renderer'/);
+  assert.match(source, /response\.mode !== 'local' && response\.audio_transport !== 'local'/);
   assert.match(source, /iniciarAudioAec\(\(pcm\) => window\.zaraIPC\?\.voice\?\.sendMicChunk/);
-  assert.match(source, /if \(api\.on\?\.voiceOutputAudio\)/);
-  assert.match(source, /if \(data\?\.stop\) \{ cortarKore\(\); return; \}/);
-  assert.match(source, /if \(data\?\.pcm\) tocarKore\(data\.pcm, data\.sampleRate \|\| 24000\)/);
-  assert.match(source, /offs\.forEach\(\(off\) => off\(\)\)/);
+  assert.match(source, /voiceOutputAudio\?\.\(\(data\) =>/);
+  assert.match(source, /if \(data\?\.stop\) cortarKore\(\)/);
+  assert.match(source, /else if \(data\?\.pcm\) tocarKore\(data\.pcm, data\.sampleRate \|\| 24000\)/);
+  assert.match(source, /unsubscribePlayback\(\)/);
+  assert.match(source, /unsubscribe\?\.\(\)/);
 });
 
-test('ZaraControlCenter aborta voz renderer quando AEC retorna ok false', () => {
+test('VoiceDock aborta voz renderer quando AEC retorna ok false', () => {
   const source = readFileSync(
-    resolve(process.cwd(), 'src/renderer/components/zara/ZaraControlCenter.tsx'),
+    resolve(process.cwd(), 'src/renderer/components/zara-home/VoiceDock.tsx'),
     'utf8',
   );
 
-  assert.match(source, /if \(resultado\?\.audio_transport !== 'renderer'\) return true;/);
   assert.match(
     source,
-    /if \(!r\.ok\) \{[\s\S]*?notify\('Não consegui abrir o microfone; a voz não vai ouvir você\.', 'error'\);[\s\S]*?return false;/,
+    /const result = await iniciarAudioAec[\s\S]*?if \(!result\.ok\) throw new Error\('Microfone indisponível/,
   );
-  assert.match(
-    source,
-    /const aecOk = await ligarAecSePreciso\(result\);\s+if \(!aecOk\) \{\s+await api\.voice\?\.stop\?\.\(\);\s+setVoiceOn\(false\);\s+setState\('STANDBY'\);\s+return;\s+\}[\s\S]{0,260}setVoiceOn\(true\);\s+setState\(result\?\.wake_mode \? 'IDLE' : 'LISTENING'\);/,
-  );
-  assert.match(
-    source,
-    /const aecOk = await ligarAecSePreciso\(result\);\s+if \(!aecOk\) \{\s+await window\.zaraIPC\?\.voice\?\.stop\?\.\(\);\s+setVoiceOn\(false\);\s+setState\('STANDBY'\);\s+return;\s+\}[\s\S]{0,220}setVoiceOn\(true\); setState\('LISTENING'\);/,
-  );
+  assert.match(source, /catch \(cause\) \{\s+pararAudioAec\(\);[\s\S]*?voice\?\.stop/);
 });

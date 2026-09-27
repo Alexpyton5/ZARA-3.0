@@ -1,0 +1,15 @@
+/* M040 — painel de propostas do Scout */
+.zl-panel.zl-opportunities{margin:16px 0;padding:14px 16px;background:#14241f;border:1px solid #2b4a3e;border-radius:12px}
+.zl-panel.zl-opportunities h3{margin:0 0 6px;color:#7fd9b4;font-size:13px}
+.zl-panel.zl-opportunities .zl-muted{font-size:11px;color:#8ba88f;margin-bottom:10px}
+.zl-panel.zl-opportunities ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.zl-opportunity{background:#0f1d17;border:1px solid #2a4438;border-radius:10px;padding:12px}
+.zl-opportunity strong{display:block;font-size:12px;color:#e3f2e8;margin-bottom:4px}
+.zl-opportunity a{display:block;font-size:10px;color:#6fc7a8;text-decoration:none;margin-bottom:3px;overflow-wrap:anywhere}
+.zl-opportunity a:hover{text-decoration:underline}
+.zl-opportunity small{font-size:9px;color:#7a9480}
+.zl-opportunity .zl-actions{margin-top:8px;display:flex;gap:6px}
+.zl-opportunity .zl-actions button{font-size:10px;padding:6px 10px;border:1px solid #3a5a4b;background:#162a20;color:#a8d8b8}
+.zl-opportunity .zl-actions button:hover:not(:disabled){background:#1e3a2c;border-color:#4fc08a}
+.zl-opportunity .zl-actions button:last-child{margin-left:auto;color:#e8a89f;border-color:#5a3a34;background:#2a1f1b}
+.zl-opportunity .zl-actions button:last-child:hover:not(:disabled){background:#381f19;border-color:#d97a6f}

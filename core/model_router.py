@@ -4,6 +4,7 @@ ZARA Smart Router 001
 - AUTO • ECONÔMICO: fast/light/free-quota preserving first.
 - MANUAL: explicit model choice is respected; no silent fallback.
 - Provider/model health: auth, rate-limit, quota and transient failures.
+- Hermes is NEVER part of normal AUTO; Supercérebro remains explicit.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ class ModelProvider(StrEnum):
     GEMINI = "gemini"
     ZAI = "zai"
     XAI = "xai"
-    OLLAMA = "ollama"
+    HERMES = "hermes"
 
 
 class TaskType(StrEnum):
@@ -71,63 +72,13 @@ class ModelConfig:
     priority: int
     smart_bias: int = 0
     economy_bias: int = 0
-    # ZARA-VELOCIDADE-001 (Alex, 2026-08-28 noite): "qualquer coisa que ela
-    # ouvir, tem que responder no menor tempo possivel". Escala de bias
-    # igual a smart_bias/economy_bias, so que pra latencia -- usado quando
-    # policy="fast" no _score(). Valores INFERIDOS de caracteristica publica
-    # de infraestrutura de cada provedor (Groq = LPU, documentado como o
-    # mais rapido; Gemini Flash/Flash-Lite = otimizado pra latencia pelo
-    # proprio Google; Nemotron grande via NIM = MEDIDO lento em outro
-    # contexto hoje, 2-16s) -- NAO e medicao real desta app ainda. Ver
-    # skill medir-latencia-da-zara antes de declarar "ficou mais rapido".
-    speed_bias: int = 0
     supports_streaming: bool = True
     supports_tools: bool = False
     auto_eligible: bool = True
     zero_cost_eligible: bool = True
-    # Cost truth is separate from routing eligibility. UNKNOWN never enters
-    # COST_SAFE even when an older compatibility path marks it zero-cost.
-    cost_status: str = "UNKNOWN_COST"
 
 
 MODEL_REGISTRY: list[ModelConfig] = [
-    # Ollama — Local models with no API key needed
-    ModelConfig(
-        id="ollama_qwen3_8b",
-        name="Ollama qwen3:8b",
-        provider=ModelProvider.OLLAMA,
-        api_model="qwen3:8b",
-        task_types=[TaskType.REASONING, TaskType.CODING, TaskType.TOOL_USE, TaskType.GENERAL_CHAT],
-        api_key_env="OLLAMA_API_KEY",
-        base_url="http://127.0.0.1:11434",
-        max_tokens=16384,
-        free_tier_limit="Ollama • Local unlimited",
-        priority=1,
-        smart_bias=30,
-        economy_bias=30,
-        speed_bias=12,
-        supports_tools=True,
-        zero_cost_eligible=True,
-        cost_status="LOCAL_FREE",
-    ),
-    ModelConfig(
-        id="ollama_qwen3_4b",
-        name="Ollama qwen3:4b",
-        provider=ModelProvider.OLLAMA,
-        api_model="qwen3:4b",
-        task_types=[TaskType.REASONING, TaskType.CODING, TaskType.TOOL_USE, TaskType.GENERAL_CHAT],
-        api_key_env="OLLAMA_API_KEY",
-        base_url="http://127.0.0.1:11434",
-        max_tokens=16384,
-        free_tier_limit="Ollama • Local unlimited",
-        priority=2,
-        smart_bias=25,
-        economy_bias=25,
-        speed_bias=16,
-        supports_tools=True,
-        zero_cost_eligible=True,
-        cost_status="LOCAL_FREE",
-    ),
     # NVIDIA NIM — free prototype endpoints / trial limits apply.
     ModelConfig(
         id="nvidia_nemotron_ultra",
@@ -142,7 +93,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=22,
         economy_bias=1,
-        speed_bias=2,
         supports_tools=True,
     ),
     ModelConfig(
@@ -158,7 +108,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=20,
         economy_bias=2,
-        speed_bias=3,
         supports_tools=True,
     ),
     ModelConfig(
@@ -174,7 +123,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=15,
         economy_bias=6,
-        speed_bias=4,
         supports_tools=True,
     ),
     ModelConfig(
@@ -190,7 +138,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=16,
         economy_bias=3,
-        speed_bias=6,
         supports_tools=True,
     ),
 
@@ -208,7 +155,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=18,
         economy_bias=10,
-        speed_bias=26,
         supports_tools=True,
     ),
     ModelConfig(
@@ -224,7 +170,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=10,
         economy_bias=24,
-        speed_bias=30,
         supports_tools=True,
     ),
 
@@ -242,7 +187,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=1,
         smart_bias=21,
         economy_bias=13,
-        speed_bias=20,
         supports_tools=True,
     ),
     ModelConfig(
@@ -258,7 +202,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=10,
         economy_bias=27,
-        speed_bias=24,
         supports_tools=True,
     ),
     ModelConfig(
@@ -274,7 +217,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=2,
         smart_bias=17,
         economy_bias=1,
-        speed_bias=5,
         supports_tools=True,
     ),
     ModelConfig(
@@ -290,7 +232,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=3,
         smart_bias=8,
         economy_bias=18,
-        speed_bias=18,
         supports_tools=True,
     ),
 
@@ -308,7 +249,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=4,
         smart_bias=5,
         economy_bias=7,
-        speed_bias=15,
         supports_tools=True,
     ),
 
@@ -326,7 +266,6 @@ MODEL_REGISTRY: list[ModelConfig] = [
         priority=9,
         smart_bias=0,
         economy_bias=0,
-        speed_bias=8,
         supports_tools=True,
         auto_eligible=False,
         zero_cost_eligible=False,
@@ -349,6 +288,22 @@ MODEL_REGISTRY: list[ModelConfig] = [
         auto_eligible=False,
     ),
 
+    # Explicit Supercérebro path only.
+    ModelConfig(
+        id="hermes_gateway",
+        name="Hermes Gateway (Supercérebro)",
+        provider=ModelProvider.HERMES,
+        api_model="hermes_gateway",
+        task_types=[TaskType.LOCAL_PRIVATE, TaskType.TOOL_USE, TaskType.CODING, TaskType.REASONING],
+        api_key_env="HERMES_API_KEY",
+        base_url="http://127.0.0.1:8642/v1",
+        max_tokens=32768,
+        free_tier_limit="Local",
+        priority=1,
+        supports_streaming=True,
+        supports_tools=True,
+        auto_eligible=False,
+    ),
 ]
 
 
@@ -386,9 +341,6 @@ INTENT_PATTERNS = {
 
 
 class ModelRouter:
-    ACTIVE_BRAIN_DEFAULT = "gpt-5.6-luna"
-    MANUAL_ONLY_BRAINS = frozenset({"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"})
-
     """Zero-cost-first model router with runtime health awareness."""
 
     def __init__(self):
@@ -414,6 +366,7 @@ class ModelRouter:
                     "nvidia_api_key": "NVIDIA_API_KEY",
                     "zai_api_key": "ZAI_API_KEY",
                     "xai_api_key": "XAI_API_KEY",
+                    "hermes_api_key": "HERMES_API_KEY",
                 }
                 for config_key, env_key in key_map.items():
                     value = str(config.get(config_key) or "").strip()
@@ -461,7 +414,7 @@ class ModelRouter:
         self._load_catalog_snapshot()
 
     def _catalog_allows(self, model: ModelConfig) -> bool:
-        if model.provider == ModelProvider.XAI:
+        if model.provider in {ModelProvider.HERMES, ModelProvider.XAI}:
             return True
         providers = self.catalog_snapshot.get("providers")
         if not isinstance(providers, dict):
@@ -573,10 +526,10 @@ class ModelRouter:
         r.last_error = text[:500]
         r.updated_at = now
 
-    def _routable(self, model: ModelConfig, include_paid: bool = False, *, policy: str = "smart") -> bool:
+    def _routable(self, model: ModelConfig, include_paid: bool = False, include_hermes: bool = False) -> bool:
+        if model.provider == ModelProvider.HERMES:
+            return include_hermes
         if not model.auto_eligible:
-            return False
-        if policy == "cost_safe" and model.cost_status not in {"LOCAL_FREE", "FREE_PROVEN"}:
             return False
         if not include_paid and not model.zero_cost_eligible:
             return False
@@ -596,12 +549,7 @@ class ModelRouter:
         if score <= 0:
             return -10_000
         score -= model.priority * 3
-        if policy == "economy":
-            score += model.economy_bias
-        elif policy == "fast":
-            score += model.speed_bias
-        else:
-            score += model.smart_bias
+        score += model.economy_bias if policy == "economy" else model.smart_bias
         return score
 
     def rank_models(
@@ -610,11 +558,11 @@ class ModelRouter:
         policy: str = "smart",
         require_tools: bool = False,
         require_streaming: bool = True,
-        cost_safe: bool = False,
+        include_hermes: bool = False,
     ) -> list[ModelConfig]:
         ranked: list[tuple[int, ModelConfig]] = []
         for model in MODEL_REGISTRY:
-            if not self._routable(model, include_paid=False, policy="cost_safe" if cost_safe else policy):
+            if not self._routable(model, include_paid=False, include_hermes=include_hermes):
                 continue
             if require_tools and not model.supports_tools:
                 continue
@@ -634,30 +582,25 @@ class ModelRouter:
         same_provider = [m for _, m in ranked[1:] if m.provider == primary.provider]
         return [primary, *other_provider, *same_provider]
 
-    def cost_safe_candidates(self, task_types: list[TaskType], *, require_tools: bool = False,
-                             require_streaming: bool = True) -> list[ModelConfig]:
-        """Automatic workers with factual no-additional-cost evidence only."""
-        return self.rank_models(task_types, policy="economy", require_tools=require_tools,
-                                require_streaming=require_streaming, cost_safe=True)
-
     def get_best_model(
         self,
         task_types: list[TaskType],
         require_tools: bool = False,
         require_streaming: bool = True,
+        include_hermes: bool = False,
         policy: str = "smart",
-        cost_safe: bool = False,
     ) -> ModelConfig | None:
-        ranked = self.rank_models(task_types, policy, require_tools, require_streaming, cost_safe)
+        ranked = self.rank_models(task_types, policy, require_tools, require_streaming, include_hermes)
         return ranked[0] if ranked else None
 
     def get_fallback_chain(
         self,
         task_types: list[TaskType],
         require_tools: bool = False,
+        include_hermes: bool = False,
         policy: str = "smart",
     ) -> list[ModelConfig]:
-        ranked = self.rank_models(task_types, policy, require_tools, True)
+        ranked = self.rank_models(task_types, policy, require_tools, True, include_hermes)
         return ranked[1:] if len(ranked) > 1 else []
 
     def record_usage(self, model_id: str, tokens: int = 0, success: bool = True) -> None:
@@ -668,10 +611,21 @@ class ModelRouter:
             item["errors"] = int(item.get("errors", 0)) + 1
         self._save_usage_stats()
 
-    def get_available_models(self, include_paid: bool = False) -> list[ModelConfig]:
+    def get_available_models(self, include_hermes: bool = True, include_paid: bool = False) -> list[ModelConfig]:
         available: list[ModelConfig] = []
         for model in MODEL_REGISTRY:
             if model.id == "gemini_live":
+                continue
+            if model.provider == ModelProvider.HERMES:
+                if not include_hermes:
+                    continue
+                import urllib.request
+                try:
+                    with urllib.request.urlopen(model.base_url.replace("/v1", "/health"), timeout=2) as resp:
+                        if resp.status == 200:
+                            available.append(model)
+                except Exception:
+                    pass
                 continue
             if not include_paid and not model.zero_cost_eligible:
                 continue
@@ -686,7 +640,7 @@ class ModelRouter:
     def configured_model_status(self, include_paid: bool = False) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for model in MODEL_REGISTRY:
-            if model.id == "gemini_live":
+            if model.provider == ModelProvider.HERMES or model.id == "gemini_live":
                 continue
             if not include_paid and not model.zero_cost_eligible:
                 continue
@@ -710,13 +664,7 @@ router = ModelRouter()
 
 def normalize_auto_engine(engine: str | None) -> str:
     raw = str(engine or "").strip().lower()
-    if raw in {"", "auto", "auto_router", "auto_fast"}:
-        # ZARA-VELOCIDADE-001: "auto_fast" é o padrão agora -- resposta por
-        # voz tem que ser rápida por padrão, sem precisar pedir. "auto"/""
-        # (o que já existia antes) também cai aqui, não em auto_smart, pra
-        # não regredir quem já tinha o engine salvo como vazio/"auto".
-        return "auto_fast"
-    if raw == "auto_smart":
+    if raw in {"", "auto", "auto_router", "auto_smart"}:
         return "auto_smart"
     if raw == "auto_economy":
         return "auto_economy"
@@ -728,6 +676,7 @@ def route_message(
     context: dict | None = None,
     require_tools: bool = False,
     require_streaming: bool = True,
+    include_hermes: bool = False,
     policy: str = "smart",
 ) -> tuple[ModelConfig | None, list[ModelConfig]]:
     task_types = router.classify_intent(message, context)
@@ -736,6 +685,7 @@ def route_message(
         policy=policy,
         require_tools=require_tools,
         require_streaming=require_streaming,
+        include_hermes=include_hermes,
     )
     return (ranked[0], ranked[1:]) if ranked else (None, [])
 
@@ -745,37 +695,3 @@ def get_model_config(model_id: str) -> ModelConfig | None:
         if model.id == model_id:
             return model
     return None
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

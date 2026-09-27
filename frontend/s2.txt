@@ -1,0 +1,2 @@
+npm notice run zara-frontend@3.0.0 build:electron
+npm notice run tsc -p tsconfig.node.json

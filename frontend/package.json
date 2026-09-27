@@ -12,7 +12,7 @@
     "electron:build": "npm run build && npm run build:electron && electron-builder",
     "lint": "eslint src --ext ts,tsx",
     "typecheck": "tsc --noEmit",
-    "test": "echo NO REAL TEST SUITE CONFIGURED - this script is a stub and always exits 0, do not treat it as a pass/fail gate"
+    "test": "tsc -p tsconfig.test.json && node --test dist-tests/tests/*.test.js"
   },
   "dependencies": {
     "lucide-react": "^1.29.0",

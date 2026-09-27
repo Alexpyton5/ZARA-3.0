@@ -10,6 +10,7 @@ These tests verify that:
 
 import asyncio
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 import pytest
@@ -230,9 +231,96 @@ class TestMicrophoneMissingOrDenied:
         assert len(errors) == 1
         assert "AUDIO_INPUT_FAILED" in str(errors[0])
 
+    def test_audio_input_keeps_first_callback_frame(self, monkeypatch):
+        """A synchronous PortAudio callback must not lose the first frame."""
+        config = VoiceConfig()
+        seen = []
+
+        class Stream:
+            def __init__(self, callback):
+                self.callback = callback
+
+            def start(self):
+                self.callback(bytes([1, 2]), 1, None, None)
+
+            def stop(self):
+                pass
+
+            def close(self):
+                pass
+
+        class MockSoundDevice:
+            PortAudioError = Exception
+
+            @staticmethod
+            def RawInputStream(*args, **kwargs):
+                callback = kwargs["callback"]
+                return Stream(callback)
+
+        monkeypatch.setattr("core.voice_stt.sd", MockSoundDevice())
+        audio = AudioInput(config)
+        # The callback is installed by AudioInput.start; capture its result
+        # through the public queue rather than reaching into implementation.
+        audio.start()
+        assert audio.read(timeout=0.01) == bytes([1, 2])
+        audio.stop()
+
+    @pytest.mark.asyncio
+    async def test_voice_pipeline_can_retry_after_audio_open_failure(self, monkeypatch):
+        """A failed start must not poison the pipeline's next start attempt."""
+        config = VoiceConfig()
+
+        class MockVosk:
+            def __init__(self, _config):
+                pass
+
+            def reset(self):
+                pass
+
+        class FlakyAudio:
+            attempts = 0
+
+            def __init__(self, _config):
+                self.running = False
+
+            def start(self):
+                type(self).attempts += 1
+                if type(self).attempts == 1:
+                    raise VoiceNotConfiguredError("AUDIO_INPUT_FAILED: denied permanent=True")
+                self.running = True
+
+            def stop(self):
+                self.running = False
+
+            def read(self, timeout=0.1):
+                return None
+
+        monkeypatch.setattr("core.voice_stt.VoskSTT", MockVosk)
+        monkeypatch.setattr("core.voice_stt.AudioInput", FlakyAudio)
+        errors = []
+        pipeline = VoicePipeline(config, lambda: None, lambda _text: None)
+        pipeline.on_error = errors.append
+
+        pipeline.start()
+        assert pipeline.state == "ERROR"
+        assert pipeline._running is False
+
+        pipeline.start()
+        await asyncio.sleep(0.02)
+        assert pipeline.state == "LISTENING"
+        assert pipeline._running is True
+        pipeline.stop()
+
     @pytest.mark.asyncio
     async def test_local_engine_pyaudio_failure(self, monkeypatch):
         """Test LocalVoiceEngine handles PyAudio failure gracefully."""
+        # Keep this legacy-only regression fixture available after its package
+        # leaves the production source tree.
+        legacy_voice_root = (
+            Path(__file__).resolve().parents[1]
+            / "_quarentena" / "organizacao-2026-09-23"
+        )
+        sys.path.insert(0, str(legacy_voice_root))
         from voice.local_engine import LocalVoiceEngine
         from voice.voice_manager import VoiceConfig as LocalVoiceConfig
         

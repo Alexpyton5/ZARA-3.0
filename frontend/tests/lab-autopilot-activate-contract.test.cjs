@@ -1,0 +1,26 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const root = path.join(__dirname, '..')
+const main = fs.readFileSync(path.join(root, 'src/main.ts'), 'utf8')
+const preload = fs.readFileSync(path.join(root, 'src/preload.ts'), 'utf8')
+const globals = fs.readFileSync(path.join(root, 'src/renderer/types/global.d.ts'), 'utf8')
+const pythonHandlers = fs.readFileSync(path.join(root, '..', 'core/ipc_handlers.py'), 'utf8')
+const pythonService = fs.readFileSync(path.join(root, '..', 'core/lab_v1/service.py'), 'utf8')
+
+test('lab-v1 autopilot activation keeps the Python contract across Main, preload and renderer types', () => {
+  assert.match(pythonHandlers, /'lab-v1-autopilot-activate':\s*self\.handle_lab_v1_autopilot_activate/)
+  assert.match(pythonHandlers, /async def handle_lab_v1_autopilot_activate\(self, msg: IPCMessage\)/)
+  assert.match(pythonHandlers, /svc\.activate_autopilot\(\)/)
+  assert.match(pythonService, /'background': background, 'scheduler': scheduler/)
+  assert.match(pythonService, /'mode': 'CONTINUOUS_WHILE_ZARA_OPEN'/)
+
+  assert.match(main, /ipcMain\.handle\('lab-v1-autopilot-activate', \(\) => sendToPython\('lab-v1-autopilot-activate'\)\)/)
+  assert.match(preload, /activateAutopilot: \(\) => ipcRenderer\.invoke\('lab-v1-autopilot-activate'\)/)
+  assert.match(globals, /activateAutopilot: \(\) => Promise<LabV1AutopilotActivationResult>/)
+  assert.match(globals, /background\?: Record<string, unknown>/)
+  assert.match(globals, /scheduler\?: Record<string, unknown>/)
+  assert.match(globals, /mode: 'CONTINUOUS_WHILE_ZARA_OPEN'/)
+})

@@ -66,6 +66,8 @@ export function TextCommandInput({ onSent }: TextCommandInputProps) {
       if (mounted.current) setSending(false);
     }
     if (confirmed && mounted.current) {
+      // A real reply may have proved the selected model; refresh its observed status.
+      void selection.refresh();
       try {
         await onSent?.(message);
       } catch {

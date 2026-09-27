@@ -26,6 +26,7 @@ field domain.py does not already declare.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import time
@@ -40,6 +41,7 @@ from core.lab_v1.domain import (
     Decision,
     Handoff,
     LabEvent,
+    LabLesson,
     Lifecycle,
     Message,
     MessageKind,
@@ -141,6 +143,9 @@ class LabStore:
                     revision INTEGER NOT NULL DEFAULT 0,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS deleted_sessions (
+                    session_id TEXT PRIMARY KEY REFERENCES sessions(id), deleted_at REAL NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS session_authorities (
@@ -264,6 +269,17 @@ class LabStore:
                     memory_ref TEXT,
                     created_at REAL NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS lab_lessons (
+                    id TEXT PRIMARY KEY,
+                    source_event_id TEXT NOT NULL UNIQUE,
+                    source_session_id TEXT,
+                    statement TEXT NOT NULL,
+                    evidence_ref TEXT NOT NULL,
+                    created_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_lab_lessons_created
+                    ON lab_lessons(created_at DESC);
                 """
             )
             conn.execute(
@@ -289,6 +305,16 @@ class LabStore:
             conn.execute('ALTER TABLE runs ADD COLUMN effort TEXT')
         if "model_reported" not in existing_run_columns:
             conn.execute("ALTER TABLE runs ADD COLUMN model_reported TEXT")
+
+        # Phase 1 "Organization": message addressing. Additive only — legacy
+        # rows keep NULL in every new column, which reads as implicit
+        # addressing (legible by every role).
+        existing_message_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        for column in ("to_agent_id", "to_role", "reply_to", "correlation_id"):
+            if column not in existing_message_columns:
+                conn.execute(f"ALTER TABLE messages ADD COLUMN {column} TEXT")
 
     # ------------------------------------------------------------------
     # Team
@@ -438,7 +464,7 @@ class LabStore:
                 """
                 SELECT * FROM role_bindings
                 WHERE team_id=? AND role=? AND unbound_at IS NULL
-                ORDER BY bound_at DESC LIMIT 1
+                ORDER BY bound_at DESC, rowid DESC LIMIT 1
                 """,
                 (team_id, role.value),
             ).fetchone()
@@ -576,16 +602,20 @@ class LabStore:
                          (session_id, token))
 
     def list_sessions(self, team_id: str | None = None, limit: int = 50) -> list[Session]:
-        query = "SELECT * FROM sessions"
+        query = "SELECT s.* FROM sessions s WHERE NOT EXISTS (SELECT 1 FROM deleted_sessions d WHERE d.session_id=s.id)"
         params: list[Any] = []
         if team_id is not None:
-            query += " WHERE team_id=?"
+            query += " AND s.team_id=?"
             params.append(team_id)
         query += " ORDER BY updated_at DESC LIMIT ?"
         params.append(limit)
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_session(r) for r in rows]
+
+    def hide_session(self, session_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO deleted_sessions(session_id, deleted_at) VALUES(?, ?)", (session_id, time.time()))
 
     @staticmethod
     def _row_to_session(row: sqlite3.Row) -> Session:
@@ -607,32 +637,58 @@ class LabStore:
             conn.execute(
                 """
                 INSERT INTO messages(
-                    id, session_id, kind, author, content, author_agent_id, run_id, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                    id, session_id, kind, author, content, author_agent_id, run_id, created_at,
+                    to_agent_id, to_role, reply_to, correlation_id
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     kind=excluded.kind, author=excluded.author, content=excluded.content,
-                    author_agent_id=excluded.author_agent_id, run_id=excluded.run_id
+                    author_agent_id=excluded.author_agent_id, run_id=excluded.run_id,
+                    to_agent_id=excluded.to_agent_id, to_role=excluded.to_role,
+                    reply_to=excluded.reply_to, correlation_id=excluded.correlation_id
                 """,
                 (
                     message.id, message.session_id, message.kind.value, message.author,
                     message.content, message.author_agent_id, message.run_id,
                     message.created_at,
+                    message.to_agent_id, message.to_role, message.reply_to,
+                    message.correlation_id,
                 ),
             )
 
-    def list_messages(self, session_id: str, limit: int = 200) -> list[Message]:
+    def list_messages(
+        self, session_id: str, limit: int = 200, for_role: str | None = None,
+    ) -> list[Message]:
         # `created_at ASC, rowid ASC`: two messages written in the same
         # wall-clock tick (float seconds, easy to collide under a tight
         # loop) must still come back in insertion order. rowid is
         # monotonic per insert regardless of clock resolution.
+        #
+        # `for_role` is the Phase 1 "Organization" role filter: NULL
+        # addressing columns mean legacy/implicit (legible by everyone) and
+        # worker↔worker traffic (DELEGATE/REVIEW) stays out of the reader's
+        # window, except a REVIEW escalated to the OWNER.
         with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM messages WHERE session_id=?
-                ORDER BY created_at ASC, rowid ASC LIMIT ?
-                """,
-                (session_id, limit),
-            ).fetchall()
+            if for_role is None:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM messages WHERE session_id=?
+                    ORDER BY created_at ASC, rowid ASC LIMIT ?
+                    """,
+                    (session_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM messages WHERE session_id=?
+                    AND (
+                        (kind NOT IN ('DELEGATE', 'REVIEW')
+                         AND (to_role IS NULL OR to_role IN (?, 'ALL')))
+                        OR (kind='REVIEW' AND to_role='OWNER')
+                    )
+                    ORDER BY created_at ASC, rowid ASC LIMIT ?
+                    """,
+                    (session_id, for_role, limit),
+                ).fetchall()
         return [self._row_to_message(r) for r in rows]
 
     def delete_messages_for_run(self, session_id: str, run_id: str) -> int:
@@ -650,6 +706,8 @@ class LabStore:
             id=row["id"], session_id=row["session_id"], kind=MessageKind(row["kind"]),
             author=row["author"], content=row["content"],
             author_agent_id=row["author_agent_id"], run_id=row["run_id"],
+            to_agent_id=row["to_agent_id"], to_role=row["to_role"],
+            reply_to=row["reply_to"], correlation_id=row["correlation_id"],
             created_at=row["created_at"],
         )
 
@@ -855,20 +913,47 @@ class LabStore:
     # Artifact
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _save_artifact_row(conn: sqlite3.Connection, artifact: Artifact) -> None:
+        conn.execute(
+            """
+            INSERT INTO artifacts(
+                id, session_id, task_id, kind, title, body, path, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                kind=excluded.kind, title=excluded.title, body=excluded.body,
+                path=excluded.path
+            """,
+            (artifact.id, artifact.session_id, artifact.task_id, artifact.kind,
+             artifact.title, artifact.body, artifact.path, artifact.created_at),
+        )
+
     def save_artifact(self, artifact: Artifact) -> None:
         with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO artifacts(
-                    id, session_id, task_id, kind, title, body, path, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    kind=excluded.kind, title=excluded.title, body=excluded.body,
-                    path=excluded.path
-                """,
-                (artifact.id, artifact.session_id, artifact.task_id, artifact.kind,
-                 artifact.title, artifact.body, artifact.path, artifact.created_at),
-            )
+            self._save_artifact_row(conn, artifact)
+
+    def save_bound_model_response(self, response: Artifact, binding: Artifact) -> None:
+        """Commit one model response and its exact attempt/Run binding together."""
+        if (response.kind != "MODEL_TEXT" or binding.kind != "MODEL_RESPONSE_BINDING"
+                or response.session_id != binding.session_id
+                or response.task_id != binding.task_id):
+            raise ValueError("MODEL_RESPONSE_BINDING_INVALID")
+        with self._connect() as conn:
+            self._save_artifact_row(conn, response)
+            self._save_artifact_row(conn, binding)
+
+    def get_artifact(self, artifact_id: str) -> Artifact | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM artifacts WHERE id=?", (artifact_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return Artifact(
+            id=row["id"], session_id=row["session_id"], task_id=row["task_id"],
+            kind=row["kind"], title=row["title"], body=row["body"], path=row["path"],
+            created_at=row["created_at"],
+        )
 
     def list_artifacts(self, session_id: str) -> list[Artifact]:
         with self._connect() as conn:
@@ -884,6 +969,257 @@ class LabStore:
             )
             for r in rows
         ]
+
+    # ------------------------------------------------------------------
+    # Durable Builder -> Reviewer evidence transport
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _evidence_packet_json(value: Any) -> str:
+        """Canonical packet bytes, matching review_evidence_packet._json."""
+        return json.dumps(value, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":"))
+
+    @classmethod
+    def _read_evidence_packet(cls, artifact: Artifact) -> tuple[dict[str, Any], str] | None:
+        if artifact.kind != "REVIEW_EVIDENCE_PACKET":
+            return None
+        try:
+            envelope = json.loads(artifact.body)
+            packet = envelope["packet"]
+            packet_sha256 = envelope["packet_sha256"]
+        except (TypeError, ValueError, KeyError):
+            return None
+        if not isinstance(packet, dict) or not isinstance(packet_sha256, str):
+            return None
+        return packet, packet_sha256
+
+    def _evidence_packet_artifact(
+        self, session_id: str | None, packet_id: str | None,
+    ) -> tuple[Artifact, dict[str, Any], str] | None:
+        """Resolve a packet from the canonical artifacts table, not memory."""
+        if session_id is not None:
+            artifacts = self.list_artifacts(session_id)
+        else:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM artifacts WHERE kind=? ORDER BY created_at ASC",
+                    ("REVIEW_EVIDENCE_PACKET",),
+                ).fetchall()
+            artifacts = [Artifact(
+                id=row["id"], session_id=row["session_id"], task_id=row["task_id"],
+                kind=row["kind"], title=row["title"], body=row["body"],
+                path=row["path"], created_at=row["created_at"],
+            ) for row in rows]
+        candidates = []
+        for artifact in artifacts:
+            parsed = self._read_evidence_packet(artifact)
+            if parsed is None:
+                continue
+            packet, packet_sha256 = parsed
+            if packet_id is not None and artifact.id != packet_id:
+                continue
+            if session_id is not None and packet.get("session_id") != session_id:
+                continue
+            candidates.append((artifact, packet, packet_sha256))
+        return candidates[-1] if candidates else None
+
+    def _evidence_handoff_document(
+        self, artifact: Artifact, packet: dict[str, Any], packet_sha256: str,
+    ) -> dict[str, Any]:
+        """Rehydrate all packet-adjacent facts in one restart-safe read model."""
+        session_id = artifact.session_id
+        artifacts = self.list_artifacts(session_id)
+        messages = self.list_messages(session_id)
+        handoffs = self.list_handoffs(session_id)
+        runs = self.list_runs(session_id)
+        indexed = {item.id: item for item in artifacts}
+
+        receipt_map = packet.get("receipts") if isinstance(packet.get("receipts"), dict) else {}
+        resolved_receipts: dict[str, dict[str, Any]] = {}
+        action_receipts: list[dict[str, Any]] = []
+        for name, raw_ref in receipt_map.items():
+            ref_id = raw_ref.get("id") if isinstance(raw_ref, dict) else raw_ref
+            if not isinstance(ref_id, str):
+                continue
+            receipt_artifact = indexed.get(ref_id)
+            if receipt_artifact is None:
+                continue
+            resolved = receipt_artifact.to_dict()
+            resolved_receipts[name] = resolved
+            if receipt_artifact.kind in {
+                "SOURCE_DIFF", "REAL_TESTS", "LOCAL_PRESERVATION",
+                "SOURCE_SNAPSHOT", "SOURCE_BUILD",
+            }:
+                action_receipts.append(resolved)
+
+        plan: dict[str, Any] = {}
+        plan_task = self.get_task(session_id + ":plan")
+        if plan_task is not None:
+            plan["task"] = plan_task.to_dict()
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT document FROM mission_controls WHERE session_id=?",
+                    (session_id,),
+                ).fetchone()
+            if row is not None:
+                document = json.loads(row["document"])
+                if isinstance(document, dict):
+                    plan.update({
+                        "version": document.get("plan_version"),
+                        "state": document.get("state"),
+                        "liveness_state": document.get("liveness_state"),
+                        "steps": document.get("steps", []),
+                    })
+        except (sqlite3.Error, TypeError, ValueError):
+            pass
+
+        run_by_id = {run.id: run for run in runs}
+        bindings: list[dict[str, Any]] = []
+        provenance_runs: list[dict[str, Any]] = []
+        for binding_artifact in artifacts:
+            if binding_artifact.kind != "MODEL_RESPONSE_BINDING":
+                continue
+            try:
+                binding = json.loads(binding_artifact.body)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(binding, dict):
+                continue
+            binding_copy = dict(binding)
+            run_id = binding_copy.get("run_id")
+            run = run_by_id.get(run_id) if isinstance(run_id, str) else None
+            if run is not None:
+                binding_copy["run"] = run.to_dict()
+                provenance_runs.append(run.to_dict())
+            bindings.append(binding_copy)
+        known_run_ids = {item["id"] for item in provenance_runs}
+        for run in runs:
+            if run.id not in known_run_ids:
+                provenance_runs.append(run.to_dict())
+
+        continuity: list[dict[str, Any]] = []
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM agent_continuity WHERE session_id=? ORDER BY rowid ASC",
+                    (session_id,),
+                ).fetchall()
+            for row in rows:
+                try:
+                    state = json.loads(row["state_json"])
+                except (TypeError, ValueError):
+                    state = {}
+                continuity.append({
+                    "session_id": row["session_id"], "agent_id": row["agent_id"],
+                    "cursor": row["cursor"], "summary": row["summary"],
+                    "state": state, "revision": int(row["revision"]),
+                    "updated_at": float(row["updated_at"]),
+                })
+        except (sqlite3.Error, KeyError, TypeError, ValueError):
+            pass
+
+        tests = packet.get("tests") if isinstance(packet.get("tests"), dict) else {}
+        diff = packet.get("diff") if isinstance(packet.get("diff"), dict) else {}
+        measurements = {
+            "baseline": tests.get("baseline"),
+            "candidate": tests.get("candidate"),
+            "diff": {key: diff.get(key) for key in
+                      ("files_changed", "lines_added", "lines_deleted") if key in diff},
+        }
+        integrity_digest = hashlib.sha256(
+            self._evidence_packet_json(packet).encode("utf-8")
+        ).hexdigest()
+        integrity = {
+            "expected_sha256": packet_sha256,
+            "computed_sha256": integrity_digest,
+            "matches": integrity_digest == packet_sha256,
+            "status": "VALID" if integrity_digest == packet_sha256 else "TAMPERED",
+        }
+        return {
+            "version": 1,
+            "packet_id": artifact.id,
+            "packet_sha256": packet_sha256,
+            "session_id": session_id,
+            "task_id": artifact.task_id,
+            "objective": packet.get("objective"),
+            "acceptance": packet.get("acceptance"),
+            "plan": plan,
+            "source_identity": packet.get("source_identity", {}),
+            "candidate_identity": packet.get("candidate_identity", {}),
+            "artifacts": [item.to_dict() for item in artifacts],
+            "diff": diff,
+            "receipts": receipt_map,
+            "resolved_receipts": resolved_receipts,
+            "action_receipts": action_receipts,
+            "baseline": tests.get("baseline"),
+            "measurements": measurements,
+            "limitations": list(packet.get("limitations", [])),
+            "provenance": {
+                "runs": provenance_runs,
+                "bindings": bindings,
+                "handoffs": [item.to_dict() for item in handoffs],
+                "continuity": continuity,
+            },
+            "messages": [item.to_dict() for item in messages],
+            "handoffs": [item.to_dict() for item in handoffs],
+            "packet": packet,
+            "integrity": integrity,
+            "transport": {
+                "source": "LabStore.artifacts",
+                "durable": True,
+                "restart_recoverable": True,
+            },
+        }
+
+    def get_evidence_handoff(
+        self, session_id: str | None = None, packet_id: str | None = None,
+        *, packet_sha256: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return one complete Builder -> Reviewer handoff after restart."""
+        self.initialize()
+        if packet_id is None and isinstance(session_id, str) \
+                and session_id.startswith("REVIEW_EVIDENCE_PACKET:"):
+            packet_id, session_id = session_id, None
+        resolved = self._evidence_packet_artifact(session_id, packet_id)
+        if resolved is None:
+            return None
+        artifact, packet, stored_sha256 = resolved
+        if packet_sha256 is not None and packet_sha256 != stored_sha256:
+            return None
+        return self._evidence_handoff_document(artifact, packet, stored_sha256)
+
+    get_review_evidence_packet = get_evidence_handoff
+    get_builder_reviewer_evidence = get_evidence_handoff
+
+    def list_evidence_handoffs(self, session_id: str | None = None) -> list[dict[str, Any]]:
+        """Return every durable packet, oldest-first, for a mission or Lab."""
+        self.initialize()
+        if session_id is not None:
+            packet_artifacts = [item for item in self.list_artifacts(session_id)
+                                if item.kind == "REVIEW_EVIDENCE_PACKET"]
+        else:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM artifacts WHERE kind=? ORDER BY created_at ASC",
+                    ("REVIEW_EVIDENCE_PACKET",),
+                ).fetchall()
+            packet_artifacts = [Artifact(
+                id=row["id"], session_id=row["session_id"], task_id=row["task_id"],
+                kind=row["kind"], title=row["title"], body=row["body"],
+                path=row["path"], created_at=row["created_at"],
+            ) for row in rows]
+        result = []
+        for artifact in packet_artifacts:
+            parsed = self._read_evidence_packet(artifact)
+            if parsed is None:
+                continue
+            packet, packet_sha256 = parsed
+            result.append(self._evidence_handoff_document(artifact, packet, packet_sha256))
+        return result
+
+    list_review_evidence_packets = list_evidence_handoffs
 
     # ------------------------------------------------------------------
     # Capability gap
@@ -993,3 +1329,119 @@ class LabStore:
                 """,
                 (event_id, memory_ref, time.time()),
             )
+
+    # ------------------------------------------------------------------
+    # Central marked-verified lessons
+    # ------------------------------------------------------------------
+
+    def promote_lesson(self, source_event_id: str) -> LabLesson:
+        """Promote one ``lesson.marked_verified`` event into central memory.
+
+        The marker must point to an earlier durable event in the same session.
+        This proves traceability, not the truth of the lesson. Promotion is
+        transactional and keyed by its marker, so replay returns the original
+        row without adding another ``lesson.promoted`` event.
+        """
+        from core.lab_v1.domain import EventType
+
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                "SELECT * FROM lab_lessons WHERE source_event_id=?",
+                (source_event_id,),
+            ).fetchone()
+            if existing is not None:
+                return self._row_to_lesson(existing)
+
+            source = conn.execute(
+                "SELECT * FROM events WHERE id=?", (source_event_id,)
+            ).fetchone()
+            if source is None or source["type"] != EventType.LESSON_MARKED_VERIFIED:
+                raise ValueError("Only a marked-verified lesson event can be promoted")
+            if source["session_id"] is None or conn.execute(
+                "SELECT 1 FROM sessions WHERE id=?", (source["session_id"],)
+            ).fetchone() is None:
+                raise ValueError("A lesson requires an existing source session")
+
+            payload = json.loads(source["payload"])
+            statement = " ".join(str(payload.get("lesson") or "").split())
+            evidence_event_id = " ".join(str(payload.get("evidence_event_id") or "").split())
+            if not statement or not evidence_event_id:
+                raise ValueError("A marked-verified lesson requires lesson and evidence_event_id")
+            evidence = conn.execute(
+                "SELECT * FROM events WHERE id=?", (evidence_event_id,)
+            ).fetchone()
+            if (
+                evidence is None
+                or evidence["session_id"] != source["session_id"]
+                or evidence["seq"] >= source["seq"]
+            ):
+                raise ValueError("Lesson evidence must resolve to an earlier event in the same session")
+            evidence_ref = f"event:{evidence_event_id}"
+
+            lesson = LabLesson(
+                id=f"lesson:{source_event_id}",
+                source_event_id=source_event_id,
+                source_session_id=source["session_id"],
+                statement=statement,
+                evidence_ref=evidence_ref,
+                created_at=time.time(),
+            )
+            conn.execute(
+                """
+                INSERT INTO lab_lessons(
+                    id, source_event_id, source_session_id, statement,
+                    evidence_ref, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    lesson.id, lesson.source_event_id, lesson.source_session_id,
+                    lesson.statement, lesson.evidence_ref, lesson.created_at,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO events(id, type, session_id, entity_id, payload, occurred_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"lesson-promoted:{source_event_id}",
+                    EventType.LESSON_PROMOTED,
+                    lesson.source_session_id,
+                    lesson.id,
+                    json.dumps({
+                        "source_event_id": source_event_id,
+                        "evidence_ref": lesson.evidence_ref,
+                    }),
+                    lesson.created_at,
+                ),
+            )
+        return lesson
+
+    def list_lessons(self, limit: int = 100) -> list[LabLesson]:
+        """Return central lessons across every Lab mission, newest first."""
+        if int(limit) <= 0:
+            return []
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM lab_lessons ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (min(int(limit), 500),),
+            ).fetchall()
+        return [self._row_to_lesson(row) for row in rows]
+
+    def lesson_context(self, session_id: str, limit: int = 10) -> list[str]:
+        """Read global lessons for a known mission's bounded context packet."""
+        if self.get_session(session_id) is None:
+            raise ValueError("Unknown session")
+        return [lesson.statement for lesson in self.list_lessons(limit=limit)]
+
+    @staticmethod
+    def _row_to_lesson(row: sqlite3.Row) -> LabLesson:
+        return LabLesson(
+            id=row["id"],
+            source_event_id=row["source_event_id"],
+            source_session_id=row["source_session_id"],
+            statement=row["statement"],
+            evidence_ref=row["evidence_ref"],
+            created_at=row["created_at"],
+        )

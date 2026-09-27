@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -66,6 +67,48 @@ sys.path.insert(0, str(RAIZ))
 
 from core.paths import config_dir  # noqa: E402
 from core.telegram_ponte import PonteTelegram  # noqa: E402
+
+
+class _SingleInstanceLock:
+    def __init__(self, path: Path):
+        self.path, self._handle = path, None
+
+    def acquire(self) -> bool:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._handle = self.path.open("a+b")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self._handle.seek(0); self._handle.write(b"0"); self._handle.flush(); self._handle.seek(0)
+                msvcrt.locking(self._handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self._handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except (OSError, IOError):
+            self.release(); return False
+
+    def release(self) -> None:
+        if self._handle is None: return
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self._handle.seek(0); msvcrt.locking(self._handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self._handle.fileno(), fcntl.LOCK_UN)
+        except (OSError, IOError): pass
+        self._handle.close(); self._handle = None
+
+
+def _log(message: str) -> None:
+    line = f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} {message}"
+    print(line, flush=True)
+    try:
+        path = config_dir() / "telegram_bridge.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream: stream.write(line + "\n")
+    except OSError: pass
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +126,16 @@ def _carregar_token() -> str:
 
 
 def _carregar_dono_persistente() -> int | None:
+    # A configuração explícita é a fonte de verdade. O marcador pode conter
+    # um dono antigo (inclusive de um smoke test) e, nesse caso, a ponte
+    # ficaria viva mas ignoraria silenciosamente o chat atual.
+    try:
+        dados = json.loads((config_dir() / "api_keys.json").read_text(encoding="utf-8-sig"))
+        configurado = dados.get("telegram_owner_chat_id")
+        if configurado:
+            return int(configurado)
+    except (OSError, ValueError, TypeError):
+        pass
     arquivo = config_dir() / "telegram_lido.json"
     if not arquivo.exists():
         return None
@@ -255,39 +308,47 @@ async def _executar(destino: str, texto: str) -> str:
 # Loop principal
 # ---------------------------------------------------------------------------
 async def main() -> int:
+    lock = _SingleInstanceLock(config_dir() / "telegram_bridge.lock")
+    if not lock.acquire():
+        _log("[BOT] Outra ponte Telegram ja esta rodando; encerrando esta copia.")
+        return 5
     token = _carregar_token()
     if not token:
-        print("[BOT] Sem token em config/api_keys.json::telegram_bot_token", flush=True)
-        return 2
+        _log("[BOT] Sem token em config/api_keys.json::telegram_bot_token")
+        lock.release(); return 2
 
     dono = _carregar_dono_persistente()
     ponte = PonteTelegram(token, _executar, dono=dono)
 
-    print(
+    _log(
         f"[BOT] Subindo ponte Telegram (dono persistido={dono!r}). "
-        f"Ctrl+C para parar.",
-        flush=True,
+        f"Ctrl+C para parar."
     )
 
     if not await ponte.iniciar():
-        print("[BOT] Falha ao iniciar a ponte (token recusado pelo Telegram?)", flush=True)
+        _log("[BOT] Falha ao iniciar a ponte (token recusado pelo Telegram?)")
+        lock.release()
         return 3
 
-    print("[BOT] Ponte ativa. Aguardando mensagens...", flush=True)
+    _log("[BOT] Ponte ativa. Aguardando mensagens...")
 
     try:
         while True:
             await asyncio.sleep(1)
             if not ponte.esta_viva:
-                print("[BOT] Ponte ficou muda. Vou tentar religar.", flush=True)
+                _log("[BOT] Ponte ficou muda. Vou tentar religar.")
                 await ponte.parar()
                 if not await ponte.iniciar():
-                    print("[BOT] Não consegui religar.", flush=True)
+                    _log("[BOT] Não consegui religar.")
+                    lock.release()
                     return 4
     except (KeyboardInterrupt, SystemExit):
-        print("\n[BOT] Encerrando...", flush=True)
+        _log("[BOT] Encerrando...")
         await ponte.parar()
+        lock.release()
         return 0
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

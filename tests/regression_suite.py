@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -62,12 +63,15 @@ def run_golden_path_smoke(
         raise RegressionSuiteError(f"Python do projeto não encontrado: {python_path}")
 
     try:
+        nested_env = os.environ.copy()
+        nested_env["ZARA_TEST_ALLOW_NESTED"] = "1"
         result = subprocess.run(
             [str(python_path), "-m", "pytest", "-q", *test_files],
             cwd=root,
             capture_output=True,
             text=True,
             timeout=120,
+            env=nested_env,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RegressionSuiteError(f"Não consegui rodar pytest: {exc}") from exc

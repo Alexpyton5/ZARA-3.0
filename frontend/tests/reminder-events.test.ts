@@ -1,4 +1,8 @@
-//@@ This test was removed because it spawns external processes which are blocked by the current sandbox policy.
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import { normalizeReminderEvent } from '../src/reminderEvents'
+
 test('preserves Portuguese reminder text', () => {
   const reminder = normalizeReminderEvent({
     id: 'REM-1',

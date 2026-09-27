@@ -42,10 +42,10 @@ def _handler() -> IPCHandler:
     "Zara, o que voce acha disso?",
     "Zara, obrigado",
 ])
-def test_conversa_e_autorizada_sem_liberar_audio_do_gemini(frase):
+def test_conversa_autorizada_responde_direto_pelo_gemini_live(frase):
     handler = _handler()
     assert handler._voice_is_authorized_conversation(frase) is True
-    assert handler._voice_can_answer_directly(frase) is False
+    assert handler._voice_can_answer_directly(frase) is True
 
 
 @pytest.mark.parametrize("frase", [
@@ -137,13 +137,20 @@ def test_classificador_nao_arma_nem_desarma_a_janela_de_continuacao():
 # --------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_turno_de_conversa_ignora_resposta_gemini_e_usa_front_brain():
+async def test_turno_de_conversa_registra_resposta_gemini_live_sem_front_brain():
     handler = _handler()
     await handler._on_gemini_live_turn(
         "Zara, tudo bem?", "Tudo otimo, Alex.", direct=True
     )
-    handler._process_voice_message.assert_awaited_once_with("tudo bem?")
-    assert not any("Tudo otimo, Alex." in str(call) for call in handler._append_conversation_message.await_args_list)
+    handler._process_voice_message.assert_not_awaited()
+    assert any(
+        call.args == ("assistant", "Tudo otimo, Alex.", "gemini_live")
+        for call in handler._append_conversation_message.await_args_list
+    )
+    assert any(
+        call.args[0] == "message" and call.args[1]["content"] == "Tudo otimo, Alex."
+        for call in handler.send_event.await_args_list
+    )
 
 
 @pytest.mark.asyncio
@@ -206,6 +213,83 @@ async def test_early_executor_route_is_not_duplicated_at_turn_complete():
     await asyncio.sleep(0)
 
     on_turn.assert_awaited_once_with("Zara, que horas são?", "", False)
+
+
+@pytest.mark.asyncio
+async def test_expected_client_interrupt_does_not_abort_kore_response():
+    on_interrupt = AsyncMock()
+    on_output_audio = AsyncMock()
+    voice = GeminiLiveVoice(
+        GeminiLiveVoiceConfig(api_key="test", audio_transport="renderer"),
+        can_answer_directly=lambda _text: False,
+        on_interrupt=on_interrupt,
+        on_output_audio=on_output_audio,
+    )
+    voice.on_turn = AsyncMock()
+    voice._input_text = "Zara, diminua o volume"
+    voice._turn_route_decided = True
+    voice._route_executor_early()
+    await asyncio.sleep(0)
+
+    speech_done = asyncio.Event()
+    voice._speech_queue = asyncio.Queue()
+    voice._speech_queue.put_nowait(("Volume definido para 20%.", speech_done))
+    send_started = asyncio.Event()
+    audio = b"\x00" * 480
+
+    class Session:
+        async def send_client_content(self, **_kwargs):
+            send_started.set()
+
+        async def receive(self):
+            yield SimpleNamespace(server_content=SimpleNamespace(interrupted=True))
+            yield SimpleNamespace(server_content=SimpleNamespace(turn_complete=True))
+            assert not speech_done.is_set()
+            yield SimpleNamespace(server_content=SimpleNamespace(
+                model_turn=SimpleNamespace(parts=[SimpleNamespace(
+                    inline_data=SimpleNamespace(data=audio)
+                )])
+            ))
+            yield SimpleNamespace(server_content=SimpleNamespace(turn_complete=True))
+            voice._stop.set()
+
+    voice._schedule_idle_after_cooldown = lambda: None
+    types = SimpleNamespace(
+        Content=lambda **kwargs: kwargs,
+        Part=lambda **kwargs: kwargs,
+    )
+    session = Session()
+    sender = asyncio.create_task(voice._send_speech_loop(session, types))
+    await asyncio.wait_for(send_started.wait(), timeout=0.2)
+    await asyncio.wait_for(voice._receive_loop(session, sd=None), timeout=0.2)
+    await asyncio.wait_for(sender, timeout=0.2)
+
+    on_interrupt.assert_not_awaited()
+    on_output_audio.assert_awaited_once_with(audio)
+    assert speech_done.is_set()
+
+
+@pytest.mark.asyncio
+async def test_unclassified_server_interrupt_still_triggers_barge_in():
+    on_interrupt = AsyncMock()
+    voice = GeminiLiveVoice(
+        GeminiLiveVoiceConfig(api_key="test"),
+        on_interrupt=on_interrupt,
+    )
+    speech_done = asyncio.Event()
+    voice._speech_done = speech_done
+    voice._play_generated_audio = True
+
+    class Session:
+        async def receive(self):
+            yield SimpleNamespace(server_content=SimpleNamespace(interrupted=True))
+            voice._stop.set()
+
+    voice._schedule_idle_after_cooldown = lambda: None
+    await asyncio.wait_for(voice._receive_loop(Session(), sd=None), timeout=0.2)
+
+    on_interrupt.assert_awaited_once()
+    assert speech_done.is_set()
 
 
 @pytest.mark.asyncio
@@ -571,3 +655,5 @@ async def test_eco_nao_cancela_turno_anterior_valido():
     assert previous.cancelled() is False
     previous.cancel()
     await asyncio.gather(previous, return_exceptions=True)
+
+\n

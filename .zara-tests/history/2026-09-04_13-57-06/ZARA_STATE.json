@@ -1,0 +1,25 @@
+{
+  "run_id": "2026-09-04_13-57-06",
+  "commit": "2dff34e",
+  "branch": "backup/estado-20260820-1143",
+  "health_pct": 100,
+  "root_hygiene": "CRITICAL",
+  "duration_seconds": 0.4,
+  "counts": {
+    "PASS": 2
+  },
+  "working": [
+    "SYS-DISK",
+    "TECH-001"
+  ],
+  "broken": [],
+  "degraded": [],
+  "unverified": [],
+  "known_failures": [],
+  "new_failures": [],
+  "slow": [],
+  "capabilities_total": null,
+  "changed_files_since_baseline": [
+    "tools/zara_selftest.py"
+  ]
+}

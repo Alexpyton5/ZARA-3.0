@@ -13,11 +13,17 @@ _CRITICISM = re.compile(
     r"precisa\s+melhorar|deveria|n[aã]o\s+pode\s+ser|cr[ií]tic[ao])\b",
     re.IGNORECASE,
 )
+_NON_CRITICAL_FAILURE_NEGATION = re.compile(
+    r"\bn[aã]o\s+h[aá]\s+(?:(?:nenhum|qualquer)\s+)?"
+    r"(?:erro|falha)(?:\s+ou\s+(?:erro|falha))*\b",
+    re.IGNORECASE,
+)
 
 
 def looks_like_product_criticism(text: str) -> bool:
     clean = " ".join(str(text or "").split())
-    return len(clean) >= 8 and bool(_CRITICISM.search(clean))
+    searchable = _NON_CRITICAL_FAILURE_NEGATION.sub(" ", clean)
+    return len(clean) >= 8 and bool(_CRITICISM.search(searchable))
 
 
 class FeedbackInbox:

@@ -1,0 +1,470 @@
+{
+  "schema": "zara-root-inventory-v1",
+  "generated_at_utc": "2026-09-18T22:42:40+00:00",
+  "root": "/mnt/528b2e8f-0da5-47bd-9b01-251f9fcae860/ZARA 3.0 CLEAN 002",
+  "read_only": true,
+  "entries": [
+    {
+      "name": "$root",
+      "kind": "directory",
+      "classification": "root-entry",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".agent_context",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".agents",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".claude",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".codex",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".git",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".gitignore",
+      "kind": "file",
+      "classification": "temporary-or-hidden",
+      "size_bytes": 2611,
+      "sha256": "e3df43b3aaec1749e1300e9ac6805929efde30c8bc8877c3c71a34c44a598fe0"
+    },
+    {
+      "name": ".hermes-runtime",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".mcp.json",
+      "kind": "file",
+      "classification": "temporary-or-hidden",
+      "size_bytes": 663,
+      "sha256": "c79642fb7d39fa762324590169bd6da18f0f9b9a638623aee212b0f6342aadce"
+    },
+    {
+      "name": ".opencode",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".pnpm-store",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".pytest_cache",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".unlazy",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".venv",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".zara-dev",
+      "kind": "directory",
+      "classification": "temporary-or-hidden",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": ".zara-tests",
+      "kind": "directory",
+      "classification": "evidence",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "_quarentena",
+      "kind": "directory",
+      "classification": "quarantine",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "ABRIR-A-ZARA.bat",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 300,
+      "sha256": "d692ee750918e737263eb86c53da78965fb6c66848edbb7947f53468b7b9dd1d"
+    },
+    {
+      "name": "AGENTS.md",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 5389,
+      "sha256": "3f73acf0af6df35b75a14813f78ad57c64c96c7a20d004bbb2753214c09f7dd7"
+    },
+    {
+      "name": "artifacts",
+      "kind": "directory",
+      "classification": "evidence",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "build-diagnostico.log",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 33473,
+      "sha256": "3c15ec23402c74a35b6a2b8d75e808778294570d968cfaf73d1cf37757c4841a"
+    },
+    {
+      "name": "build-output.log",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 44297,
+      "sha256": "320c7637657ac88e39d67b9cf4c291e9152bd4aa2c417705de49f87ad41f0237"
+    },
+    {
+      "name": "build-rebuild-completo.log",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 148,
+      "sha256": "0dc8dd84c5dcf389f407425a00d206b5f6a3da06caddd62ae9cb630173d07005"
+    },
+    {
+      "name": "build-run-2.log",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 148,
+      "sha256": "0dc8dd84c5dcf389f407425a00d206b5f6a3da06caddd62ae9cb630173d07005"
+    },
+    {
+      "name": "build-sidecar",
+      "kind": "directory",
+      "classification": "build-artifact",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "build_exe.py",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 18807,
+      "sha256": "6f2c7e417cd2e0fce0f6f81ebb74740df8aee07fb59fa0870cc62ade0313c72f"
+    },
+    {
+      "name": "CLAUDE.md",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 6758,
+      "sha256": "3b7bd8f05ee1323cc0c11c009278c0943a21db92a8d7420464e437bcf1eccc52"
+    },
+    {
+      "name": "CLEAN_BUILD_ID.txt",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 10,
+      "sha256": "9b9b3bb767f67c5ffb04a40c02f59b4466bc3c0232c6b03b1bff9e74d1ebd837"
+    },
+    {
+      "name": "config",
+      "kind": "directory",
+      "classification": "runtime-data",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "core",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "data",
+      "kind": "directory",
+      "classification": "runtime-data",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "dist-sidecar",
+      "kind": "directory",
+      "classification": "build-artifact",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "docs",
+      "kind": "directory",
+      "classification": "documentation",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "DOSSIE ZARA",
+      "kind": "directory",
+      "classification": "documentation",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "frontend",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "GATES.md",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 2373,
+      "sha256": "a0a4487970325226a3b4bb33b989248756315442adf318c923952ac50890250a"
+    },
+    {
+      "name": "lembretes",
+      "kind": "directory",
+      "classification": "runtime-data",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "main.py",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 4601,
+      "sha256": "74716109a5effdf109bde92eaf61c1d78731974c4f68bb40e6b23107476d2e0f"
+    },
+    {
+      "name": "memory",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "memory_system",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "PATCH_SHA256_MANIFEST.txt",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 96,
+      "sha256": "9670fb012e089337b0636a7e1b49157c5d9e7ee2f92ce587371e548c2696e5de"
+    },
+    {
+      "name": "PERSONALIDADE_DA_ZARA.txt",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 478,
+      "sha256": "b047591ce4735e6398ce9c0f56e20be43f0aa599e0bd3f31cb8b498bfc5e6ef9"
+    },
+    {
+      "name": "plugins",
+      "kind": "directory",
+      "classification": "root-entry",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "profiles",
+      "kind": "directory",
+      "classification": "runtime-data",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "pyproject.toml",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 3383,
+      "sha256": "786c3b986e91fb4dcce32fd1abde15712a6443db928ef05e614a319086f0a16f"
+    },
+    {
+      "name": "README.md",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 1089,
+      "sha256": "ef8c1f88c2ab5f37d907f93c825f7c0fa79d57656af264a4133a93f9704aab68"
+    },
+    {
+      "name": "scripts",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "SHA256_MANIFEST.txt",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 96,
+      "sha256": "9670fb012e089337b0636a7e1b49157c5d9e7ee2f92ce587371e548c2696e5de"
+    },
+    {
+      "name": "skills",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "spikes",
+      "kind": "directory",
+      "classification": "root-entry",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "tests",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "tools",
+      "kind": "directory",
+      "classification": "source",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "uv.lock",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 691276,
+      "sha256": "7c7b0a4dc275dc70cffc091adab10e3cd0de79d6c7a01032eb3f3974ca060d61"
+    },
+    {
+      "name": "voice",
+      "kind": "directory",
+      "classification": "runtime-data",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "wiki",
+      "kind": "directory",
+      "classification": "documentation",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "windows-ops",
+      "kind": "directory",
+      "classification": "runtime-data",
+      "size_bytes": null,
+      "sha256": null
+    },
+    {
+      "name": "ZARA_ACTIVE_BUILD.json",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 946,
+      "sha256": "edb1f302545bd6de9835323961d40d077101a0cfc64b0f152468680353fa59e6"
+    },
+    {
+      "name": "ZARA_AGENT_START_HERE.md",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 9745,
+      "sha256": "88b574644df338267479de13fd666a52fcb217da557222cf308e9c61fd8392f7"
+    },
+    {
+      "name": "ZARA_BUILD_ATUAL.bat",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 314,
+      "sha256": "91402a0dcf13f6d4366e144cefa4f808cad6344a8e2c2277d57de3f7dc5e53d9"
+    },
+    {
+      "name": "ZARA_BUILD_DIAGNOSTICO.bat",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 1119,
+      "sha256": "e9a444b081088bf14a0d488b788b5db4e4ab0baadebb14f6862e8b94de7e1f10"
+    },
+    {
+      "name": "ZARA_BUILD_DIAGNOSTICO_DIRETO.bat",
+      "kind": "file",
+      "classification": "build-artifact",
+      "size_bytes": 1180,
+      "sha256": "f2cbd4b51dc1d453e5bf6ce5c6d3ab9760cdf113318dbc19344648b6c8bd6df8"
+    },
+    {
+      "name": "ZARA_EMPACOTAR.bat",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 720,
+      "sha256": "0919a0442b5e52702e48319da7d53a295bfe66d1d568b68ca3c8374c1438dbc5"
+    },
+    {
+      "name": "ZARA_GERAR_INSTALADOR_AUTOPILOT.bat",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 1586,
+      "sha256": "02740946933e12d52775a2b470b2d255a74235c060a4f40655fb84d73403f467"
+    },
+    {
+      "name": "ZARA_INICIAR.bat",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 300,
+      "sha256": "d692ee750918e737263eb86c53da78965fb6c66848edbb7947f53468b7b9dd1d"
+    },
+    {
+      "name": "ZARA_MASTER_CONTEXT.md",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 25630,
+      "sha256": "0fec224df42baf352af04a984a99ab909f235cd435a362474d86ebf18eebf77a"
+    },
+    {
+      "name": "ZARA_TESTAR_TUDO.bat",
+      "kind": "file",
+      "classification": "root-entry",
+      "size_bytes": 2484,
+      "sha256": "9a8fc70b1b6abe2d7753c9a79f721a36c47d373b6eeeeab45d4dc6420d97c5ff"
+    }
+  ]
+}

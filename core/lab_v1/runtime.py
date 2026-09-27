@@ -20,11 +20,12 @@ from __future__ import annotations
 import json
 import re
 import threading
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass, field, replace
+from typing import Any, Protocol
 
 from core.lab_v1.domain import (
     AgentProfile,
+    Artifact,
     Availability,
     CapabilityGap,
     ContextPacket,
@@ -50,12 +51,116 @@ from core.lab_v1.domain import (
     new_id,
     now,
 )
-from core.lab_v1.memory_adapter import LabMemoryAdapter
+from core.lab_v1.memory_adapter import (
+    LabMemoryAdapter,
+    is_current_message_echo,
+    is_safe_recovery_text,
+)
 from core.lab_v1.providers.registry import ProviderRegistry
 from core.lab_v1.providers.base import InvocationConfigurationError, InvocationOptions
+from core.lab_v1.review_evidence_packet import LOG_EXCERPT_CHARS
 from core.lab_v1.store import LabStore
+from core.lab_v1 import messages as message_protocol
 
-__all__ = ["LabRuntime"]
+__all__ = ["LabRuntime", "MissionRoom"]
+
+
+class MissionRoom:
+    """The multi-agent room seam over `MissionController`.
+
+    A thin, engine-agnostic facade for the Research/Architect/Builder/QA
+    exchange inside a mission: explicit recipient, correlation id, pending
+    reply, bounded contestation and explicit close. It never calls a model —
+    every transition belongs to the MissionController, which owns all state
+    and persistence. Engines (Autopilot, future drivers) call this instead of
+    building a second delegation engine.
+    """
+
+    def __init__(self, controller, runtime=None) -> None:
+        self.controller = controller
+        # Existing MissionController callers keep the durable room API.  A
+        # LabRuntime can additionally expose the canonical Message table
+        # without creating a second room engine.
+        self.runtime = runtime or (
+            controller if hasattr(controller, "send_agent_message") else None
+        )
+
+    def ask(self, session_id, *, step_id, from_agent_id, to_agent_id, question,
+            kind="QUESTION", correlation_id=None, refinement_budget=0):
+        return self.controller.room_ask(
+            session_id, step_id=step_id, from_agent_id=from_agent_id,
+            to_agent_id=to_agent_id, question=question, kind=kind,
+            correlation_id=correlation_id, refinement_budget=refinement_budget,
+        )
+
+    def answer(self, session_id, correlation_id, reply, *, decision=None):
+        return self.controller.room_answer(session_id, correlation_id, reply, decision=decision)
+
+    def contest(self, session_id, correlation_id, corrections):
+        return self.controller.room_contest(session_id, correlation_id, corrections)
+
+    def close(self, session_id, correlation_id, *, outcome="ANSWERED"):
+        return self.controller.room_close(session_id, correlation_id, outcome=outcome)
+
+    def state(self, session_id, correlation_id):
+        return self.controller.room_state(session_id, correlation_id)
+
+    def messages(self, session_id):
+        if self.runtime is not None:
+            return self.runtime.list_agent_messages(session_id)
+        return self.controller.room_messages(session_id)
+
+    def send(self, session_id, *, from_agent_id, content, to_agent_id=None,
+             task_id=None, run_id=None, correlation_id=None, reply_to=None,
+             natural_language=False):
+        if self.runtime is None:
+            raise ValueError("MissionRoom persistent messaging needs LabRuntime")
+        sender = self.runtime.send_natural_language if natural_language else self.runtime.send_agent_message
+        return sender(
+            session_id, from_agent_id=from_agent_id, content=content,
+            to_agent_id=to_agent_id, task_id=task_id, run_id=run_id,
+            correlation_id=correlation_id, reply_to=reply_to,
+        )
+
+    def reply(self, session_id, *, from_agent_id, reply_to, content,
+              to_agent_id=None, run_id=None, correlation_id=None,
+              natural_language=False):
+        return self.send(
+            session_id, from_agent_id=from_agent_id, content=content,
+            to_agent_id=to_agent_id, run_id=run_id,
+            correlation_id=correlation_id, reply_to=reply_to,
+            natural_language=natural_language,
+        )
+
+    def pending_replies(self, session_id, *, for_agent_id=None):
+        if self.runtime is None:
+            raise ValueError("MissionRoom persistent messaging needs LabRuntime")
+        return self.runtime.pending_agent_replies(session_id, for_agent_id=for_agent_id)
+
+    def state_message(self, session_id, message_id):
+        if self.runtime is None:
+            raise ValueError("MissionRoom persistent messaging needs LabRuntime")
+        return self.runtime.agent_message_state(session_id, message_id)
+
+
+class MemoryRecovery(Protocol):
+    """Shared contract implemented by the Memory agent.
+
+    The Lab runtime asks this layer for bounded, recoverable context instead
+    of building prompts from store rows directly.  When the adapter does not
+    implement the contract, the runtime falls back to its existing local
+    helpers so tests and old entry points keep working until the Memory agent
+    lands.
+    """
+
+    def recover_session_context(self, session: Session, text: str) -> str:
+        """Return bounded memory text for the runtime to append."""
+        ...
+
+    def recover_agent_context(self, session: Session, agent_id: str) -> list[str]:
+        """Return memory lines to inject into an Autopilot worker context."""
+        ...
+
 
 
 # --------------------------------------------------------------------------
@@ -66,8 +171,19 @@ __all__ = ["LabRuntime"]
 CORE_TEAM_NAME = "ZARA Core"
 
 CORE_TEAM_AGENTS: dict[str, dict[str, str]] = {
-    "ceo": {"name": "Artemis", "provider_id": "claude_cli", "model": "opus"},
-    "builder": {"name": "Vulcan", "provider_id": "claude_cli", "model": "sonnet"},
+    # OpenAI/Codex remains the selected workforce route. Claude may stay
+    # registered for diagnostics, but workforce_policy keeps it on standby.
+    "ceo": {"name": "Artemis", "provider_id": "codex_cli", "model": "gpt-5.6-sol"},
+    "builder": {"name": "Vulcan", "provider_id": "codex_cli", "model": "gpt-5.6-luna"},
+    "reviewer": {"name": "Kairos", "provider_id": "codex_cli", "model": "gpt-5.6-terra"},
+}
+
+# Separate relay agents preserve the original role and mission when the
+# primary worker becomes unavailable. They are selected
+# only through the explicit fallback handoff, never as a silent model swap.
+CORE_TEAM_FALLBACK_AGENTS: dict[str, dict[str, str]] = {
+    "ceo": {"name": "Artemis Relay", "provider_id": "nine_router", "model": "oc/muse-spark-1.3-contributor-free"},
+    "builder": {"name": "Vulcan Relay", "provider_id": "nine_router", "model": "alex"},
 }
 
 CEO_ACTING_REASON = "Papel CEO inicial do time; a disponibilidade depende do provedor verificado."
@@ -102,6 +218,20 @@ Voce recebeu uma tarefa delegada pelo CEO do time. Execute e entregue o resultad
 Responda em texto direto, em portugues, sem JSON.
 Se nao conseguir concluir, diga exatamente o que faltou. Nunca finja que fez."""
 
+_REVIEWER_PROMPT_TEMPLATE = """Voce e {agent_name}, REVISOR no time {team_name} da ZARA.
+Voce recebe o resultado entregue pelo executor e os criterios de aceite da tarefa.
+Responda SEMPRE com um unico objeto JSON, sem nenhum texto fora dele e sem cercas de codigo:
+{{"verdict": "APPROVED", "notes": "...", "corrections": []}}
+
+Onde:
+- verdict: "APPROVED" se o resultado atende aos criterios, ou "CHANGES_REQUESTED" se nao atende.
+- notes: motivo curto do veredito.
+- corrections: com "CHANGES_REQUESTED", lista curta do que exatamente corrigir; com "APPROVED", [].
+
+Regras:
+- Julgue apenas o resultado contra os criterios de aceite. Nao reescreva o trabalho.
+- Nao inclua raciocinio interno. So o veredito."""
+
 
 def _ceo_system_prompt(agent: AgentProfile, designation: str, team: Team, roster_lines: list[str]) -> str:
     return _CEO_PROMPT_TEMPLATE.format(
@@ -117,6 +247,19 @@ def _builder_system_prompt(agent: AgentProfile, team: Team) -> str:
     return _BUILDER_PROMPT_TEMPLATE.format(agent_name=agent.name, role="executor da tarefa", team_name=team.name) + ("\nPerfil do agente:\n" + agent.instructions if agent.instructions else "")
 
 
+def _reviewer_system_prompt(agent: AgentProfile, team: Team) -> str:
+    return _REVIEWER_PROMPT_TEMPLATE.format(agent_name=agent.name, team_name=team.name) + ("\nPerfil do agente:\n" + agent.instructions if agent.instructions else "")
+
+
+# At most this many paid reviewer runs per delegation. A rejection on the
+# last round is exhaustion, not another repair.
+_MAX_REVIEW_ROUNDS = 2
+
+# Reviewer notes/corrections are bounded to the same tail limit already used
+# for log excerpts (2000 chars) on every path that consumes them.
+_REVIEW_TAIL_CHARS = LOG_EXCERPT_CHARS
+
+
 def _roster_line(agent: AgentProfile) -> str:
     return f"- {agent.name} ({agent.role.value}, modelo {agent.model})"
 
@@ -128,6 +271,44 @@ def _safe_role(value: str) -> RoleName | None:
         return RoleName(value.strip().upper())
     except ValueError:
         return None
+
+
+_RECOVERY_ECHO_TOKEN = re.compile(r"\w+", re.UNICODE)
+
+
+def _recovery_repeats_current_message(appendix: str, current_text: str) -> bool:
+    """Detect a material replay of Alex's current turn inside an appendix.
+
+    The recovery contract permits related facts, so this intentionally avoids
+    substring matching on individual words.  A full normalized turn is an
+    echo only when it is long enough to be meaningful.  A partial echo needs
+    ordered token overlap covering at least 60% of a sufficiently detailed
+    current turn (and never fewer than five words).  The overlap is a longest
+    common subsequence, so filler words cannot bypass the guard.
+    """
+    current_tokens = _RECOVERY_ECHO_TOKEN.findall((current_text or "").casefold())
+    appendix_tokens = _RECOVERY_ECHO_TOKEN.findall((appendix or "").casefold())
+    if not current_tokens or not appendix_tokens:
+        return False
+    current_normalized = " ".join(current_tokens)
+    appendix_normalized = " ".join(appendix_tokens)
+    if len(current_normalized) >= 24 and current_normalized in appendix_normalized:
+        return True
+    if len(current_tokens) < 5:
+        return False
+    required_overlap = 4 if len(current_tokens) == 5 else (
+        len(current_tokens) * 3 + 4
+    ) // 5
+    previous = [0] * (len(appendix_tokens) + 1)
+    for current_token in current_tokens:
+        row = [0]
+        for index, appendix_token in enumerate(appendix_tokens, start=1):
+            if current_token == appendix_token:
+                row.append(previous[index - 1] + 1)
+            else:
+                row.append(max(previous[index], row[-1]))
+        previous = row
+    return previous[-1] >= required_overlap
 
 
 # --------------------------------------------------------------------------
@@ -226,6 +407,25 @@ class _DelegationOutcome:
     candidate_agent_ids: list[str] = field(default_factory=list)
 
 
+@dataclass
+class _ReviewOutcome:
+    """What the reviewer leg of a delegation produced.
+
+    `active` means a real, distinct REVIEWER ran (the full four-stage baton
+    chain STRATEGIST -> EXECUTOR -> REVIEWER -> MAESTRO is only written when
+    this is True). `refusal` is a typed reason the review did not happen or
+    did not approve — none of these produce an extra paid Run by themselves.
+    """
+
+    active: bool = False
+    approved: bool = False
+    artifact_ref: str | None = None
+    notes: str = ""
+    corrections: list[str] = field(default_factory=list)
+    refusal: str | None = None
+    refusal_detail: str = ""
+
+
 class LabRuntime:
     """Runs Lab missions against an injected store and provider registry."""
 
@@ -233,14 +433,18 @@ class LabRuntime:
         self,
         store: LabStore,
         registry: ProviderRegistry,
-        memory_adapter: LabMemoryAdapter | None = None,
+        memory_adapter: LabMemoryAdapter | MemoryRecovery | None = None,
+        team_chat: Any | None = None,
     ) -> None:
         self.store = store
         self.registry = registry
         self.memory_adapter = memory_adapter
+        self._team_chat = team_chat
         self.store.initialize()
         self._submit_lock = threading.Lock()
         self._active_sessions: set[str] = set()
+        self._agent_continuity: Any = None
+        self._turn_correlation_id: str | None = None
 
     # ------------------------------------------------------------------
     # 2.1 Bootstrap
@@ -253,32 +457,67 @@ class LabRuntime:
 
     def ensure_core_team(self) -> Team:
         """Idempotent: returns the existing "ZARA Core" team if one exists,
-        otherwise creates it with Artemis (CEO, acting) and Vulcan (BUILDER,
-        permanent), Vulcan wired as Artemis's fallback."""
+        otherwise creates it with the best verified local worker and separate
+        9Router relay workers for role-preserving fallback.
+
+        Existing member choices are intentionally preserved. An older Core
+        team without a reviewer receives one separate reviewer and binding;
+        this does not certify its model or change any existing assignment.
+        """
         for team in self.store.list_teams(include_archived=True):
             if team.name == CORE_TEAM_NAME:
+                # Early ZARA Core databases were created before the execution
+                # capability became an explicit admission requirement. Those
+                # otherwise valid workers must be upgraded in place: without
+                # it a packaged Lab renders its team but cannot run a mission.
+                expected = {
+                    (item["name"], item["provider_id"], item["model"])
+                    for item in (*CORE_TEAM_AGENTS.values(), *CORE_TEAM_FALLBACK_AGENTS.values())
+                }
+                for agent in self.store.list_agents(team_id=team.id):
+                    identity = (agent.name, agent.provider_id, agent.model)
+                    if identity not in expected or "model.text" in agent.capabilities:
+                        continue
+                    agent.capabilities.append("model.text")
+                    self.store.save_agent(agent)
+                self._ensure_core_reviewer(team)
                 return team
 
         team = Team(id=new_id("team"), name=CORE_TEAM_NAME, objective="Time permanente de trabalho da ZARA.")
         self.store.save_team(team)
         self._emit(EventType.TEAM_CREATED, session_id=None, entity_id=team.id, payload={"name": team.name})
 
-        ceo_cfg = CORE_TEAM_AGENTS["ceo"]
-        builder_cfg = CORE_TEAM_AGENTS["builder"]
+        ceo_cfg, builder_cfg = CORE_TEAM_AGENTS["ceo"], CORE_TEAM_AGENTS["builder"]
+        ceo_fallback_cfg = CORE_TEAM_FALLBACK_AGENTS["ceo"]
+        builder_fallback_cfg = CORE_TEAM_FALLBACK_AGENTS["builder"]
 
         ceo = AgentProfile(
             id=new_id("agent"), name=ceo_cfg["name"], provider_id=ceo_cfg["provider_id"],
             model=ceo_cfg["model"], role=RoleName.CEO, lifecycle=Lifecycle.PERMANENT,
+            capabilities=["model.text"],
         )
         builder = AgentProfile(
             id=new_id("agent"), name=builder_cfg["name"], provider_id=builder_cfg["provider_id"],
             model=builder_cfg["model"], role=RoleName.BUILDER, lifecycle=Lifecycle.PERMANENT,
+            capabilities=["model.text"],
         )
-        # Vulcan is who takes the chair if Artemis (today's acting CEO) goes down.
-        ceo.fallback_agent_id = builder.id
+        ceo_fallback = AgentProfile(
+            id=new_id("agent"), name=ceo_fallback_cfg["name"],
+            provider_id=ceo_fallback_cfg["provider_id"], model=ceo_fallback_cfg["model"],
+            role=RoleName.CEO, lifecycle=Lifecycle.PERMANENT, capabilities=["model.text"],
+        )
+        builder_fallback = AgentProfile(
+            id=new_id("agent"), name=builder_fallback_cfg["name"],
+            provider_id=builder_fallback_cfg["provider_id"], model=builder_fallback_cfg["model"],
+            role=RoleName.BUILDER, lifecycle=Lifecycle.PERMANENT, capabilities=["model.text"],
+        )
+        ceo.fallback_agent_id = ceo_fallback.id
+        builder.fallback_agent_id = builder_fallback.id
 
         self.store.save_agent(builder)
         self.store.save_agent(ceo)
+        self.store.save_agent(builder_fallback)
+        self.store.save_agent(ceo_fallback)
         self._emit(
             EventType.AGENT_CREATED, session_id=None, entity_id=ceo.id,
             payload={"name": ceo.name, "role": ceo.role.value},
@@ -288,7 +527,7 @@ class LabRuntime:
             payload={"name": builder.name, "role": builder.role.value},
         )
 
-        for agent in (ceo, builder):
+        for agent in (ceo, builder, ceo_fallback, builder_fallback):
             self.store.save_membership(TeamMembership(id=new_id("mem"), team_id=team.id, agent_id=agent.id))
 
         ceo_binding = RoleBinding(
@@ -310,7 +549,38 @@ class LabRuntime:
             payload={"role": "BUILDER", "agent_id": builder.id, "designation": "PERMANENT"},
         )
 
+        self._ensure_core_reviewer(team)
         return team
+
+    def _ensure_core_reviewer(self, team: Team) -> None:
+        """Repair the missing Core reviewer once, without changing owner bots."""
+        reviewer = next((agent for agent in self.store.list_agents(team_id=team.id)
+                         if agent.role is RoleName.REVIEWER), None)
+        if reviewer is None:
+            config = CORE_TEAM_AGENTS["reviewer"]
+            reviewer = AgentProfile(
+                id=f"core-reviewer:{team.id}", name=config["name"],
+                provider_id=config["provider_id"], model=config["model"],
+                role=RoleName.REVIEWER, lifecycle=Lifecycle.PERMANENT,
+                capabilities=["model.text"],
+            )
+            self.store.save_agent(reviewer)
+            self.store.save_membership(TeamMembership(
+                id=f"core-reviewer-member:{team.id}", team_id=team.id,
+                agent_id=reviewer.id,
+            ))
+            self._emit(EventType.AGENT_CREATED, session_id=None, entity_id=reviewer.id,
+                       payload={"name": reviewer.name, "role": reviewer.role.value})
+        if self.store.active_binding(team.id, RoleName.REVIEWER) is None:
+            binding = RoleBinding(
+                id=f"core-reviewer-binding:{team.id}", team_id=team.id,
+                role=RoleName.REVIEWER, agent_id=reviewer.id,
+                designation="PERMANENT",
+            )
+            self.store.save_role_binding(binding)
+            self._emit(EventType.ROLE_BOUND, session_id=None, entity_id=binding.id,
+                       payload={"role": "REVIEWER", "agent_id": reviewer.id,
+                                "designation": "PERMANENT"})
 
     # ------------------------------------------------------------------
     # 2.3 submit() — the mission
@@ -326,15 +596,234 @@ class LabRuntime:
             return {"success": False, "code": refusal, "state": "BUSY",
                     "error": "Esta sessao ja pertence a um executor; outro turno nao foi iniciado."}
         try:
-            return self._submit_turn(session_id, text)
+            return self._submit_turn(session_id, text, correlation_id=token)
         finally:
             self.store.release_v1(session_id, token)
 
-    def _submit_turn(self, session_id: str, text: str) -> dict[str, Any]:
+    # ------------------------------------------------------------------
+    # 2.3a persistent MissionRoom communication
+    # ------------------------------------------------------------------
+    def send_natural_language(
+        self, session_id: str, *, from_agent_id: str, content: str,
+        to_agent_id: str | None = None, task_id: str | None = None,
+        run_id: str | None = None, correlation_id: str | None = None,
+        reply_to: str | None = None,
+    ) -> dict[str, Any]:
+        """Send one short natural-language message through the canonical bus.
+
+        Natural language changes only the input convenience.  The persisted
+        result is still addressed by agent id, validated against active team
+        membership and (when present) the task's ``assigned_agent_id``.
+        """
+        return self.send_agent_message(
+            session_id, from_agent_id=from_agent_id, content=content,
+            to_agent_id=to_agent_id, task_id=task_id, run_id=run_id,
+            correlation_id=correlation_id, reply_to=reply_to,
+        )
+
+    def send_agent_message(
+        self, session_id: str, *, from_agent_id: str, content: str,
+        to_agent_id: str | None = None, task_id: str | None = None,
+        run_id: str | None = None, correlation_id: str | None = None,
+        reply_to: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist one addressed agent-to-agent message.
+
+        This is deliberately synchronous and has no model call.  A repeated
+        request with the same correlation and exact message identity returns
+        the original row, making a retry after process death restart-safe.
+        """
+        session = self.store.get_session(session_id)
+        if session is None:
+            raise ValueError(f"sessao '{session_id}' nao encontrada")
+        text = message_protocol.normalize_message_text(content)
+
+        active_ids = message_protocol.active_member_ids(self.store, session.team_id)
+        sender = self.store.get_agent(from_agent_id)
+        if sender is None or sender.archived or from_agent_id not in active_ids:
+            raise message_protocol.MentionResolutionError(
+                "O remetente precisa ser um agente com membership ativo."
+            )
+
+        root = None
+        if reply_to:
+            root = next(
+                (
+                    item for item in self.store.list_messages(session_id, limit=10000)
+                    if item.id == reply_to
+                ),
+                None,
+            )
+            if root is None:
+                raise ValueError("reply_to precisa apontar para uma mensagem persistida.")
+            if root.to_agent_id != from_agent_id:
+                raise ValueError("Somente o destinatario canonico pode responder esta mensagem.")
+            if root.author_agent_id is None or root.author_agent_id == from_agent_id:
+                raise ValueError("reply_to precisa ter um autor agent-to-agent distinto.")
+            if to_agent_id is not None:
+                raise ValueError(
+                    "A resposta precisa voltar ao destinatario canonico (autor da mensagem)."
+                )
+            to_agent_id = root.author_agent_id
+            if correlation_id is None:
+                correlation_id = root.correlation_id
+            if correlation_id and root.correlation_id and correlation_id != root.correlation_id:
+                raise ValueError("A resposta precisa preservar a correlation_id da mensagem raiz.")
+
+        assignment = None
+        if task_id:
+            task = self.store.get_task(task_id)
+            if task is None or task.session_id != session_id:
+                raise message_protocol.MentionResolutionError(
+                    "A tarefa precisa pertencer a esta sessao."
+                )
+        recipients, assignment = message_protocol.resolve_recipient_ids(
+            self.store, team_id=session.team_id, text=text,
+            to_agent_id=to_agent_id, task_id=task_id,
+        )
+        if len(recipients) != 1:
+            raise message_protocol.MentionResolutionError(
+                "Cada mensagem precisa de exatamente um destinatario canonico."
+            )
+        recipient_id = recipients[0]
+        if recipient_id == from_agent_id:
+            raise ValueError("Uma mensagem agent-to-agent precisa de dois agentes distintos.")
+
+        correlation_id = correlation_id or message_protocol.new_correlation_id()
+
+        # Exact identity makes an IPC retry a read, not a duplicate delivery.
+        existing = next(
+            (
+                item for item in self.store.list_messages(session_id, limit=10000)
+                if item.correlation_id == correlation_id
+                and item.author_agent_id == from_agent_id
+                and item.to_agent_id == recipient_id
+                and item.reply_to == reply_to
+                and item.content == text
+            ),
+            None,
+        )
+        if existing is not None:
+            return self._agent_message_result(
+                existing, assignment=assignment, idempotent=True,
+            )
+        if any(item.correlation_id == correlation_id and item.reply_to == reply_to
+               for item in self.store.list_messages(session_id, limit=10000)):
+            raise ValueError("A correlation_id ja foi usada por outra mensagem.")
+
+        if run_id is not None:
+            run = self.store.get_run(run_id)
+            if run is None or run.session_id != session_id or run.agent_id != from_agent_id:
+                raise ValueError("run_id precisa provar a execucao do remetente nesta sessao.")
+
+        recipient = self.store.get_agent(recipient_id)
+        message = Message(
+            id=new_id("msg"), session_id=session_id, kind=MessageKind.AGENT,
+            author=sender.name, content=text, author_agent_id=from_agent_id,
+            run_id=run_id, to_agent_id=recipient_id,
+            to_role=recipient.role.value if recipient else None,
+            reply_to=reply_to, correlation_id=correlation_id,
+        )
+        self.store.add_message(message)
+        provenance = message_protocol.message_provenance(
+            message, task_id=task_id,
+            assigned_agent_id=(assignment or {}).get("assigned_agent_id"),
+        )
+        self._emit(
+            EventType.MESSAGE_CREATED, session_id=session_id, entity_id=message.id,
+            payload={
+                "kind": message.kind.value, "author_agent_id": from_agent_id,
+                "to_agent_id": recipient_id, "reply_to": reply_to,
+                "correlation_id": correlation_id, "task_id": task_id,
+                "assignment": assignment, "provenance": provenance,
+            },
+        )
+        pending = reply_to is None
+        if pending:
+            pending = message.id in message_protocol.pending_reply_ids(
+                self.store.list_messages(session_id, limit=10000)
+            )
+        return self._agent_message_result(message, pending=pending, assignment=assignment)
+
+    def list_agent_messages(
+        self, session_id: str, *, for_agent_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Read canonical messages and reconstruct pending state from rows."""
+        session = self.store.get_session(session_id)
+        if session is None:
+            raise ValueError(f"sessao '{session_id}' nao encontrada")
+        messages = self.store.list_messages(session_id, limit=10000)
+        pending = message_protocol.pending_reply_ids(
+            messages, for_agent_id=for_agent_id,
+        )
+        tasks = self.store.list_tasks(session_id)
+        assignments = {
+            task.assigned_agent_id: {"task_id": task.id, "assigned_agent_id": task.assigned_agent_id}
+            for task in tasks if task.assigned_agent_id
+        }
+        result = []
+        for message in messages:
+            if message.kind != MessageKind.AGENT:
+                continue
+            if for_agent_id is not None and (
+                message.to_agent_id != for_agent_id
+                and message.author_agent_id != for_agent_id
+            ):
+                continue
+            assignment = assignments.get(message.to_agent_id)
+            result.append(self._agent_message_result(
+                message, pending=message.id in pending, assignment=assignment,
+            ))
+        return result
+
+    def pending_agent_replies(
+        self, session_id: str, *, for_agent_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = self.list_agent_messages(session_id, for_agent_id=for_agent_id)
+        return [row for row in rows if row.get("pending_reply")]
+
+    def agent_message_state(self, session_id: str, message_id: str) -> dict[str, Any]:
+        rows = self.list_agent_messages(session_id)
+        for row in rows:
+            if row["id"] == message_id:
+                return row
+        raise ValueError("Unknown agent message")
+
+    def _agent_message_result(
+        self, message: Message, *, pending: bool | None = None,
+        assignment: dict[str, str] | None = None, idempotent: bool = False,
+    ) -> dict[str, Any]:
+        result = message_protocol.message_to_dict(
+            message, pending=pending, provenance=message_protocol.message_provenance(
+                message, task_id=(assignment or {}).get("task_id"),
+                assigned_agent_id=(assignment or {}).get("assigned_agent_id"),
+            ),
+        )
+        result["status"] = "PENDING_REPLY" if pending else "DELIVERED"
+        if idempotent:
+            result["idempotent"] = True
+        if assignment is not None:
+            result["assignment"] = dict(assignment)
+        return result
+
+    def _submit_turn(self, session_id: str, text: str, *, correlation_id: str | None = None) -> dict[str, Any]:
         session = self.store.get_session(session_id)
         if session is None:
             raise ValueError(f"sessao '{session_id}' nao encontrada")
 
+        # One turn = one claim_v1 token; every message written inside this
+        # turn carries it as correlation_id (Phase 1 "Organization"). Set on
+        # the instance so every _add_message call site inherits it without
+        # threading a new parameter through every helper; the token lives for
+        # exactly this turn and is cleared when it ends.
+        previous_correlation = self._turn_correlation_id
+        self._turn_correlation_id = correlation_id
+        try:
+            return self._submit_turn_inner(session, text)
+        finally:
+            self._turn_correlation_id = previous_correlation
+
+    def _submit_turn_inner(self, session: Session, text: str) -> dict[str, Any]:
         message_ids: list[str] = []
         run_ids: list[str] = []
         is_new_session = session.state == SessionState.QUEUED
@@ -380,7 +869,7 @@ class LabRuntime:
             designation = binding.designation if binding is not None else "ACTING"
             return _ceo_system_prompt(ceo, designation, team, roster_lines)
 
-        ceo_prompt = self._session_context(session, text)
+        ceo_prompt = self._session_context_with_recovery(session, text)
         guarded = self._run_agent_guarded(session, ceo, ceo_prompt, ceo_system_prompt())
         if guarded is None:
             return self._summary(session, message_ids, None, run_ids, "")
@@ -572,6 +1061,14 @@ class LabRuntime:
             EventType.DELEGATION_CREATED, session_id=session.id, entity_id=task.id,
             payload={"from_agent_id": ceo.id, "to_agent_id": builder.id, "role": target_role.value},
         )
+        # Formal CEO tasking, addressed: the DELEGATE message mirrors the
+        # Task row so the conversation thread shows who asked whom for what.
+        delegate_message = self._add_message(
+            session, kind=MessageKind.DELEGATE, author=ceo.name,
+            content=task.instruction or task.title,
+            author_agent_id=ceo.id, to_agent_id=builder.id,
+            to_role=target_role.value,
+        )
 
         recent_decisions = [d.statement for d in self.store.list_decisions(session.id)[-3:]]
         packet = ContextPacket(
@@ -636,8 +1133,21 @@ class LabRuntime:
         builder_message = self._add_message(
             session, kind=MessageKind.AGENT, author=builder.name, content=builder_result.text,
             author_agent_id=builder.id, run_id=builder_run.id,
+            reply_to=delegate_message.id,
         )
         message_ids.append(builder_message.id)
+
+        # Reviewer leg (Phase 1 "Organization"): a real, distinct REVIEWER
+        # checks the delivery against the task's acceptance criteria, with a
+        # bounded repair loop back to the executor. Teams without a REVIEWER
+        # binding behave exactly as before.
+        review = self._run_review_loop(
+            session, team, ceo, target_role, task, builder, builder_run,
+            builder_result.text, delegate_message.id, message_ids, run_ids,
+        )
+        if review.refusal:
+            outcome.refusal = review.refusal
+            outcome.refusal_detail = review.refusal_detail
 
         # Exactly one consolidation turn: tell the CEO what was delivered and
         # ask for the final answer. Never loops back into another delegation.
@@ -647,6 +1157,11 @@ class LabRuntime:
             "Responda novamente no mesmo formato JSON com o reply_to_alex final considerando "
             "esse resultado. delegate deve ser null nesta resposta (a tarefa ja foi entregue)."
         )
+        if review.active and not review.approved and review.notes:
+            consolidation_prompt += (
+                f"\n\nO revisor NAO aprovou o resultado apos {_MAX_REVIEW_ROUNDS} rodadas. "
+                f"Notas do revisor para sua decisao final: {review.notes[:_REVIEW_TAIL_CHARS]}"
+            )
         guarded = self._run_agent_guarded(session, ceo, consolidation_prompt, ceo_system)
         if guarded is None:
             return outcome
@@ -687,7 +1202,402 @@ class LabRuntime:
                 )
                 outcome.decision_id = decision.id
 
+        # Last baton of the chain: MAESTRO, written by the CEO once the final
+        # consolidated answer exists. Only when the full chain ran AND the
+        # reviewer approved — otherwise the baton sequence would skip stages.
+        if review.active and review.approved and review.artifact_ref:
+            try:
+                self._save_stage_checkpoint(
+                    session, ceo, "MAESTRO", review.artifact_ref,
+                    [f"run:{consolidation_run.id}"], consolidation_run,
+                )
+            except ValueError as exc:
+                self._record_gap(session, "MAESTRO", f"Bastao MAESTRO nao gravado: {exc}")
+
         return outcome
+
+    # ------------------------------------------------------------------
+    # 2.3.1 Reviewer leg — a real check between delivery and consolidation
+    # ------------------------------------------------------------------
+
+    def _run_review_loop(
+        self,
+        session: Session,
+        team: Team,
+        ceo: AgentProfile,
+        target_role: RoleName,
+        task: Task,
+        builder: AgentProfile,
+        builder_run: Run,
+        builder_result_text: str,
+        delegate_message_id: str,
+        message_ids: list[str],
+        run_ids: list[str],
+    ) -> _ReviewOutcome:
+        """Verify the executor's delivery against the task's acceptance.
+
+        Runs at most `_MAX_REVIEW_ROUNDS` paid reviewer runs. A rejection in
+        a non-final round sends the task back to the executor once (REPAIRING)
+        with the reviewer's corrections; a rejection on the last round ends
+        the loop as typed refusal REVIEW_LOOP_EXHAUSTED and escalates the
+        notes to the OWNER. Everything runs inside the turn that already
+        holds the claim_v1 token: no re-claim, no intermediate release.
+        """
+        outcome = _ReviewOutcome()
+
+        binding = self.store.active_binding(team.id, RoleName.REVIEWER)
+        if binding is None:
+            self._record_gap(
+                session, "REVIEWER",
+                "Nenhum agente ocupa o papel de REVIEWER neste time; o resultado segue sem revisao independente.",
+            )
+            outcome.refusal = "NO_REVIEWER_BOUND"
+            outcome.refusal_detail = "Papel REVIEWER sem ocupante; revisao independente nao aconteceu."
+            return outcome
+        reviewer = self.store.get_agent(binding.agent_id)
+        if reviewer is None or reviewer.archived or not self._is_member(team.id, reviewer.id):
+            self._record_gap(session, "REVIEWER", "Agente vinculado ao papel REVIEWER nao foi encontrado.")
+            outcome.refusal = "NO_REVIEWER_BOUND"
+            outcome.refusal_detail = "Ocupante do papel REVIEWER invalido; revisao independente nao aconteceu."
+            return outcome
+        if reviewer.id == ceo.id or reviewer.id == builder.id:
+            outcome.refusal = "REVIEWER_SELF_REVIEW"
+            outcome.refusal_detail = (
+                f"{reviewer.name} nao pode revisar um trabalho do qual participou "
+                "(CEO ou executor da tarefa). Nenhuma chamada de revisao foi paga."
+            )
+            self._record_gap(session, "REVIEWER", outcome.refusal_detail)
+            return outcome
+
+        outcome.active = True
+        continuity = self._continuity()
+
+        # STRATEGIST baton: the CEO's plan becomes a durable artifact so the
+        # chain STRATEGIST -> EXECUTOR -> REVIEWER -> MAESTRO is complete.
+        plan_artifact = Artifact(
+            id=new_id("art"), session_id=session.id, task_id=task.id,
+            kind="CEO_PLAN", title=f"Plano: {task.title}",
+            body=task.instruction or task.title,
+        )
+        self.store.save_artifact(plan_artifact)
+        try:
+            self._save_stage_checkpoint(
+                session, ceo, "STRATEGIST", f"artifact:{plan_artifact.id}",
+                [f"run:{builder_run.id}"], builder_run,
+            )
+        except ValueError as exc:
+            self._record_gap(session, "STRATEGIST", f"Bastao STRATEGIST nao gravado: {exc}")
+
+        artifact_ref = self._persist_delivery_artifact(session, task, builder_result_text)
+        outcome.artifact_ref = artifact_ref
+        try:
+            self._save_stage_checkpoint(
+                session, builder, "EXECUTOR", artifact_ref,
+                [f"run:{builder_run.id}"], builder_run,
+            )
+        except ValueError as exc:
+            self._record_gap(session, "EXECUTOR", f"Bastao EXECUTOR nao gravado: {exc}")
+
+        current_text = builder_result_text
+        current_run = builder_run
+        for round_index in range(_MAX_REVIEW_ROUNDS):
+            if not self._review_budget_ok(session):
+                outcome.refusal = "REVIEW_BUDGET_EXHAUSTED"
+                outcome.refusal_detail = "Orcamento da sessao nao cobre mais uma rodada de revisao."
+                break
+            self._set_session_state(session, SessionState.VERIFYING)
+            self._emit(
+                EventType.REVIEW_REQUESTED, session_id=session.id, entity_id=task.id,
+                payload={"reviewer_agent_id": reviewer.id, "artifact_ref": artifact_ref,
+                         "round": round_index + 1},
+            )
+            review_prompt = self._reviewer_prompt(task, builder.name, artifact_ref, current_text)
+            guarded = self._run_agent_guarded(
+                session, reviewer, review_prompt, _reviewer_system_prompt(reviewer, team), task=task,
+            )
+            if guarded is None:
+                # Budget gate blocked the session mid-review; nothing else to do.
+                return outcome
+            review_run, review_result = guarded
+            run_ids.append(review_run.id)
+
+            if not review_result.ok:
+                self._record_gap(
+                    session, "REVIEWER",
+                    f"Revisor falhou ({review_result.error or review_result.availability.value}); "
+                    "o resultado segue para consolidacao sem veredito.",
+                )
+                break
+
+            parse_failed = False
+            verdict = ""
+            notes = ""
+            corrections: list[str] = []
+            review_data = _extract_json(review_result.text)
+            if isinstance(review_data, dict):
+                verdict = str(review_data.get("verdict") or "").strip().upper()
+                notes = str(review_data.get("notes") or "").strip()
+                raw_corrections = review_data.get("corrections")
+                corrections = (
+                    [str(c).strip() for c in raw_corrections if str(c).strip()]
+                    if isinstance(raw_corrections, list) else []
+                )
+                if verdict not in ("APPROVED", "CHANGES_REQUESTED", "REJECTED"):
+                    parse_failed = True
+            else:
+                parse_failed = True
+            if parse_failed:
+                # FAIL-CLOSED: an unrecognized or missing verdict never
+                # approves. A prose verdict that starts with one of the valid
+                # verdicts is honored with normal semantics; anything else is
+                # treated as CHANGES_REQUESTED (a rejection round) with the
+                # prose as notes — the mission may end exhausted, never
+                # sealed by an unparseable review. CapabilityGap stays as a
+                # record, never as an approval.
+                prose = (review_result.text or "").strip()
+                prose_upper = prose.upper()
+                for recognized in ("APPROVED", "CHANGES_REQUESTED", "REJECTED"):
+                    if prose_upper.startswith(recognized):
+                        verdict = recognized
+                        notes = prose[len(recognized):].lstrip(" :-—")
+                        corrections = []
+                        break
+                else:
+                    verdict = "CHANGES_REQUESTED"
+                    notes = prose
+                    corrections = []
+                notes = notes[:_REVIEW_TAIL_CHARS]
+                self._record_gap(
+                    session, "REVIEWER",
+                    f"Veredito do revisor veio fora do formato JSON esperado; "
+                    f"tratado como {verdict} (fail-closed).",
+                )
+
+            notes = notes[:_REVIEW_TAIL_CHARS]
+            corrections = [c[:_REVIEW_TAIL_CHARS] for c in corrections]
+
+            outcome.notes = notes
+            outcome.corrections = list(corrections)
+            self._emit(
+                EventType.REVIEW_COMPLETED, session_id=session.id, entity_id=task.id,
+                payload={"verdict": verdict, "reviewer_agent_id": reviewer.id,
+                         "artifact_ref": artifact_ref},
+            )
+            review_content = json.dumps(
+                {"verdict": verdict, "notes": notes, "artifact_ref": artifact_ref},
+                ensure_ascii=False,
+            )
+            if verdict == "APPROVED":
+                outcome.approved = True
+                self._add_message(
+                    session, kind=MessageKind.REVIEW, author=reviewer.name,
+                    content=review_content, author_agent_id=reviewer.id,
+                    run_id=review_run.id, to_agent_id=builder.id,
+                    to_role=target_role.value, reply_to=delegate_message_id,
+                )
+                try:
+                    self._save_stage_checkpoint(
+                        session, reviewer, "REVIEWER", artifact_ref,
+                        [f"run:{review_run.id}"], review_run,
+                    )
+                except ValueError as exc:
+                    self._record_gap(session, "REVIEWER", f"Bastao REVIEWER nao gravado: {exc}")
+                break
+
+            # Rejection: the verdict goes back to the executor's role. The
+            # reviewer's baton is written here too — the reviewer did hold
+            # the artifact — so the explicit REVIEWER -> EXECUTOR rework that
+            # follows is a legal transition. On the final round there is no
+            # repair left: the loop is exhausted and the notes are escalated
+            # to the OWNER for the CEO's decision.
+            try:
+                self._save_stage_checkpoint(
+                    session, reviewer, "REVIEWER", artifact_ref,
+                    [f"run:{review_run.id}"], review_run,
+                )
+            except ValueError as exc:
+                self._record_gap(session, "REVIEWER", f"Bastao REVIEWER nao gravado: {exc}")
+            self._add_message(
+                session, kind=MessageKind.REVIEW, author=reviewer.name,
+                content=review_content, author_agent_id=reviewer.id,
+                run_id=review_run.id, to_agent_id=builder.id,
+                to_role=target_role.value, reply_to=delegate_message_id,
+            )
+            if round_index + 1 >= _MAX_REVIEW_ROUNDS:
+                outcome.refusal = "REVIEW_LOOP_EXHAUSTED"
+                outcome.refusal_detail = (
+                    f"Revisor rejeitou o resultado nas {_MAX_REVIEW_ROUNDS} rodadas disponiveis; "
+                    "a decisao final fica com o CEO."
+                )
+                self._add_message(
+                    session, kind=MessageKind.REVIEW, author=reviewer.name,
+                    content=review_content, author_agent_id=reviewer.id,
+                    run_id=review_run.id, to_role="OWNER",
+                )
+                self._add_message(
+                    session, kind=MessageKind.SYSTEM, author="ZARA",
+                    content=(
+                        f"A revisao independente nao aprovou o resultado apos "
+                        f"{_MAX_REVIEW_ROUNDS} rodadas. O CEO decide com as notas do revisor."
+                    ),
+                )
+                break
+
+            self._set_session_state(session, SessionState.REPAIRING)
+            self._emit(
+                EventType.REPAIR_STARTED, session_id=session.id, entity_id=task.id,
+                payload={"round": round_index + 1, "corrections": corrections,
+                         "notes": notes},
+            )
+            repair_prompt = self._repair_prompt(session, task, corrections, notes)
+            task.state = TaskState.RUNNING
+            task.updated_at = now()
+            self.store.save_task(task)
+            guarded = self._run_agent_guarded(
+                session, builder, repair_prompt, _builder_system_prompt(builder, team), task=task,
+            )
+            if guarded is None:
+                return outcome
+            repair_run, repair_result = guarded
+            run_ids.append(repair_run.id)
+            if not repair_result.ok:
+                task.result = repair_result.error or "Falha desconhecida do executor no reparo."
+                task.state = TaskState.FAILED
+                task.updated_at = now()
+                self.store.save_task(task)
+                self._emit(
+                    EventType.TASK_FAILED, session_id=session.id, entity_id=task.id,
+                    payload={"agent_id": builder.id, "error": task.result},
+                )
+                outcome.refusal = None
+                outcome.notes = notes
+                return outcome
+
+            current_text = repair_result.text
+            current_run = repair_run
+            task.result = current_text
+            task.state = TaskState.COMPLETED
+            task.updated_at = now()
+            self.store.save_task(task)
+            outcome.task_completed_event = self._emit(
+                EventType.TASK_COMPLETED, session_id=session.id, entity_id=task.id,
+                payload={"agent_id": builder.id},
+            )
+            artifact_ref = self._persist_delivery_artifact(session, task, current_text)
+            outcome.artifact_ref = artifact_ref
+            # Explicit rework: the baton goes back one pair (REVIEWER ->
+            # EXECUTOR) with the repaired artifact and the attempt counter
+            # riding the chain. Never through the +1 API — rework is its own
+            # transition.
+            try:
+                builder_current = continuity.load_checkpoint(session.id, builder.id)
+                continuity.save_rework_checkpoint(
+                    session.id, builder.id, artifact_ref=artifact_ref,
+                    evidence_refs=[f"run:{repair_run.id}"],
+                    provenance=self._handoff_provenance(repair_run),
+                    cursor="rework",
+                    summary=f"Revisor pediu correcao (rodada {round_index + 1}).",
+                    expected_revision=builder_current.revision if builder_current is not None else None,
+                )
+            except ValueError as exc:
+                self._record_gap(session, "EXECUTOR", f"Bastao de rework nao gravado: {exc}")
+            repair_message = self._add_message(
+                session, kind=MessageKind.AGENT, author=builder.name, content=current_text,
+                author_agent_id=builder.id, run_id=repair_run.id,
+                to_agent_id=reviewer.id, to_role=RoleName.REVIEWER.value,
+                reply_to=delegate_message_id,
+            )
+            message_ids.append(repair_message.id)
+
+        self._set_session_state(session, SessionState.RUNNING)
+        return outcome
+
+    def _continuity(self):
+        """Lazily built continuity service; never constructed for teams that
+        never reach a real baton write (keeps the default two-agent teams
+        byte-for-byte on their current behavior)."""
+        if getattr(self, "_agent_continuity", None) is None:
+            from core.lab_v1.agent_continuity import AgentContinuity
+            self._agent_continuity = AgentContinuity(self.store)
+        return self._agent_continuity
+
+    def _handoff_provenance(self, run: Run) -> dict[str, str]:
+        """Canonical caller-supplied provenance from a real Run row."""
+        return {
+            "run_id": run.id,
+            "provider": run.provider_id,
+            "model": run.model,
+            "model_reported": run.model_reported or run.model,
+        }
+
+    def _save_stage_checkpoint(
+        self, session: Session, agent: AgentProfile, stage: str,
+        artifact_ref: str, evidence_refs: list[str], run: Run,
+    ):
+        """Write one baton for `agent`, resolving its own revision lock."""
+        continuity = self._continuity()
+        current = continuity.load_checkpoint(session.id, agent.id)
+        expected = current.revision if current is not None else None
+        return continuity.save_handoff_checkpoint(
+            session.id, agent.id, stage=stage, artifact_ref=artifact_ref,
+            evidence_refs=evidence_refs, provenance=self._handoff_provenance(run),
+            cursor=stage.lower(), summary=f"{stage} concluido por {agent.name}.",
+            expected_revision=expected, verify_artifact=True,
+        )
+
+    def _persist_delivery_artifact(self, session: Session, task: Task, text: str) -> str:
+        artifact = Artifact(
+            id=new_id("art"), session_id=session.id, task_id=task.id,
+            kind="BUILDER_RESULT", title=task.title, body=text or "",
+        )
+        self.store.save_artifact(artifact)
+        return f"artifact:{artifact.id}"
+
+    def _review_budget_ok(self, session: Session) -> bool:
+        """Non-blocking budget probe: the reviewer leg exits its loop with a
+        typed refusal instead of blocking the whole session."""
+        if session.max_cost_usd is None:
+            return True
+        return self.store.total_cost(session.id) < session.max_cost_usd
+
+    def _set_session_state(self, session: Session, state: SessionState) -> None:
+        session.state = state
+        session.updated_at = now()
+        self.store.save_session(session)
+        self._emit(
+            EventType.SESSION_STATUS, session_id=session.id, entity_id=session.id,
+            payload={"state": state.value},
+        )
+
+    def _reviewer_prompt(
+        self, task: Task, builder_name: str, artifact_ref: str, result_text: str,
+    ) -> str:
+        acceptance = task.acceptance.strip() or "(nao especificados)"
+        return (
+            f"Tarefa: {task.title}\n"
+            f"Instrucao: {task.instruction}\n"
+            f"Criterios de aceite: {acceptance}\n\n"
+            f"Resultado entregue por {builder_name} (artifact {artifact_ref}):\n"
+            f"{(result_text or '')[:6000]}"
+        )
+
+    def _repair_prompt(self, session: Session, task: Task, corrections: list[str], notes: str) -> str:
+        recent_decisions = [d.statement for d in self.store.list_decisions(session.id)[-3:]]
+        packet = ContextPacket(
+            objective=session.objective, task_title=task.title,
+            task_instruction=task.instruction, acceptance=task.acceptance,
+            relevant_decisions=recent_decisions,
+        )
+        lines = (
+            [f"- {c[:_REVIEW_TAIL_CHARS]}" for c in corrections]
+            or ([f"- {notes[:_REVIEW_TAIL_CHARS]}"] if notes else [])
+        )
+        return (
+            packet.render()
+            + "\n\nA revisao REJEITOU o resultado anterior. Correcoes pedidas pelo revisor:\n"
+            + "\n".join(lines)
+            + "\n\nEntregue o resultado corrigido, completo, no mesmo formato de texto direto."
+        )
 
     # ------------------------------------------------------------------
     # 2.4 _run_agent
@@ -735,7 +1645,15 @@ class LabRuntime:
 
         try:
             probe = adapter.probe()
-            if agent.archived or not probe.availability.can_work:
+            # OpenCode and NVIDIA cannot prove account/model access without a
+            # first inference. Permit exactly one declared model to be tried
+            # while the provider is UNKNOWN; the resulting Run is the proof.
+            first_use = (
+                probe.availability is Availability.UNKNOWN
+                and adapter.id in {"opencode", "nvidia"}
+                and any(item.model_id == agent.model for item in adapter.declared_models)
+            )
+            if agent.archived or (not probe.availability.can_work and not first_use):
                 result = ProviderResult(ok=False, availability=probe.availability, error="Agente arquivado." if agent.archived else probe.detail)
             else:
                 invocation_options = InvocationOptions(effort=agent.effort)
@@ -775,6 +1693,22 @@ class LabRuntime:
             self.store.save_run(run)
             self._emit(EventType.RUN_FAILED, session_id=session.id, entity_id=run.id, payload={"error": run.error})
             return run, ProviderResult(ok=False, availability=Availability.ERROR, error=run.error)
+
+        if result.ok and result.model_reported:
+            identifies_model = getattr(adapter, "identifies_model", None)
+            model_matches = (
+                identifies_model(agent.model, result.model_reported)
+                if callable(identifies_model)
+                else result.model_reported == agent.model
+            )
+            if not model_matches:
+                # A successful transport response is not a successful run when the
+                # provider identifies a different model. Reject before recording
+                # model health so this receipt cannot certify the requested model.
+                result = replace(
+                    result, ok=False, availability=Availability.MODEL_UNAVAILABLE,
+                    error="CODEX_MODEL_MISMATCH",
+                )
 
         observe = getattr(self.registry, "record_result", None)
         if callable(observe):
@@ -981,12 +1915,18 @@ class LabRuntime:
 
         working_agent_ids = self._working_agent_ids(session_id)
         participation: dict[str, str] = {}
+        agent_resources: dict[str, dict[str, Any]] = {}
         for agent in agents:
+            resource = (self.registry.model_status(agent.provider_id, agent.model, providers=providers)
+                        if hasattr(self.registry, "model_status") else
+                        {"availability": "UNKNOWN", "detail": "Model status unavailable"})
+            agent_resources[agent.id] = resource
             if agent.archived:
                 state = ParticipationState.OFFLINE
             elif agent.id in working_agent_ids:
                 state = ParticipationState.WORKING
-            elif not provider_availability.get(agent.provider_id, Availability.UNKNOWN).can_work:
+            elif (not provider_availability.get(agent.provider_id, Availability.UNKNOWN).can_work
+                  or resource["availability"] != Availability.AVAILABLE.value):
                 state = ParticipationState.OFFLINE
             else:
                 state = ParticipationState.IDLE
@@ -1011,6 +1951,7 @@ class LabRuntime:
             "memberships": [m.to_dict() for m in self.store.list_memberships(team.id)] if team else [],
             "sessions": [s.to_dict() for s in sessions],
             "participation": participation,
+            "agent_resources": agent_resources,
             "regent": {"id": "zara", "name": "ZARA", "role": "REGENT", "state": "OBSERVING" if working_agent_ids else "READY", "source": "runtime_events", "detail": "Preserva missoes, registra resultados e coordena a continuidade. Sem modelo proprio invocado."},
             "health": health,
             "session": None,
@@ -1097,6 +2038,7 @@ class LabRuntime:
                     decision_event, session=session, statement=decision.statement,
                     category="semantic_fact", confidence=0.85,
                 )
+            self._sync_adapter_projection(session)
             return
 
         if task_id and task_completed_event is not None:
@@ -1107,6 +2049,21 @@ class LabRuntime:
                     task_completed_event, session=session, statement=statement,
                     category="semantic_fact", confidence=0.7,
                 )
+            self._sync_adapter_projection(session)
+
+    def _sync_adapter_projection(self, session: Session) -> None:
+        """Best-effort Obsidian projection of promoted facts; never blocks.
+
+        Obsidian is a projection, not a source of truth: an unavailable vault
+        keeps the durable Lab/UserMemory result and retries on the next sync.
+        """
+        adapter = self.memory_adapter
+        if adapter is None:
+            return
+        try:
+            adapter.sync_to_obsidian(session.id)
+        except Exception:
+            pass
 
     def _summary(
         self, session: Session, message_ids: list[str], task_id: str | None, run_ids: list[str], final_reply: str,
@@ -1131,17 +2088,61 @@ class LabRuntime:
     def _add_message(
         self, session: Session, *, kind: MessageKind, author: str, content: str,
         author_agent_id: str | None = None, run_id: str | None = None,
+        to_agent_id: str | None = None, to_role: str | None = None,
+        reply_to: str | None = None, correlation_id: str | None = None,
     ) -> Message:
         message = Message(
             id=new_id("msg"), session_id=session.id, kind=kind, author=author, content=content,
             author_agent_id=author_agent_id, run_id=run_id,
+            to_agent_id=to_agent_id, to_role=to_role, reply_to=reply_to,
+            # The turn token is filled automatically: every message of one
+            # turn shares the same correlation_id.
+            correlation_id=correlation_id or getattr(self, "_turn_correlation_id", None),
         )
         self.store.add_message(message)
+        self._project_team_chat_message(session, message)
         self._emit(
             EventType.MESSAGE_CREATED, session_id=session.id, entity_id=message.id,
             payload={"kind": kind.value, "author": author},
         )
         return message
+
+    def _project_team_chat_message(self, session: Session, message: Message) -> None:
+        """Project a real agent baton into the shared vault once.
+
+        SQLite remains the source of truth.  This compact projection gives
+        participants a durable, human-readable recovery journal without
+        turning the vault into a second chat engine or recording owner prose.
+        """
+        if message.kind not in {MessageKind.DELEGATE, MessageKind.AGENT}:
+            return
+        agent = self.store.get_agent(message.author_agent_id) if message.author_agent_id else None
+        if agent is None:
+            return
+        role = {
+            RoleName.CEO: "CEO",
+            RoleName.BUILDER: "ENGINEER",
+            RoleName.REVIEWER: "REVIEWER",
+        }.get(agent.role, "ZARA")
+        state = "PLANNED" if message.kind == MessageKind.DELEGATE else (
+            "REVIEWING" if agent.role == RoleName.REVIEWER else "IMPLEMENTING"
+        )
+        try:
+            journal = self._team_chat
+            if journal is None:
+                from core.lab_v1.team_chat_memory import TeamChatMemory
+                journal = self._team_chat = TeamChatMemory()
+            journal.append_once(
+                mission_id=session.id, role=role, state=state,
+                summary=message.content,
+                evidence_refs=[f"message:{message.id}", f"run:{message.run_id}"] if message.run_id else [f"message:{message.id}"],
+                next_action=(f"Responder ao papel {message.to_role}." if message.to_role else "Preservar para a proxima etapa."),
+                record_id=message.id,
+            )
+        except Exception:
+            # The journal is a recoverable projection.  Never lose the
+            # canonical mission turn because an external vault is unavailable.
+            return
 
     def _record_gap(self, session: Session, required: str, detail: str) -> None:
         gap = CapabilityGap(id=new_id("gap"), session_id=session.id, required=required, detail=detail)
@@ -1169,10 +2170,50 @@ class LabRuntime:
     def _is_member(self, team_id: str, agent_id: str) -> bool:
         return any(m.agent_id == agent_id and m.left_at is None for m in self.store.list_memberships(team_id))
 
+    def _session_context_with_recovery(self, session: Session, text: str) -> str:
+        """Append memory context without replacing the runtime-owned history.
+
+        ``_session_context`` remains the single owner of owner input, mission
+        history and decisions. Compatible adapters may append to that base;
+        legacy or failing adapters leave it unchanged.
+        """
+        base_context = self._session_context(session, text)
+        adapter = self.memory_adapter
+        if adapter is not None:
+            try:
+                recover = getattr(adapter, "recover_session_context")
+                recovered = recover(session, text)
+            except Exception:
+                return base_context
+            if isinstance(recovered, str) and recovered.strip():
+                appendix = recovered.strip()
+                if base_context and base_context in appendix:
+                    return base_context
+                # An adapter owns only a memory appendix.  It cannot replay
+                # the current owner turn, inject another owner-turn marker,
+                # or pass secret/private-reasoning text through to a model.
+                # These checks are deliberately block-based rather than a
+                # substring test so a legitimate lesson sharing request words
+                # remains eligible for recovery.
+                if (
+                    not is_safe_recovery_text(appendix)
+                    or is_current_message_echo(appendix, text)
+                    or _recovery_repeats_current_message(appendix, text)
+                ):
+                    return base_context
+                return f"{base_context}\n\n{appendix}" if base_context else appendix
+        return base_context
+
     def _session_context(self, session: Session, text: str) -> str:
         # CLI/API providers are stateless here. Preserve only this mission's
         # bounded delivered history, never unrelated sessions or chain of thought.
-        messages = self.store.list_messages(session.id, limit=10000)[-21:]
+        # Role filter (Phase 1 "Organization"): the CEO does not swallow the
+        # worker↔worker DELEGATE/REVIEW traffic; a REVIEW escalated to the
+        # OWNER (exhausted loop) still reaches it. Legacy rows (NULL columns)
+        # remain visible to everyone.
+        messages = self.store.list_messages(
+            session.id, limit=10000, for_role=RoleName.CEO.value,
+        )[-21:]
         if messages and messages[-1].kind == MessageKind.USER and messages[-1].content == text:
             messages = messages[:-1]
         history = "\n".join(f"{m.author}: {m.content[:2400]}" for m in messages)[-18000:]

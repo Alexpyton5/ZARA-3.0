@@ -35,57 +35,6 @@ def setup_environment():
     data_dir()
     logs_dir()
     memory_dir()
-    _seed_user_config()
-
-    # Advisory single-writer guard: warn (never kill) if another live ZARA
-    # process already owns this data dir. Fail-open by design.
-    try:
-        from core.single_writer import acquire_writer_lock
-
-        lock = acquire_writer_lock(data_dir())
-        if lock.blocked:
-            print(
-                "[ZARA][WARN] Outro processo ZARA (PID "
-                f"{lock.conflict_pid}) ja usa este data dir: {data_dir()}. "
-                "Risco de dois writers no mesmo SQLite/WAL. "
-                "Use ZARA3_HOME para isolar um runtime de teste."
-            )
-        return lock
-    except Exception:
-        return None
-
-
-def _seed_user_config():
-    """Semeia o config do usuario a partir do pacote (apenas no empacotado).
-
-    O build congela dentro do EXE uma copia de config/api_keys.json e
-    feature_flags.json. O exe le config de LOCALAPPDATA (nunca escreve dentro
-    de resources) — sem a semente, a chave NVIDIA e as preferencias de voz do
-    projeto sao invisiveis ao empacotado para sempre (voz errada silenciosa,
-    Lab sem chaves). Semeia UMA vez: se o usuario ja tem config, ele manda
-    (nunca sobrescrevo).
-    """
-    if not getattr(sys, "frozen", False):
-        return
-    try:
-        from core.paths import config_dir
-
-        target_dir = config_dir()
-        bundled = Path(getattr(sys, "_MEIPASS", "")) / "config"
-        seeded_any = False
-        for name in ("api_keys.json", "feature_flags.json"):
-            target = target_dir / name
-            if target.exists():
-                continue
-            source = bundled / name
-            if not source.exists():
-                continue
-            target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-            seeded_any = True
-        if seeded_any:
-            print("[ZARA] Config do usuario semeado a partir do pacote (primeira execucao).")
-    except Exception:
-        pass
 
 
 def check_dependencies() -> bool:
@@ -99,10 +48,6 @@ def check_dependencies() -> bool:
         "cv2", "mss", "PIL", "pytesseract", "vosk", "pvporcupine",
         "kokoro_onnx", "sounddevice", "numpy", "scipy", "playwright",
         "pyperclip", "watchdog",
-        # Voz gratuita da cascata de TTS. Se estes sumirem no empacotado, a
-        # ZARA cai da Kore direto no SAPI robotico — e sem esta linha isso
-        # so apareceria no ouvido do Alex.
-        "edge_tts", "miniaudio",
     ]
 
     missing_essential = [pkg for pkg in essential if importlib.util.find_spec(pkg) is None]
@@ -126,20 +71,12 @@ async def run_ipc_handler():
 def main() -> int:
     """Main entry point."""
     configure_utf8_stdio()
-    if os.environ.get('ZARA_SMOKE_TEST') == '1':
-        import tempfile
-        sandbox = Path(os.environ.get('ZARA3_HOME', '')).resolve()
-        temporary_root = Path(tempfile.gettempdir()).resolve()
-        if (not os.environ.get('ZARA3_HOME') or not sandbox.is_relative_to(temporary_root)
-                or not (sandbox / '.zara-smoke-runtime').is_file()):
-            print('[ERROR] Smoke mode requires a marked temporary ZARA3_HOME directory')
-            return 1
     print("=" * 60)
     print("  ZARA 3.0 — NEURAL INTERFACE")
     print("  Python Sidecar Starting...")
     print("=" * 60)
 
-    writer_lock = setup_environment()
+    setup_environment()
 
     if not check_dependencies():
         return 1
@@ -155,8 +92,6 @@ def main() -> int:
         return 1
 
     print("[ZARA] Goodbye")
-    if writer_lock is not None:
-        writer_lock.release()
     return 0
 
 

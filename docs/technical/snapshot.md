@@ -36,9 +36,16 @@ The snapshot includes:
 - Verifies that the target directory is safe before copying
 - Reports any issues during restore
 
-## Implementation
+## Historical implementation
 
-The snapshot functionality is implemented in `snapshot_zara.py` with the following main functions:
+The original one-shot implementation lived in `snapshot_zara.py`. It was
+intentionally moved to
+`_quarentena/organizacao-2026-09-17/scripts-historicos/snapshot_zara.py`
+and is not part of the active runtime. The active test file remains as a
+historical record and skips when that archived module is unavailable; it must
+not be used as evidence that the packaged ZARA exports or restores snapshots.
+
+The archived implementation provided these functions:
 - `export_cerebro(snapshot_dir)`: Creates the snapshot
 - `redact_api_keys_file(src, dst)`: Redsensitive keys in `api_keys.json`
 - `copy_with_redaction(src, dst, redaction_fn)`: Copies a file applying redaction if provided
@@ -47,7 +54,7 @@ The snapshot functionality is implemented in `snapshot_zara.py` with the followi
 - `restore_snapshot(snapshot_dir, target_dir, dry_run=True)`: Restores from a snapshot
 - `audit_existing_snapshots(snapshots_base, quarantine_dir)`: Audits existing snapshots and moves insecure ones to quarantine
 
-## Usage
+## Historical usage (not an active runtime contract)
 
 ```bash
 # Create a snapshot (dry-run first recommended)
@@ -59,4 +66,6 @@ python snapshot_zara.py --snapshot /tmp/zara-snapshot --restore /tmp/zara-restor
 
 ## Status
 
-**PRONTO** — Functional and tested as part of Fases 1-2. The snapshot system successfully exports the data layer with secret redaction and excludes caches/builds.
+**ARQUIVADO** — The implementation and its tests are preserved for historical
+reference only. No current packaged-runtime snapshot/export capability is
+claimed by this document.

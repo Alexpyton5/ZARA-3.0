@@ -5,7 +5,143 @@ import pytest
 from core.lab_v1.store import LabStore
 from core.lab_v1.supervisor import AutonomySupervisor, WORKFLOW
 from core.lab_v1.mission_controller import MissionController
+from core.lab_v1.domain import Availability
+from core.lab_v1.workforce_policy import WorkforcePolicy
 import core.lab_v1.supervisor as module
+import core.lab_v1.autopilot as autopilot_module
+
+
+def _verified_checkout(root):
+    (root / '.git').mkdir(parents=True)
+    (root / '.git' / 'HEAD').write_text('ref: refs/heads/main\n', encoding='utf-8')
+    (root / 'pyproject.toml').write_text('[project]\nname = "zara-3.0"\n', encoding='utf-8')
+    for name in ('tools/build_current.py', 'core/lab_v1/autopilot.py',
+                 'core/lab_v1/evolution.py'):
+        file = root / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.touch()
+    return root
+
+
+def _persist_legacy_workspace(supervisor, workspace):
+    with supervisor.store._connect() as conn:
+        value = json.loads(conn.execute(
+            'SELECT document FROM lab_autonomy_policy WHERE id=1').fetchone()[0])
+        value.update(workspace=str(workspace), enabled=False, owner_setting={'keep': True})
+        conn.execute('UPDATE lab_autonomy_policy SET document=? WHERE id=1',
+                     (json.dumps(value),))
+
+
+def test_transient_policy_workspace_migrates_on_restart_and_tick(supervisor, tmp_path, monkeypatch):
+    original, _ = supervisor
+    checkout = _verified_checkout(tmp_path / 'source-checkout')
+    monkeypatch.setattr(autopilot_module, '_persistent_checkout_candidates', lambda: (checkout,))
+    _persist_legacy_workspace(original, tmp_path / '_MEI143722')
+
+    restarted = AutonomySupervisor(original.runtime, autopilot=original.autopilot)
+    policy = restarted.policy()
+    assert policy['workspace'] == str(checkout.resolve())
+    assert policy['owner_setting'] == {'keep': True}
+    with restarted.store._connect() as conn:
+        stored = json.loads(conn.execute(
+            'SELECT document FROM lab_autonomy_policy WHERE id=1').fetchone()[0])
+    assert stored['workspace'] == str(checkout.resolve())
+
+    observed = []
+    restarted._evolution_engine = lambda workforce, workspace: (
+        observed.append(workspace) or SimpleNamespace(
+            observe_local=lambda: [], observer_snapshot=lambda: {}))
+    assert restarted.tick()['state'] == 'MONITORING'
+    assert observed == [str(checkout.resolve())]
+    assert AutonomySupervisor(original.runtime).policy()['workspace'] == str(checkout.resolve())
+
+
+def test_transient_policy_without_verified_checkout_reports_blocker(supervisor, tmp_path, monkeypatch):
+    original, _ = supervisor
+    monkeypatch.setattr(autopilot_module, '_persistent_checkout_candidates',
+                        lambda: (tmp_path / 'not-a-checkout',))
+    stale = tmp_path / '_MEI143722'
+    _persist_legacy_workspace(original, stale)
+
+    restarted = AutonomySupervisor(original.runtime, autopilot=original.autopilot)
+    policy = restarted.policy()
+    assert policy['workspace'] == str(stale)
+    assert policy['last_state'] == 'WORKSPACE_NOT_CONFIGURED'
+    assert policy['error'] == 'WORKSPACE_NOT_CONFIGURED'
+    assert policy['owner_setting'] == {'keep': True}
+    restarted._evolution_engine = lambda *args: pytest.fail('invalid workspace was observed')
+    assert restarted.tick()['state'] == 'WORKSPACE_NOT_CONFIGURED'
+
+
+def test_explicit_workspace_survives_policy_restart(supervisor, tmp_path, monkeypatch):
+    original, workspace = supervisor
+    original.configure(enabled=True, workspace=workspace)
+    monkeypatch.setattr(autopilot_module, '_persistent_checkout_candidates',
+                        lambda: (_verified_checkout(tmp_path / 'other-checkout'),))
+    restarted = AutonomySupervisor(original.runtime, autopilot=original.autopilot)
+    assert restarted.policy()['workspace'] == str(workspace.resolve())
+
+
+def test_supervisor_bootstraps_mission_schema_on_clean_store(tmp_path):
+    store = LabStore(tmp_path / 'clean.db')
+    store.initialize()
+    with store._connect() as conn:
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mission_controls'"
+        ).fetchone() is None
+
+    supervisor = AutonomySupervisor(SimpleNamespace(store=store))
+
+    with store._connect() as conn:
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mission_controls'"
+        ).fetchone() is not None
+        columns = {row['name'] for row in conn.execute('PRAGMA table_info(mission_controls)')}
+    assert 'lease_owner' in columns
+    assert supervisor.controller.store.db_path == store.db_path
+
+
+def test_supervisor_migrates_existing_mission_schema(tmp_path):
+    store = LabStore(tmp_path / 'existing.db')
+    store.initialize()
+    with store._connect() as conn:
+        conn.execute('''CREATE TABLE mission_controls(
+            session_id TEXT PRIMARY KEY REFERENCES sessions(id),
+            document TEXT NOT NULL,
+            lease_token TEXT,
+            lease_until REAL NOT NULL DEFAULT 0
+        )''')
+
+    AutonomySupervisor(SimpleNamespace(store=store))
+
+    with store._connect() as conn:
+        columns = {row['name'] for row in conn.execute('PRAGMA table_info(mission_controls)')}
+    assert 'lease_owner' in columns
+
+
+def test_supervisor_bootstraps_core_team_before_selecting_workers(tmp_path):
+    store = LabStore(tmp_path / 'team.db')
+    store.initialize()
+    from core.lab_v1.runtime import LabRuntime
+    runtime = LabRuntime(store, SimpleNamespace())
+    supervisor = AutonomySupervisor(runtime)
+    # _team needs resource availability, but the invariant under test is the
+    # bootstrap ordering: the selection path must see a persisted core team.
+    supervisor._engine = lambda workforce: SimpleNamespace(_team=lambda: (store.list_teams()[0], None, None))
+
+    team = supervisor.ensure_team()
+
+    assert team.name == 'ZARA Core'
+    members = store.list_agents(team_id=team.id)
+    assert len(members) == 5
+    by_name = {agent.name: agent for agent in members}
+    assert by_name['Artemis'].provider_id == 'codex_cli'
+    assert by_name['Vulcan'].provider_id == 'codex_cli'
+    assert by_name['Artemis Relay'].provider_id == 'nine_router'
+    assert by_name['Vulcan Relay'].provider_id == 'nine_router'
+    assert by_name['Kairos'].role.value == 'REVIEWER'
+    assert by_name['Artemis'].fallback_agent_id == by_name['Artemis Relay'].id
+    assert by_name['Vulcan'].fallback_agent_id == by_name['Vulcan Relay'].id
 
 
 def test_service_snapshot_does_not_advertise_hermes_workcell(tmp_path):
@@ -75,6 +211,35 @@ def test_default_on_and_pause_persists_workspace(supervisor):
     assert s.policy()['background_enabled'] is True
     assert s.tick()['state'] == 'MONITORING'
     with pytest.raises(ValueError): s.configure(enabled='true')
+
+
+def test_provider_wait_continues_when_authorized_alternative_is_candidate(supervisor, monkeypatch):
+    s, _ = supervisor
+    s.runtime.registry = SimpleNamespace(list_providers=lambda: [
+        SimpleNamespace(id='codex_cli', availability=Availability.QUOTA_EXHAUSTED, detail='limit reached'),
+        SimpleNamespace(id='claude_cli', availability=Availability.AVAILABLE, detail=None),
+    ])
+    monkeypatch.setattr(s, '_engine', lambda workforce: SimpleNamespace(
+        candidates=lambda: [SimpleNamespace(provider_id='claude_cli', model='sonnet')]))
+
+    assert s._provider_wait_state(WorkforcePolicy(s.policy())) is None
+
+
+def test_provider_wait_remains_when_no_authorized_candidate_is_available(supervisor, monkeypatch):
+    s, _ = supervisor
+    s.runtime.registry = SimpleNamespace(list_providers=lambda: [
+        SimpleNamespace(id='codex_cli', availability=Availability.QUOTA_EXHAUSTED, detail='limit reached'),
+        SimpleNamespace(id='claude_cli', availability=Availability.AVAILABLE, detail=None),
+    ])
+    monkeypatch.setattr(s, '_engine', lambda workforce: SimpleNamespace(candidates=lambda: []))
+
+    assert s._provider_wait_state(WorkforcePolicy(s.policy())) == {
+        'state': 'WAITING_PROVIDER',
+        'provider': 'codex_cli',
+        'reason': Availability.QUOTA_EXHAUSTED.value,
+        'detail': 'limit reached',
+        'retry_after_seconds': 300,
+    }
 
 
 def test_tick_writes_visible_heartbeat(supervisor):

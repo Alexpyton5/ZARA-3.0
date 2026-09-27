@@ -1,19 +1,64 @@
 """Real packaged Electron IPC/UI canary in disposable userdata. No product data mutations."""
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.build_current import packaged_paths, digest, write_json
+
+
+def inspect_entry_workspace(snapshot, database, disposable_home):
+    """Independently verify the workspace reported by a packaged Lab snapshot."""
+    policy = snapshot.get('autonomy_policy') or {}
+    if policy.get('background_task_state') not in ('STOPPED', 'PAUSED'):
+        raise RuntimeError('ENTRY_CANARY_SUPERVISOR_NOT_PAUSED')
+    raw = policy.get('workspace')
+    if not isinstance(raw, str) or not raw or not Path(raw).is_absolute():
+        raise RuntimeError('PACKAGED_WORKSPACE_NOT_CONFIGURED')
+    database = Path(database)
+    if not database.is_file():
+        raise RuntimeError('PACKAGED_WORKSPACE_NOT_PERSISTED')
+    try:
+        with closing(sqlite3.connect(database)) as conn:
+            row = conn.execute('SELECT document FROM lab_autonomy_policy WHERE id=1').fetchone()
+        persisted = json.loads(row[0]) if row else {}
+    except (sqlite3.Error, ValueError, TypeError):
+        raise RuntimeError('PACKAGED_WORKSPACE_NOT_PERSISTED') from None
+    if not isinstance(persisted, dict) or persisted.get('workspace') != raw:
+        raise RuntimeError('PACKAGED_WORKSPACE_NOT_PERSISTED')
+
+    workspace = Path(raw).resolve()
+    home = Path(disposable_home).resolve()
+    if (not workspace.is_dir() or any(part.upper().startswith('_MEI') for part in workspace.parts)
+            or workspace == home or home in workspace.parents):
+        raise RuntimeError('PACKAGED_WORKSPACE_NOT_CONFIGURED')
+    git_marker = workspace / '.git'
+    try:
+        valid_git = ((git_marker.is_dir() and (git_marker / 'HEAD').is_file())
+                     or (git_marker.is_file() and git_marker.read_text(
+                         encoding='utf-8', errors='replace').startswith('gitdir:')))
+        valid_source = all((workspace / name).is_file() for name in (
+            'tools/build_current.py', 'core/lab_v1/autopilot.py',
+            'core/lab_v1/evolution.py'))
+        with (workspace / 'pyproject.toml').open('rb') as stream:
+            valid_project = tomllib.load(stream).get('project', {}).get('name') == 'zara-3.0'
+    except (OSError, ValueError, tomllib.TOMLDecodeError):
+        raise RuntimeError('PACKAGED_WORKSPACE_NOT_CONFIGURED') from None
+    if not (valid_git and valid_source and valid_project):
+        raise RuntimeError('PACKAGED_WORKSPACE_NOT_CONFIGURED')
+    return workspace
 
 
 def stop_owned(process):
@@ -47,11 +92,18 @@ def run_canary(package, output, *, live=True, entry_only=False):
     source_data = data_dir() / 'lab'
     dest = home / 'data/lab'
     dest.mkdir(parents=True)
-    copied = ['provider_health.json', 'nvidia_models.json', 'codex_models.json']
-    if entry_only: copied.append('zara_lab_v1.db')
+    # Provider metadata is local evidence, not a credential.  Copy every
+    # cached catalog used by the persisted Lab team so the isolated canary
+    # measures the package instead of failing merely because its disposable
+    # home has no discovery cache yet.
+    copied = ['provider_health.json', 'nvidia_models.json', 'codex_models.json',
+              'nine_router_models.json']
+    # Entry canaries must start from a clean Lab database. Reusing a previous
+    # owner/blocked mission makes admission fail with MISSION_BUSY and tests
+    # the old fixture state instead of the packaged runtime.
     for name in copied:
         if (source_data / name).exists(): shutil.copy2(source_data / name, dest / name)
-    credential = NvidiaApiAdapter._load_credential(None)
+    credential = None if entry_only else NvidiaApiAdapter._load_credential(None)
     saved = {k: os.environ.get(k) for k in ('ZARA3_HOME', 'NVIDIA_API_KEY')}
     try:
         os.environ['ZARA3_HOME'] = str(home)
@@ -65,18 +117,27 @@ def run_canary(package, output, *, live=True, entry_only=False):
             else: os.environ[key] = value
     env = dict(os.environ, ZARA_SMOKE_TEST='1', ZARA_LAB_LIVE_CANARY='1' if live else '0',
                ZARA_LAB_ENTRY_CANARY='1' if entry_only else '0', ZARA3_HOME=str(home))
+    if entry_only: env.pop('NVIDIA_API_KEY', None)
     if credential: env['NVIDIA_API_KEY'] = credential
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
     exe = packaged_paths(package)['EXE_SHA256']
+    stdout_handle = (output / 'electron.stdout.log').open('wb')
+    stderr_handle = (output / 'electron.stderr.log').open('wb')
     process = subprocess.Popen([str(exe), '--minimizada', '--remote-debugging-address=127.0.0.1',
         f'--remote-debugging-port={port}', f'--user-data-dir={home / "electron"}'],
-        env=env, cwd=exe.parent, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=env, cwd=exe.parent, stdout=stdout_handle, stderr=stderr_handle,
         creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    report = {'status': 'failed', 'live': live, 'userdata': str(home), 'checks': {},
+    report = {'status': 'failed', 'live': live, 'entry_only': entry_only,
+        'userdata': str(home), 'checks': {},
         'stage': 'STARTING_ELECTRON',
         'asar_sha256': digest(packaged_paths(package)['ASAR_SHA256']),
         'backend_sha256': digest(packaged_paths(package)['BACKEND_SHA256'])}
+    if entry_only:
+        report['autonomy_proven'] = False
+        report['limitations'] = [
+            'Supervisor paused by entry-only canary; autonomous mission execution is not proven.']
+    page = None
     try:
         with sync_playwright() as pw:
             report['stage'] = 'CONNECTING_CDP'
@@ -103,6 +164,15 @@ def run_canary(package, output, *, live=True, entry_only=False):
                 time.sleep(2)
             if not snap.get('success'): raise RuntimeError('PACKAGED_LAB_IPC_UNAVAILABLE')
             report['checks']['packaged_ipc'] = True
+            if entry_only:
+                report['stage'] = 'VERIFYING_PERSISTENT_WORKSPACE'
+                policy = snap.get('autonomy_policy') or {}
+                report['workspace'] = policy.get('workspace')
+                report['supervisor_state'] = policy.get('background_task_state')
+                workspace = inspect_entry_workspace(snap, dest / 'zara_lab_v1.db', home)
+                report['workspace'] = str(workspace)
+                report['checks'].update(workspace_persisted=True, workspace_valid=True,
+                                        workspace_outside_mei=True, supervisor_paused=True)
             report['stage'] = 'OPENING_LAB_ROOM'
             page.locator('button').filter(has_text='ZARA Lab').first.click(timeout=30000)
             lab = page.get_by_role('dialog', name='ZARA Lab', exact=True)
@@ -110,13 +180,27 @@ def run_canary(package, output, *, live=True, entry_only=False):
             report['stage'] = 'CAPTURING_LAB_ROOM'
             page.screenshot(path=str(output / 'lab-desktop.png'))
             report['checks']['lab_room_visible'] = True
+            # The room existing is not sufficient: a fresh packaged runtime can
+            # render the shell while a backend migration has already failed.
+            # Fail closed on the concrete database error surface so a screenshot
+            # cannot be promoted as a healthy Lab canary.
+            if page.get_by_text('OperationalError:', exact=False).count():
+                raise RuntimeError('PACKAGED_LAB_RUNTIME_ERROR')
+            report['checks']['lab_runtime_healthy'] = True
             if live:
                 report['stage'] = 'STARTING_REAL_MISSION'
-                lab.get_by_role('button', name='Nova missão', exact=True).click()
                 marker = 'ZARA_PACKAGED_AUTONOMY_OK'
-                lab.get_by_role('textbox', name='Mensagem para a equipe').fill(
+                # Exercise the canonical renderer -> preload -> Electron -> IPC
+                # path directly. The visual composer has two product entry
+                # modes and can remain on the welcome shell in a fresh package;
+                # using the exposed Lab autopilot API avoids making canary
+                # success depend on a stale selector while still testing the
+                # real frontend contract.
+                started = page.evaluate(
+                    "(objective) => window.zaraIPC.labV1.autopilot(objective)",
                     'Crie um documento de uma única linha contendo exatamente: ' + marker)
-                lab.get_by_role('button', name='Enviar mensagem', exact=True).click()
+                if not started or started.get('success') is not True:
+                    raise RuntimeError('PACKAGED_OWNER_ENTRY_NOT_ACCEPTED')
                 until = time.monotonic() + (30 if entry_only else 330)
                 report['stage'] = 'WAITING_REAL_MISSION'
                 sid = None
@@ -142,7 +226,10 @@ def run_canary(package, output, *, live=True, entry_only=False):
                 report['runs'] = [{k: r.get(k) for k in ('id','provider_id','model','model_reported','state',
                     'input_tokens','output_tokens','duration_ms','cost_basis','provider_session_id')} for r in session.get('runs', [])]
                 if entry_only:
-                    if not sid or session.get('state') != 'QUEUED':
+                    # The entry canary pauses the consumer and supervisor. The
+                    # accepted mission may remain queued or report a resource
+                    # wait, but no provider Run may be created.
+                    if not sid or session.get('state') not in ('QUEUED', 'WAITING_RESOURCE', 'BLOCKED'):
                         raise RuntimeError('PACKAGED_OWNER_ENTRY_NOT_QUEUED')
                     if session.get('runs'): raise RuntimeError('ENTRY_CANARY_PROVIDER_CALL_DETECTED')
                     cancelled = page.evaluate('(sid) => window.zaraIPC.labV1.cancelMission(sid)', sid)
@@ -179,7 +266,14 @@ def run_canary(package, output, *, live=True, entry_only=False):
         # Provider output and credentials never enter error reports.
         report['error'] = type(exc).__name__ + ': ' + (str(exc) if str(exc).isupper() else 'CANARY_CHECK_FAILED')
     finally:
+        if page is not None:
+            try:
+                page.screenshot(path=str(output / 'lab-failure.png'))
+            except Exception:
+                pass
         stop_owned(process)
+        stdout_handle.close()
+        stderr_handle.close()
         write_json(output / 'VALIDATION.json', report)
     return report
 

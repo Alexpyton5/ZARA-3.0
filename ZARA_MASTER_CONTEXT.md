@@ -8,6 +8,21 @@
 
 > Este arquivo é a fonte única de contexto operacional da ZARA. Relatórios antigos foram preservados em `_quarentena/docs-legacy/2026-09-05/` para auditoria histórica, mas não devem ser usados como descrição atual sem reconciliação com o código e os artefatos de teste mais recentes.
 
+## Atualização de organização — 2026-09-17
+
+Para qualquer nova IA, o ponto de entrada obrigatório agora é
+[`ZARA_AGENT_START_HERE.md`](./ZARA_AGENT_START_HERE.md). Ele resume arquitetura,
+fontes de verdade, regras de edição, validação, capacidades e limitações.
+
+O ponteiro operacional atual em `ZARA_ACTIVE_BUILD.json` prevalece sobre os
+registros históricos abaixo. Ele aponta para
+`frontend/release-candidate-fix-9router-v2-20260917-0020`.
+
+Artefatos, rascunhos, scripts one-shot e relatórios duplicados foram movidos de
+forma reversível para `_quarentena/organizacao-2026-09-17/`; o inventário está em
+`_quarentena/organizacao-2026-09-17/MOVIMENTACOES.txt`. Nenhum código-fonte ativo,
+memória, banco ou build apontado pelo ponteiro foi apagado.
+
 ## 0. Atualização 2026-09-06 — ZARA CURRENT BUILD ativada (transferência Astra → Claude)
 
 **HEAD atual:** `7e3624c44cdbce5a4f1114229884cc7deb41d346` (branch inalterada, dirty=true).

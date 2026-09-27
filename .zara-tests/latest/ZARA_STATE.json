@@ -1,0 +1,23 @@
+{
+  "run_id": "2026-09-05_15-10-09",
+  "commit": "4f415e6",
+  "branch": "backup/estado-20260820-1143",
+  "health_pct": 100,
+  "root_hygiene": "CRITICAL",
+  "duration_seconds": 0.1,
+  "counts": {
+    "PASS": 2
+  },
+  "working": [
+    "SYS-DISK",
+    "TECH-001"
+  ],
+  "broken": [],
+  "degraded": [],
+  "unverified": [],
+  "known_failures": [],
+  "new_failures": [],
+  "slow": [],
+  "capabilities_total": null,
+  "changed_files_since_baseline": []
+}

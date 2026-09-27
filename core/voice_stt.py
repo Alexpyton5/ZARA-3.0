@@ -44,14 +44,6 @@ except ImportError:
 from core.paths import user_data_dir
 
 
-class VoiceNotConfiguredError(RuntimeError):
-    """Local voice weights/backends are missing.
-
-    Distinct from a runtime failure: nothing is broken, the feature simply has
-    no model configured. ZARA never downloads weights on its own.
-    """
-
-
 @dataclass
 class VoiceConfig:
     """Voice pipeline configuration."""
@@ -83,7 +75,7 @@ class VoskSTT:
 
     def __init__(self, config: VoiceConfig):
         if not VOSK_AVAILABLE:
-            raise VoiceNotConfiguredError("STT_BACKEND_NOT_CONFIGURED: vosk não instalado.")
+            raise RuntimeError("Vosk not installed. Run: uv pip install vosk")
 
         self.config = config
         self.model: vosk.Model | None = None
@@ -108,12 +100,18 @@ class VoskSTT:
             elif en_model.exists():
                 model_path = str(en_model)
             else:
-                # No weights on disk. Never download autonomously: report an
-                # honest NOT_CONFIGURED state so the caller can surface it.
-                raise VoiceNotConfiguredError(
-                    "STT_MODEL_NOT_CONFIGURED: nenhum modelo Vosk encontrado em "
-                    f"{model_dir}. Instale/aponte vosk_model_path manualmente."
-                )
+                # Download Portuguese model (small ~40MB)
+                import urllib.request
+                print("[Vosk] Downloading Portuguese model...")
+                url = "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip"
+                zip_path = model_dir / "vosk-pt.zip"
+                urllib.request.urlretrieve(url, zip_path)
+
+                import zipfile
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    zf.extractall(model_dir)
+                zip_path.unlink()
+                model_path = str(pt_model)
 
         self.model = vosk.Model(model_path)
         self.recognizer = vosk.KaldiRecognizer(self.model, self.config.vosk_sample_rate)
@@ -231,20 +229,17 @@ class AudioInput:
                 except queue.Full:
                     pass  # Drop frame if queue full
 
-        try:
-            self.stream = sd.RawInputStream(
-                samplerate=self.config.vosk_sample_rate,
-                blocksize=self.config.chunk_size,
-                device=self.config.input_device,
-                channels=self.config.channels,
-                dtype="int16",
-                callback=callback,
-            )
-            self.stream.start()
-            self._running = True
-            print(f"[Audio] Started: {self.config.vosk_sample_rate}Hz, {self.config.channels}ch")
-        except sd.PortAudioError as exc:
-            raise VoiceNotConfiguredError(f"AUDIO_INPUT_FAILED: {exc} permanent=True") from exc
+        self.stream = sd.RawInputStream(
+            samplerate=self.config.vosk_sample_rate,
+            blocksize=self.config.chunk_size,
+            device=self.config.input_device,
+            channels=self.config.channels,
+            dtype="int16",
+            callback=callback,
+        )
+        self.stream.start()
+        self._running = True
+        print(f"[Audio] Started: {self.config.vosk_sample_rate}Hz, {self.config.channels}ch")
 
     def stop(self):
         """Stop audio capture."""
@@ -302,7 +297,7 @@ class VoicePipeline:
 
         self._thread: threading.Thread | None = None
         self._running = False
-        self._state = "SLEEPING"  # SLEEPING, LISTENING, PROCESSING, PAUSED
+        self._state = "SLEEPING"  # SLEEPING, LISTENING, PROCESSING
         self._silence_chunks = 0
         self._speech_buffer: list[bytes] = []
         self._event_loop: asyncio.AbstractEventLoop | None = None
@@ -339,39 +334,16 @@ class VoicePipeline:
         try:
             self._event_loop = asyncio.get_running_loop()
         except RuntimeError:
-            # start() may be intentionally moved to a worker thread so a bad
-            # PortAudio driver cannot freeze the IPC loop. Preserve the loop
-            # supplied by the async owner for callback dispatch.
-            pass
+            self._event_loop = None
 
-        # When Porcupine is configured, the microphone starts behind the wake
-        # gate. Push-to-talk/local fallback keeps the previous LISTENING mode.
-        self._state = "SLEEPING" if self.porcupine else "LISTENING"
+        self._state = "LISTENING"
         self._speech_buffer = []
         self._silence_chunks = 0
         self._running = True
-        try:
-            self.audio.start()
-        except VoiceNotConfiguredError as e:
-            self._state = "ERROR"
-            if hasattr(self, 'on_error') and self.on_error:
-                try:
-                    self.on_error(e)
-                except Exception:
-                    pass  # Ignore errors in error callback
-            return
-        except Exception as e:
-            # Handle other unexpected errors during audio start
-            self._state = "ERROR"
-            if hasattr(self, 'on_error') and self.on_error:
-                try:
-                    self.on_error(e)
-                except Exception:
-                    pass  # Ignore errors in error callback
-            return
+        self.audio.start()
         self._thread = threading.Thread(target=self._run_loop, daemon=True, name="VoicePipeline")
         self._thread.start()
-        print(f"[Voice] Pipeline started ({self._state})")
+        print("[Voice] Pipeline started (LISTENING)")
 
     def stop(self):
         """Stop the voice pipeline."""
@@ -394,28 +366,14 @@ class VoicePipeline:
             return
         asyncio.run_coroutine_threadsafe(self._safe_call(callback, *args), loop)
 
-    def pause_listening(self) -> None:
-        """Discard microphone audio while ZARA is speaking.
-
-        This is the local self-listening guard.  Audio continues to be drained
-        by the worker thread, but it is never handed to Vosk while paused.
-        """
-        if not self._running:
-            return
-        self._state = "PAUSED"
-        self._speech_buffer = []
-        self._silence_chunks = 0
-        if self.vosk:
-            self.vosk.reset()
-
-    def resume_listening(self, *, require_wake_word: bool = False) -> None:
-        """Resume capture, optionally returning behind the wake-word gate."""
+    def resume_listening(self) -> None:
+        """Return to listening after ZARA finishes processing/speaking."""
         if self._running:
             self._speech_buffer = []
             self._silence_chunks = 0
             if self.vosk:
                 self.vosk.reset()
-            self._state = "SLEEPING" if require_wake_word and self.porcupine else "LISTENING"
+            self._state = "LISTENING"
 
     def _run_loop(self):
         """Main processing loop (runs in background thread)."""
@@ -506,7 +464,7 @@ class VoicePipeline:
         else:
             print("[Voice] No speech recognized")
             if self._running:
-                self._state = "SLEEPING" if self.porcupine else "LISTENING"
+                self._state = "LISTENING"
 
     async def _safe_call(self, callback, *args):
         """Safely call async callback."""

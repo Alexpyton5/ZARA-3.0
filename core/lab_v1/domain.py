@@ -132,6 +132,10 @@ class SessionState(str, Enum):
     RUNNING = "RUNNING"
     WORKING = "WORKING"
     WAITING_USER = "WAITING_USER"
+    WAITING_REVIEW = "WAITING_REVIEW"
+    WAITING_OWNER = "WAITING_OWNER"
+    READY_FOR_OWNER = "READY_FOR_OWNER"
+    BACKOFF = "BACKOFF"
     REPAIRING = "REPAIRING"
     WAITING_RESOURCE = "WAITING_RESOURCE"
     VERIFYING = "VERIFYING"
@@ -157,6 +161,9 @@ class MessageKind(str, Enum):
     AGENT = "AGENT"          # a real model produced it in a real run
     ZARA = "ZARA"            # ZARA speaking as the regent
     SYSTEM = "SYSTEM"        # operational note, compact in the UI
+    DELEGATE = "DELEGATE"    # formal CEO tasking to a role; mirrors the Task row
+    REVIEW = "REVIEW"        # reviewer verdict: JSON {"verdict","notes","artifact_ref"}
+    HANDOFF = "HANDOFF"      # compact baton note written by the runtime at a stage transition
 
 
 class RunState(str, Enum):
@@ -368,6 +375,12 @@ class Message:
     content: str
     author_agent_id: str | None = None
     run_id: str | None = None
+    # Addressing (additive, Phase 1 "Organization"). NULL columns on legacy
+    # rows mean implicit addressing: the message is legible by every role.
+    to_agent_id: str | None = None
+    to_role: str | None = None          # RoleName.value | "OWNER" | "ALL"
+    reply_to: str | None = None         # id of the message this one answers
+    correlation_id: str | None = None   # turn token (v1turn_*); shared by one turn's messages
     created_at: float = field(default_factory=now)
 
     def to_dict(self) -> dict[str, Any]:
@@ -375,6 +388,8 @@ class Message:
             "id": self.id, "session_id": self.session_id, "kind": self.kind.value,
             "author": self.author, "content": self.content,
             "author_agent_id": self.author_agent_id, "run_id": self.run_id,
+            "to_agent_id": self.to_agent_id, "to_role": self.to_role,
+            "reply_to": self.reply_to, "correlation_id": self.correlation_id,
             "created_at": self.created_at,
         }
 
@@ -624,6 +639,33 @@ class LabEvent:
         }
 
 
+@dataclass(frozen=True)
+class LabLesson:
+    """A lesson promoted from one durable, marked-verified Lab event.
+
+    Lessons are global to the Lab rather than owned by a mission.  The source
+    session and evidence reference make the classification auditable; this
+    record does not claim a higher evidence level than its source proves.
+    """
+
+    id: str
+    source_event_id: str
+    source_session_id: str | None
+    statement: str
+    evidence_ref: str
+    created_at: float = field(default_factory=now)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "source_event_id": self.source_event_id,
+            "source_session_id": self.source_session_id,
+            "statement": self.statement,
+            "evidence_ref": self.evidence_ref,
+            "created_at": self.created_at,
+        }
+
+
 class EventType:
     """String constants, not an enum: the store must accept an event type
     added by a later phase without a migration."""
@@ -652,6 +694,13 @@ class EventType:
     ARTIFACT_CREATED = "artifact.created"
     CAPABILITY_GAP = "capability_gap.detected"
     MEMORY_LINKED = "memory.linked"
+    LESSON_MARKED_VERIFIED = "lesson.marked_verified"
+    LESSON_PROMOTED = "lesson.promoted"
+    # Reviewer leg of the V1 pipeline (Phase 1 "Organization"). String
+    # constants like every other entry: no migration needed.
+    REVIEW_REQUESTED = "review.requested"
+    REVIEW_COMPLETED = "review.completed"
+    REPAIR_STARTED = "repair.started"
 
 
 # --------------------------------------------------------------------------

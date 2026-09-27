@@ -222,26 +222,36 @@ class TestBuildIdentity:
     """M7: Build metadata (M2 verification)."""
 
     def test_build_info_json_location(self):
-        """BUILD_INFO.json has correct location."""
-        build_info_path = PROJECT_ROOT / "frontend" / "release" / "win-unpacked" / "BUILD_INFO.json"
-        # Location should exist (or be creatable during build)
-        assert build_info_path.parent.exists(), f"Parent directory missing: {build_info_path.parent}"
+        """BUILD_INFO.json lives beside the EXE named by the active pointer."""
+        import json
+        pointer_path = PROJECT_ROOT / "ZARA_ACTIVE_BUILD.json"
+        assert pointer_path.is_file(), f"Active build pointer missing: {pointer_path}"
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8-sig"))
+        exe_path = Path(pointer["EXE_PATH"])
+        assert exe_path.is_file(), f"Active EXE missing: {exe_path}"
+        build_info_path = exe_path.parent / "BUILD_INFO.json"
+        assert build_info_path.is_file(), f"BUILD_INFO.json missing: {build_info_path}"
+        info = json.loads(build_info_path.read_text(encoding="utf-8-sig"))
+        assert info["BUILD_ID"] == pointer["BUILD_ID"]
 
     def test_build_info_json_schema(self):
-        """BUILD_INFO.json (if present) has correct structure."""
+        """The active pointer and package identity record share the required fields."""
         import json
-        build_info_path = PROJECT_ROOT / "frontend" / "release" / "win-unpacked" / "BUILD_INFO.json"
+        pointer = json.loads(
+            (PROJECT_ROOT / "ZARA_ACTIVE_BUILD.json").read_text(encoding="utf-8-sig")
+        )
+        exe_path = Path(pointer["EXE_PATH"])
+        info_path = exe_path.parent / "BUILD_INFO.json"
+        assert info_path.is_file(), f"BUILD_INFO.json missing: {info_path}"
+        data = json.loads(info_path.read_text(encoding="utf-8-sig"))
 
-        if build_info_path.exists():
-            with open(build_info_path) as f:
-                data = json.load(f)
-
-            required_fields = [
-                "BUILD_ID", "BUILD_TIMESTAMP", "GIT_BRANCH", "GIT_COMMIT",
-                "GIT_DIRTY", "PYTHON_VERSION", "NODE_VERSION", "SIDECAR_SHA256"
-            ]
-            for field in required_fields:
-                assert field in data, f"Missing field: {field}"
+        required_fields = [
+            "BUILD_ID", "BUILD_TIMESTAMP", "GIT_BRANCH", "GIT_COMMIT", "GIT_DIRTY",
+            "EXE_PATH", "EXE_SHA256", "ASAR_SHA256", "BACKEND_SHA256"
+        ]
+        for field in required_fields:
+            assert field in data, f"Missing field: {field}"
+            assert data[field] == pointer[field], f"Active pointer differs for {field}"
 
 
 class TestIPC:

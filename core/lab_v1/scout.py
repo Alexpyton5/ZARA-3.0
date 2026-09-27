@@ -7,12 +7,39 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from datetime import datetime, timezone
 
 SOURCES = (
     ('OpenAI Codex', 'https://github.com/openai/codex/releases.atom'),
     ('DeepSeek Harness', 'https://github.com/deepseek-ai/deepseek-harness/releases.atom'),
     ('Hermes', 'https://github.com/NousResearch/hermes-agent/releases.atom'),
 )
+_FICTITIOUS_HOSTS = frozenset({'example.com', 'example.org', 'example.net', 'invalid', 'test'})
+
+
+def _source_url(url):
+    """Return a canonical public URL or reject a fabricated/local source."""
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError('SOURCE_URL_REQUIRED')
+    raw = url.strip()
+    parts = urllib.parse.urlsplit(raw)
+    host = (parts.hostname or '').casefold().rstrip('.')
+    if parts.scheme.lower() not in {'http', 'https'} or not host or parts.username or parts.password:
+        raise ValueError('SOURCE_URL_INVALID')
+    if (host in _FICTITIOUS_HOSTS or host.endswith(('.example', '.invalid', '.test', '.local', '.internal', '.lan'))):
+        raise ValueError('SOURCE_URL_FICTITIOUS')
+    try:
+        address = __import__('ipaddress').ip_address(host)
+    except ValueError:
+        address = None
+    if address is not None and (address.is_private or address.is_loopback or address.is_link_local
+                                or address.is_multicast or address.is_reserved or address.is_unspecified):
+        raise ValueError('SOURCE_URL_NON_PUBLIC')
+    return urllib.parse.urlunsplit((parts.scheme.lower(), parts.netloc, parts.path or '/', parts.query, ''))
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def review_evidence_bound(content, evidence):
@@ -64,13 +91,30 @@ class TechnologyScout:
                     url = link.get('href', '') if link is not None else ''
                     allowed = source_url.removesuffix('releases.atom') + 'releases/tag/'
                     if not title or not url.startswith(allowed): continue
+                    try:
+                        url = _source_url(url)
+                    except ValueError:
+                        continue
                     key = hashlib.sha256(url.encode()).hexdigest()[:24]
                     summary = re.sub('<[^>]*>', ' ', entry.findtext('a:content', '', ns))[:2500]
+                    observed_excerpt = ' '.join(summary.split())[:1200]
+                    feed_digest = hashlib.sha256(
+                        (source_url + '\n' + url + '\n' + summary).encode('utf-8')
+                    ).hexdigest()
                     score = min(100, 60 + 8 * len(set(re.findall(r'\b(?:fix|security|agent|memory|tool|windows|sdk|api)\b', summary.lower()))))
                     doc = {'id': key, 'opportunity': source_name + ': ' + title, 'source': url,
                         'published_at': entry.findtext('a:updated', '', ns), 'observed_at': now,
-                        'evidence_excerpt': ' '.join(summary.split())[:1200],
+                        'evidence_excerpt': observed_excerpt,
                         'evidence_sha256': hashlib.sha256(summary.encode('utf-8')).hexdigest(),
+                        'source_access': {'status': 'READ', 'accessed_url': source_url,
+                                          'retrieved_at': _utc_now(), 'content_sha256': feed_digest},
+                        'read_evidence': {'status': 'READ', 'excerpt': observed_excerpt,
+                                          'evidence_sha256': hashlib.sha256(summary.encode('utf-8')).hexdigest()},
+                        'provenance': {'source_url': url, 'feed_url': source_url,
+                                       'retrieved_at': _utc_now(), 'content_sha256': feed_digest},
+                        'finding_validation': {'status': 'UNVERIFIED', 'reason': 'OWNER_REVIEW_REQUIRED'},
+                        'memory': {'reusable': True, 'status': 'PERSISTED', 'lesson':
+                                   'Revisar notas oficiais e testar versao fixada em sandbox.'},
                         'why_it_matters': 'Atualizacao de uma dependencia ou ferramenta utilizada pelo Lab.',
                         'expected_benefit': 'Avaliar compatibilidade, correcoes e capacidades novas.',
                         'cost': 'UNKNOWN', 'risk': 'REQUIRES_REVIEW', 'relevance_score': score,

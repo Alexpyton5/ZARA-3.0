@@ -2,10 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/globals.css';
-// A pele nova entra DEPOIS do globals de propósito: ela redefine os tokens
-// antigos em vez de reescrever 155 linhas densas que ainda sustentam telas
-// que funcionam (Lab, Memory Galaxy). Ver pele-instrumento.css.
-import './styles/pele-instrumento.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1,6 +1,7 @@
 """Real text/voice IPC entry paths with isolated fake transport and no hardware."""
 import asyncio
 import threading
+from types import SimpleNamespace
 from array import array
 from unittest.mock import AsyncMock, Mock
 
@@ -133,6 +134,26 @@ def test_voice_speaks_without_waiting_for_slow_memory_persistence(handler):
     asyncio.run(run())
 
 
+def test_voice_brain_result_marks_proven_zero_cost_for_kore_speech(handler, monkeypatch):
+    h, _, _ = handler
+    monkeypatch.setattr(
+        "core.ipc_handlers.get_model_config",
+        lambda _engine: SimpleNamespace(cost_status="FREE_PROVEN"),
+    )
+    result = asyncio.run(h._front_conversation_reply("pergunta", requested_model="mimo"))
+    assert result["cost_status"] == "FREE_PROVEN"
+
+
+def test_voice_brain_result_keeps_unknown_cost_conservative(handler, monkeypatch):
+    h, _, _ = handler
+    monkeypatch.setattr(
+        "core.ipc_handlers.get_model_config",
+        lambda _engine: SimpleNamespace(cost_status="UNKNOWN_COST"),
+    )
+    result = asyncio.run(h._front_conversation_reply("pergunta", requested_model="model-x"))
+    assert result["cost_status"] == "UNKNOWN_COST"
+
+
 def test_telegram_uses_selected_front_brain_and_canonical_history(handler):
     h, brain, adapter = handler
     h.conversation_history = Mock()
@@ -208,13 +229,14 @@ def test_lab_submit_is_not_falsely_queued(handler):
     assert not h._lab_v1_background_tasks and not adapter.calls
 
 
-def test_real_voice_entry_ignores_remote_direct_answer(handler):
+def test_real_voice_entry_accepts_direct_live_answer_without_front_brain(handler):
     h, _, adapter = handler
     assert h._voice_is_authorized_conversation('Zara, qual e o projeto?') is True
-    assert h._voice_can_answer_directly('Zara, qual e o projeto?') is False
-    asyncio.run(h._on_gemini_live_turn('Zara, qual e o projeto?', 'Resposta remota proibida', direct=True))
-    assert [c['model'] for c in adapter.calls] == ['gpt-5.6-luna']
-    assert not any('Resposta remota proibida' in str(c) for c in h._append_conversation_message.call_args_list)
+    assert h._voice_can_answer_directly('Zara, qual e o projeto?') is True
+    asyncio.run(h._on_gemini_live_turn('Zara, qual e o projeto?', 'Resposta direta Live', direct=True))
+    assert adapter.calls == []
+    assert any(call.args == ('assistant', 'Resposta direta Live', 'gemini_live') for call in h._append_conversation_message.call_args_list)
+    assert h._speak_response.await_count == 0
 
 
 def test_canonical_old_history_and_large_mentor_survive_both_channels(handler):
@@ -316,3 +338,4 @@ def test_real_voice_entry_barge_in_purges_all_context_but_keeps_run(
         assert connection.execute('SELECT COUNT(*) FROM episodes').fetchone()[0] == 0
     # The background write may be attempted, but its durable row is removed
     # above when the generation changes.
+

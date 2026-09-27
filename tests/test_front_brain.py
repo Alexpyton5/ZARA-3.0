@@ -39,6 +39,33 @@ class FrontFake(ProviderAdapter):
         return self.answer
 
 
+class UnverifiedOpenCode(ProviderAdapter):
+    id = 'opencode'
+    label = 'OpenCode first-use fixture'
+    declared_models = (
+        ModelDescriptor('opencode', 'opencode/a-free', 'A free'),
+        ModelDescriptor('opencode', 'opencode/b-free', 'B free'),
+    )
+
+    def __init__(self, *, fail=False):
+        self.fail = fail
+        self.verified = False
+        self.calls = []
+
+    def probe(self):
+        status = Availability.AVAILABLE if self.verified else Availability.UNKNOWN
+        return ProviderInfo(self.id, self.label, 'fixture', status, 'Configured; first call unverified')
+
+    def complete(self, *, model, **kwargs):
+        self.calls.append(model)
+        if self.fail:
+            return ProviderResult(False, availability=Availability.MODEL_UNAVAILABLE,
+                                  error='Model rejected')
+        self.verified = True
+        return ProviderResult(True, text='OK', availability=Availability.AVAILABLE,
+                              model_reported=model)
+
+
 @pytest.fixture
 def front(tmp_path):
     store = LabStore(tmp_path / 'lab.db')
@@ -83,10 +110,51 @@ def test_discovered_authenticated_model_can_make_its_first_proving_call(tmp_path
     # DISCOVERED_UNPROVEN. The front channel must still allow the first real
     # invocation, whose receipt becomes the proof.
     assert registry.model_status(adapter.id, DEFAULT_BRAIN)['availability'] == 'DISCOVERED_UNPROVEN'
-    assert brain.snapshot()['engines'][0]['status'] == 'AVAILABLE'
+    assert brain.snapshot()['engines'][0]['status'] == 'DISCOVERED_UNPROVEN'
     result = brain.reply('Oi')
     assert result['success'] is True
     assert len(adapter.calls) == 1
+
+
+def test_unknown_opencode_first_call_proves_only_the_requested_model(tmp_path):
+    store = LabStore(tmp_path / 'lab.db')
+    store.initialize()
+    adapter = UnverifiedOpenCode()
+    registry = ProviderRegistry(health_path=tmp_path / 'health.json')
+    registry.register(adapter)
+    runtime = LabRuntime(store, registry)
+    brain = FrontBrain(runtime)
+
+    initial = {item['id']: item['status'] for item in brain.snapshot()['engines']}
+    assert initial['opencode/a-free'] == initial['opencode/b-free'] == 'DISCOVERED_UNPROVEN'
+    assert brain.select('opencode/a-free')['success']
+    answer = brain.reply('Responda apenas OK')
+    assert answer['success'] and answer['response'] == 'OK'
+    assert adapter.calls == ['opencode/a-free']
+    runs = runtime.store.list_runs(answer['session_id'])
+    assert len(runs) == 1 and runs[0].provider_id == 'opencode'
+    assert runs[0].model == runs[0].model_reported == 'opencode/a-free'
+    assert registry.model_status('opencode', 'opencode/a-free')['availability'] == 'AVAILABLE'
+    assert registry.model_status('opencode', 'opencode/b-free')['availability'] == 'DISCOVERED_UNPROVEN'
+    after = {item['id']: item['status'] for item in brain.snapshot()['engines']}
+    assert after['opencode/a-free'] == 'AVAILABLE'
+    assert after['opencode/b-free'] == 'DISCOVERED_UNPROVEN'
+
+
+def test_unknown_opencode_failed_first_call_never_becomes_available(tmp_path):
+    store = LabStore(tmp_path / 'lab.db')
+    store.initialize()
+    adapter = UnverifiedOpenCode(fail=True)
+    registry = ProviderRegistry(health_path=tmp_path / 'health.json')
+    registry.register(adapter)
+    brain = FrontBrain(LabRuntime(store, registry))
+
+    assert brain.select('opencode/a-free')['success']
+    result = brain.reply('Oi')
+    assert not result['success']
+    assert adapter.calls == ['opencode/a-free']
+    assert registry.model_status('opencode', 'opencode/a-free')['availability'] != 'AVAILABLE'
+    assert brain.snapshot()['current'] == 'opencode/a-free'
 
 
 def test_home_history_supplements_instead_of_replacing_persistent_history(front):

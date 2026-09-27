@@ -6,6 +6,7 @@ na intencao antes desta tarefa.
 """
 from __future__ import annotations
 
+import threading
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -194,12 +195,69 @@ async def test_sem_interrupcao_a_edge_ainda_assume(monkeypatch):
         return False
 
     live.speak = nao_falou
+    live.ultimo_audio_entregue.return_value = None
     edge = _FakeEngine()
     handler = _handler_de_voz(live=live, edge=edge)
 
     await handler._speak_response("Volume em 30 por cento.")
 
     assert edge.spoken == ["Volume em 30 por cento."]
+
+
+@pytest.mark.asyncio
+async def test_kore_parcial_nao_troca_de_voz_no_meio_da_frase():
+    live = Mock()
+    live.active = True
+    live.ultimo_audio_entregue.return_value = 12.5
+
+    async def kore_parcial(_texto, **_kw):
+        return False
+
+    live.speak = kore_parcial
+    edge = _FakeEngine()
+    handler = _handler_de_voz(live=live, edge=edge)
+
+    await handler._speak_response("Frase longa com corte depois do primeiro bloco.")
+
+    assert edge.spoken == []
+
+
+@pytest.mark.asyncio
+async def test_falha_da_kore_antes_do_primeiro_audio_ainda_usa_edge():
+    live = Mock()
+    live.active = True
+    live.ultimo_audio_entregue.return_value = None
+
+    async def kore_sem_audio(_texto, **_kw):
+        return False
+
+    live.speak = kore_sem_audio
+    edge = _FakeEngine()
+    handler = _handler_de_voz(live=live, edge=edge)
+
+    await handler._speak_response("A Kore não começou a frase.")
+
+    assert edge.spoken == ["A Kore não começou a frase."]
+
+
+@pytest.mark.asyncio
+async def test_cerebro_nao_gratis_nao_faz_segunda_viagem_de_tts_ao_gemini():
+    live = Mock()
+    live.active = True
+    live.ultimo_audio_entregue.return_value = None
+
+    async def kore_nao_deve_ser_chamada(_texto, **_kw):
+        pytest.fail("Kore Live seria uma segunda viagem paga")
+
+    live.speak = kore_nao_deve_ser_chamada
+    edge = _FakeEngine(fails=True)
+    gemini_http = Mock()
+    gemini_http.play = AsyncMock()
+    handler = _handler_de_voz(live=live, edge=edge, gemini=gemini_http)
+
+    await handler._speak_response("Resposta do cérebro não gratuito.", prefer_live=False)
+
+    gemini_http.play.assert_not_awaited()
 
 
 def test_chunk_source_returns_partial_data_instead_of_waiting_for_full_block():
@@ -253,6 +311,24 @@ def test_non_blocking_failure_still_falls_back_to_next_engine():
     mgr._current_playback.join(timeout=2)
 
     assert mgr.kokoro.spoken == ["Aviso importante."]
+
+
+def test_interrupt_during_failed_engine_does_not_restart_on_fallback():
+    """Barge-in durante falha da Edge não pode reiniciar o texto na Kokoro."""
+    mgr = TTSManager(TTSConfig())
+    fallback = _FakeEngine()
+
+    class _InterruptedFailure(_FakeEngine):
+        def play(self, text, voice=None, speed=1.0, blocking=True):
+            mgr.interrupt()
+            raise RuntimeError("player interrompido")
+
+    mgr.edge = _InterruptedFailure()
+    mgr.kokoro = fallback
+
+    mgr.speak("Este texto não pode voltar depois do corte.")
+
+    assert fallback.spoken == []
 
 
 def test_non_blocking_cascade_exhausted_does_not_raise_in_thread():
@@ -309,3 +385,34 @@ def test_is_speaking_true_when_stream_active(monkeypatch):
     mgr = TTSManager(TTSConfig())
 
     assert mgr.is_speaking() is True
+
+
+def test_is_speaking_tracks_blocking_edge_mci_without_sounddevice_stream(monkeypatch):
+    """O gate de STT precisa enxergar Edge/MCI enquanto ela ainda está audível."""
+    entered = threading.Event()
+    release = threading.Event()
+
+    class _NoStream:
+        def get_stream(self):
+            raise RuntimeError("PortAudio: no stream")
+
+    class _BlockingEdge(_FakeEngine):
+        def play(self, text, voice=None, speed=1.0, blocking=True):
+            entered.set()
+            assert release.wait(timeout=2)
+
+    monkeypatch.setattr(voice_tts, "SOUNDDEVICE_AVAILABLE", True)
+    monkeypatch.setattr(voice_tts, "sd", _NoStream())
+    mgr = TTSManager(TTSConfig())
+    mgr.edge = _BlockingEdge()
+
+    worker = threading.Thread(target=mgr.speak, args=("Falando pela Edge.",))
+    worker.start()
+    assert entered.wait(timeout=2)
+    try:
+        assert mgr.is_speaking() is True
+    finally:
+        release.set()
+        worker.join(timeout=2)
+
+    assert mgr.is_speaking() is False

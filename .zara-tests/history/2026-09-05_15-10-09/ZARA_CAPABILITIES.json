@@ -1,0 +1,18 @@
+{
+  "SYS-DISK": {
+    "label": "Espaço em disco",
+    "status": "PASS",
+    "last_verified": "2026-09-05_15-10-09",
+    "latency_ms": 0.0,
+    "category": "system",
+    "error_if_any": null
+  },
+  "TECH-001": {
+    "label": "Camada técnica (zara_validate.py)",
+    "status": "PASS",
+    "last_verified": "2026-09-05_15-10-09",
+    "latency_ms": 140.8,
+    "category": "technical",
+    "error_if_any": null
+  }
+}

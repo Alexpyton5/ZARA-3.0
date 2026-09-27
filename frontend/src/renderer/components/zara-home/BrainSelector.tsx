@@ -14,6 +14,11 @@ const BASE_BRAINS = [
 
 type BrainOption = { id: string; name: string; status: string };
 
+/** An unverified catalog entry may be tried once; only AVAILABLE is proven. */
+export function canTryBrain(status: string): boolean {
+  return status === 'AVAILABLE' || status === 'DISCOVERED_UNPROVEN';
+}
+
 function isKnownBrainId(value: unknown, options: BrainOption[]): value is string {
   return typeof value === 'string' && options.some(option => option.id === value);
 }
@@ -84,7 +89,7 @@ export function useBrainSelection() {
   }, [refresh]);
 
   async function select(id: string) {
-    if (loading || changePending.current || !options.some(option => option.id === id) || id === selected || !options.some(option => option.id === id && option.status === 'AVAILABLE')) return;
+    if (loading || changePending.current || id === selected || !options.some(option => option.id === id && canTryBrain(option.status))) return;
     changePending.current = true;
     const request = ++generation.current;
     setChanging(id);
@@ -152,7 +157,7 @@ export function BrainSelector({ selection, disabled }: BrainSelectorProps) {
         >
           <option value="" disabled>Escolha um cérebro</option>
           {selection.options.map(brain => (
-            <option key={brain.id} value={brain.id} disabled={brain.status !== 'AVAILABLE'}>
+            <option key={brain.id} value={brain.id} disabled={!canTryBrain(brain.status)}>
               {brain.name}{brain.id === 'gpt-5.6-luna' ? ' (padrão)' : ''} — {statusLabel(brain.status)}
             </option>
           ))}

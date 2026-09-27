@@ -1,0 +1,112 @@
+/// <reference types="vite/client" />
+
+import type React from 'react';
+import type { ReminderEvent } from '../../reminderEvents';
+
+declare global {
+  // Elemento <webview> do Electron (usado pela aba "ZOE" para embutir o app da zoe).
+  namespace JSX {
+    interface IntrinsicElements {
+      webview: React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        src?: string;
+        partition?: string;
+        allowpopups?: boolean | '';
+        preload?: string;
+      };
+    }
+  }
+
+  interface ZaraWindowControl {
+    minimize: () => Promise<void>;
+    maximize: () => Promise<void>;
+    close: () => Promise<void>;
+  }
+
+  interface Window {
+    zaraIPC: {
+      engine?: { change?: (engine: string) => Promise<any>; list?: () => Promise<any> };
+      supercerebro?: { toggle?: (active: boolean) => Promise<any>; status?: () => Promise<any> };
+      message?: { send?: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) => Promise<any>; interrupt?: () => Promise<any> };
+      conversationHistory?: {
+        list?: (limit?: number) => Promise<any>;
+        clear?: () => Promise<any>;
+      };
+      action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
+      system?: { metrics?: () => Promise<any>; info?: () => Promise<any> };
+      voice?: { start?: () => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any>; mute?: (muted: boolean) => Promise<any>; sendMicChunk?: (pcm: any) => Promise<any> };
+      config?: { get?: () => Promise<any>; set?: (key: string, value: any) => Promise<any> };
+      // Atalhos de desktop (abrir apps, pastas, links externos, configurações)
+      desktop?: {
+        openExternal?: (id: string) => Promise<any>;
+        openFolder?: (id: string) => Promise<any>;
+        openSettings?: (id: string) => Promise<any>;
+        openApp?: (id: string) => Promise<any>;
+      };
+      // Memória de projeto / galáxia de memórias / memória do usuário
+      projectMemory?: { context?: () => Promise<any>; get?: (key: string) => Promise<any> };
+      memoryGalaxy?: { list?: () => Promise<any> };
+      userMemory?: { add?: (payload: { fact: string; source: string }) => Promise<any> };
+      // Lab v1 — API usada pelos painéis zara-home / zara-lab-v2
+      labV1?: {
+        snapshot?: (...args: any[]) => Promise<any>;
+        createSession?: (objective: string) => Promise<any>;
+        deleteSession?: (sessionId: string) => Promise<any>;
+        submit?: (payload: Record<string, any>) => Promise<any>;
+        cancel?: (payload: Record<string, any>) => Promise<any>;
+        researchSkill?: (payload: any) => Promise<any>;
+        agentProfile?: (agentId: string) => Promise<any>;
+        createAgent?: (payload: Record<string, any>) => Promise<any>;
+        updateAgentProfile?: (payload: Record<string, any>) => Promise<any>;
+        rollbackAgentProfile?: (agentId: string, version: number) => Promise<any>;
+        rebindRole?: (payload: Record<string, any>) => Promise<any>;
+        archiveAgent?: (agentId: string) => Promise<any>;
+        proposalList?: (...args: any[]) => Promise<any>;
+        proposalUpdate?: (...args: any[]) => Promise<any>;
+        proposalFeedUpdate?: (...args: any[]) => Promise<any>;
+        configureAutonomy?: (enabled: boolean) => Promise<any>;
+      };
+      lab?: {
+        state?: () => Promise<any>;
+        send?: (payload: { author: string; target: string; content: string }) => Promise<any>;
+        createProposal?: (payload: { title: string; summary: string; risk: string; owner: string }) => Promise<any>;
+        decideProposal?: (payload: { id: string; decision: 'APPROVE' | 'REJECT' }) => Promise<any>;
+        missionState?: () => Promise<any>;
+        missionVerify?: (payload: { code: string; state: string; evidence?: string[]; note?: string }) => Promise<any>;
+        missionCycle?: (payload: { action: 'resume' | 'complete'; objective?: string; cycle_id?: string; summary?: string }) => Promise<any>;
+        missionRecruit?: (payload: { task: string; needed_capabilities?: string[] }) => Promise<any>;
+        missionFinding?: (payload: { reader: string; source_name: string; url: string; summary: string }) => Promise<any>;
+        missionPrioritize?: (payload: { finding_id: string; decision: 'PRIORITIZED' | 'NO_CHANGE'; note?: string; proposal_id?: string }) => Promise<any>;
+        missionPatch?: (payload: Record<string, unknown>) => Promise<any>;
+        missionBot?: (payload: Record<string, unknown>) => Promise<any>;
+        autonomyStart?: (payload?: { objective?: string }) => Promise<any>;
+        autonomyStop?: () => Promise<any>;
+        autonomyStatus?: () => Promise<any>;
+      };
+      reminders?: {
+        create?: (payload: { text: string; due_at: number; timezone?: string }) => Promise<unknown>;
+        list?: (state?: string) => Promise<unknown>;
+        cancel?: (id: string) => Promise<unknown>;
+      };
+      conselheira?: {
+        sendMessage?: (payload: { text: string }) => Promise<any>;
+        sync?: () => Promise<any>;
+        getMessages?: (payload?: { limit?: number }) => Promise<any>;
+        getStatus?: () => Promise<any>;
+      };
+      window?: ZaraWindowControl;
+      on?: {
+        stateChange?: (callback: (state: string) => void) => () => void;
+        message?: (callback: (message: { role: string; content: string }) => void) => () => void;
+        metrics?: (callback: (metrics: any) => void) => () => void;
+        voiceLevel?: (callback: (level: number, tone: number, speaking: boolean) => void) => () => void;
+        supercerebroChange?: (callback: (active: boolean) => void) => () => void;
+        reminderCreated?: (callback: (reminder: ReminderEvent) => void) => () => void;
+        reminderFired?: (callback: (reminder: ReminderEvent) => void) => () => void;
+        voiceOutputAudio?: (callback: (data: any) => void) => () => void;
+        labOperationResult?: (callback: (event: any) => void) => () => void;
+      };
+    };
+  }
+}
+
+export {};

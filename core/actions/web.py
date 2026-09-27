@@ -565,7 +565,7 @@ def _compact_output_text(value: object, max_chars: int) -> str:
 
 
 def _format_research_output(payload: Mapping) -> str:
-    """Build a bounded, citation-usable text view for the renderer."""
+    """Build a bounded, citation-usable text view for Hermes and the renderer."""
 
     query = _compact_output_text(payload.get("query"), MAX_QUERY_CHARS)
     lines = [

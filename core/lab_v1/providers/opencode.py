@@ -97,7 +97,7 @@ class OpenCodeAdapter(ProviderAdapter):
     """Adapter that calls the local OpenCode installation."""
 
     id = "opencode"
-    label = "OpenCode · 35 modelos gratuitos"
+    label = "OpenCode"
 
     def __init__(self, *, cache_path: str | None = None, timeout_s: int = 60) -> None:
         self._timeout_s = timeout_s
@@ -105,6 +105,7 @@ class OpenCodeAdapter(ProviderAdapter):
         self._catalog: dict[str, Any] = {}
         self._last_catalog_load = 0.0
         self._catalog_ttl = 300.0  # 5 min
+        self._last_success_at = 0.0
         self._load_catalog()
 
     # -----------------------------------------------------------------
@@ -113,7 +114,7 @@ class OpenCodeAdapter(ProviderAdapter):
 
     def _load_catalog(self) -> None:
         """Carrega catálogo de modelos do OpenCode (arquivo cache ou CLI)."""
-        now = os.path.getmtime(str(self._cache_path)) if self._cache_path.exists() else 0
+        now = time.time()
         if now - self._last_catalog_load < self._catalog_ttl and self._catalog:
             return
         try:
@@ -125,9 +126,9 @@ class OpenCodeAdapter(ProviderAdapter):
                 # o MESMO no source e no empacotado (data_dir() = LOCALAPPDATA),
                 # entao um catalogo descoberto uma vez nunca se perde.
                 models = self._read_catalog_cache()
-            if models:
-                self._catalog = models
-                self._last_catalog_load = now or time.time()
+            if models is not None:
+                self._catalog = self._own_models(models)
+                self._last_catalog_load = now
                 # Grava cache para próxima vez
                 try:
                     self._cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,7 +143,7 @@ class OpenCodeAdapter(ProviderAdapter):
         """Le o cache de modelos gravado por uma sessao anterior."""
         try:
             data = json.loads(self._cache_path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) and data else None
+            return self._own_models(data) if isinstance(data, dict) else None
         except (OSError, ValueError, TypeError):
             return None
 
@@ -168,9 +169,9 @@ class OpenCodeAdapter(ProviderAdapter):
             data = json.loads(stdout)
             # O OpenCode pode retornar lista ou dict; normalizamos para dict {id: info}
             if isinstance(data, list):
-                return {m["id"]: m for m in data if isinstance(m, dict) and "id" in m}
+                return self._own_models({m["id"]: m for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)})
             if isinstance(data, dict):
-                return data
+                return self._own_models(data)
             return None
         except json.JSONDecodeError:
             # Formato texto: uma linha por modelo (sem JSON). Evidência direta
@@ -183,11 +184,23 @@ class OpenCodeAdapter(ProviderAdapter):
                 ]
                 if not lines:
                     return None
-                return {ln: {"id": ln, "name": ln} for ln in lines}
+                return self._own_models({ln: {"id": ln, "name": ln} for ln in lines})
             except Exception:
                 return None
         except Exception:
             return None
+
+    @staticmethod
+    def _own_models(models: dict[str, Any]) -> dict[str, dict[str, str]]:
+        """The CLI lists *all* providers. Only its own namespace belongs here."""
+        own = {}
+        for key, info in models.items():
+            model_id = info.get("id", key) if isinstance(info, dict) else key
+            if (isinstance(model_id, str) and model_id.startswith("opencode/")
+                    and model_id.count("/") == 1 and model_id != "opencode/"):
+                name = info.get("name") if isinstance(info, dict) else None
+                own[model_id] = {"id": model_id, "name": str(name or model_id)}
+        return own
 
     # -----------------------------------------------------------------
     # ProviderAdapter implementation
@@ -205,8 +218,6 @@ class OpenCodeAdapter(ProviderAdapter):
                 continue
             # Use o api_model que já vem com prefixo "opencode/" ou o próprio id
             api_model = info.get("id", model_id)
-            if not api_model.startswith("opencode/"):
-                api_model = f"opencode/{api_model}"
             # Tenta achar um display_name bonito
             disp = info.get("name", api_model)
             out.append(ModelDescriptor(
@@ -223,24 +234,21 @@ class OpenCodeAdapter(ProviderAdapter):
     def probe(self) -> ProviderInfo:
         """Checa se o OpenCode está disponível e tem modelos."""
         try:
-            # Se não tem nem CLI nem catalog, reporta OFFLINE
-            if not _OPENCODE_CLI or not self._catalog:
-                # Tenta carregar catálogo novamente
+            if not _OPENCODE_CLI:
+                return ProviderInfo(self.id, self.label, "opencode", Availability.OFFLINE,
+                                    "OpenCode CLI não encontrado.", models=list(self.declared_models),
+                                    installed=False, authenticated=None)
+            if not self._catalog:
                 self._load_catalog()
-                if not self._catalog:
-                    return ProviderInfo(
-                        self.id, self.label, "opencode",
-                        Availability.OFFLINE,
-                        "OpenCode CLI não encontrado ou sem modelos disponíveis.",
-                        models=[], installed=False, authenticated=False,
-                    )
-            # Se tem catálogo, está "installado" e "autenticado" (usa login do usuário)
             model_count = len(self._catalog)
+            recently_verified = time.monotonic() - self._last_success_at < 300 if self._last_success_at else False
             return ProviderInfo(
                 self.id, self.label, "opencode",
-                Availability.AVAILABLE,
-                f"OpenCode ativo ({model_count} modelos) via CLI local.",
-                models=list(self.declared_models), installed=True, authenticated=True,
+                Availability.AVAILABLE if recently_verified else Availability.UNKNOWN,
+                ("Chamada real concluída nesta sessão." if recently_verified else
+                 f"CLI encontrado; {model_count} modelos no catálogo. Acesso não verificado por chamada real."),
+                models=list(self.declared_models), installed=True,
+                authenticated=True if recently_verified else None,
                 supports_effort=False,
             )
         except Exception as exc:
@@ -280,7 +288,9 @@ class OpenCodeAdapter(ProviderAdapter):
 
         # Chama o OpenCode CLI para executar
         try:
+            started = time.perf_counter()
             result = self._call_opencode_cli(api_model, prompt, timeout)
+            duration_ms = int((time.perf_counter() - started) * 1000)
             if result is None:
                 return ProviderResult(
                     False, availability=Availability.ERROR,
@@ -301,6 +311,7 @@ class OpenCodeAdapter(ProviderAdapter):
                     error="OpenCode retornou resposta vazia.",
                 )
             # Normaliza custo e provenance
+            self._last_success_at = time.monotonic()
             return ProviderResult(
                 True,
                 text=text.strip(),
@@ -310,7 +321,7 @@ class OpenCodeAdapter(ProviderAdapter):
                 # Tenta pegar tokens se o OpenCodeReportar
                 input_tokens=result.get("input_tokens"),
                 output_tokens=result.get("output_tokens"),
-                duration_ms=result.get("duration_ms", 0),
+                duration_ms=result.get("duration_ms") or duration_ms,
             )
         except Exception as exc:
             err_classified = classify_error_text(str(exc))
@@ -328,7 +339,9 @@ class OpenCodeAdapter(ProviderAdapter):
         """Normaliza o id do modelo para o formato interno do OpenCode."""
         # Se já vem com prefixo opencode/, mantém
         if model.startswith("opencode/"):
-            return model
+            return model if model.count("/") == 1 and model != "opencode/" else None
+        if "/" in model:
+            return None
         # Tenta achar alias no dicionário
         if model in _OPENCODE_MODEL_ALIASES:
             return _OPENCODE_MODEL_ALIASES[model]
@@ -338,11 +351,6 @@ class OpenCodeAdapter(ProviderAdapter):
         direct = f"opencode/{model}"
         if self._catalog and direct in self._catalog:
             return direct
-        if self._catalog:
-            suffix = "/" + model
-            for key in self._catalog:
-                if key.endswith(suffix):
-                    return key
         return None
 
     def _call_opencode_cli(self, model: str, prompt: str, timeout_s: int) -> dict[str, Any] | None:

@@ -1,0 +1,6 @@
+  • electron-builder  version=24.13.3 os=10.0.22621
+  • loaded configuration  file=package.json ("build" field)
+  • author is missed in the package.json  appPackageFile=C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\package.json
+  • packaging       platform=win32 arch=x64 electron=28.3.3 appOutDir=release3\win-unpacked
+  • building        target=nsis file=release3\ZARA 3.0 Setup 3.0.0.exe archs=x64 oneClick=true perMachine=false
+  • building block map  blockMapFile=release3\ZARA 3.0 Setup 3.0.0.exe.blockmap

@@ -98,7 +98,7 @@ class Pedido:
     def como_pergunta(self) -> str:
         return (
             f"{self.quem_pediu} quer fazer isto:\n\n{self.o_que}\n\n"
-            f"Responde SIM ou NÃO. (pedido {self.id})\n"
+            f"Responder com 'sim' ou 'não'. (pedido {self.id})\n"
         )
 
 

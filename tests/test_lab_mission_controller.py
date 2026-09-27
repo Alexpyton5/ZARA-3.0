@@ -381,7 +381,7 @@ def test_atomic_v1_claim_prevents_adoption_before_session_state_changes(world, t
     store, ctl, _, _ = world
     runtime = LabRuntime(store, ProviderRegistry(tmp_path / 'health.json'))
 
-    def turn(session_id, text):
+    def turn(session_id, text, **kwargs):
         assert store.get_session(session_id).state.value == 'QUEUED'
         with pytest.raises(ValueError, match='belongs to V1'):
             plan(ctl)

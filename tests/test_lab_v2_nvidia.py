@@ -64,6 +64,36 @@ def test_real_catalog_shape_is_parsed_and_cached(tmp_path):
     assert DUMMY_SECRET not in (tmp_path / "models.json").read_text()
 
 
+def test_cached_catalog_and_configured_key_do_not_prove_inference(tmp_path):
+    http = FakeHttp([response(200, {"data": [{"id": "nvidia/nemotron"}]})])
+    item = adapter(tmp_path, http)
+    item.discover_models()
+    before = len(http.calls)
+    info = item.probe()
+    assert info.availability is Availability.UNKNOWN
+    assert info.authenticated is None
+    assert info.models == ["nvidia/nemotron"]
+    assert len(http.calls) == before
+
+
+def test_successful_inference_temporarily_verifies_provider(tmp_path):
+    http = FakeHttp([response(200, {"choices": [{"message": {"content": "OK"}}]})])
+    item = adapter(tmp_path, http)
+    assert item.probe().availability is Availability.UNKNOWN
+    assert item.complete(prompt="Reply exactly OK", model="nvidia/test").ok
+    assert item.probe().availability is Availability.AVAILABLE
+    item._last_success_at -= 301
+    assert item.probe().availability is Availability.UNKNOWN
+
+
+def test_empty_success_payload_does_not_verify_provider(tmp_path):
+    http = FakeHttp([response(200, {"choices": [{"message": {"content": ""}}]})])
+    item = adapter(tmp_path, http)
+    result = item.complete(prompt="Reply exactly OK", model="nvidia/test")
+    assert not result.ok and result.availability is Availability.PROVIDER_ERROR
+    assert item.probe().availability is Availability.UNKNOWN
+
+
 def test_registry_list_models_never_calls_remote(tmp_path):
     http = FakeHttp([response(200, {"data": [{"id": "nvidia/nemotron"}]})])
     item = adapter(tmp_path, http)

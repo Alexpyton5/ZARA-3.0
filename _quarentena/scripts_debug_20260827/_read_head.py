@@ -1,1 +1,0 @@
-head -100 /c/Users/alexp/Downloads/ZARA\ 3.0\ CLEAN\ 002/core/ipc_handlers.py

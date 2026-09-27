@@ -53,6 +53,12 @@ class WorkforcePolicy:
             'mission_entry_enabled': True,
             'background_enabled': True,
             'paid_allowed': False,
+            # The reauthorized Claude CLI participates through the same
+            # allow-list and resource-class checks as every other provider.
+            # An owner can still put it on standby through the persisted policy
+            # document; the default must not silently contradict the approved
+            # `claude_cli/*` PLAN_INCLUDED entries below.
+            'standby_providers': [],
             # Owner-set, per-bot provider/model choice (2026-09-12, "bots
             # customizaveis"). Empty by default: with no entry here an agent
             # keeps using its own AgentProfile.provider_id/model exactly as
@@ -99,6 +105,7 @@ class WorkforcePolicy:
                 'nvidia/nvidia/nemotron-3-super-120b-a12b': 'OWNER_REPORTED_FREE',
                 'nvidia/nvidia/nemotron-3-ultra-550b-a55b': 'OWNER_REPORTED_FREE',
                 'deepseek_harness/*': 'UNKNOWN_COST',
+                'nine_router/*': 'OWNER_REPORTED_FREE',
             },
             # Only aliases proven by a real call are listed. `claude_cli/haiku`
             # joined on 2026-09-10 (TASK 2) once it was both proven by a real call
@@ -121,8 +128,9 @@ class WorkforcePolicy:
                 # "nvidia/" appears twice: provider id "nvidia" + NVIDIA's own
                 # real model id "nvidia/nemotron-...".
                 'nvidia/nvidia/nemotron-3-super-120b-a12b', 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+                'nine_router/alex', 'nine_router/oc/muse-spark-1.2-contributor-free', 'nine_router/oc/muse-spark-1.3-contributor-free', 'nine_router/*',
             ],
-            'authorized_providers': ['codex_cli', 'claude_cli', 'nvidia'],
+            'authorized_providers': ['codex_cli', 'claude_cli', 'nvidia', 'nine_router', 'opencode'],
             'authorized_roles': ['CEO', 'BUILDER', 'REVIEWER', 'RESEARCHER', 'MEMBER'],
             'max_repair_attempts': 1,
             'cadence_seconds': 60,
@@ -146,11 +154,11 @@ class WorkforcePolicy:
             # candidate standing (e.g. codex_cli and claude_cli both out of
             # quota) -- see tests/test_lab_workforce_bot_customization.py.
             'role_model_preference': {
-                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus'],
-                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus'],
-                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus'],
-                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'sonnet', 'opus'],
-                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'sonnet', 'opus'],
+                'CEO': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'oc/nemotron-3.5-lightning-free', 'sonnet', 'opus'],
+                'BUILDER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'oc/nemotron-3.5-lightning-free', 'oc/mimo-v2.5-free', 'sonnet', 'opus'],
+                'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'sonnet', 'opus'],
+                'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'oc/nemotron-3.5-lightning-free', 'sonnet', 'opus'],
+                'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'oc/mimo-v2.5-free', 'sonnet', 'opus'],
             },
         }
 
@@ -204,6 +212,8 @@ class WorkforcePolicy:
         # resource_classes), never as an identity check in this function.
         if agent.provider_id not in set(self.document.get('authorized_providers') or ()):
             return WorkforceDecision(False, 'PROVIDER_NOT_AUTHORIZED', **common)
+        if agent.provider_id in set(self.document.get('standby_providers') or ()):
+            return WorkforceDecision(False, 'PROVIDER_STANDBY', **common)
         if agent.role.value not in set(self.document.get('authorized_roles') or ()):
             return WorkforceDecision(False, 'ROLE_NOT_AUTHORIZED', **common)
         if not self._matches(agent.provider_id, agent.model, self.document.get('authorized_models') or ()):

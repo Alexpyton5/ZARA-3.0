@@ -15,7 +15,8 @@ class Fake(ProviderAdapter):
     declared_models = (ModelDescriptor('fake', 'model', 'Model', supports_effort=True, effort_levels=('low',)),)
     calls = 0
     state = Availability.AVAILABLE
-    answer = ProviderResult(True, text='Observed tests are required.', availability=Availability.AVAILABLE)
+    answer = ProviderResult(True, text='Observed tests are required.', availability=Availability.AVAILABLE,
+                            model_reported='model')
 
     def probe(self):
         return ProviderInfo(self.id, self.label, 'fixture', self.state)
@@ -76,3 +77,59 @@ def test_invalid_effort_makes_no_call(fleet):
     with pytest.raises(ValueError, match='UNSUPPORTED_EFFORT'):
         runtime.certify_model(key='test-run', provider_id='fake', model='model', effort='ultra')
     assert fake.calls == 0
+
+
+class FakeNvidia(Fake):
+    id = 'nvidia'
+    label = 'NVIDIA fixture'
+    declared_models = (ModelDescriptor('nvidia', 'nvidia/test-a', 'Test A'),)
+    state = Availability.UNKNOWN
+    answer = ProviderResult(True, text='Observed tests are required.', availability=Availability.AVAILABLE,
+                            model_reported='nvidia/test-a', provider_session_id='request-1')
+
+
+@pytest.fixture
+def nvidia_fleet(tmp_path):
+    store = LabStore(tmp_path / 'lab.db')
+    registry = ProviderRegistry(tmp_path / 'health.json')
+    adapter = FakeNvidia()
+    registry.register(adapter)
+    runtime = LabRuntime(store, registry)
+    store.save_team(Team('team', 'Test'))
+    return runtime, FleetCertification(runtime), adapter
+
+
+def test_nvidia_unknown_first_call_can_certify_only_matching_reported_model(nvidia_fleet):
+    runtime, cert, adapter = nvidia_fleet
+    doc = runtime.certify_model(key='first', provider_id='nvidia', model='nvidia/test-a')
+    assert doc['state'] == 'COMPLETED'
+    assert doc['result']['model_reported'] == 'nvidia/test-a'
+    assert doc['result']['provider_session_id'] == 'request-1'
+    assert cert.register_proven_agent('first', team_id='team', name='Worker', role=RoleName.MEMBER).model == 'nvidia/test-a'
+    repeated = runtime.certify_model(key='first', provider_id='nvidia', model='nvidia/test-a')
+    assert repeated['agent_id'] == runtime.store.list_agents()[0].id
+    assert repeated['result'] == doc['result']
+    assert adapter.calls == 1
+
+
+@pytest.mark.parametrize(('reported', 'expected_error'), [
+    (None, 'MODEL_IDENTITY_MISSING'),
+    ('nvidia/test-b', 'MODEL_IDENTITY_MISMATCH'),
+])
+def test_nvidia_wrong_or_missing_identity_cannot_certify_or_admit(nvidia_fleet, reported, expected_error):
+    runtime, cert, adapter = nvidia_fleet
+    adapter.answer = ProviderResult(True, text='Some answer', availability=Availability.AVAILABLE,
+                                    model_reported=reported, provider_session_id='request-2')
+
+    doc = runtime.certify_model(key='identity-check', provider_id='nvidia', model='nvidia/test-a')
+
+    assert doc['state'] == 'FAILED'
+    assert doc['result']['ok'] is False
+    assert doc['result']['error'] == expected_error
+    assert doc['result']['model_reported'] == reported
+    assert doc['result']['provider_session_id'] == 'request-2'
+    assert runtime.registry.health_snapshot()['model:nvidia:nvidia/test-a']['availability'] != Availability.AVAILABLE.value
+    with pytest.raises(ValueError, match='NO_CALLABLE_PROOF'):
+        cert.register_proven_agent('identity-check', team_id='team', name='Worker', role=RoleName.MEMBER)
+    assert runtime.certify_model(key='identity-check', provider_id='nvidia', model='nvidia/test-a') == doc
+    assert adapter.calls == 1

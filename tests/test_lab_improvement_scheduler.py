@@ -11,13 +11,14 @@ Two worlds are exercised here, both entirely inside `tmp_path`:
   real Mission through the canonical `EvolutionEngine.observe_and_plan` flow.
 
 Nothing in this file touches the owner's workspace, CURRENT build, Lab database
-or the real autonomy policy. The master switch stays False in source; every test
-that needs the scheduler awake turns it on the way the owner would.
+or the real autonomy policy. The installation default is enabled, while each
+isolated test can persist an explicit opt-out when it needs the scheduler inert.
 """
 import asyncio
 import json
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -73,11 +74,11 @@ def gap_scheduler(loop, *, cap: int = 1) -> ImprovementScheduler:  # noqa: F811
 
 
 # ---------------------------------------------------------------------------
-# 1. The master switch. Production default is OFF and nothing runs by itself.
+# 1. The durable switch. Installation default is ON; persisted opt-out wins.
 # ---------------------------------------------------------------------------
-def test_the_master_switch_ships_off_and_the_cycle_refuses_to_look_for_work(tmp_path, monkeypatch):
+def test_persisted_opt_out_refuses_to_look_for_work(tmp_path, monkeypatch):
     monkeypatch.delenv(SCHEDULER_ENV_FLAG, raising=False)
-    assert SCHEDULER_ENABLED is False           # the in-source default that ships
+    assert SCHEDULER_ENABLED is True            # owner-authorized installation default
     scheduler = idle_scheduler(tmp_path, opted_in=False)
     assert scheduler_enabled(scheduler._policy()) is False
     assert scheduler.enabled() is False
@@ -92,7 +93,7 @@ def test_the_master_switch_ships_off_and_the_cycle_refuses_to_look_for_work(tmp_
     assert scheduler.store.list_sessions() == []
 
 
-def test_with_the_switch_off_background_work_cannot_bring_the_scheduler_up(tmp_path, monkeypatch):
+def test_persisted_opt_out_background_work_cannot_bring_the_scheduler_up(tmp_path, monkeypatch):
     monkeypatch.delenv(SCHEDULER_ENV_FLAG, raising=False)
     scheduler = idle_scheduler(tmp_path, opted_in=False)
     service = LabV1Service()
@@ -140,6 +141,146 @@ def test_the_owner_opt_in_is_persisted_and_reversible(tmp_path, monkeypatch):
     assert turned_off == {"success": True, "enabled": False}
     assert service._scheduler_task is None
     assert scheduler.supervisor.policy()["scheduler_enabled"] is False
+
+
+def test_snapshot_identifies_installation_default_and_persisted_choice(tmp_path, monkeypatch):
+    monkeypatch.delenv(SCHEDULER_ENV_FLAG, raising=False)
+    workspace = tmp_path / "empty-workspace"
+    workspace.mkdir()
+    store = LabStore(tmp_path / "lab.db")
+    store.initialize()
+    runtime = LabRuntime(store, ProviderRegistry(tmp_path / "health.json"))
+    supervisor = AutonomySupervisor(runtime)
+    scheduler = ImprovementScheduler(runtime, supervisor)
+
+    inherited = scheduler.snapshot()
+    assert inherited["enabled"] is True
+    assert inherited["configured_enabled"] is None
+    assert inherited["activation_source"] == "INSTALLATION_DEFAULT"
+
+    supervisor._save(scheduler_enabled=False)
+    disabled = scheduler.snapshot()
+    assert disabled["enabled"] is False
+    assert disabled["configured_enabled"] is False
+    assert disabled["activation_source"] == "PERSISTED_POLICY"
+
+
+def test_repeated_background_start_reuses_the_same_scheduler_task(tmp_path, monkeypatch):
+    monkeypatch.delenv(SCHEDULER_ENV_FLAG, raising=False)
+    scheduler = idle_scheduler(tmp_path, opted_in=True)
+    service = LabV1Service()
+    service._supervisor = scheduler.supervisor
+    service._scheduler = scheduler
+    service._scheduler_poll_seconds = 60
+
+    async def no_research():
+        return {"state": "WAITING"}
+
+    monkeypatch.setattr(service, "_run_scheduled_research", no_research)
+
+    async def exercise():
+        first = await service.start_scheduler()
+        task = service._scheduler_task
+        second = await service.start_scheduler()
+        same_task = service._scheduler_task is task
+        stopped = await service.stop_scheduler()
+        return first, second, same_task, stopped
+
+    first, second, same_task, stopped = asyncio.run(exercise())
+    assert first == {"success": True, "state": "RUNNING"}
+    assert second == {"success": True, "state": "RUNNING"}
+    assert same_task is True
+    assert stopped == {"success": True, "state": "PAUSED"}
+
+
+def test_normal_background_boot_runs_one_bounded_real_mission_and_persists_proof(
+    loop, monkeypatch
+):  # noqa: F811
+    """One normal resident boot creates work once and leaves an auditable trail.
+
+    This is intentionally stronger than a mocked timer test.  A factual runtime
+    failure is persisted first, then only ``LabV1Service.start_background`` is
+    allowed to drive the real scheduler/supervisor pair.  The owner sends no
+    message and no test calls ``Autopilot.run`` directly.
+    """
+    monkeypatch.delenv(SCHEDULER_ENV_FLAG, raising=False)
+    observe_the_failed_action(loop)
+    supervisor = AutonomySupervisor(loop["runtime"], autopilot=loop["autopilot"])
+    supervisor._save(
+        enabled=True,
+        background_enabled=True,
+        workspace=str(loop["workspace"]),
+        scheduler_enabled=True,
+        cadence_seconds=0.01,
+        evolution_cadence_seconds=86400,
+        max_new_evolution_missions_per_day=1,
+        daily_date=None,
+        daily_missions=0,
+    )
+    scheduler = ImprovementScheduler(loop["runtime"], supervisor)
+    service = LabV1Service()
+    service._runtime = loop["runtime"]
+    service._store = loop["store"]
+    service._supervisor = supervisor
+    service._scheduler = scheduler
+    service._background_interval = 0.01
+    service._scheduler_poll_seconds = 0.01
+
+    async def no_research():
+        return {"state": "WAITING"}
+
+    monkeypatch.setattr(service, "_run_scheduled_research", no_research)
+
+    async def exercise():
+        first = await service.start_background()
+        supervisor_task = service._supervisor_task
+        scheduler_task = service._scheduler_task
+        second = await service.start_background()
+        same_tasks = (
+            service._supervisor_task is supervisor_task
+            and service._scheduler_task is scheduler_task
+        )
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            with loop["store"]._connect() as conn:
+                mission_ids = [row[0] for row in conn.execute(
+                    "SELECT session_id FROM mission_controls ORDER BY rowid"
+                )]
+            if mission_ids:
+                state = loop["autopilot"].controller.snapshot(mission_ids[0])["state"]
+                if state in {"COMPLETED", "FAILED", "CANCELLED"}:
+                    break
+            await asyncio.sleep(0.02)
+        await service.stop_background()
+        return first, second, same_tasks
+
+    first, second, same_tasks = asyncio.run(exercise())
+
+    assert first == {"success": True, "state": "RUNNING"}
+    assert second == {"success": True, "state": "RUNNING"}
+    assert same_tasks is True
+    with loop["store"]._connect() as conn:
+        mission_ids = [row[0] for row in conn.execute(
+            "SELECT session_id FROM mission_controls ORDER BY rowid"
+        )]
+    assert len(mission_ids) == 1
+    sid = mission_ids[0]
+    assert loop["autopilot"].controller.snapshot(sid)["state"] == "COMPLETED"
+    assert supervisor.policy()["daily_missions"] == 1
+
+    # Visible activity is backed by canonical persisted records, not status
+    # strings invented by the scheduler or UI.
+    messages = loop["store"].list_messages(sid)
+    runs = loop["store"].list_runs(sid)
+    artifacts = loop["store"].list_artifacts(sid)
+    events = loop["store"].list_events(sid)
+    assert messages and runs and artifacts and events
+    assert any(message.run_id for message in messages if message.kind.value == "AGENT")
+    assert any(
+        artifact.kind in {"VERIFICATION", "SOURCE_VERIFICATION", "REAL_TESTS"}
+        for artifact in artifacts
+    )
+    assert any(event.type == "mission.verified" for event in events)
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +386,42 @@ def test_a_real_capability_gap_creates_a_real_mission(loop, monkeypatch):  # noq
     assert scheduler.state()["dispatched"] == 1
     assert scheduler.supervisor.policy()["daily_missions"] == 1
     assert scheduler.supervisor.policy()["active_session"] == sid
+
+
+def test_concurrent_scheduler_cycle_cannot_pass_the_same_supervisor_gate(
+    loop, monkeypatch
+):  # noqa: F811
+    monkeypatch.delenv(SCHEDULER_ENV_FLAG, raising=False)
+    observe_the_failed_action(loop)
+    first = gap_scheduler(loop, cap=5)
+    competing = ImprovementScheduler(loop["runtime"], first.supervisor)
+    entered = threading.Event()
+    release = threading.Event()
+    original_candidates = first._candidates
+
+    def hold_before_dispatch(policy):
+        entered.set()
+        assert release.wait(timeout=5)
+        return original_candidates(policy)
+
+    first._candidates = hold_before_dispatch
+    result = {}
+
+    def run_first():
+        result["first"] = first.cycle(now=T0)
+
+    worker = threading.Thread(target=run_first)
+    worker.start()
+    assert entered.wait(timeout=5)
+    second = competing.cycle(now=T0)
+    release.set()
+    worker.join(timeout=10)
+
+    assert not worker.is_alive()
+    assert second == {"state": "BUSY", "dispatched": False}
+    assert result["first"]["state"] == "DISPATCHED"
+    assert len(loop["store"].list_sessions()) == 1
+    assert loop["adapter"].prompts == []
 
 
 def test_a_live_mission_outranks_speculative_improvement_work(loop, monkeypatch):  # noqa: F811
@@ -377,6 +554,12 @@ def test_the_scheduler_loop_ticks_on_a_timer_and_does_not_busy_poll(tmp_path, mo
         return await real_sleep(delay, *args, **kwargs)
 
     monkeypatch.setattr(scheduler, "cycle", observed_cycle)
+    # This test proves the timer only.  Research has its own contract and may
+    # use network sources, so it must never be reached from this isolated test.
+    async def no_research():
+        return {"state": "WAITING"}
+
+    monkeypatch.setattr(service, "_run_scheduled_research", no_research)
     monkeypatch.setattr(asyncio, "sleep", observed_sleep)
 
     async def exercise():

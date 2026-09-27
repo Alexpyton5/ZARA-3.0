@@ -83,6 +83,16 @@ def test_role_selection_uses_economical_authorized_worker():
     assert policy.preference_rank('gpt-5.6-luna', 'BUILDER') < policy.preference_rank('gpt-6-astra', 'BUILDER')
 
 
+def test_9router_is_ranked_after_codex_and_before_other_remote_fallbacks():
+    policy = WorkforcePolicy({})
+    assert policy.preference_rank('gpt-5.6-sol', 'CEO') < policy.preference_rank(
+        'oc/muse-spark-1.3-contributor-free', 'CEO'
+    )
+    assert policy.preference_rank('oc/muse-spark-1.3-contributor-free', 'CEO') < policy.preference_rank(
+        'sonnet', 'CEO'
+    )
+
+
 def test_service_and_supervisor_share_one_autopilot_instance():
     service = LabV1Service()
     shared = SimpleNamespace(start=Mock(return_value={
@@ -128,3 +138,52 @@ def test_stale_quota_denial_becomes_retryable_without_becoming_success_evidence(
     current = registry.list_providers()[0]
     assert current.availability is Availability.AVAILABLE
     assert 'revalida o recurso' in current.detail
+
+
+def test_configure_agent_replaces_the_effective_override_not_just_the_card_label():
+    class Adapter:
+        controlled_text_only = True
+        declared_models = (SimpleNamespace(model_id='nvidia/nemotron-3-super-120b-a12b'),)
+
+    class Registry:
+        def get(self, provider_id):
+            return Adapter() if provider_id == 'nvidia' else None
+
+        def list_providers(self):
+            return [ProviderInfo('nvidia', 'NVIDIA', 'test', Availability.AVAILABLE,
+                                 models=['nvidia/nemotron-3-super-120b-a12b'])]
+
+        def list_models(self, provider_id=None):
+            return [{'provider_id': 'nvidia', 'model_id': 'nvidia/nemotron-3-super-120b-a12b'}]
+
+    worker = AgentProfile('worker', 'Vulcan', 'nine_router', 'alex', RoleName.BUILDER,
+                          capabilities=['model.text'])
+    saved = []
+    policy_writes = []
+    supervisor = SimpleNamespace(
+        policy=lambda: {**WorkforcePolicy.default_document(), 'agent_model_overrides': {
+            worker.id: {'provider_id': 'nine_router', 'model_id': 'alex'},
+        }},
+        _save=lambda **changes: policy_writes.append(changes),
+    )
+    service = LabV1Service()
+    service._runtime = SimpleNamespace(registry=Registry())
+    service._store = SimpleNamespace(
+        get_agent=lambda agent_id: worker if agent_id == worker.id else None,
+        list_agents=lambda: [worker],
+        save_agent=lambda value: saved.append(value),
+    )
+    service._supervisor = supervisor
+
+    result = asyncio.run(service.configure_agent(
+        agent_id=worker.id, provider_id='nvidia', model='nvidia/nemotron-3-super-120b-a12b',
+    ))
+
+    assert result['success'] is True
+    assert result['effective_resource'] == {
+        'provider_id': 'nvidia', 'model_id': 'nvidia/nemotron-3-super-120b-a12b',
+    }
+    assert saved[0].provider_id == 'nvidia'
+    assert policy_writes == [{'agent_model_overrides': {
+        worker.id: {'provider_id': 'nvidia', 'model_id': 'nvidia/nemotron-3-super-120b-a12b'},
+    }}]

@@ -5,10 +5,6 @@ config/api_keys.json.bak_*
 .env.*
 !*.example.json
 
-# Ambiente Python proprio da ZARA (ZARA-PYTHON-PROPRIO-001)
-# Criado por tools/preparar_python.py. Nunca versionado: e ~2 GB de wheels.
-.venv/
-
 # Python caches and test output
 __pycache__/
 *.py[cod]
@@ -22,9 +18,6 @@ frontend/dist-frontend/
 frontend/dist-electron/
 frontend/dist-tests/
 frontend/release/
-frontend/ZARA CURRENT BUILD/
-frontend/.current-build-staging-*/
-frontend/.build-backups/
 frontend/.test-dist/
 build-sidecar/
 dist-sidecar/
@@ -42,52 +35,22 @@ nul
 # Temporary probe artifacts (may contain runtime DBs with personal data)
 _codex_*
 
-# Room relay runtime data (append-only history, gitignored)
-tools/room_relay/relay_store/
-
-# ZARA-PROTECT-WORK-001 (2026-08-12)
-# Linhagens de candidato pesam ~7.7 GB. Nunca entram no git.
-frontend/release-candidate-*/
+# Generated and local artifacts requested by the release workflow
+node_modules/
+node_modules.bak*/
+.png-store/
 .pnpm-store/
-.opencode/
+.venv/
+venv/
+*.exe
+*.asar
+dist***/
+build-*/
+release-candidate-*/
+frontend/release*/
+.unlazy/
+artifacts/
 data/
-lembretes/
-model-routing-skill.zip
-ZARA-DIAGNOSTICO.txt
-
-# Graphify code graph (regenerate with: graphify update .)
-graphify-out/
-
-# Backups de chave feitos pelos scripts (ex.: api_keys.json.antes-do-telegram).
-# A regra antiga cobria so o nome exato, e um backup com sufixo teria levado as
-# chaves reais do Alex para dentro do repositorio - onde ficariam no historico
-# para sempre, mesmo depois de apagadas.
-config/api_keys*
-!config/api_keys.example.json
-
-# Historical snapshots may contain retired credentials. Keep the recoverable
-# quarantine local and permanently outside version control.
-_quarentena/snapshots-inseguros/
-
-# Tauri prototype build artifacts (never versioned: Rust target dir is ~5GB)
-zara-app/src-tauri/target/
-zara-app/node_modules/
-
-# Inspection/debug scratch dirs
-.dsh-inspect/
-
-# Archived interface source dump (large zip, not canonical source)
-zara-interface-codigo-completo.zip
-
-# ZaraValidationEngine local run history — ephemeral, one folder per run.
-# baseline.json IS tracked (reviewed, intentional); everything else here is not.
-.zara-tests/runs/
-.zara-tests/latest.json
-.zara-tests/history.json
-.zara-tests/test-run.lock
-
-# ZARA-SELFTEST-001 local report output — ephemeral, one folder per run.
-# test_config.json IS tracked (reviewed, intentional); everything else here is not.
-.zara-tests/latest/
-.zara-tests/history/
-.zara-tests/sandbox/
+ZARA 4/
+zara app/
+*.bak-build-publish-*

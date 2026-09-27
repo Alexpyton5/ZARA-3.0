@@ -12,7 +12,8 @@ import subprocess
 import sys
 import time
 
-from core.lab_v1.autopilot import Autopilot, WORKFLOW
+from core.lab_v1.autopilot import (Autopilot, WORKFLOW, WorkspaceNotConfigured,
+                                   resolve_lab_source_checkout)
 
 
 LEGACY_WORKFLOW = "reviewed-candidate-update-v1"
@@ -29,8 +30,13 @@ class EvolutionEngine:
 
     def __init__(self, runtime, workspace, *, policy=None, checker=None, autopilot=None):
         self.runtime, self.store = runtime, runtime.store
-        self.workspace = Path(workspace).resolve()
+        source = resolve_lab_source_checkout(workspace)
+        self.workspace = source
         self.policy = policy
+        if source is not None and policy is not None:
+            # This is an in-memory policy for this run; keep persisted user
+            # configuration intact while source missions use the real checkout.
+            policy.document['workspace'] = str(source)
         self.checker = checker or self._check_counterexample
         # Keep passive source observation provider-free.  The canonical
         # Autopilot is created only when a justified mission is dispatched.
@@ -98,6 +104,8 @@ class EvolutionEngine:
 
     def observe_local(self):
         """Hash real local source and persist a provider-free heartbeat."""
+        if self.workspace is None:
+            raise WorkspaceNotConfigured('WORKSPACE_NOT_CONFIGURED: persistent source checkout not found')
         inventory = self._source_inventory()
         previous = self.observer_snapshot() or {}
         old_hashes = {item["source_path"]: item["source_sha256"]

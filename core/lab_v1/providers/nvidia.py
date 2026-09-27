@@ -36,6 +36,7 @@ class NvidiaApiAdapter(ProviderAdapter):
         self._cache_path = cache_path or (data_dir() / "lab" / "nvidia_models.json")
         self._transport = transport or self._urlopen_transport
         self._catalog = self._read_catalog()
+        self._last_success_at = 0.0
 
     @staticmethod
     def _load_credential(config_path: Path | None) -> str:
@@ -92,14 +93,14 @@ class NvidiaApiAdapter(ProviderAdapter):
                 installed=None, authenticated=False,
             )
         models = [item.model_id for item in self.declared_models]
-        verified = bool(models)
+        recently_verified = time.monotonic() - self._last_success_at < 300 if self._last_success_at else False
         return ProviderInfo(
             self.id, self.label, "nvidia_api",
-            Availability.AVAILABLE if verified else Availability.UNKNOWN,
-            "Credencial e catalogo NVIDIA verificados anteriormente." if verified
-            else "Credencial NVIDIA configurada; acesso ainda nao verificado.",
+            Availability.AVAILABLE if recently_verified else Availability.UNKNOWN,
+            "Chamada real concluida nesta sessao." if recently_verified else
+            "Credencial configurada; acesso ao modelo nao verificado por chamada real.",
             models=models, installed=None,
-            authenticated=True if verified else None,
+            authenticated=True if recently_verified else None,
             quota_available=None,
         )
 
@@ -171,13 +172,14 @@ class NvidiaApiAdapter(ProviderAdapter):
             choices = payload.get("choices") or []
             message = choices[0].get("message") if choices and isinstance(choices[0], dict) else None
             text = message.get("content") if isinstance(message, dict) else None
-            if not isinstance(text, str):
+            if not isinstance(text, str) or not text.strip():
                 raise ValueError("missing content")
             usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
             reported = payload.get("model") if isinstance(payload.get("model"), str) else None
             request_id = payload.get("id") if isinstance(payload.get("id"), str) else None
             if request_id is None:
                 request_id = headers.get("x-request-id")
+            self._last_success_at = time.monotonic()
             return ProviderResult(
                 True, text=text, availability=Availability.AVAILABLE,
                 provider_session_id=request_id, cost_usd=None,

@@ -28,6 +28,19 @@ from core.lab_v1.runtime import _extract_json
 _MAX_SOURCE_REPAIRS = 3
 
 
+def profile_permission_allows(agent, permission: str) -> bool:
+    """Enforce owner-configured permissions without breaking legacy agents.
+
+    Profiles created before this feature have no marker and retain their
+    established behavior. Once the owner saves permissions, absence becomes
+    an explicit denial for source-work actions.
+    """
+    capabilities = set(getattr(agent, 'capabilities', ()) or ())
+    if 'profile.permissions.configured' not in capabilities:
+        return True
+    return f'permission:{permission}' in capabilities
+
+
 def _dict(value):
     if hasattr(value, 'to_dict'):
         return value.to_dict()
@@ -86,8 +99,15 @@ def source_requested(intent, kind):
         return True
     if re.search(r'\b(propostas?|pesquis[ae]|estud[ae])\b', intent, re.I) and not re.search(r'\b(implement[ae]|corrij[ae]|aplique)\b', intent, re.I):
         return False
+    # Alex can ask the team to work toward a concrete voice-latency outcome
+    # without using an implementation verb such as "melhore" or "corrija".
+    if (re.search(r'\btrabalh\w*\b', intent, re.I)
+            and re.search(r'\btempo\s+de\s+resposta\b', intent, re.I)
+            and re.search(r'\bvoz\b', intent, re.I)
+            and re.search(r'\bquase\s+instant[aâ]ne', intent, re.I)):
+        return True
     return bool(re.search(r'(?:corrij|consert|implement|melhor|auto.?melhor|resolv|mudem|aprend|mais r[aá]pid|mais discret)', intent, re.I)
-                and re.search(r'(?:zara|voz|anima[çc][aã]o|interface|\blab\b|\bcore/|\.py\b|c[oó]digo)', intent, re.I))
+                and re.search(r'(?:zara|voz|anima[çc][aã]o|interface|\blab\b|\bcore/|\.py\b|c[oó]digo|\bopen\s*code\b)', intent, re.I))
 
 
 def prepare_source(engine, sandbox, intent):
@@ -183,12 +203,19 @@ class SourceMission:
         if not builders:
             self.engine._block(self.sid, 'REAL_BUILDER_UNAVAILABLE'); return
         builder = builders[0]
+        if (not profile_permission_allows(builder, 'write_sandbox')
+                or not profile_permission_allows(builder, 'run_tests')):
+            self.engine._block(self.sid, 'AGENT_PERMISSION_DENIED')
+            return
         reviewers = [a for a in self.engine.candidates(team, RoleName.REVIEWER)
                      if a.id not in (planner.id, builder.id)
                      and (a.provider_id, a.model) not in ((planner.provider_id, planner.model), (builder.provider_id, builder.model))]
         if not reviewers:
             self.engine._block(self.sid, 'INDEPENDENT_REVIEWER_UNAVAILABLE'); return
         reviewer = reviewers[0]
+        if not profile_permission_allows(reviewer, 'read_workspace'):
+            self.engine._block(self.sid, 'AGENT_PERMISSION_DENIED')
+            return
         definitions = [
             (patch['id'] + ':draft', patch, builder, 'DELEGATE', 'model.text', ('plan',)),
             (patch['id'] + ':apply', patch, builder, 'ACTION', 'source.apply', (patch['id'] + ':draft',)),
@@ -295,7 +322,6 @@ class SourceMission:
                 'copied core. Preserve unrelated behavior. No predetermined answer has been provided; implement it.')
             self.engine._metrics(self.sid, delegation_automatic=True, context_transfer_automatic=True)
         else:
-            evidence = self.meta['test_evidence']
             changes = self.meta['change_evidence']
             hashes = self.current_hashes()
             preservation = _recheck_protected(self.meta['protection_baseline'])
@@ -306,28 +332,43 @@ class SourceMission:
                     body=json.dumps(preservation, ensure_ascii=False)))
             self.save_meta(review_preservation_evidence=preservation,
                            review_preservation_receipt_id=preservation_id)
+            from core.lab_v1.review_evidence_packet import (
+                build_review_evidence_packet, persist_review_evidence_packet)
+            packet, packet_sha256 = build_review_evidence_packet(
+                store=self.store, controller=self.engine.controller, session_id=self.sid,
+                review_attempt_id=dispatch.attempt_id, patch_step_id=self.meta['patch_step'],
+                test_step_id=self.meta['test_step'], review_task_id=dispatch.task_id,
+                change_evidence=changes, review_preservation_id=preservation_id,
+                source_identity=self.source_identity(), candidate_identity=self.current_identity())
+            packet_artifact = persist_review_evidence_packet(
+                self.store, session_id=self.sid, task_id=dispatch.task_id,
+                packet=packet, packet_sha256=packet_sha256)
+            self.save_meta(review_evidence_packet_id=packet_artifact.id,
+                           review_evidence_packet_sha256=packet_sha256,
+                           review_evidence_packet_attempt_id=dispatch.attempt_id)
             prompt += '\nACTUAL_FILES: ' + json.dumps(self.candidate.read_context(
                 self.meta['allowed_paths'], max_chars=46000, on_overflow='outline',
                 focus=self.context_focus(changes.get('diff') if isinstance(changes, dict) else None)),
                 ensure_ascii=False)
-            prompt += '\nACTUAL_DIFF_TESTS_AND_LOCAL_PRESERVATION: ' + json.dumps(
-                {'changes': changes, 'tests': evidence,
-                 'preservation_after_tests': self.meta['preservation_evidence'],
-                 'preservation_immediately_before_review': preservation}, ensure_ascii=False)[-44000:]
+            prompt += '\nREVIEW_EVIDENCE_PACKET: ' + json.dumps(packet, ensure_ascii=False, sort_keys=True)
             prompt += '\nEVIDENCE_REFERENCES: ' + json.dumps(
                 {'artifact_hashes': hashes,
                  'test_receipt_ids': [self.meta['test_receipt_id'], self.meta['preservation_receipt_id'],
-                                      preservation_id]})
+                                      preservation_id],
+                 'packet_id': packet_artifact.id, 'packet_sha256': packet_sha256})
             system = ('You are the independent reviewer. Inspect the objective, actual diff/source/tests and '
                 'actual subprocess results plus the deterministic local before/after preservation receipt. '
                 'The future desktop candidate build is a later gate; review only source, tests, and the factual '
                 'NO_PROMOTION proof at this stage. Reject superficial fixes, weakened tests, fabricated work, unrelated '
                 'modifications, missed negation scopes, negative statements hiding real complaints, or fake evidence. '
                 'You are a distinct model/Run from planner and builder. No expected solution is supplied. '
-                'Return JSON only. PASS schema: {"verdict":"PASS","rationale":"concrete findings",'
-                '"evidence_refs":{"artifact_hashes":["reviewed hash"],"test_receipt_ids":["reviewed receipt"]}}. '
+                'Return JSON only. Copy every supplied EVIDENCE_REFERENCES value exactly; partial references fail. '
+                'PASS schema: {"verdict":"PASS","rationale":"concrete findings",'
+                '"evidence_refs":{"artifact_hashes":["all reviewed hashes"],"test_receipt_ids":["all reviewed receipts"],'
+                '"packet_id":"reviewed packet id","packet_sha256":"reviewed packet hash"}}. '
                 'FAIL schema: {"verdict":"FAIL","failure_kind":"CODE_OR_TEST","rationale":"concrete findings",'
-                '"evidence_refs":{"artifact_hashes":["reviewed hash"],"test_receipt_ids":["reviewed receipt"]}}. '
+                '"evidence_refs":{"artifact_hashes":["all reviewed hashes"],"test_receipt_ids":["all reviewed receipts"],'
+                '"packet_id":"reviewed packet id","packet_sha256":"reviewed packet hash"}}. '
                 'For FAIL, failure_kind must be exactly CODE_OR_TEST or EVIDENCE_ONLY. '
                 'Use CODE_OR_TEST for any source logic, behavioral counterexample, regression-test weakness, or '
                 'implementation concern. Use EVIDENCE_ONLY only when source and tests are acceptable and the sole '
@@ -365,6 +406,15 @@ class SourceMission:
     def current_hashes(self):
         return [hashlib.sha256((Path(self.meta['sandbox']) / 'source' / p).read_bytes()).hexdigest()
                 for p in self.meta['allowed_paths'] if (Path(self.meta['sandbox']) / 'source' / p).is_file()]
+
+    def current_identity(self):
+        return {p: hashlib.sha256((Path(self.meta['sandbox']) / 'source' / p).read_bytes()).hexdigest()
+                for p in self.meta['allowed_paths'] if (Path(self.meta['sandbox']) / 'source' / p).is_file()}
+
+    def source_identity(self):
+        manifest = json.loads(Path(self.meta['snapshot']['manifest_path']).read_text(encoding='utf-8'))
+        return {item['path']: item['before_sha256'] for item in manifest['files']
+                if item['path'] in self.meta['allowed_paths']}
 
     def artifact(self, dispatch, kind, value):
         body = json.dumps(_dict(value), ensure_ascii=False)
@@ -582,12 +632,30 @@ class SourceMission:
                     raise ValueError('REAL_REGRESSION_TEST_REQUIRED')
                 if not set(paths) & set(self.meta['source_paths']): raise ValueError('REAL_SOURCE_REQUIRED')
             else:
+                from core.lab_v1.review_evidence_packet import (
+                    _bound_response_run,
+                    validate_persisted_review_evidence_packet,
+                )
                 after_review = _recheck_protected(self.meta['protection_baseline'])
                 if after_review.get('status') != 'NO_PROMOTION' or after_review.get('matches') is not True:
                     raise ValueError('PROTECTED_STATE_CHANGED_DURING_REVIEW')
                 runs = self.store.list_runs(self.sid)
-                reviewer = next(r for r in reversed(runs) if r.task_id == dispatch.task_id)
-                planner = next(r for r in reversed(runs) if r.task_id == self.sid + ':plan' and r.state.value == 'COMPLETED')
+                artifacts = self.store.list_artifacts(self.sid)
+                indexed = {item.id: item for item in artifacts}
+                if len(indexed) != len(artifacts):
+                    raise ValueError('MODEL_RESPONSE_BINDING_DUPLICATE_ARTIFACT')
+                reviewer = _bound_response_run(
+                    self.store, indexed, session_id=self.sid, task_id=dispatch.task_id,
+                    attempt_id=dispatch.attempt_id, response=artifact)
+                snapshot = self.engine.controller.snapshot(self.sid)
+                plan_step = next(step for step in snapshot['steps'] if step['id'] == 'plan')
+                plan_attempt_id = plan_step.get('attempt_id')
+                plan_artifact = indexed.get('response:' + str(plan_attempt_id))
+                if not plan_attempt_id or plan_artifact is None:
+                    raise ValueError('MODEL_RESPONSE_BINDING_PLANNER_RESPONSE_MISSING')
+                planner = _bound_response_run(
+                    self.store, indexed, session_id=self.sid, task_id=plan_step['task_id'],
+                    attempt_id=plan_attempt_id, response=plan_artifact)
                 builders = [r for r in runs if r.task_id == self.sid + ':' + self.meta['patch_step'] and r.state.value == 'COMPLETED']
                 failure_kind = 'CODE_OR_TEST'
                 # Defensive default: legacy, malformed or ambiguous FAIL output
@@ -599,6 +667,11 @@ class SourceMission:
                 # repair() restart the worker that actually failed.
                 self.save_meta(review_response_defect=None)
                 try:
+                    packet_id = self.meta['review_evidence_packet_id']
+                    packet_sha256 = self.meta['review_evidence_packet_sha256']
+                    validate_persisted_review_evidence_packet(
+                        self.store, session_id=self.sid, packet_id=packet_id,
+                        packet_sha256=packet_sha256, review_attempt_id=dispatch.attempt_id)
                     if isinstance(value, dict) and value.get('verdict') == 'FAIL':
                         if set(value) != {'verdict', 'rationale', 'evidence_refs', 'failure_kind'}:
                             raise ReviewResponseContractError('REVIEW_FAIL_SCHEMA_REQUIRES_FAILURE_KIND')
@@ -619,7 +692,8 @@ class SourceMission:
                     verified = validate_reviewer_result(normalized_review, reviewer_run=reviewer, planner_run=planner,
                         builder_runs=builders, artifact_hashes=self.current_hashes(),
                         test_receipt_ids=[self.meta['test_receipt_id'], self.meta['preservation_receipt_id'],
-                                          self.meta['review_preservation_receipt_id']])
+                                          self.meta['review_preservation_receipt_id']],
+                        expected_packet_id=packet_id, expected_packet_sha256=packet_sha256)
                 except ReviewResponseContractError as exc:
                     self.save_meta(review_response_defect=str(exc))
                     raise

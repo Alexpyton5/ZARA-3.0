@@ -7,12 +7,17 @@ activated. No dependency installation, process termination or baseline overwrite
 from __future__ import annotations
 
 import argparse
+import codecs
 import hashlib
 import json
+import math
 import os
+import queue
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -52,13 +57,213 @@ def write_json(path: Path, data: dict) -> None:
     os.replace(temporary, path)
 
 
-def run(command: list[str], cwd: Path = ROOT) -> str:
-    print("[BUILD] " + " ".join(command), flush=True)
-    result = subprocess.run(command, cwd=cwd, text=True, encoding="utf-8", errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    print(result.stdout, flush=True)
-    if result.returncode:
-        raise RuntimeError(f"command failed ({result.returncode}): {command[0]}")
-    return result.stdout.strip()
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 30 * 60
+DEFAULT_HEARTBEAT_SECONDS = 15
+
+
+def build_log_path() -> Path:
+    """Return the append-only log path without changing build output paths."""
+    configured = os.environ.get("ZARA_BUILD_LOG")
+    return Path(configured) if configured else ROOT / "build-current.log"
+
+
+def _duration_from_env(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if not value:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a positive number") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise RuntimeError(f"{name} must be a positive number")
+    return parsed
+
+
+def _write_event(stream, message: str) -> None:
+    line = message if message.endswith("\n") else message + "\n"
+    stream.write(line)
+    stream.flush()
+
+
+def _record(message: str) -> None:
+    """Print and append one pipeline event immediately."""
+    line = message if message.endswith("\n") else message + "\n"
+    print(line, end="", flush=True)
+    log_path = build_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8", newline="") as log:
+        _write_event(log, line)
+
+
+def emit_stage(stage: str) -> None:
+    _record(f"[HEARTBEAT] stage={stage} status=started")
+
+
+def _read_pipe(source: str, stream, events: queue.Queue) -> None:
+    try:
+        while True:
+            chunk = stream.read(4096)
+            if not chunk:
+                break
+            events.put((source, chunk))
+    finally:
+        stream.close()
+        events.put((source, None))
+
+
+def _write_output(log, source: str, text: str) -> None:
+    for part in text.splitlines(keepends=True):
+        log.write(f"[{source}] {part}")
+    if text and not text.endswith(("\n", "\r")):
+        log.write("\n")
+    log.flush()
+
+
+def run(
+    command: list[str],
+    cwd: Path = ROOT,
+    *,
+    timeout_seconds: float | None = None,
+    heartbeat_seconds: float | None = None,
+    stage: str | None = None,
+) -> str:
+    """Run a Windows command with live stdout/stderr, heartbeats and timeout."""
+    if not command:
+        raise ValueError("command must not be empty")
+    command = [str(item) for item in command]
+    label = stage or Path(command[0]).name
+    timeout_seconds = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else _duration_from_env("ZARA_BUILD_TIMEOUT_SECONDS", DEFAULT_COMMAND_TIMEOUT_SECONDS)
+    )
+    heartbeat_seconds = (
+        heartbeat_seconds
+        if heartbeat_seconds is not None
+        else _duration_from_env("ZARA_BUILD_HEARTBEAT_SECONDS", DEFAULT_HEARTBEAT_SECONDS)
+    )
+    if timeout_seconds <= 0 or heartbeat_seconds <= 0:
+        raise ValueError("timeout and heartbeat must be positive")
+
+    log_path = build_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    command_text = " ".join(command)
+    output: list[str] = []
+    events: queue.Queue = queue.Queue()
+    finished_readers: set[str] = set()
+    last_output = started
+    last_heartbeat = started
+
+    with log_path.open("a", encoding="utf-8", newline="") as log:
+        _write_event(log, f"[BUILD] stage={label} command={command_text}")
+        print(f"[BUILD] stage={label} command={command_text}", flush=True)
+        _write_event(log, f"[HEARTBEAT] stage={label} status=started")
+        print(f"[HEARTBEAT] stage={label} status=started", flush=True)
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+            )
+        except OSError as exc:
+            _write_event(log, f"[FAILED] stage={label} spawn={exc}")
+            raise
+
+        assert process.stdout is not None and process.stderr is not None
+        readers = [
+            threading.Thread(target=_read_pipe, args=("stdout", process.stdout, events), daemon=True),
+            threading.Thread(target=_read_pipe, args=("stderr", process.stderr, events), daemon=True),
+        ]
+        for reader in readers:
+            reader.start()
+
+        decoders = {
+            source: codecs.getincrementaldecoder("utf-8")(errors="replace")
+            for source in ("stdout", "stderr")
+        }
+
+        def drain_event(source: str, chunk: bytes | None) -> None:
+            nonlocal last_output
+            if chunk is None:
+                tail = decoders[source].decode(b"", final=True)
+                if tail:
+                    output.append(tail)
+                    print(tail, end="", flush=True)
+                    _write_output(log, source, tail)
+                finished_readers.add(source)
+                return
+            text = decoders[source].decode(chunk)
+            if text:
+                output.append(text)
+                last_output = time.monotonic()
+                print(text, end="", flush=True)
+                _write_output(log, source, text)
+
+        def drain_pending() -> None:
+            while True:
+                try:
+                    source, chunk = events.get_nowait()
+                except queue.Empty:
+                    return
+                drain_event(source, chunk)
+
+        try:
+            while len(finished_readers) < 2 or process.poll() is None:
+                now = time.monotonic()
+                elapsed = now - started
+                if elapsed >= timeout_seconds:
+                    message = (
+                        f"[TIMEOUT] stage={label} timeout={timeout_seconds:.1f}s "
+                        f"elapsed={elapsed:.1f}s quiet={now - last_output:.1f}s"
+                    )
+                    print(message, flush=True)
+                    _write_event(log, message)
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait()
+                    for reader in readers:
+                        reader.join(timeout=2)
+                    drain_pending()
+                    raise TimeoutError(f"command timed out after {timeout_seconds:.1f}s: {command[0]}")
+
+                if now - last_heartbeat >= heartbeat_seconds:
+                    message = (
+                        f"[HEARTBEAT] stage={label} elapsed={elapsed:.1f}s "
+                        f"quiet={now - last_output:.1f}s pid={process.pid}"
+                    )
+                    print(message, flush=True)
+                    _write_event(log, message)
+                    last_heartbeat = now
+
+                wait_for = min(heartbeat_seconds, timeout_seconds - elapsed)
+                try:
+                    source, chunk = events.get(timeout=max(0.01, wait_for))
+                except queue.Empty:
+                    continue
+                drain_event(source, chunk)
+
+            process.wait()
+            for reader in readers:
+                reader.join(timeout=2)
+            drain_pending()
+            elapsed = time.monotonic() - started
+            if process.returncode:
+                message = f"[FAILED] stage={label} returncode={process.returncode} elapsed={elapsed:.1f}s"
+                print(message, flush=True)
+                _write_event(log, message)
+                raise RuntimeError(f"command failed ({process.returncode}): {command[0]}")
+            message = f"[DONE] stage={label} elapsed={elapsed:.1f}s"
+            print(message, flush=True)
+            _write_event(log, message)
+            return "".join(output).strip()
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
 
 
 def git_value(command: list[str], override: str) -> str:
@@ -68,6 +273,7 @@ def git_value(command: list[str], override: str) -> str:
 
 
 def toolchain() -> dict:
+    emit_stage("toolchain")
     node = shutil.which("node.exe") or shutil.which("node")
     if not node or not PYTHON.is_file():
         raise RuntimeError("Node or project .venv Python is missing")
@@ -86,6 +292,40 @@ def confined_package(path: Path) -> Path:
     return resolved
 
 
+MIN_BUILD_FREE_BYTES = 3 * 1024 * 1024 * 1024
+
+
+def build_preflight(*, clean_incomplete: bool = False) -> dict:
+    """Check the expensive failure modes before PyInstaller/electron-builder.
+
+    The Windows NSIS step needs room for a large temporary 7z archive.  Failing
+    before compiling is cheaper and, importantly, cannot touch the active build.
+    Cleanup is deliberately allow-listed: only incomplete staging directories in
+    ``frontend`` can be removed, never source, ``ZARA CURRENT BUILD`` or user data.
+    """
+    emit_stage("preflight")
+    usage = shutil.disk_usage(ROOT)
+    free_gb = usage.free / (1024 ** 3)
+    if usage.free < MIN_BUILD_FREE_BYTES:
+        raise RuntimeError(
+            f"Espaco insuficiente para o empacotamento NSIS: {free_gb:.2f} GiB livres; "
+            f"sao necessarios pelo menos {MIN_BUILD_FREE_BYTES / (1024 ** 3):.0f} GiB."
+        )
+    removed: list[str] = []
+    if clean_incomplete:
+        for candidate in FRONTEND.glob(".current-build-staging-*"):
+            if not candidate.is_dir():
+                continue
+            if (candidate / "win-unpacked" / "BUILD_INFO.json").is_file() and (candidate / "SOURCE_MANIFEST.json").is_file():
+                continue
+            confined_package(candidate)
+            shutil.rmtree(candidate)
+            removed.append(str(candidate))
+    result = {"free_gib": round(free_gb, 2), "minimum_free_gib": 3, "removed_incomplete": removed}
+    print("[PREFLIGHT] " + json.dumps(result, ensure_ascii=False), flush=True)
+    return result
+
+
 def packaged_paths(package: Path) -> dict[str, Path]:
     unpacked = package / "win-unpacked"
     return {"EXE_SHA256": unpacked / "ZARA 3.0.exe", "ASAR_SHA256": unpacked / "resources" / "app.asar",
@@ -94,6 +334,7 @@ def packaged_paths(package: Path) -> dict[str, Path]:
 
 def verify_package(package: Path, check_source: bool = True) -> dict:
     package = confined_package(package)
+    emit_stage("verify-package")
     info = json.loads((package / "win-unpacked" / "BUILD_INFO.json").read_text(encoding="utf-8"))
     for key, path in packaged_paths(package).items():
         if not path.is_file() or digest(path) != info[key]:
@@ -114,7 +355,9 @@ def verify_package(package: Path, check_source: bool = True) -> dict:
     return info
 
 
-def build_package(delta: str, reuse_sidecar: bool = False) -> Path:
+def build_package(delta: str, reuse_sidecar: bool = False, clean_incomplete: bool = False) -> Path:
+    emit_stage("build-package")
+    build_preflight(clean_incomplete=clean_incomplete)
     chain = toolchain()
     if not (FRONTEND / "node_modules" / "electron-builder" / "cli.js").is_file():
         raise RuntimeError("frontend dependencies are missing; run npm ci in frontend")
@@ -130,12 +373,12 @@ def build_package(delta: str, reuse_sidecar: bool = False) -> Path:
         if receipt.get("SIDECAR_SHA256") != digest(ROOT / "dist-sidecar" / "zara-backend.exe"):
             raise ValueError("sidecar receipt does not match binary")
     else:
-        run([str(PYTHON), "build_exe.py"])
+        run([str(PYTHON), "build_exe.py"], stage="pyinstaller-sidecar")
     npm = [chain["node"], chain["npm_cli"]]
-    run(npm + ["run", "typecheck"], FRONTEND)
-    run(npm + ["run", "build"], FRONTEND)
-    run(npm + ["run", "build:electron"], FRONTEND)
-    run([chain["node"], str(FRONTEND / "node_modules" / "electron-builder" / "cli.js"), "--win", "nsis", f"--config.directories.output={package}"], FRONTEND)
+    run(npm + ["run", "typecheck"], FRONTEND, stage="frontend-typecheck")
+    run(npm + ["run", "build"], FRONTEND, stage="frontend-vite-build")
+    run(npm + ["run", "build:electron"], FRONTEND, stage="electron-build")
+    run([chain["node"], str(FRONTEND / "node_modules" / "electron-builder" / "cli.js"), "--win", "nsis", f"--config.directories.output={package}"], FRONTEND, stage="electron-builder-nsis")
     if before != source_identity():
         raise RuntimeError("source changed while building; package was not activated")
     hashes = {key: digest(path) for key, path in packaged_paths(package).items()}
@@ -161,6 +404,7 @@ def build_package(delta: str, reuse_sidecar: bool = False) -> Path:
 
 
 def activate_package(package: Path, validation: Path, shortcuts: bool = False) -> dict:
+    emit_stage("activate-package")
     package = confined_package(package)
     info = verify_package(package)
     validation = validation.resolve(strict=True)
@@ -219,6 +463,7 @@ def activate_package(package: Path, validation: Path, shortcuts: bool = False) -
 
 def rollback_package(journal_path: Path) -> dict:
     """Restore the exact retained baseline; no deletion of either package."""
+    emit_stage("rollback-package")
     journal = json.loads(journal_path.read_text(encoding='utf-8'))
     if journal.get('state') != 'ACTIVATED': raise ValueError('No active release to roll back')
     backup = Path(journal['backup']).resolve()
@@ -251,6 +496,7 @@ def main() -> int:
     build = sub.add_parser("build")
     build.add_argument("--delta", required=True)
     build.add_argument("--reuse-sidecar", action="store_true", help="Only reuses a sidecar with matching source and binary receipts")
+    build.add_argument("--clean-incomplete", action="store_true", help="Remove only incomplete frontend staging directories")
     verify = sub.add_parser("verify")
     verify.add_argument("package", type=Path)
     verify.add_argument("--artifacts-only", action="store_true")
@@ -261,7 +507,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "build":
-            build_package(args.delta, args.reuse_sidecar)
+            build_package(args.delta, args.reuse_sidecar, args.clean_incomplete)
         elif args.command == "verify":
             info = verify_package(args.package, check_source=not args.artifacts_only)
             print(json.dumps({"status": "passed", "build_id": info["BUILD_ID"]}))

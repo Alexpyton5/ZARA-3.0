@@ -91,3 +91,5 @@ Só decisão estável/importante. Não é log de rotina — isso fica no git.
 
 Nunca escrever estado técnico dentro de `.claude/`, nem regra de processo
 dentro de `.zara-tests/`.
+
+- **2026-09-23 — Sequência mestre de fases confirmada por Alex.** A lista ordenada e os gates físicos/empacotados em `.claude/CURRENT_MISSION.md` são a ordem operacional oficial. Cada fase precisa de build separado e commit; não usar build sem provar que contém o delta. Ordem F3 deliberada: P3.3, P3.4, P3.1, P3.2, P3.5, P3.7, P3.6. Lab autopilot permanece desligado até decisão de Alex. F2 só inicia após F1/P1.7 físico.

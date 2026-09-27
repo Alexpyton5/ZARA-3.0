@@ -4,18 +4,22 @@ These fixtures must never qualify as production autonomy proof.
 """
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from core.lab_v1.autopilot import Autopilot
-from core.lab_v1.domain import AgentProfile, Availability, ProviderInfo, ProviderResult, RoleName, Team, TeamMembership
+from core.lab_v1.domain import (AgentProfile, Availability, ProviderInfo, ProviderResult,
+                                RoleName, Run, RunState, Team, TeamMembership)
+from core.lab_v1.mission_controller import Receipt
 from core.lab_v1.providers.base import ProviderAdapter
 from core.lab_v1.providers.registry import ProviderRegistry
 from core.lab_v1.runtime import LabRuntime
 from core.lab_v1.store import LabStore
 from core.lab_v1.workforce_policy import WorkforcePolicy
-from core.lab_v1.source_mission import SourceMission, _protected_baseline, _recheck_protected
+from core.lab_v1.source_mission import SourceMission, _protected_baseline, _recheck_protected, source_requested
 
 
 class UnitReasoningFixture(ProviderAdapter):
@@ -115,6 +119,38 @@ def source_engine(tmp_path, monkeypatch):
     return Autopilot(runtime, root=tmp_path / 'missions', policy=policy)
 
 
+@pytest.mark.parametrize('objective', [
+    '@artemis convoque o time trabalhe para que o tempo de resposta da voz da zara seja quase instantaneo',
+    'corrija os modelos nao verificados da open code',
+])
+def test_owner_repair_requests_enter_real_source_pipeline(source_engine, monkeypatch, objective):
+    import core.lab_v1.source_scope as source_scope
+
+    monkeypatch.setattr(source_scope, 'select_source_scope', lambda workspace, intent: ['core/example.py'])
+    assert source_requested(objective, 'OWNER_MISSION') is True
+
+    started = source_engine.start(objective)
+    sid = started['session_id']
+    assert source_engine.metrics(sid)['source_work']['snapshot_state'] == 'PENDING'
+    initial = source_engine.controller.snapshot(sid)['steps']
+    assert next(step for step in initial if step['id'] == 'source_prepare')['capability'] == 'source.prepare'
+
+    result = source_engine.run(sid)
+    assert result['state'] == 'COMPLETED'
+    completed = source_engine.controller.snapshot(sid)['steps']
+    assert any(step['capability'] == 'source.apply' and step['status'] == 'DONE'
+               for step in completed)
+
+
+@pytest.mark.parametrize('objective', [
+    'Oi, equipe',
+    '@Artemis converse comigo sobre a voz da ZARA',
+    'Quais modelos do OpenCode estao verificados?',
+])
+def test_conversation_does_not_request_source_work(objective):
+    assert source_requested(objective, 'OWNER_MISSION') is False
+
+
 def test_source_pipeline_reopens_candidate_and_runs_real_subprocesses(source_engine):
     started = source_engine.start('Corrija a ZARA core/example.py: twice deve duplicar também negativos.')
     sid = started['session_id']
@@ -136,6 +172,118 @@ def test_source_pipeline_reopens_candidate_and_runs_real_subprocesses(source_eng
     assert proof['production_evidence'][0]['status'] == 'NOT_PROVEN'
     assert len(proof['participants']) == 3
     assert proof['owner_touches'] == 1
+
+
+def test_reviewer_packet_keeps_diff_and_status_when_raw_test_receipt_exceeds_44k(
+        source_engine, monkeypatch):
+    from core.lab_v1.candidate_source import CandidateSource
+
+    original_pytest = CandidateSource.run_pytest
+    def noisy_pytest(self, *args, **kwargs):
+        result = original_pytest(self, *args, **kwargs)
+        return replace(result, stdout=('NOISY-TEST-LOG-' * 4000) + result.stdout)
+    monkeypatch.setattr(CandidateSource, 'run_pytest', noisy_pytest)
+
+    adapter = source_engine.runtime.registry.get('unit-only')
+    original_complete = adapter.complete
+    captured = {}
+    def capture_packet(**kwargs):
+        if kwargs['model'] == 'reviewer':
+            prompt = kwargs.get('prompt') or kwargs.get('user') or kwargs.get('message')
+            packet_text = prompt.split('REVIEW_EVIDENCE_PACKET: ', 1)[1].split('\nEVIDENCE_REFERENCES: ', 1)[0]
+            captured['packet'] = json.loads(packet_text)
+            captured['refs'] = json.loads(prompt.split('EVIDENCE_REFERENCES: ', 1)[1])
+        return original_complete(**kwargs)
+    monkeypatch.setattr(adapter, 'complete', capture_packet)
+
+    sid = source_engine.start(
+        'Corrija a ZARA core/example.py: twice deve duplicar também negativos.')['session_id']
+    result = source_engine.run(sid)
+    assert result['state'] == 'COMPLETED'
+    packet = captured['packet']
+    assert packet['diff']['content'].startswith('--- a/core/example.py')
+    assert packet['tests']['baseline']['exit_code'] == 1
+    assert packet['tests']['candidate']['exit_code'] == 0
+    assert packet['tests']['baseline']['stdout_artifact']['chars'] > 44_000
+    assert len(packet['tests']['baseline']['stdout_artifact']['excerpt']) == 2_000
+    assert packet['tests']['baseline']['stdout_artifact']['artifact_id'].startswith('REAL_TESTS:')
+    assert packet['source_identity']['core/example.py'] != packet['candidate_identity']['core/example.py']
+    assert captured['refs']['packet_id'] == packet['packet_id']
+    persisted = next(a for a in source_engine.store.list_artifacts(sid)
+                     if a.kind == 'REVIEW_EVIDENCE_PACKET')
+    assert json.loads(persisted.body)['packet_sha256'] == captured['refs']['packet_sha256']
+
+
+def test_review_verification_uses_exact_bound_reviewer_and_planner_runs_despite_later_runs(
+        source_engine, monkeypatch):
+    import core.lab_v1.source_mission as source_contract
+
+    sid = source_engine.start(
+        'Corrija a ZARA core/example.py: twice deve duplicar também negativos.')['session_id']
+    result = source_engine.run(sid)
+    assert result['state'] == 'COMPLETED', {
+        'blocker': result['mission'].get('blocker'),
+        'last_failure': result['mission'].get('last_failure'),
+        'failed_verifications': [
+            json.loads(item.body).get('error') for item in source_engine.store.list_artifacts(sid)
+            if item.kind == 'SOURCE_VERIFICATION' and not json.loads(item.body).get('passed')],
+    }
+    snapshot = source_engine.controller.snapshot(sid)
+    plan_step = next(step for step in snapshot['steps'] if step['id'] == 'plan')
+    review_step = next(step for step in snapshot['steps'] if step['id'] == 'review')
+    artifacts = source_engine.store.list_artifacts(sid)
+    bindings = {json.loads(item.body)['attempt_id']: json.loads(item.body)
+                for item in artifacts if item.kind == 'MODEL_RESPONSE_BINDING'}
+    expected_planner = bindings[plan_step['attempt_id']]['run_id']
+    expected_reviewer = bindings[review_step['attempt_id']]['run_id']
+    actual_planner = source_engine.store.get_run(expected_planner)
+    actual_reviewer = source_engine.store.get_run(expected_reviewer)
+    source_engine.store.save_run(Run(
+        'run:later-planner', sid, actual_planner.agent_id, actual_planner.provider_id,
+        actual_planner.model, model_reported=actual_planner.model_reported,
+        state=RunState.COMPLETED, task_id=plan_step['task_id'], started_at=actual_planner.started_at + 100))
+    source_engine.store.save_run(Run(
+        'run:later-reviewer', sid, actual_reviewer.agent_id, actual_reviewer.provider_id,
+        actual_reviewer.model, model_reported=actual_reviewer.model_reported,
+        state=RunState.COMPLETED, task_id=review_step['task_id'], started_at=actual_reviewer.started_at + 100))
+
+    observed = {}
+    original = source_contract.validate_reviewer_result
+    def capture_exact_runs(*args, **kwargs):
+        observed['planner'] = kwargs['planner_run'].id
+        observed['reviewer'] = kwargs['reviewer_run'].id
+        return original(*args, **kwargs)
+    monkeypatch.setattr(source_contract, 'validate_reviewer_result', capture_exact_runs)
+    receipt = Receipt(review_step['receipt']['artifact_ref'], review_step['receipt']['summary'])
+    dispatch = SimpleNamespace(
+        step_id='review', task_id=review_step['task_id'], capability='model.text',
+        attempt_id=review_step['attempt_id'])
+
+    assert SourceMission(source_engine, sid).verify(dispatch, receipt).verdict == 'PASS'
+    assert observed == {'planner': expected_planner, 'reviewer': expected_reviewer}
+
+
+def test_evidence_packet_over_budget_fails_before_reviewer_call(source_engine, monkeypatch):
+    import core.lab_v1.review_evidence_packet as packet_contract
+
+    monkeypatch.setattr(packet_contract, 'MAX_REVIEW_PACKET_CHARS', 1)
+    adapter = source_engine.runtime.registry.get('unit-only')
+    original_complete = adapter.complete
+    calls = {'reviewer': 0}
+    def count_reviewer(**kwargs):
+        if kwargs['model'] == 'reviewer':
+            calls['reviewer'] += 1
+        return original_complete(**kwargs)
+    monkeypatch.setattr(adapter, 'complete', count_reviewer)
+
+    sid = source_engine.start(
+        'Corrija a ZARA core/example.py: twice deve duplicar também negativos.')['session_id']
+    result = source_engine.run(sid)
+    assert result['state'] == 'BLOCKED'
+    assert calls['reviewer'] == 0
+    snapshot = source_engine.controller.snapshot(sid)
+    assert 'REVIEW_EVIDENCE_PACKET_TOO_LARGE' in snapshot['last_failure']['message']
+    assert snapshot['used']['retries'] == 0
 
 
 def test_public_start_defers_cold_snapshot_until_supervised_run(source_engine, monkeypatch):

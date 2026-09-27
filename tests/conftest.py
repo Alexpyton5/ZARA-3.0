@@ -102,6 +102,11 @@ def pytest_sessionstart(session):
     import json
     import time
 
+    # A golden-path smoke is intentionally a nested pytest process launched
+    # by one test. It has its own process boundary and must not be rejected by
+    # the outer session's lock; the caller opts in explicitly.
+    if os.environ.get("ZARA_TEST_ALLOW_NESTED") == "1":
+        return
     lock_file = _lock_path()
     if lock_file.exists():
         try:
@@ -138,6 +143,8 @@ def pytest_sessionstart(session):
 
 
 def pytest_sessionfinish(session, exitstatus):
+    if os.environ.get("ZARA_TEST_ALLOW_NESTED") == "1":
+        return
     lock_file = _lock_path()
     try:
         lock_file.unlink(missing_ok=True)

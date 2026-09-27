@@ -61,7 +61,87 @@ def main() -> int:
                     help="pasta em frontend/ usada como base, ou 'auto' para a mais recente")
     ap.add_argument("--tag", default="kore", help="rótulo curto do candidato")
     ap.add_argument("--delta", default="", help="o que mudou em relação ao base")
+    ap.add_argument(
+        "--full", action="store_true",
+        help="reconstrói frontend + Electron do source em pasta nova (usa dist-sidecar existente)",
+    )
     args = ap.parse_args()
+
+    if args.full:
+        if not DIST_SIDECAR.exists():
+            fail("dist-sidecar/zara-backend.exe nao existe. Rode 'python build_exe.py' antes.")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        build_id = f"release-candidate-{args.tag}-{stamp}"
+        dest_dir = FRONTEND / build_id
+        if dest_dir.exists():
+            fail(f"saida ja existe: {dest_dir}")
+        print(f"build completo: {build_id}")
+        print("compilando renderer... ")
+        for command in (
+            ["npm.cmd", "run", "build"],
+            ["npm.cmd", "run", "build:electron"],
+        ):
+            try:
+                subprocess.run(command, cwd=FRONTEND, check=True)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                fail(f"falha em {' '.join(command)}: {exc}")
+        builder = FRONTEND / "node_modules" / ".bin" / "electron-builder.cmd"
+        if not builder.exists():
+            fail(f"electron-builder local nao encontrado: {builder}")
+        output_name = build_id
+        command = [
+            str(builder), "--dir",
+            f"--config.directories.output={output_name}",
+        ]
+        print("empacotando Electron em diretorio novo...")
+        try:
+            subprocess.run(command, cwd=FRONTEND, check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            fail(f"falha no electron-builder: {exc}")
+
+        destino_win = dest_dir / "win-unpacked"
+        essenciais = [
+            "ZARA 3.0.exe", "ffmpeg.dll", "icudtl.dat", "resources.pak",
+            "v8_context_snapshot.bin", "locales", "resources/app.asar",
+            "resources/backend/zara-backend.exe",
+        ]
+        faltando = [nome for nome in essenciais if not (destino_win / nome).exists()]
+        if faltando:
+            fail("build completo incompleto; faltando: " + ", ".join(faltando))
+        exe = destino_win / "ZARA 3.0.exe"
+        backend = destino_win / "resources" / "backend" / "zara-backend.exe"
+        asar = destino_win / "resources" / "app.asar"
+        backend_sha = sha256(backend)
+        source_backend_sha = sha256(DIST_SIDECAR)
+        if backend_sha != source_backend_sha:
+            fail("backend empacotado diverge de dist-sidecar; build invalido")
+        info = {
+            "BUILD_ID": build_id,
+            "BUILD_TIMESTAMP": datetime.now().astimezone().isoformat(),
+            "BASE_BUILD": "source",
+            "BUILD_METHOD": "full-electron (frontend + Electron + sidecar atual)",
+            "GIT_BRANCH": git("rev-parse", "--abbrev-ref", "HEAD"),
+            "GIT_COMMIT": git("rev-parse", "HEAD"),
+            "GIT_DIRTY": bool(git("status", "--porcelain")),
+            "EXE_PATH": str(exe),
+            "EXE_SHA256": sha256(exe),
+            "BACKEND_SHA256": backend_sha,
+            "ASAR_SHA256": sha256(asar),
+            "DELTA": args.delta or "nao informado",
+        }
+        (destino_win / "BUILD_INFO.json").write_text(
+            json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        (ROOT / "ZARA_ACTIVE_BUILD.json").write_text(
+            json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        (ROOT / "ZARA_ACTIVE_BUILD.txt").write_text(str(exe), encoding="utf-8")
+        print(f"BUILD_ID       : {build_id}")
+        print(f"EXE_SHA256     : {info['EXE_SHA256']}")
+        print(f"BACKEND_SHA256 : {backend_sha}")
+        print(f"ASAR_SHA256    : {info['ASAR_SHA256']}")
+        print(f"ALEX_OPEN_THIS_EXE: {exe}")
+        return 0
 
     # 'auto' escolhe a linhagem mais recente que realmente tem os dois binarios.
     # Sem isso, uma limpeza de disco que remova a base nomeada quebra o build
@@ -237,27 +317,6 @@ def main() -> int:
     # projeto tem espacos no nome, a linha do cmd quebrava e o atalho morria em
     # silencio na cara do Alex. Texto simples nao tem esse problema.
     (ROOT / "ZARA_ACTIVE_BUILD.txt").write_text(str(dest_exe), encoding="utf-8")
-
-    # ZARA-UM-CANDIDATO-SO-001 (Alex, 2026-08-13)
-    # "toda vez que voce criar um novo apague o velho para nao confundir".
-    # A regra antiga guardava dois candidatos; foi assim que Alex passou dias
-    # testando um EXE velho sem saber. Agora sobra exatamente um, e a baseline
-    # frontend/release/ — que nao e candidato, e a copia de seguranca de onde
-    # o portao de integridade restaura arquivo faltando.
-    apagados = []
-    for velho in FRONTEND.glob("release-candidate-*"):
-        if not velho.is_dir() or velho == dest_dir:
-            continue
-        try:
-            shutil.rmtree(velho, ignore_errors=True)
-            if not velho.exists():
-                apagados.append(velho.name)
-        except Exception:
-            pass
-    if apagados:
-        print(f"\nlimpeza: {len(apagados)} candidato(s) antigo(s) apagado(s)")
-        for nome in apagados:
-            print(f"         {nome}")
 
     print("\n" + "=" * 64)
     print("CANDIDATO PRONTO")

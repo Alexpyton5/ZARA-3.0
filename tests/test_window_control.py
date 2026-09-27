@@ -59,6 +59,9 @@ def test_named_window_alias_keeps_target_distinct_from_wake_word(phrase, target)
         ("minimiza o vscode", "window_minimize", "vscode"),
         ("minimiza a zara", "window_minimize", "zara"),
         ("minimiza o projeto", "window_minimize", "project"),
+        ("Maximize o Bloco de Notas", "window_maximize", "notepad"),
+        ("minimiza o notepad", "window_minimize", "notepad"),
+        ("restaura o bloco de notas", "window_restore", "notepad"),
     ],
 )
 def test_named_window_minimize_maximize_restore(phrase, action, target):
@@ -66,6 +69,34 @@ def test_named_window_minimize_maximize_restore(phrase, action, target):
     assert result.action == action
     assert result.param == target
     assert result.blocked is False
+
+
+def test_named_notepad_target_matches_windows_process(monkeypatch):
+    import psutil
+
+    monkeypatch.setattr(os_ops, "_window_process_name", lambda hwnd: "notepad.exe")
+    monkeypatch.setattr(os_ops, "_window_text", lambda hwnd: "Untitled - Notepad")
+    monkeypatch.setattr(os_ops, "_window_pid", lambda hwnd: 456)
+    monkeypatch.setattr(psutil, "Process", lambda pid: type("P", (), {"cmdline": lambda self: ["notepad.exe"]})())
+
+    assert os_ops._window_matches_named_target(77, "notepad") is True
+
+
+def test_named_window_minimize_resolves_notepad_target(monkeypatch):
+    monkeypatch.setattr(os_ops.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(os_ops, "_eligible_windows", lambda: [11, 12])
+    monkeypatch.setattr(os_ops, "_window_matches_named_target", lambda hwnd, target: hwnd == 12 and target == "notepad")
+    monkeypatch.setattr(os_ops, "_foreground_window", lambda: 11)
+    states = iter(("restored", "minimized"))
+    monkeypatch.setattr(os_ops, "_window_state", lambda hwnd: next(states))
+    monkeypatch.setattr(os_ops, "_window_pid", lambda hwnd: 99)
+    monkeypatch.setattr(os_ops, "_window_process_name", lambda hwnd: "notepad.exe")
+    monkeypatch.setattr(os_ops.time, "sleep", lambda seconds: None)
+
+    result = os_ops.window_minimize_action(target="notepad")
+
+    assert result.success is True
+    assert result.data["hwnd"] == 12
 
 
 def test_named_window_minimize_finds_and_minimizes_by_app_name(monkeypatch):

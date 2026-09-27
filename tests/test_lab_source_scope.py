@@ -103,3 +103,24 @@ def test_scope_is_always_small():
                  'ELA AINDA DEMORA MUITO DE ME RESPONDER')
     result = select_source_scope(WORKSPACE, objective)
     assert 1 <= len(result) <= 3
+
+
+def test_near_instant_voice_response_request_targets_voice_pipeline():
+    objective = '@artemis convoque o time trabalhe para que o tempo de resposta da voz da zara seja quase instantaneo'
+    result = select_source_scope(WORKSPACE, objective)
+    assert result == [
+        'core/gemini_live_voice.py',
+        'core/voice_tts.py',
+        'core/model_router.py',
+    ]
+    assert all((WORKSPACE / relative).is_file() for relative in result)
+
+
+def test_unverified_opencode_models_request_targets_model_integration():
+    result = select_source_scope(WORKSPACE, 'corrija os modelos nao verificados da open code')
+    assert result == [
+        'core/lab_v1/providers/opencode.py',
+        'core/lab_v1/front_brain.py',
+        'core/lab_v1/providers/registry.py',
+    ]
+    assert all((WORKSPACE / relative).is_file() for relative in result)

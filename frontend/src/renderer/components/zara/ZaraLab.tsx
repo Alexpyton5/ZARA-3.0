@@ -1,15 +1,9 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity, BadgeCheck, BrainCircuit, Check, ChevronRight, ChevronDown, CircleDot,
+  Activity, BadgeCheck, BrainCircuit, Check, ChevronRight, CircleDot,
   Clock3, Code2, FlaskConical, GitBranch, LoaderCircle, MessageSquareText,
-  RefreshCw, Send, ShieldCheck, Sparkles, UserRound, X
+  RefreshCw, Send, ShieldCheck, Sparkles, UserRound, Wrench, X
 } from 'lucide-react';
-import {
-  initialAutoScrollState,
-  onJumpToLatest,
-  onMessages as onMessagesDecision,
-  onScroll as onScrollDecision,
-} from '../../lib/autoScroll';
 
 type Worker = {
   id: string;
@@ -87,6 +81,39 @@ type MentorRelayState = {
   pending: number;
 };
 
+type MissionMilestone = {
+  code: string;
+  title: string;
+  description: string;
+  state: 'done' | 'partial' | 'pending';
+  evidence: string[];
+  updated_at: number;
+};
+
+type MissionFeedEntry = {
+  id: number;
+  actor: string;
+  event: string;
+  detail: string;
+  created_at: number;
+};
+
+type MissionSnapshot = {
+  mission_id: string;
+  room?: { name: string } | null;
+  milestones: MissionMilestone[];
+  feed: MissionFeedEntry[];
+  active_cycle?: { id: string; objective: string; status: string } | null;
+  autonomy?: {
+    enabled: boolean;
+    running: boolean;
+    phase: string;
+    cycle_id?: string | null;
+    last_summary?: string;
+  };
+  status?: string;
+};
+
 type LabState = {
   version: string;
   execution_runtime: string;
@@ -98,10 +125,11 @@ type LabState = {
   activity: ActivityEntry[];
   autonomy?: AutonomyState;
   mentor_relay?: MentorRelayState;
+  mission?: MissionSnapshot;
 };
 
 const emptyState: LabState = {
-  version: 'LAB-AUTONOMY-001', execution_runtime: '', approval_gate: true,
+  version: 'LAB-AUTONOMY-001', execution_runtime: 'AUTONOMY ONLINE • WORKER EXECUTION LOCKED', approval_gate: true,
   workers: [], messages: [], proposals: [], tasks: [], activity: [],
   autonomy: { status: 'STARTING', persistent: true, execution_enabled: false, total_tasks: 0, counts: {}, online_workers: 0 },
   mentor_relay: { state: 'EXTERNAL', detail: 'Relay ainda não conectado.', online: false, pending: 0 },
@@ -111,6 +139,7 @@ const participantIcon = (id: string) => {
   if (id === 'alex') return UserRound;
   if (id === 'zara') return Sparkles;
   if (id === 'mentor') return BrainCircuit;
+  if (id === 'hermes') return Wrench;
   if (id === 'opencode') return Code2;
   if (id === 'openclaw') return BrainCircuit;
   if (id === 'cline') return ShieldCheck;
@@ -120,6 +149,137 @@ const participantIcon = (id: string) => {
 const readableTime = (epoch: number) => new Date(epoch * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 const stateClass = (state: string) => state.toLowerCase().replace(/[^a-z]+/g, '-');
+
+const milestoneIcon = (state: string) => {
+  if (state === 'done') return Check;
+  if (state === 'partial') return Clock3;
+  return CircleDot;
+};
+
+const MissionBoard: React.FC<{ mission?: MissionSnapshot; onRefresh: () => void }> = ({ mission, onRefresh }) => {
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  if (!mission || mission.status === 'ERROR') {
+    return (
+      <section className="lab-panel lab-mission">
+        <header className="lab-panel-header"><div><FlaskConical size={15}/><span>LIVING TEAM MISSION</span></div><em>OFFLINE</em></header>
+        <div className="lab-empty small">Missão indisponível no backend.</div>
+      </section>
+    );
+  }
+
+  const confirmVerify = async (code: string) => {    const ref = evidence.trim();
+    if (!ref || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await window.zaraIPC?.lab?.missionVerify?.({ code, state: 'done', evidence: [ref] });
+      setVerifying(null);
+      setEvidence('');
+      onRefresh();
+    } catch {
+      setError('Falha ao verificar o marco. Evidência é obrigatória.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const feed = (mission.feed || []).slice(-12);
+
+  const autonomy = mission.autonomy;
+  const autoOn = !!autonomy?.enabled;
+  const autoRunning = !!autonomy?.running;
+
+  const toggleAutonomy = async () => {
+    try {
+      if (autoOn) {
+        await window.zaraIPC?.lab?.autonomyStop?.();
+      } else {
+        await window.zaraIPC?.lab?.autonomyStart?.();
+      }
+      onRefresh();
+    } catch {
+      /* painel segue mostrando o último estado conhecido */
+    }
+  };
+
+  return (
+    <section className="lab-panel lab-mission">
+      <header className="lab-panel-header">
+        <div><FlaskConical size={15}/><span>LIVING TEAM MISSION</span></div>
+        <button
+          className={autoOn ? 'approve' : 'reject'}
+          onClick={() => void toggleAutonomy()}
+          title="O conselho trabalha sozinho: lê o código, debate e propõe"
+        >
+          {autoRunning ? <LoaderCircle className="spin" size={13}/> : <Sparkles size={13}/>}
+          {autoOn ? 'AUTÔNOMO ON' : 'AUTÔNOMO OFF'}
+        </button>
+        <em>{mission.mission_id}</em>
+      </header>
+      {autoRunning && autonomy?.phase && autonomy.phase !== 'idle' && (
+        <div className="lab-lock-note"><RefreshCw size={13}/> CONSELHO AUTÔNOMO — FASE {autonomy.phase.toUpperCase()}{autonomy.cycle_id ? ` · ${autonomy.cycle_id}` : ''}</div>
+      )}
+      {autonomy?.last_summary && !autoRunning && (
+        <div className="lab-lock-note"><Check size={13}/> ÚLTIMO CICLO AUTÔNOMO: {autonomy.last_summary}</div>
+      )}
+      <div className="lab-card-scroll">
+        {mission.active_cycle && (
+          <div className="lab-lock-note"><RefreshCw size={13}/> CICLO ATIVO {mission.active_cycle.id} — {mission.active_cycle.objective}</div>
+        )}
+        {(mission.milestones || []).map((m) => {
+          const Icon = milestoneIcon(m.state);
+          const isOpen = verifying === m.code;
+          return (
+            <article className="lab-task" key={m.code}>
+              <div>
+                <strong>{m.code}</strong>
+                <span>{m.title.toUpperCase()}</span>
+              </div>
+              <p>{m.description}</p>
+              <footer>
+                <em className={`worker-state state-${stateClass(m.state)}`}><i/>{m.state.toUpperCase()}</em>
+                <span><Icon size={12}/> {m.evidence.length} EVIDÊNCIA(S)</span>
+                {m.state !== 'done' && !isOpen && (
+                  <button className="approve" onClick={() => { setVerifying(m.code); setEvidence(''); setError(''); }}>
+                    <BadgeCheck size={13}/> VERIFICAR
+                  </button>
+                )}
+              </footer>
+              {m.evidence.length > 0 && (
+                <div className="lab-lock-note"><ShieldCheck size={13}/> {m.evidence.join(' • ')}</div>
+              )}
+              {isOpen && (
+                <div className="lab-verify-row">
+                  <input
+                    value={evidence}
+                    onChange={(e) => setEvidence(e.target.value)}
+                    placeholder="Referência da evidência (ex.: .unlazy/.../GATES.md)"
+                  />
+                  <button className="approve" disabled={!evidence.trim() || busy} onClick={() => void confirmVerify(m.code)}>
+                    {busy ? <LoaderCircle className="spin" size={13}/> : <Check size={13}/>} CONFIRMAR
+                  </button>
+                  <button className="reject" onClick={() => setVerifying(null)}><X size={13}/></button>
+                </div>
+              )}
+            </article>
+          );
+        })}
+        {error && <div className="lab-error"><Activity size={13}/>{error}<button onClick={() => setError('')}><X size={12}/></button></div>}
+      </div>
+      <div className="lab-activity-feed">
+        <h3><Activity size={13}/> MISSION FEED — {mission.room?.name || 'ZARA Core'}</h3>
+        {feed.length === 0 && <div className="lab-empty small">Nenhum evento da missão ainda.</div>}
+        {feed.map((f) => (
+          <div key={f.id}><time>{readableTime(f.created_at)}</time><strong>{f.actor.toUpperCase()}</strong><span>{f.event}</span><em>{f.detail}</em></div>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 export const ZaraLab: React.FC = () => {
   const [lab, setLab] = useState<LabState>(emptyState);
@@ -134,29 +294,6 @@ export const ZaraLab: React.FC = () => {
   const [proposalOwner, setProposalOwner] = useState('opencode');
   const [proposalBusy, setProposalBusy] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const chatScrollRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(initialAutoScrollState.sticky);
-  const [showJumpToLatest, setShowJumpToLatest] = useState(initialAutoScrollState.showJumpToLatest);
-
-  // BUG-002: so acompanha o fim quando o usuario esta perto do fim.
-  const metricsOf = (el: HTMLDivElement | null) =>
-    el ? { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight } : null;
-
-  const onChatScroll = () => {
-    const next = onScrollDecision(
-      { sticky: stickToBottomRef.current, showJumpToLatest },
-      metricsOf(chatScrollRef.current),
-    );
-    stickToBottomRef.current = next.sticky;
-    setShowJumpToLatest(next.showJumpToLatest);
-  };
-
-  const jumpToLatest = () => {
-    const { state } = onJumpToLatest();
-    stickToBottomRef.current = state.sticky;
-    setShowJumpToLatest(state.showJumpToLatest);
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  };
 
   const refresh = useCallback(async (quiet = false) => {
     try {
@@ -182,16 +319,7 @@ export const ZaraLab: React.FC = () => {
   }, [refresh]);
 
   useEffect(() => {
-    const { state, scrollToBottom } = onMessagesDecision({
-      sticky: stickToBottomRef.current,
-      showJumpToLatest,
-    });
-    stickToBottomRef.current = state.sticky;
-    setShowJumpToLatest(state.showJumpToLatest);
-    if (scrollToBottom) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [lab.messages]);
 
   const chatWorkers = useMemo(() => lab.workers.filter((w) => w.id !== 'alex'), [lab.workers]);
@@ -261,7 +389,7 @@ export const ZaraLab: React.FC = () => {
         {lab.workers.map((worker) => {
           const Icon = participantIcon(worker.id);
           return (
-            <button key={worker.id} className={`lab-person ${target === worker.id ? 'selected' : ''}`} disabled={worker.id === 'alex' || !worker.can_chat} onClick={() => worker.can_chat && worker.id !== 'alex' && setTarget(worker.id)} title={worker.detail}>
+            <button key={worker.id} className={`lab-person ${target === worker.id ? 'selected' : ''}`} disabled={worker.id === 'alex'} onClick={() => worker.id !== 'alex' && setTarget(worker.id)} title={worker.detail}>
               <div className="lab-person-icon"><Icon size={16}/></div>
               <div><strong>{worker.name}</strong><span>{worker.role}</span></div>
               <em className={`worker-state state-${stateClass(worker.state)}`}><i/>{worker.state}</em>
@@ -279,26 +407,17 @@ export const ZaraLab: React.FC = () => {
               {selectedWorker?.id === 'mentor' && lab.mentor_relay?.pending ? ` • ${lab.mentor_relay.pending} PENDING` : ''}
             </em>
           </header>
-          <div className="lab-chat-area">
-          <div className="lab-chat-scroll" ref={chatScrollRef} onScroll={onChatScroll}>
+          <div className="lab-chat-scroll">
             {loading && <div className="lab-empty"><LoaderCircle className="spin" size={18}/> CARREGANDO LABORATÓRIO...</div>}
             {!loading && lab.messages.length === 0 && <div className="lab-empty">O Conselho está pronto. Converse com ZARA, Mentor ou OpenClaw.</div>}
             {lab.messages.map((m) => {
               const Icon = participantIcon(m.author);
               const isAlex = m.author === 'alex';
-              // Mensagens importadas pelo relay externo trazem o relay_id no id.
-              // Marcamos a origem real em vez de simular presenca do agente.
-              const viaRelay = m.id.startsWith('mentor-relay-');
               return (
-                <article className={`lab-message ${isAlex ? 'alex' : ''} ${m.kind === 'status' ? 'status' : ''} ${viaRelay ? 'via-relay' : ''}`} key={m.id}>
+                <article className={`lab-message ${isAlex ? 'alex' : ''} ${m.kind === 'status' ? 'status' : ''}`} key={m.id}>
                   <div className="lab-message-avatar"><Icon size={15}/></div>
                   <div className="lab-message-content">
-                    <div>
-                      <strong>{m.author.toUpperCase()}</strong>
-                      {viaRelay && <span className="lab-relay-tag" title="Recebida pelo relay externo, nao significa agente conectado">VIA RELAY</span>}
-                      <span>→ @{m.target.toUpperCase()}</span>
-                      <time>{readableTime(m.created_at)}</time>
-                    </div>
+                    <div><strong>{m.author.toUpperCase()}</strong><span>→ @{m.target.toUpperCase()}</span><time>{readableTime(m.created_at)}</time></div>
                     <p>{m.content}</p>
                   </div>
                 </article>
@@ -306,15 +425,9 @@ export const ZaraLab: React.FC = () => {
             })}
             <div ref={chatEndRef}/>
           </div>
-          {showJumpToLatest && (
-            <button type="button" className="lab-jump-latest" onClick={jumpToLatest}>
-              <ChevronDown size={12}/> Ir para última mensagem
-            </button>
-          )}
-          </div>
           <form className="lab-composer" onSubmit={sendMessage}>
             <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Destinatário">
-              {chatWorkers.map((w) => <option key={w.id} value={w.id} disabled={!w.can_chat}>@{w.name} • {w.state}</option>)}
+              {chatWorkers.map((w) => <option key={w.id} value={w.id}>@{w.name} • {w.state}</option>)}
             </select>
             <input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Discuta uma ideia com o Conselho..."/>
             <button type="submit" disabled={!message.trim() || sending}>{sending ? <LoaderCircle className="spin" size={17}/> : <Send size={17}/>}</button>
@@ -329,7 +442,7 @@ export const ZaraLab: React.FC = () => {
             <label>RESUMO<textarea value={proposalSummary} onChange={(e) => setProposalSummary(e.target.value)} placeholder="O que queremos melhorar e por quê?"/></label>
             <div className="lab-form-row">
               <label>RISCO<select value={proposalRisk} onChange={(e) => setProposalRisk(e.target.value)}><option>LOW</option><option>MEDIUM</option><option>HIGH</option></select></label>
-              <label>LEAD<select value={proposalOwner} onChange={(e) => setProposalOwner(e.target.value)}><option value="opencode">OpenCode</option><option value="openclaw">OpenClaw</option><option value="cline">Cline</option><option value="aider">Aider</option></select></label>
+              <label>LEAD<select value={proposalOwner} onChange={(e) => setProposalOwner(e.target.value)}><option value="opencode">OpenCode</option><option value="openclaw">OpenClaw</option><option value="cline">Cline</option><option value="aider">Aider</option><option value="hermes">Hermes</option></select></label>
             </div>
             <button className="lab-primary" type="submit" disabled={proposalBusy || !proposalTitle.trim() || !proposalSummary.trim()}>{proposalBusy ? <LoaderCircle className="spin" size={15}/> : <BadgeCheck size={15}/>} REGISTRAR PARA DISCUSSÃO</button>
           </form>
@@ -383,6 +496,8 @@ export const ZaraLab: React.FC = () => {
             {lab.activity.slice(0, 8).map((a) => <div key={a.id}><time>{readableTime(a.created_at)}</time><strong>{a.actor.toUpperCase()}</strong><span>{a.event}</span><em>{a.detail}</em></div>)}
           </div>
         </section>
+
+        <MissionBoard mission={lab.mission} onRefresh={() => void refresh(true)} />
       </div>
 
       <footer className="lab-footer">

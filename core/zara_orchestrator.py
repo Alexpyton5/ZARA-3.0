@@ -10,9 +10,7 @@ from typing import Any
 
 import httpx
 
-from core.conversation_compression import compress_history
 from core.model_router import ModelProvider, ModelRouter, normalize_auto_engine, route_message
-from core.personality import load_personality
 
 _SKILL_ID = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
 _SENSITIVE_KEYS = {"api_key", "authorization", "credential", "password", "secret", "token"}
@@ -25,8 +23,6 @@ _BLOCKED_OUTCOME_MARKERS = (
     "não permitido",
     "not allowed",
 )
-
-CONVERSATIONAL_SYSTEM_PROMPT = load_personality()
 
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -136,7 +132,6 @@ class ZaraOrchestrator:
         message: str,
         engine: str = None,
         context: dict = None,
-        history: list[dict] | None = None,
         require_tools: bool = False,
         stream: bool = False
     ) -> str:
@@ -144,17 +139,13 @@ class ZaraOrchestrator:
         if not self.initialized:
             await self.initialize()
 
-        history = compress_history(history)
-
         normalized_engine = normalize_auto_engine(engine)
 
         # Manual means manual: never silently leave the selected engine.
-        if normalized_engine not in {"auto_smart", "auto_economy", "auto_fast"}:
+        if normalized_engine not in {"auto_smart", "auto_economy"}:
             self.last_route_policy = "manual"
             self.last_engine_used = normalized_engine
-            response = await self._call_model_direct(
-                message, normalized_engine, stream, history=history
-            )
+            response = await self._call_model_direct(message, normalized_engine, stream)
             if self._is_error_response(response):
                 self.model_router.mark_failure(normalized_engine, response)
                 self.model_router.record_usage(normalized_engine, success=False)
@@ -167,12 +158,7 @@ class ZaraOrchestrator:
         if require_tools:
             route_context["require_tools"] = True
 
-        if normalized_engine == "auto_economy":
-            policy = "economy"
-        elif normalized_engine == "auto_smart":
-            policy = "smart"
-        else:
-            policy = "fast"
+        policy = "economy" if normalized_engine == "auto_economy" else "smart"
         self.last_route_policy = policy
         primary_model, fallback_chain = route_message(
             message=message,
@@ -190,9 +176,7 @@ class ZaraOrchestrator:
         last_error = None
 
         for model in models_to_try:
-            response = await self._call_model_direct(
-                message, model.id, stream, history=history
-            )
+            response = await self._call_model_direct(message, model.id, stream)
             if response and not self._is_error_response(response):
                 self.model_router.mark_success(model.id)
                 self.model_router.record_usage(model.id, success=True)
@@ -209,71 +193,40 @@ class ZaraOrchestrator:
 
     @staticmethod
     def _is_error_response(response: object) -> bool:
-        normalized = str(response or "").strip().lower()
-        # Resposta vazia ou so com espacos = falha do provider, nunca sucesso.
-        return (not normalized) or normalized.startswith(("error", "erro", "failed"))
+        normalized = str(response or "").lstrip().lower()
+        return (not response) or normalized.startswith(("error", "erro", "failed"))
 
-    async def _call_model_direct(
-        self,
-        message: str,
-        model_id: str,
-        stream: bool = False,
-        history: list[dict] | None = None,
-    ) -> str:
+    async def _call_model_direct(self, message: str, model_id: str, stream: bool = False) -> str:
         """Call a specific model directly"""
-        from core.model_router import ModelProvider, get_model_config
+        from core.model_router import get_model_config
 
         model_config = get_model_config(model_id)
         if not model_config:
             return f"Error: Model {model_id} not found"
 
-        # Check if Ollama (local)
-        if model_config.api_key_env == "OLLAMA_API_KEY":
-            return await self._call_ollama(message, model_config, stream, history)
+        # Check if Hermes (local)
+        if model_config.provider == ModelProvider.HERMES:
+            return await self._call_hermes(message, model_config, stream)
 
         # For cloud models, use httpx to call API
-        return await self._call_cloud_model(message, model_config, stream, history)
+        return await self._call_cloud_model(message, model_config, stream)
 
-    @staticmethod
-    def _normalized_history(
-        history: list[dict] | None, current_message: str
-    ) -> list[dict[str, str]]:
-        """Keep valid recent turns and drop a duplicated current user message."""
-        normalized: list[dict[str, str]] = []
-        for turn in (history or [])[-16:]:
-            if not isinstance(turn, dict):
-                continue
-            role = str(turn.get("role", "")).strip().lower()
-            content = str(turn.get("content", "")).strip()
-            if role not in {"user", "assistant"} or not content:
-                continue
-            normalized.append({"role": role, "content": content})
-        if (
-            normalized
-            and normalized[-1]["role"] == "user"
-            and normalized[-1]["content"] == current_message.strip()
-        ):
-            normalized.pop()
-        return normalized
-
-    async def _call_ollama(
-        self, message: str, model_config, stream: bool = False, history=None
-    ) -> str:
-        """Call Ollama local API (OpenAI-compatible)"""
+    async def _call_hermes(self, message: str, model_config, stream: bool = False) -> str:
+        """Call Hermes Gateway"""
         try:
             import httpx
 
-            # Ollama doesn't need an API key
+            api_key = model_config.api_key_env
+            import os
+            key = os.environ.get(api_key, "zara-hermes-bridge-key-2026")
+
             async with httpx.AsyncClient(timeout=120.0) as client:
                 payload = {
-                    "model": model_config.api_model,
+                    "model": model_config.id,
                     "messages": [
-                        {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
-                        *self._normalized_history(history, message),
+                        {"role": "system", "content": "You are ZARA, a helpful AI assistant. Be concise and accurate."},
                         {"role": "user", "content": message}
                     ],
-                    "max_tokens": model_config.max_tokens,
-                    "temperature": 0.7,
                     "stream": stream,
                 }
 
@@ -284,7 +237,7 @@ class ZaraOrchestrator:
                 resp = await client.post(
                     f"{model_config.base_url}/chat/completions",
                     json=payload,
-                    headers={"Content-Type": "application/json"},
+                    headers={"Authorization": f"Bearer {key}"},
                     timeout=120.0
                 )
 
@@ -292,15 +245,12 @@ class ZaraOrchestrator:
                     data = resp.json()
                     return data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 else:
-                    error_text = (await resp.aread()).decode(errors="replace")
-                    return f"Error {resp.status_code}: {error_text[:800]}"
+                    return f"Error: Hermes returned {resp.status_code}"
 
         except Exception as e:
-            return f"Error calling Ollama: {e}"
+            return f"Error calling Hermes: {e}"
 
-    async def _call_cloud_model(
-        self, message: str, model_config, stream: bool = False, history=None
-    ) -> str:
+    async def _call_cloud_model(self, message: str, model_config, stream: bool = False) -> str:
         """Call cloud model API (Groq, Gemini, NVIDIA, Z.AI)"""
         try:
             import os
@@ -313,20 +263,19 @@ class ZaraOrchestrator:
 
             async with httpx.AsyncClient(timeout=120.0) as client:
                 if model_config.provider == ModelProvider.GEMINI:
-                    return await self._call_gemini(message, model_config, api_key, client, history)
+                    return await self._call_gemini(message, model_config, api_key, client)
                 else:
-                    return await self._call_openai_compatible(message, model_config, api_key, client, history)
+                    return await self._call_openai_compatible(message, model_config, api_key, client)
 
         except Exception as e:
             return f"Error calling {model_config.provider.value}: {e}"
 
-    async def _call_openai_compatible(self, message: str, model_config, api_key: str, client: httpx.AsyncClient, history=None) -> str:
+    async def _call_openai_compatible(self, message: str, model_config, api_key: str, client: httpx.AsyncClient) -> str:
         """Call OpenAI-compatible API (Groq, NVIDIA, Z.AI)"""
         payload = {
             "model": model_config.api_model,
             "messages": [
-                {"role": "system", "content": CONVERSATIONAL_SYSTEM_PROMPT},
-                *self._normalized_history(history, message),
+                {"role": "system", "content": "You are ZARA, a helpful AI assistant. Be concise and accurate."},
                 {"role": "user", "content": message}
             ],
             "max_tokens": model_config.max_tokens,
@@ -357,22 +306,15 @@ class ZaraOrchestrator:
             error_text = (await resp.aread()).decode(errors="replace")
             return f"Error {resp.status_code}: {error_text[:800]}"
 
-    async def _call_gemini(self, message: str, model_config, api_key: str, client: httpx.AsyncClient, history=None) -> str:
+    async def _call_gemini(self, message: str, model_config, api_key: str, client: httpx.AsyncClient) -> str:
         """Call Gemini API"""
         model_name = model_config.api_model
 
         payload = {
             "systemInstruction": {
-                "parts": [{"text": CONVERSATIONAL_SYSTEM_PROMPT}]
+                "parts": [{"text": "Você é ZARA, uma assistente pessoal útil, objetiva e precisa. Responda em português do Brasil quando o usuário falar em português."}]
             },
             "contents": [
-                *[
-                    {
-                        "role": "model" if turn["role"] == "assistant" else "user",
-                        "parts": [{"text": turn["content"]}],
-                    }
-                    for turn in self._normalized_history(history, message)
-                ],
                 {"role": "user", "parts": [{"text": message}]}
             ],
             "generationConfig": {
@@ -403,9 +345,8 @@ class ZaraOrchestrator:
             error_text = (await resp.aread()).decode(errors="replace")
             return f"Error {resp.status_code}: {error_text[:800]}"
 
-    async def get_available_models(self) -> list[dict]:
+    def get_available_models(self) -> list[dict]:
         """Get list of available models with API keys configured"""
-        models = await self.model_router.get_available_models()
         return [
             {
                 "id": m.id,
@@ -413,8 +354,7 @@ class ZaraOrchestrator:
                 "provider": m.provider.value,
                 "task_types": [t.value for t in m.task_types],
                 "free_tier": m.free_tier_limit,
-                "available": m.api_key_env == "OLLAMA_API_KEY"
-                or m.api_key_env in self.model_router.api_keys
+                "available": m.provider == ModelProvider.HERMES or m.api_key_env in self.model_router.api_keys
             }
-            for m in models
+            for m in self.model_router.get_available_models()
         ]

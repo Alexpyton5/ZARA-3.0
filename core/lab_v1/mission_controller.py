@@ -129,6 +129,8 @@ class MissionLimits:
     max_retries: int = 1
     max_actions: int = 8
     timeout_s: int = 900
+    max_quota_waits: int = 3
+    max_quota_wait_s: int = 3600
 
     def validate(self):
         for value in asdict(self).values():
@@ -194,6 +196,38 @@ class TextProviderFailure(RuntimeError):
 _QUOTA_WAIT_STATES = frozenset({'QUOTA_EXHAUSTED', 'RATE_LIMITED'})
 _QUOTA_BACKOFF_MAX_S = 3600
 
+# Public mission lifecycle.  The older V1 values (VERIFYING,
+# BLOCKED_NEEDS_OWNER and CANCELLING) remain readable for compatibility with
+# already persisted databases; new writes also carry the canonical liveness
+# metadata below so a scheduler can decide what to do without an owner click.
+MISSION_LIVENESS_STATES = frozenset({
+    'QUEUED', 'RUNNING', 'WAITING_RESOURCE', 'WAITING_REVIEW', 'REPAIRING',
+    'WAITING_OWNER', 'READY_FOR_OWNER', 'BACKOFF', 'BLOCKED', 'COMPLETED',
+    'FAILED', 'CANCELLED',
+})
+_LIVENESS_DEFAULT_REASON = {
+    'QUEUED': 'MISSION_QUEUED',
+    'RUNNING': 'MISSION_RUNNING',
+    'WAITING_RESOURCE': 'RESOURCE_WAIT',
+    'WAITING_REVIEW': 'REVIEW_REQUIRED',
+    'REPAIRING': 'REPAIR_REQUIRED',
+    'WAITING_OWNER': 'OWNER_INPUT_REQUIRED',
+    'READY_FOR_OWNER': 'OWNER_REVIEW_READY',
+    'BACKOFF': 'RETRY_BACKOFF',
+    'BLOCKED': 'MISSION_BLOCKED',
+    'COMPLETED': 'MISSION_COMPLETED',
+    'FAILED': 'MISSION_FAILED',
+    'CANCELLED': 'MISSION_CANCELLED',
+}
+_LIVENESS_DEFAULT_COMPONENT = {
+    'WAITING_RESOURCE': 'resource_manager',
+    'BACKOFF': 'resource_manager',
+    'WAITING_REVIEW': 'reviewer',
+    'REPAIRING': 'mission_controller',
+    'WAITING_OWNER': 'owner',
+    'READY_FOR_OWNER': 'owner',
+}
+
 
 class MissionController:
     """State and lease mutations are atomic with Session/Task/event updates.
@@ -228,7 +262,22 @@ class MissionController:
                 step_id TEXT NOT NULL, attempt_id TEXT NOT NULL, kind TEXT NOT NULL,
                 document TEXT NOT NULL, occurred_at REAL NOT NULL
             )""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS mission_owner_inputs (
+                id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id),
+                text TEXT NOT NULL, status TEXT NOT NULL, submitted_at REAL NOT NULL,
+                applied_version INTEGER
+            )""")
             conn.execute("UPDATE schema_meta SET value='2' WHERE key='mission_controller_version'")
+            conn.execute("""CREATE TABLE IF NOT EXISTS mission_room_messages (
+                id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id),
+                step_id TEXT NOT NULL, attempt_id TEXT, kind TEXT NOT NULL,
+                from_agent_id TEXT NOT NULL, to_agent_id TEXT NOT NULL,
+                correlation_id TEXT NOT NULL UNIQUE, body TEXT NOT NULL,
+                corrections TEXT, status TEXT NOT NULL,
+                refinement_budget INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL, answered_at REAL, closed_at REAL)""")
+            conn.execute("""CREATE INDEX IF NOT EXISTS idx_room_session
+                ON mission_room_messages(session_id, status)""")
 
     @contextmanager
     def _transaction(self):
@@ -249,8 +298,67 @@ class MissionController:
             raise ValueError("Session has no mission plan")
         return json.loads(row['document']), row
 
+    @staticmethod
+    def _default_liveness_component(state):
+        return _LIVENESS_DEFAULT_COMPONENT.get(state, 'mission_controller')
+
+    def _set_liveness(self, doc, state: str, *, reason: str | None = None,
+                      next_trigger: float | None = None,
+                      responsible_component: str | None = None,
+                      legacy_state: str | None = None):
+        """Set one durable, scheduler-readable lifecycle checkpoint.
+
+        ``blocker`` is retained as the V1 compatibility field.  ``reason`` is
+        the canonical explanation and ``next_trigger``/``responsible_component``
+        make a restartable checkpoint actionable without owner continuation.
+        """
+        if state not in MISSION_LIVENESS_STATES and state not in {
+                'PLANNING', 'WORKING', 'WAITING_USER', 'VERIFYING',
+                'BLOCKED_NEEDS_OWNER', 'CANCELLING'}:
+            raise ValueError('Unsupported mission liveness state: ' + str(state))
+        # Keep the pre-existing ``state`` value where it carries an older
+        # public contract (VERIFYING/BLOCKED_NEEDS_OWNER); the additive
+        # liveness value is what new schedulers consume.
+        legacy = {'WAITING_REVIEW': 'VERIFYING', 'WAITING_OWNER': 'BLOCKED_NEEDS_OWNER'}
+        doc['state'] = legacy_state or legacy.get(state, state)
+        doc['liveness_state'] = state
+        doc['reason'] = reason or _LIVENESS_DEFAULT_REASON.get(state, state)
+        doc['next_trigger'] = next_trigger
+        doc['responsible_component'] = responsible_component or self._default_liveness_component(state)
+        if state in ('BLOCKED', 'WAITING_OWNER', 'READY_FOR_OWNER', 'BLOCKED_NEEDS_OWNER', 'FAILED') or legacy_state == 'BLOCKED':
+            doc['blocker'] = doc['reason']
+        elif state not in ('WAITING_RESOURCE', 'BACKOFF'):
+            doc['blocker'] = None
+        return doc
+
+    def _normalize_liveness(self, doc, stamp):
+        """Backfill liveness fields on old documents without changing state."""
+        state = doc.get('state', 'QUEUED')
+        state = doc.get('liveness_state') or {
+            'VERIFYING': 'WAITING_REVIEW',
+            'BLOCKED_NEEDS_OWNER': 'WAITING_OWNER',
+            'CANCELLING': 'WAITING_OWNER',
+        }.get(state, state)
+        if state not in MISSION_LIVENESS_STATES:
+            state = 'BLOCKED' if state == 'CANCELLING' else state
+        doc['liveness_state'] = state
+        blocker = doc.get('blocker')
+        doc['reason'] = blocker or doc.get('reason') or _LIVENESS_DEFAULT_REASON.get(state, state)
+        if state in ('WAITING_RESOURCE', 'BACKOFF'):
+            if doc.get('next_trigger') is None:
+                retry_at = next((s.get('retry_at') for s in doc.get('steps', [])
+                                 if s.get('status') == 'PROVIDER_FAILED' and s.get('retry_at') is not None), None)
+                doc['next_trigger'] = retry_at
+        elif state == 'QUEUED':
+            doc['next_trigger'] = stamp if doc.get('next_trigger') is None else doc['next_trigger']
+        else:
+            doc['next_trigger'] = None
+        doc['responsible_component'] = doc.get('responsible_component') or self._default_liveness_component(state)
+        return doc
+
     def _save(self, conn, doc, event):
         sid, stamp = doc['session_id'], self.clock()
+        self._normalize_liveness(doc, stamp)
         doc['updated_at'] = stamp
         conn.execute("UPDATE mission_controls SET document=? WHERE session_id=?", (json.dumps(doc), sid))
         conn.execute("UPDATE sessions SET state=?, updated_at=?, revision=revision+1 WHERE id=?",
@@ -258,8 +366,49 @@ class MissionController:
         conn.execute("""INSERT INTO events(id,type,session_id,entity_id,payload,occurred_at)
                         VALUES(?,?,?,?,?,?)""",
                      (new_id('evt'), event, sid, sid,
-                      json.dumps({'state': doc['state'], 'blocker': doc['blocker'],
-                                  'plan_version': doc['plan_version']}), stamp))
+                      json.dumps({'state': doc['state'], 'liveness_state': doc['liveness_state'],
+                                  'reason': doc['reason'], 'next_trigger': doc['next_trigger'],
+                                  'responsible_component': doc['responsible_component'],
+                      'blocker': doc['blocker'], 'plan_version': doc['plan_version']}), stamp))
+
+    def can_supersede_stale_provider_block(self, conn, doc, row):
+        """Return whether a persisted authorization refusal is safe to retire."""
+        blocker = str(doc.get('blocker') or doc.get('reason') or '')
+        if doc.get('state') != 'BLOCKED' or blocker != 'PROVIDER_PROVIDER_NOT_AUTHORIZED':
+            return False
+        if row['lease_token'] is not None and row['lease_until'] > self.clock():
+            return False
+        steps = doc.get('steps', [])
+        failed = [step for step in steps if step.get('status') == 'PROVIDER_FAILED']
+        if not failed or any(step.get('status') not in ('DONE', 'PENDING', 'PROVIDER_FAILED')
+                             for step in steps):
+            return False
+        if any(step.get('kind') not in ('INVOKE', 'DELEGATE')
+               or step.get('capability') != 'model.text'
+               or step.get('receipt') is not None
+               or step.get('verification') is not None for step in failed):
+            return False
+        failed_task_ids = {step['task_id'] for step in failed}
+        running = conn.execute("SELECT id FROM tasks WHERE session_id=? AND state='RUNNING'",
+                               (doc['session_id'],)).fetchall()
+        return all(task['id'] in failed_task_ids for task in running)
+
+    def supersede_stale_provider_block(self, conn, doc, row):
+        """Atomically retire one proven, effect-free provider authorization refusal."""
+        if not self.can_supersede_stale_provider_block(conn, doc, row):
+            return False
+        blocker = str(doc.get('blocker') or doc.get('reason') or '')
+        failed = [step for step in doc['steps'] if step.get('status') == 'PROVIDER_FAILED']
+        self._set_liveness(doc, 'CANCELLED', reason='MISSION_SUPERSEDED_PROVIDER_BLOCK')
+        doc['superseded_provider_blocker'] = blocker
+        doc['superseded_at'] = self.clock()
+        for step in failed:
+            conn.execute("UPDATE tasks SET state='FAILED',result=?,updated_at=? WHERE id=?",
+                         (blocker, self.clock(), step['task_id']))
+        conn.execute('UPDATE mission_controls SET lease_token=NULL, lease_until=0, lease_owner=NULL WHERE session_id=?',
+                     (doc['session_id'],))
+        self._save(conn, doc, 'mission.superseded_stale_provider_block')
+        return True
 
     def _validate_plan(self, conn, session_id, steps):
         session = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
@@ -300,9 +449,13 @@ class MissionController:
                                      (session_id,)).fetchone()
             if authority and authority['owner'] != 'MISSION':
                 raise ValueError('Session already belongs to V1')
-            # One nonterminal mission, including blocked/cancelling work. No tick interleaving.
-            for row in conn.execute('SELECT document FROM mission_controls WHERE session_id<>?', (session_id,)):
-                if json.loads(row[0])['state'] not in ('COMPLETED', 'CANCELLED', 'FAILED'):
+            # One live mission at a time. A provider-only blocked mission with
+            # no lease is safe to retire because no effect was dispatched.
+            for row in conn.execute('SELECT * FROM mission_controls WHERE session_id<>?', (session_id,)).fetchall():
+                other = json.loads(row['document'])
+                if self.supersede_stale_provider_block(conn, other, row):
+                    continue
+                if other['state'] not in ('COMPLETED', 'CANCELLED', 'FAILED'):
                     raise ValueError('Another mission must finish or be safely cancelled first')
             existing = conn.execute("SELECT document FROM mission_controls WHERE session_id=?", (session_id,)).fetchone()
             if existing:
@@ -316,7 +469,10 @@ class MissionController:
                     raise ValueError("Only a queued Session can enter Autopilot")
                 version, deadline = 1, self.clock() + limits.timeout_s
             doc = {'session_id': session_id, 'plan_version': version, 'state': 'QUEUED',
-                   'blocker': None, 'cancel_requested': False, 'deadline': deadline,
+                   'liveness_state': 'QUEUED', 'reason': 'MISSION_QUEUED',
+                   'next_trigger': self.clock(), 'responsible_component': 'mission_controller',
+                   'blocker': None,
+                   'cancel_requested': False, 'deadline': deadline,
                    'resource_waiting': scope.authorization_ref.startswith('autopilot'),
                    'awaiting_expansion': dynamic,
                    'execution_scope': asdict(scope),
@@ -370,6 +526,290 @@ class MissionController:
         finally:
             conn.close()
 
+    def submit_owner_input(self, session_id: str, text: str):
+        """Persist natural owner steering for the next safe mission checkpoint."""
+        text = str(text or '').strip()
+        if not text or len(text) > 4000:
+            raise ValueError('Owner input must contain 1..4000 characters')
+        input_id = new_id('owner_input')
+        with self._transaction() as conn:
+            doc, row = self._load(conn, session_id)
+            if doc.get('cancel_requested') or doc['state'] == 'CANCELLING':
+                raise ValueError('A cancelling mission cannot accept owner input')
+            if doc['state'] in ('COMPLETED', 'FAILED', 'CANCELLED'):
+                raise ValueError('A terminal mission cannot be revised')
+            conn.execute('INSERT INTO mission_owner_inputs VALUES(?,?,?,?,?,NULL)',
+                         (input_id, session_id, text, 'PENDING', self.clock()))
+            safe_boundary = row['lease_token'] is None or row['lease_until'] <= self.clock()
+            applied = self._apply_owner_inputs(conn, doc) if safe_boundary else False
+        return {'accepted': True, 'session_id': session_id, 'input_id': input_id,
+                'classification': 'CONSTRAINT', 'status': 'APPLIED' if applied else 'PENDING'}
+
+    def _apply_owner_inputs(self, conn, doc):
+        rows = conn.execute("SELECT * FROM mission_owner_inputs WHERE session_id=? AND status='PENDING' "
+                            "ORDER BY submitted_at,id", (doc['session_id'],)).fetchall()
+        if not rows:
+            return False
+        if doc.get('cancel_requested') or doc['state'] in ('CANCELLING', 'CANCELLED'):
+            return False
+        # A dispatch without a retained receipt may have taken effect. Owner
+        # guidance cannot erase that uncertainty; explicit reconciliation keeps
+        # the exactly-once boundary for every step kind. An ACTION with a known
+        # receipt likewise finishes independent verification before steering.
+        if any(step['status'] in ('DISPATCHED', 'RECONCILE') or
+               (step['kind'] == 'ACTION' and step['status'] == 'VERIFYING')
+               for step in doc['steps']):
+            return False
+        reset_ids = {step['id'] for step in doc['steps'] if step['status'] != 'DONE'}
+        for step in doc['steps']:
+            if step['id'] not in reset_ids:
+                continue
+            if step.get('attempt_id') or step.get('receipt') or step.get('verification'):
+                step.setdefault('superseded', []).append({
+                    'reason': 'OWNER_INPUT', 'attempt_id': step.get('attempt_id'),
+                    'receipt': step.get('receipt'), 'verification': step.get('verification'),
+                    'at': self.clock(),
+                })
+            step.update(status='PENDING', attempt_id=None, receipt=None, verification=None)
+            conn.execute("UPDATE tasks SET state='CREATED',result=NULL,updated_at=? WHERE id=?",
+                         (self.clock(), step['task_id']))
+        doc.setdefault('owner_inputs', []).extend(
+            {'id': row['id'], 'text': row['text'], 'classification': 'CONSTRAINT',
+             'submitted_at': row['submitted_at']}
+            for row in rows)
+        doc['plan_version'] += 1
+        if reset_ids:
+            self._set_liveness(doc, 'RUNNING', reason='OWNER_INPUT_APPLIED')
+        else:
+            self._set_liveness(doc, 'WAITING_OWNER', reason='OWNER_INPUT_NO_REVISABLE_WORK',
+                               legacy_state='BLOCKED_NEEDS_OWNER')
+        doc.pop('waiting_since', None)
+        conn.execute('INSERT INTO mission_plans VALUES(?,?,?)', (
+            doc['session_id'], doc['plan_version'],
+            json.dumps({'steps': doc['steps'], 'owner_inputs': doc['owner_inputs']})))
+        conn.executemany("UPDATE mission_owner_inputs SET status='APPLIED',applied_version=? WHERE id=?",
+                         ((doc['plan_version'], row['id']) for row in rows))
+        self._save(conn, doc, 'mission.owner_input_applied')
+        return True
+
+    # ------------------------------------------------------------------
+    # Multi-agent room: bounded agent-to-agent exchange inside one mission.
+    #
+    # The room never calls a model. It only persists an explicit exchange
+    # (recipient, correlation id, pending-reply state, budget) and moves the
+    # mission's own state machine: a contestation re-queues the executor with
+    # the reviewer's corrections, charged to the mission's retry budget.
+    # ------------------------------------------------------------------
+
+    _ROOM_KINDS = frozenset({'QUESTION', 'HANDOFF'})
+    _ROOM_ASKABLE = frozenset({'PENDING', 'DISPATCHED', 'VERIFYING'})
+    _ROOM_BODY_LIMIT = 8000
+
+    def _room_event(self, conn, doc, event_type, entity_id, payload):
+        stamp = self.clock()
+        doc['updated_at'] = stamp
+        conn.execute("UPDATE mission_controls SET document=? WHERE session_id=?",
+                     (json.dumps(doc), doc['session_id']))
+        conn.execute("""INSERT INTO events(id,type,session_id,entity_id,payload,occurred_at)
+                        VALUES(?,?,?,?,?,?)""",
+                     (new_id('evt'), event_type, doc['session_id'], entity_id,
+                      json.dumps(payload), stamp))
+
+    def _room_member(self, conn, session_id, agent_id):
+        row = conn.execute("""SELECT a.id FROM agents a JOIN sessions s ON s.id=?
+            JOIN team_memberships m ON m.team_id=s.team_id AND m.agent_id=a.id AND m.left_at IS NULL
+            WHERE s.id=? AND a.id=? AND a.archived=0""", (session_id, session_id, agent_id)).fetchone()
+        if row is None:
+            raise ValueError('Room participants must be active members of the mission team')
+        return row[0]
+
+    def room_ask(self, session_id: str, *, step_id: str, from_agent_id: str, to_agent_id: str,
+                 question: str, kind: str = 'QUESTION', correlation_id: str | None = None,
+                 refinement_budget: int = 0) -> dict:
+        """Persist one explicit agent-to-agent question awaiting a reply.
+
+        Requires a live mission and an askable step, so nothing here can bring
+        a model into existence where no mission event asked for one.
+        """
+        question = str(question or '').strip()
+        if not question or len(question) > self._ROOM_BODY_LIMIT:
+            raise ValueError('A room question needs 1..8000 characters')
+        if kind not in self._ROOM_KINDS:
+            raise ValueError('Unsupported room message kind')
+        if type(refinement_budget) is not int or refinement_budget < 0:
+            raise ValueError('Room refinement budget must be a nonnegative integer')
+        with self._transaction() as conn:
+            doc, _ = self._load(conn, session_id)
+            if doc['state'] in ('COMPLETED', 'FAILED', 'CANCELLED'):
+                raise ValueError('A terminal mission has no room')
+            if doc.get('cancel_requested'):
+                raise ValueError('A cancelling mission has no room')
+            step = next((s for s in doc['steps'] if s['id'] == step_id), None)
+            if step is None or step['status'] not in self._ROOM_ASKABLE:
+                raise ValueError('Room questions need an askable mission step')
+            if conn.execute("SELECT 1 FROM mission_room_messages WHERE session_id=? AND status='PENDING'",
+                            (session_id,)).fetchone():
+                raise ValueError('One pending room exchange per mission at a time')
+            self._room_member(conn, session_id, from_agent_id)
+            self._room_member(conn, session_id, to_agent_id)
+            if from_agent_id == to_agent_id:
+                raise ValueError('A room exchange needs two distinct agents')
+            correlation_id = correlation_id or new_id('room')
+            row_id = new_id('room')
+            conn.execute("""INSERT INTO mission_room_messages(id,session_id,step_id,attempt_id,kind,
+                from_agent_id,to_agent_id,correlation_id,body,corrections,status,refinement_budget,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                         (row_id, session_id, step_id, step.get('attempt_id'), kind,
+                          from_agent_id, to_agent_id, correlation_id, question, None,
+                          'PENDING', refinement_budget, self.clock()))
+            self._room_event(conn, doc, 'mission.room_question', row_id, {
+                'correlation_id': correlation_id, 'step_id': step_id, 'kind': kind,
+                'from_agent_id': from_agent_id, 'to_agent_id': to_agent_id,
+                'question': question[:2000], 'status': 'PENDING',
+                'refinement_budget': refinement_budget,
+            })
+        return {'correlation_id': correlation_id, 'step_id': step_id,
+                'from_agent_id': from_agent_id, 'to_agent_id': to_agent_id, 'status': 'PENDING'}
+
+    def room_state(self, session_id: str, correlation_id: str) -> dict:
+        conn = self.store._connect()
+        try:
+            row = conn.execute('SELECT * FROM mission_room_messages WHERE session_id=? AND correlation_id=?',
+                               (session_id, correlation_id)).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            raise ValueError('Unknown room correlation')
+        return self._room_row_dict(row)
+
+    @staticmethod
+    def _room_row_dict(row):
+        return {'id': row['id'], 'session_id': row['session_id'], 'step_id': row['step_id'],
+                'kind': row['kind'], 'from_agent_id': row['from_agent_id'],
+                'to_agent_id': row['to_agent_id'], 'correlation_id': row['correlation_id'],
+                'body': row['body'], 'corrections': json.loads(row['corrections']) if row['corrections'] else None,
+                'status': row['status'], 'refinement_budget': row['refinement_budget'],
+                'created_at': row['created_at'], 'answered_at': row['answered_at'],
+                'closed_at': row['closed_at']}
+
+    def _room_pending(self, conn, session_id, correlation_id):
+        row = conn.execute('SELECT * FROM mission_room_messages WHERE session_id=? AND correlation_id=?',
+                           (session_id, correlation_id)).fetchone()
+        if row is None:
+            raise ValueError('Unknown room correlation: answering never invents an exchange')
+        return row
+
+    def room_answer(self, session_id: str, correlation_id: str, reply: str,
+                    *, decision: str | None = None) -> dict:
+        """Answer exactly once. An answered correlation can never be answered again."""
+        reply = str(reply or '').strip()
+        if not reply or len(reply) > self._ROOM_BODY_LIMIT:
+            raise ValueError('A room reply needs 1..8000 characters')
+        with self._transaction() as conn:
+            row = self._room_pending(conn, session_id, correlation_id)
+            if row['status'] != 'PENDING':
+                raise ValueError('Correlation ' + correlation_id + ' was already answered')
+            doc, _ = self._load(conn, session_id)
+            conn.execute("UPDATE mission_room_messages SET status='ANSWERED',body=?,answered_at=? WHERE id=?",
+                         (reply, self.clock(), row['id']))
+            body = row['body'][:2000]
+            self._room_event(conn, doc, 'mission.room_reply', row['id'], {
+                'correlation_id': correlation_id, 'step_id': row['step_id'],
+                'from_agent_id': row['to_agent_id'], 'to_agent_id': row['from_agent_id'],
+                'reply': reply[:2000], 'question': body, 'status': 'ANSWERED',
+            })
+            if decision is not None and str(decision).strip():
+                self._room_event(conn, doc, 'mission.room_decision', row['id'], {
+                    'correlation_id': correlation_id, 'step_id': row['step_id'],
+                    'from_agent_id': row['from_agent_id'], 'to_agent_id': row['to_agent_id'],
+                    'decision': str(decision).strip()[:2000], 'status': 'ANSWERED',
+                })
+        return {'correlation_id': correlation_id, 'status': 'ANSWERED',
+                'answered_at': self.room_state(session_id, correlation_id)['answered_at']}
+
+    def room_contest(self, session_id: str, correlation_id: str, corrections: list[str]) -> dict:
+        """Reviewer contestation: route the executor back with a correction list.
+
+        Bounded by the question's refinement_budget and the mission's global
+        retry budget. Exhaustion is an explicit owner blocker, never a silent loop.
+        """
+        if not isinstance(corrections, list) or not corrections or \
+                not all(isinstance(c, str) and c.strip() for c in corrections):
+            raise ValueError('Contestation needs a nonempty list of corrections')
+        corrections = [c.strip()[:2000] for c in corrections][:16]
+        with self._transaction() as conn:
+            row = self._room_pending(conn, session_id, correlation_id)
+            if row['status'] != 'PENDING':
+                raise ValueError('Correlation ' + correlation_id + ' was already answered')
+            doc, _ = self._load(conn, session_id)
+            if doc['state'] in ('COMPLETED', 'FAILED', 'CANCELLED'):
+                raise ValueError('A terminal mission cannot be contested')
+            step = next((s for s in doc['steps'] if s['id'] == row['step_id']), None)
+            if (step is None or step['kind'] != 'DELEGATE'
+                    or step['status'] not in self._ROOM_ASKABLE or doc['cancel_requested']):
+                raise ValueError('Only a live DELEGATE step can be contested')
+            refinements = step.get('refinements', 0)
+            if (refinements >= row['refinement_budget']
+                    or doc['used']['retries'] >= doc['limits']['max_retries']
+                    or self.clock() >= doc['deadline']):
+                self._set_liveness(doc, 'WAITING_OWNER', reason='REVIEW_CONTESTATION_LIMIT',
+                                   legacy_state='BLOCKED_NEEDS_OWNER')
+                conn.execute("UPDATE mission_room_messages SET status='CONTESTED',corrections=?,closed_at=? WHERE id=?",
+                             (json.dumps(corrections), self.clock(), row['id']))
+                self._room_event(conn, doc, 'mission.room_contestation', row['id'], {
+                    'correlation_id': correlation_id, 'from_agent_id': row['to_agent_id'],
+                    'to_agent_id': row['from_agent_id'], 'corrections': corrections,
+                    'routed': False, 'reason': 'REVIEW_CONTESTATION_LIMIT',
+                })
+                return {'correlation_id': correlation_id, 'status': 'CONTESTED', 'routed': False}
+            doc['used']['retries'] += 1
+            step['refinements'] = refinements + 1
+            step['refinement_corrections'] = corrections
+            step.update(status='PENDING', attempt_id=None, receipt=None, verification=None)
+            conn.execute("UPDATE tasks SET state='CREATED',result=NULL,updated_at=? WHERE id=?",
+                         (self.clock(), step['task_id']))
+            self._set_liveness(doc, 'RUNNING', reason='REVIEW_CONTESTATION_ROUTED')
+            doc['plan_version'] += 1
+            conn.execute("UPDATE mission_room_messages SET status='CONTESTED',corrections=? WHERE id=?",
+                         (json.dumps(corrections), row['id']))
+            conn.execute('INSERT INTO mission_plans VALUES(?,?,?)',
+                         (session_id, doc['plan_version'], json.dumps(doc['steps'])))
+            self._room_event(conn, doc, 'mission.room_contestation', row['id'], {
+                'correlation_id': correlation_id, 'from_agent_id': row['to_agent_id'],
+                'to_agent_id': row['from_agent_id'], 'corrections': corrections,
+                'routed': True, 'refinements': step['refinements'],
+                'refinement_budget': row['refinement_budget'],
+            })
+        return {'correlation_id': correlation_id, 'status': 'CONTESTED', 'routed': True,
+                'refinements': refinements + 1}
+
+    def room_close(self, session_id: str, correlation_id: str, *, outcome: str = 'ANSWERED') -> dict:
+        """Explicit close. Only an answered or contested exchange can close."""
+        if outcome not in ('ANSWERED', 'CONTESTED'):
+            raise ValueError('Room close needs an explicit outcome')
+        with self._transaction() as conn:
+            row = self._room_pending(conn, session_id, correlation_id)
+            if row['status'] not in ('ANSWERED', 'CONTESTED'):
+                raise ValueError('An unanswered correlation cannot be closed')
+            doc, _ = self._load(conn, session_id)
+            conn.execute("UPDATE mission_room_messages SET status='CLOSED',closed_at=? WHERE id=?",
+                         (self.clock(), row['id']))
+            self._room_event(conn, doc, 'mission.room_closed', row['id'], {
+                'correlation_id': correlation_id, 'step_id': row['step_id'],
+                'from_agent_id': row['from_agent_id'], 'to_agent_id': row['to_agent_id'],
+                'outcome': outcome, 'status': 'CLOSED',
+            })
+        return {'correlation_id': correlation_id, 'status': 'CLOSED'}
+
+    def room_messages(self, session_id: str) -> list[dict]:
+        conn = self.store._connect()
+        try:
+            rows = conn.execute('SELECT * FROM mission_room_messages WHERE session_id=? ORDER BY created_at,id',
+                                (session_id,)).fetchall()
+        finally:
+            conn.close()
+        return [self._room_row_dict(row) for row in rows]
+
     def fail_idle(self, session_id: str, reason: str):
         """Close a nonterminal mission only when no worker still owns its lease."""
         with self._transaction() as conn:
@@ -378,7 +818,7 @@ class MissionController:
                 return doc
             if row['lease_token'] is not None and row['lease_until'] > self.clock():
                 raise LeaseLost('Active mission cannot be failed by another worker')
-            doc['state'], doc['blocker'] = 'FAILED', reason
+            self._set_liveness(doc, 'FAILED', reason=reason)
             conn.execute('UPDATE mission_controls SET lease_token=NULL, lease_until=0, lease_owner=NULL WHERE session_id=?',
                          (session_id,))
             self._save(conn, doc, 'mission.failed')
@@ -447,9 +887,34 @@ class MissionController:
         resource_wait = doc.get('resource_waiting', False) and reason in (
             'PROVIDER_BUSY', 'PROVIDER_RATE_LIMITED', 'PROVIDER_QUOTA_EXHAUSTED',
             'PROVIDER_PROVIDER_ERROR', 'PROVIDER_OFFLINE', 'PROVIDER_ERROR')
-        doc['state'] = 'WAITING_RESOURCE' if resource_wait else 'BLOCKED'
-        doc['blocker'] = reason
+        if resource_wait:
+            retry_at = next((s.get('retry_at') for s in doc.get('steps', [])
+                             if s.get('status') == 'PROVIDER_FAILED' and s.get('retry_at') is not None), None)
+            self._set_liveness(doc, 'BACKOFF' if retry_at is not None else 'WAITING_RESOURCE',
+                               reason=reason, next_trigger=retry_at,
+                               legacy_state='WAITING_RESOURCE')
+        elif reason.startswith('VERIFICATION_') or reason == 'VERIFIER_ERROR':
+            self._set_liveness(doc, 'WAITING_REVIEW', reason=reason, legacy_state='BLOCKED')
+        else:
+            self._set_liveness(doc, 'BLOCKED', reason=reason)
         self._save(conn, doc, 'mission.blocked')
+
+    @staticmethod
+    def _quota_wait_exhausted(doc, step, stamp):
+        """Whether a persisted quota pause has spent its bounded wait budget."""
+        limits = doc.get('limits', {})
+        max_waits = limits.get('max_quota_waits', MissionLimits().max_quota_waits)
+        if step.get('quota_waits', 0) >= max_waits:
+            return True
+        deadline = step.get('quota_wait_deadline')
+        return deadline is not None and stamp >= deadline
+
+    def _stop_quota_wait(self, conn, doc, step):
+        """Make a quota timeout terminal so it cannot hold the next owner mission."""
+        self._set_liveness(doc, 'FAILED', reason='QUOTA_WAIT_LIMIT')
+        conn.execute("UPDATE tasks SET state='FAILED',result=?,updated_at=? WHERE id=?",
+                     ('QUOTA_WAIT_LIMIT', self.clock(), step['task_id']))
+        self._save(conn, doc, 'mission.quota_wait_exhausted')
 
     def repair_step(self, session_id: str, *, reason: str) -> bool:
         """Authorize one bounded re-execution after failed verification.
@@ -471,7 +936,8 @@ class MissionController:
                     or doc['used']['retries'] >= doc['limits']['max_retries'] or doc['cancel_requested']
                     or self.clock() >= doc['deadline']):
                 if doc['state'] == 'BLOCKED' and doc['blocker'] in ('VERIFICATION_FAIL', 'VERIFICATION_INCONCLUSIVE'):
-                    doc['state'], doc['blocker'] = 'BLOCKED_NEEDS_OWNER', 'REPAIR_LIMIT'
+                    self._set_liveness(doc, 'WAITING_OWNER', reason='REPAIR_LIMIT',
+                                       legacy_state='BLOCKED_NEEDS_OWNER')
                     self._save(conn, doc, 'mission.repair_exhausted')
                 return False
             step.setdefault('repairs', []).append({
@@ -479,7 +945,7 @@ class MissionController:
                 'verification': step['verification'], 'attempt_id': step['attempt_id']})
             doc['used']['retries'] += 1
             step.update(status='PENDING', attempt_id=None, receipt=None, verification=None)
-            doc['state'], doc['blocker'] = 'REPAIRING', None
+            self._set_liveness(doc, 'REPAIRING', reason='REPAIR_AUTHORIZED')
             doc['plan_version'] += 1
             conn.execute('INSERT INTO mission_plans VALUES(?,?,?)',
                          (session_id, doc['plan_version'], json.dumps(doc['steps'])))
@@ -494,15 +960,19 @@ class MissionController:
             doc, row = self._load(conn, session_id)
             if row['lease_until'] > self.clock() or doc['cancel_requested']:
                 return False
-            if doc['state'] not in ('WAITING_RESOURCE', 'RUNNING'):
+            if doc['state'] not in ('WAITING_RESOURCE', 'RUNNING') and doc.get('liveness_state') not in ('WAITING_RESOURCE', 'BACKOFF'):
                 return False
             due = next((s for s in doc['steps'] if s['status'] == 'PROVIDER_FAILED'
                         and s.get('retry_at', float('inf')) <= self.clock()), None)
             if not due: return False
             waiting_on_quota = due.get('quota_waits', 0) > 0 and due.get('resource_failures', 0) < 3
+            if waiting_on_quota and self._quota_wait_exhausted(doc, due, self.clock()):
+                self._stop_quota_wait(conn, doc, due)
+                return False
             if not waiting_on_quota and (doc['used']['retries'] >= doc['limits']['max_retries']
                                          or due.get('resource_failures', 0) >= 3):
-                doc['state'], doc['blocker'] = 'BLOCKED_NEEDS_OWNER', 'RESOURCE_RETRY_LIMIT'
+                self._set_liveness(doc, 'WAITING_OWNER', reason='RESOURCE_RETRY_LIMIT',
+                                   legacy_state='BLOCKED_NEEDS_OWNER')
                 self._save(conn, doc, 'mission.resource_exhausted')
                 return False
             if due['capability'] != 'model.text' or due['receipt']:
@@ -512,9 +982,48 @@ class MissionController:
             if doc.get('waiting_since') is not None:
                 doc['deadline'] += max(0, self.clock() - doc.pop('waiting_since'))
             due.update(status='PENDING', attempt_id=None)
-            doc['state'], doc['blocker'] = 'RUNNING', None
+            self._set_liveness(doc, 'RUNNING', reason='RESOURCE_RETRY_DUE')
             self._save(conn, doc, 'mission.resource_retry_due')
             return True
+
+    def resume(self, session_id: str) -> dict:
+        """Idempotently return a durable mission to its next safe checkpoint.
+
+        This is intentionally a controller operation, not an owner ``continue``
+        command.  It never replays DISPATCHED/RECONCILE work, never spends a
+        budget by itself, and only clears a due backoff or a scheduler-safe
+        waiting state.  A repeated call is a no-op with the same snapshot.
+        """
+        with self._transaction() as conn:
+            doc, row = self._load(conn, session_id)
+            stamp = self.clock()
+            if doc['state'] in ('COMPLETED', 'FAILED', 'CANCELLED'):
+                return doc
+            if row['lease_token'] and row['lease_until'] > stamp:
+                return doc
+            if doc.get('cancel_requested'):
+                if not any(s['status'] in ('DISPATCHED', 'RECONCILE') for s in doc['steps']):
+                    self._set_liveness(doc, 'CANCELLED', reason='MISSION_CANCELLED')
+                    self._save(conn, doc, 'mission.cancelled')
+                return doc
+            liveness = doc.get('liveness_state') or doc.get('state')
+            if liveness in ('WAITING_RESOURCE', 'BACKOFF'):
+                trigger = doc.get('next_trigger')
+                if trigger is None or trigger > stamp:
+                    return doc
+                self._set_liveness(doc, 'QUEUED', reason='BACKOFF_ELAPSED', next_trigger=stamp)
+                self._save(conn, doc, 'mission.resumed_after_backoff')
+                return doc
+            if liveness == 'WAITING_REVIEW' and doc.get('blocker'):
+                # Verification is a durable review checkpoint.  The reviewer
+                # can call repair_step/recheck_verification; resume itself does
+                # not manufacture a verdict or repeat the effect.
+                return doc
+            if liveness == 'WAITING_OWNER':
+                return doc
+            if liveness in ('QUEUED', 'REPAIRING', 'RUNNING'):
+                return doc
+            return doc
 
     def tick(self, session_id: str, ports: MissionPorts):
         token = self._claim(session_id)
@@ -523,6 +1032,7 @@ class MissionController:
         try:
             with self._transaction() as conn:
                 doc = self._owned(conn, session_id, token)
+                self._apply_owner_inputs(conn, doc)
                 completed = {s['id'] for s in doc['steps'] if s['status'] == 'DONE'}
                 step = next((s for s in doc['steps'] if s['status'] in ('DISPATCHED', 'RECONCILE', 'VERIFYING')), None)
                 if step is None:
@@ -535,7 +1045,7 @@ class MissionController:
                     self._block(conn, doc, 'UNCERTAIN_EFFECT')
                     return doc
                 if doc['cancel_requested']:
-                    doc['state'] = 'CANCELLED'
+                    self._set_liveness(doc, 'CANCELLED', reason='MISSION_CANCELLED')
                     self._save(conn, doc, 'mission.cancelled')
                     return doc
                 if self.clock() >= doc['deadline']:
@@ -562,9 +1072,15 @@ class MissionController:
                     return doc
                 context = ContextPacket(session['objective'], task['title'], task['instruction'],
                                         task['acceptance'], constraints=[json.dumps(asdict(scope))])
+                for owner_input in doc.get('owner_inputs', []):
+                    context.relevant_decisions.append('Owner input: ' + owner_input['text'][:4000])
                 if step.get('repairs'):
                     context.relevant_decisions.append('Repair the rejected result using verifier evidence: ' +
                                                        step['repairs'][-1]['reason'][:5000])
+                if step.get('refinement_corrections'):
+                    context.relevant_decisions.append(
+                        'Reviewer contestation routed this work back. Apply every correction: ' +
+                        ' | '.join(step['refinement_corrections'])[:5000])
                 for dep in doc['steps']:
                     if dep['id'] in step['depends_on'] and dep['receipt']:
                         context.relevant_decisions.append('Verified dependency ' + dep['id'] + ': ' +
@@ -580,7 +1096,7 @@ class MissionController:
                     for k, v in charges.items():
                         doc['used'][k] += v
                     step['attempt_id'], step['status'] = new_id('attempt'), 'DISPATCHED'
-                    doc['state'] = 'RUNNING'
+                    self._set_liveness(doc, 'RUNNING', reason='STEP_DISPATCHED')
                     conn.execute("UPDATE tasks SET state='RUNNING',updated_at=? WHERE id=?", (self.clock(), task['id']))
                     self._save(conn, doc, 'mission.dispatched')
                     if step['kind'] == 'DELEGATE':
@@ -608,7 +1124,14 @@ class MissionController:
                         self._block(conn, doc, 'LATE_EXECUTION')
                         return doc
                     step['status'] = 'VERIFYING'
-                    doc['state'] = 'CANCELLING' if doc['cancel_requested'] else 'VERIFYING'
+                    if doc['cancel_requested']:
+                        self._set_liveness(doc, 'WAITING_OWNER', reason='CANCELLATION_REVIEW',
+                                           legacy_state='CANCELLING')
+                    else:
+                        self._set_liveness(doc, 'WAITING_REVIEW', reason='REVIEW_REQUIRED',
+                                           legacy_state='VERIFYING')
+                    if step['kind'] != 'ACTION' and self._apply_owner_inputs(conn, doc):
+                        return doc
                     self._save(conn, doc, 'mission.result_received')
             else:
                 result = ports.verify(dispatch, receipt)
@@ -619,6 +1142,8 @@ class MissionController:
                     doc = self._owned(conn, session_id, token)
                     step = next(s for s in doc['steps'] if s['id'] == dispatch.step_id)
                     step['verification'] = asdict(result)
+                    if step['kind'] != 'ACTION' and self._apply_owner_inputs(conn, doc):
+                        return doc
                     if self.clock() >= dispatch.deadline:
                         self._block(conn, doc, 'LATE_VERIFICATION')
                     elif result.verdict != 'PASS':
@@ -628,15 +1153,25 @@ class MissionController:
                         step['status'] = 'DONE'
                         conn.execute("UPDATE tasks SET state='COMPLETED', result=?,updated_at=? WHERE id=?",
                                      (receipt.summary, self.clock(), step['task_id']))
-                        doc['state'] = 'CANCELLED' if doc['cancel_requested'] else (
-                            ('PLANNING' if doc.get('awaiting_expansion') else 'COMPLETED')
-                            if all(s['status'] == 'DONE' for s in doc['steps']) else 'RUNNING')
+                        if doc['cancel_requested']:
+                            self._set_liveness(doc, 'CANCELLED', reason='MISSION_CANCELLED')
+                        elif all(s['status'] == 'DONE' for s in doc['steps']):
+                            self._set_liveness(doc, 'COMPLETED', reason='MISSION_COMPLETED')
+                            if doc.get('awaiting_expansion'):
+                                doc['state'] = 'PLANNING'
+                                doc['liveness_state'] = 'RUNNING'
+                        else:
+                            self._set_liveness(doc, 'RUNNING', reason='STEP_COMPLETED')
                         if doc['state'] == 'RUNNING' and all(s['status'] in ('DONE', 'PROVIDER_FAILED')
                                 or (s['status'] == 'PENDING' and not set(s['depends_on']) <=
                                     {x['id'] for x in doc['steps'] if x['status'] == 'DONE'}) for s in doc['steps']):
-                            doc['state'] = 'WAITING_RESOURCE'
+                            self._set_liveness(doc, 'BACKOFF', reason='RESOURCE_WAIT',
+                                               next_trigger=next((s.get('retry_at') for s in doc['steps']
+                                                                  if s.get('status') == 'PROVIDER_FAILED'), None),
+                                               legacy_state='WAITING_RESOURCE')
                             doc.setdefault('waiting_since', self.clock())
                         self._save(conn, doc, 'mission.verified')
+                        self._apply_owner_inputs(conn, doc)
         except TextProviderFailure as exc:
             with self._transaction() as conn:
                 try:
@@ -655,7 +1190,15 @@ class MissionController:
                         # espera mais e nao consome o orcamento de falha real.
                         if exc.availability in _QUOTA_WAIT_STATES:
                             step['quota_waits'] = step.get('quota_waits', 0) + 1
-                            step['retry_at'] = self.clock() + min(
+                            stamp = self.clock()
+                            step.setdefault('quota_wait_started_at', stamp)
+                            step.setdefault('quota_wait_deadline',
+                                            step['quota_wait_started_at'] + doc['limits'].get(
+                                                'max_quota_wait_s', MissionLimits().max_quota_wait_s))
+                            if self._quota_wait_exhausted(doc, step, stamp):
+                                self._stop_quota_wait(conn, doc, step)
+                                return doc
+                            step['retry_at'] = stamp + min(
                                 _QUOTA_BACKOFF_MAX_S, 300 * 2 ** (step['quota_waits'] - 1))
                         else:
                             step['resource_failures'] = step.get('resource_failures', 0) + 1
@@ -791,7 +1334,8 @@ class MissionController:
             conn.execute('INSERT INTO handoffs(id,session_id,team_id,role,from_agent_id,to_agent_id,reason,'
                          'context_summary,unfinished_task_ids,outcome,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
                          (new_id('handoff'), session_id, session['team_id'], agent['role'], previous, agent_id,
-                          doc['blocker'], session['objective'], json.dumps([step['task_id']]), 'COMPLETED', self.clock()))
+                          doc['blocker'] or 'PROVIDER_FAILED_RETRY', session['objective'],
+                          json.dumps([step['task_id']]), 'COMPLETED', self.clock()))
             step['resources'], step['status'] = [resource], 'PENDING'
             doc['used']['retries'] += 1
             doc['state'], doc['blocker'] = 'QUEUED', None

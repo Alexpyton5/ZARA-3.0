@@ -1,0 +1,4 @@
+interface:
+  display_name: "GPT OpenCode Room"
+  short_description: "Govern OpenCode execution inside the ZARA Room"
+  default_prompt: "Use $gpt-opencode-room to execute an authorized ZARA Room task safely."

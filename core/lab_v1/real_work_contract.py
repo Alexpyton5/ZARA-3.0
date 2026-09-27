@@ -264,6 +264,7 @@ def _terminal_run(value: Any, label: str) -> dict[str, Any]:
 def validate_reviewer_result(
     result: Any, *, reviewer_run: Any, planner_run: Any, builder_runs: Iterable[Any],
     artifact_hashes: Iterable[str], test_receipt_ids: Iterable[str],
+    expected_packet_id: str | None = None, expected_packet_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Validate an independent review tied to actual artifacts and test receipts."""
     review = _row(result)
@@ -281,18 +282,33 @@ def validate_reviewer_result(
     rationale = _require_text(review.get("rationale"), "review rationale",
                               limit=REVIEW_RATIONALE_LIMIT, error=ReviewResponseContractError)
     refs = review.get("evidence_refs")
-    if not isinstance(refs, Mapping) or set(refs) != {"artifact_hashes", "test_receipt_ids"}:
+    expected_ref_keys = {"artifact_hashes", "test_receipt_ids"}
+    if expected_packet_id is not None or expected_packet_sha256 is not None:
+        if not expected_packet_id or not expected_packet_sha256:
+            raise RealWorkContractError("packet id and hash must be required together")
+        expected_ref_keys |= {"packet_id", "packet_sha256"}
+    if not isinstance(refs, Mapping) or set(refs) != expected_ref_keys:
         raise ReviewResponseContractError("review needs artifact hashes and test receipt ids")
     supplied_hashes, supplied_receipts = refs["artifact_hashes"], refs["test_receipt_ids"]
     actual_hashes, actual_receipts = set(artifact_hashes), set(test_receipt_ids)
+    exact_refs_required = expected_packet_id is not None
     if (not isinstance(supplied_hashes, list) or not isinstance(supplied_receipts, list)
             or not supplied_hashes or not supplied_receipts
             or not all(isinstance(item, str) and item for item in supplied_hashes + supplied_receipts)
             or not all(isinstance(item, str) and item for item in actual_hashes | actual_receipts)
-            or not set(supplied_hashes) <= actual_hashes or not set(supplied_receipts) <= actual_receipts):
+            or (set(supplied_hashes) != actual_hashes if exact_refs_required
+                else not set(supplied_hashes) <= actual_hashes)
+            or (set(supplied_receipts) != actual_receipts if exact_refs_required
+                else not set(supplied_receipts) <= actual_receipts)):
         raise ReviewResponseContractError("review evidence does not reference actual artifacts and receipts")
+    if expected_packet_id is not None and (refs.get("packet_id") != expected_packet_id
+                                            or refs.get("packet_sha256") != expected_packet_sha256):
+        raise ReviewResponseContractError("review evidence packet identity does not match")
+    verified_refs = {"artifact_hashes": list(supplied_hashes), "test_receipt_ids": list(supplied_receipts)}
+    if expected_packet_id is not None:
+        verified_refs.update(packet_id=expected_packet_id, packet_sha256=expected_packet_sha256)
     return {"verdict": review["verdict"], "rationale": rationale,
-            "evidence_refs": {"artifact_hashes": list(supplied_hashes), "test_receipt_ids": list(supplied_receipts)},
+            "evidence_refs": verified_refs,
             "reviewer_run_id": reviewer["id"]}
 
 

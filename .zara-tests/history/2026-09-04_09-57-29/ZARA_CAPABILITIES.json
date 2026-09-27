@@ -1,0 +1,187 @@
+{
+  "SYS-DISK": {
+    "label": "Espaço em disco",
+    "status": "PASS",
+    "latency_ms": 0.0
+  },
+  "TECH-001": {
+    "label": "Camada técnica (zara_validate.py)",
+    "status": "PASS",
+    "latency_ms": 147935.8
+  },
+  "SYS-BOOT": {
+    "label": "Boot do backend",
+    "status": "PASS",
+    "latency_ms": 0.0
+  },
+  "SYS-001": {
+    "label": "Comando de texto (\"que horas são?\")",
+    "status": "PASS",
+    "latency_ms": 59.2
+  },
+  "SYS-002": {
+    "label": "Ver processos (system_processes)",
+    "status": "PASS",
+    "latency_ms": 1289.3
+  },
+  "SYS-003": {
+    "label": "Métricas de sistema (CPU/RAM/disco)",
+    "status": "PASS",
+    "latency_ms": 133.3
+  },
+  "SYS-004": {
+    "label": "Wi-Fi (leitura real do rádio)",
+    "status": "PASS",
+    "latency_ms": 1629.3
+  },
+  "SYS-005": {
+    "label": "Planos de energia (powercfg real)",
+    "status": "PASS",
+    "latency_ms": 120.7
+  },
+  "SYS-006": {
+    "label": "Diagnóstico interno (self-status)",
+    "status": "PASS",
+    "latency_ms": 1431.3
+  },
+  "MEM-001": {
+    "label": "Memória de usuário (leitura real)",
+    "status": "PASS",
+    "latency_ms": 27.3
+  },
+  "MEM-002": {
+    "label": "Memória de projeto (leitura real)",
+    "status": "PASS",
+    "latency_ms": 30.4
+  },
+  "APP-001": {
+    "label": "Abrir app real (Bloco de Notas)",
+    "status": "PASS",
+    "latency_ms": 205.9
+  },
+  "APP-002": {
+    "label": "Minimizar app (via texto)",
+    "status": "PASS",
+    "latency_ms": 182.1
+  },
+  "REM-001": {
+    "label": "Lembretes (criar)",
+    "status": "PASS",
+    "latency_ms": 38.1
+  },
+  "REM-002": {
+    "label": "Lembretes (cancelar, limpa o teste)",
+    "status": "PASS",
+    "latency_ms": 30.1
+  },
+  "FILE-001": {
+    "label": "Criar pasta (sandbox)",
+    "status": "PASS",
+    "latency_ms": 0.5
+  },
+  "FILE-002": {
+    "label": "Criar arquivo (sandbox)",
+    "status": "PASS",
+    "latency_ms": 0.3
+  },
+  "FILE-003": {
+    "label": "Renomear arquivo (sandbox)",
+    "status": "PASS",
+    "latency_ms": 0.2
+  },
+  "FILE-004": {
+    "label": "Copiar arquivo (sandbox)",
+    "status": "PASS",
+    "latency_ms": 0.8
+  },
+  "FILE-005": {
+    "label": "Listar pasta (sandbox)",
+    "status": "PASS",
+    "latency_ms": 0.1
+  },
+  "ERR-001": {
+    "label": "App inexistente falha com erro claro",
+    "status": "PASS",
+    "latency_ms": 24.5
+  },
+  "ERR-002": {
+    "label": "Comando sem sentido não trava o backend",
+    "status": "PASS",
+    "latency_ms": 24126.8
+  },
+  "PC-001": {
+    "label": "\"abre o youtube\"",
+    "status": "PASS",
+    "latency_ms": 493.3
+  },
+  "PC-002": {
+    "label": "\"pesquisa hans zimmer no youtube\"",
+    "status": "PASS",
+    "latency_ms": 432.8
+  },
+  "PC-003": {
+    "label": "\"toca hans zimmer\"",
+    "status": "EXECUTED_UNVERIFIED",
+    "latency_ms": 13299.8
+  },
+  "PC-004": {
+    "label": "\"pula o anuncio\"",
+    "status": "EXECUTED_UNVERIFIED",
+    "latency_ms": 1619.8
+  },
+  "PC-005": {
+    "label": "\"diminui o volume\"",
+    "status": "PASS",
+    "latency_ms": 223.9
+  },
+  "PC-006": {
+    "label": "\"diminui o brilho\"",
+    "status": "PASS",
+    "latency_ms": 5566.0
+  },
+  "PC-007": {
+    "label": "\"pula essa\"",
+    "status": "EXECUTED_UNVERIFIED",
+    "latency_ms": 8849.1
+  },
+  "PC-008": {
+    "label": "\"pausa\"",
+    "status": "PASS",
+    "latency_ms": 940.5
+  },
+  "PC-009": {
+    "label": "\"continua\"",
+    "status": "PASS",
+    "latency_ms": 1854.6
+  },
+  "PC-010": {
+    "label": "\"abre o spotify\"",
+    "status": "PASS",
+    "latency_ms": 2367.9
+  },
+  "PC-011": {
+    "label": "\"minimiza\"",
+    "status": "PASS",
+    "latency_ms": 154.2
+  },
+  "PC-012": {
+    "label": "\"foca no chrome\"",
+    "status": "EXECUTED_UNVERIFIED",
+    "latency_ms": 71.1
+  },
+  "PC-013": {
+    "label": "\"abre o chrome no perfil trabalho\"",
+    "status": "BLOCKED",
+    "latency_ms": 23.4
+  },
+  "RESTORE-VOL": {
+    "label": "Restaurar volume original",
+    "status": "PASS",
+    "latency_ms": 151.3
+  },
+  "RESTORE-BRI": {
+    "label": "Restaurar brilho original",
+    "status": "PASS",
+    "latency_ms": 4228.2
+  }
+}

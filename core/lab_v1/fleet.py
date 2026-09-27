@@ -1,5 +1,5 @@
 """Explicit bounded model certification; catalog discovery never activates an agent."""
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 import time
 
@@ -52,6 +52,15 @@ class FleetCertification:
                     prompt='In one short sentence explain why a proposed code change is not proof that a test passed.')
                 if result.ok and not result.text.strip():
                     result = ProviderResult(False, availability=Availability.ERROR, error='EMPTY_RESPONSE')
+                if result.ok and provider_id == 'nvidia':
+                    if not result.model_reported:
+                        result = replace(result, ok=False,
+                            availability=Availability.MODEL_UNAVAILABLE,
+                            error='MODEL_IDENTITY_MISSING')
+                    elif not adapter.identifies_model(model, result.model_reported):
+                        result = replace(result, ok=False,
+                            availability=Availability.MODEL_UNAVAILABLE,
+                            error='MODEL_IDENTITY_MISMATCH')
         except Exception as exc:
             # Do not persist unsanitized exception text or retry an uncertain call.
             result = ProviderResult(False, availability=Availability.ERROR, error=type(exc).__name__)

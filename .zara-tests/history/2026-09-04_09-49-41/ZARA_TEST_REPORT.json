@@ -1,0 +1,404 @@
+{
+  "run_id": "2026-09-04_09-49-41",
+  "commit": "ce83e63",
+  "branch": "backup/estado-20260820-1143",
+  "duration_seconds": 292.5,
+  "counts": {
+    "PASS": 29,
+    "FAIL": 1,
+    "EXECUTED_UNVERIFIED": 5,
+    "BLOCKED": 1
+  },
+  "health_pct": 81,
+  "technical": {
+    "run_id": "2026-09-04_09-52-06",
+    "epoch": 1788526326.633865,
+    "commit": "ce83e63897e84595ed96e2c7d85c970db3c47505",
+    "mode": "full",
+    "changed_files": [],
+    "result": {
+      "returncode": 1,
+      "duration_seconds": 144.61,
+      "passed": 1632,
+      "failed": 25,
+      "skipped": 28,
+      "failed_tests": [
+        "tests/test_fase2_expansion_suite.py::test_run_golden_path_smoke_reports_real_outcome_honestly",
+        "tests/test_ipc_action_safety.py::test_action_ipc_propagates_failed_action_truth[handle_action_execute-execute_action-payload0]",
+        "tests/test_ipc_action_safety.py::test_action_ipc_propagates_failed_action_truth[handle_action_confirm-execute_confirmed_action-payload1]",
+        "tests/test_ipc_action_safety.py::test_background_terminal_returns_started_without_verification",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[shutdown]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[poweroff]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[restart]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[reboot]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[sleep]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[suspend]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[hibernate]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[logoff]",
+        "tests/test_os_power_gate_207.py::test_unknown_power_action_is_error_not_success",
+        "tests/test_os_power_gate_207.py::test_gate_holds_even_with_valid_high_risk_confirmation",
+        "tests/test_os_power_gate_207.py::test_authorized_path_calls_only_mock_handler",
+        "tests/test_remote_approval_e2e.py::test_risky_action_triggers_approval_request",
+        "tests/test_remote_approval_e2e.py::test_approval_response_does_not_execute_action",
+        "tests/test_remote_approval_e2e.py::test_replay_approval_does_not_execute_action",
+        "tests/test_remote_approval_e2e.py::test_nao_response_does_not_execute_action",
+        "tests/test_router_integrity.py::test_050_blocked_drive_format_is_not_an_executable_route",
+        "tests/test_router_integrity.py::test_050_mcp_actions_are_not_mapped_or_lazy_loadable",
+        "tests/test_system_env_and_files_list_safety.py::test_system_env_refuses_arbitrary_environment_inspection",
+        "tests/test_system_env_and_files_list_safety.py::test_system_env_never_echoes_the_value_being_set",
+        "tests/test_voice_usability.py::test_missing_backend_returns_friendly_response",
+        "tests/test_voice_usability.py::test_pc_router_exception_fails_closed_without_crashing"
+      ],
+      "summary_line": "===== 25 failed, 1632 passed, 28 skipped, 2 warnings in 143.48s (0:02:23) =====",
+      "targets": [
+        "<marker filtered>"
+      ],
+      "marker_expr": "not live"
+    },
+    "classification": {
+      "new_failures": [],
+      "known_failures_still_failing": [
+        "tests/test_fase2_expansion_suite.py::test_run_golden_path_smoke_reports_real_outcome_honestly",
+        "tests/test_ipc_action_safety.py::test_action_ipc_propagates_failed_action_truth[handle_action_confirm-execute_confirmed_action-payload1]",
+        "tests/test_ipc_action_safety.py::test_action_ipc_propagates_failed_action_truth[handle_action_execute-execute_action-payload0]",
+        "tests/test_ipc_action_safety.py::test_background_terminal_returns_started_without_verification",
+        "tests/test_os_power_gate_207.py::test_authorized_path_calls_only_mock_handler",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[hibernate]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[logoff]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[poweroff]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[reboot]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[restart]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[shutdown]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[sleep]",
+        "tests/test_os_power_gate_207.py::test_destructive_power_denied_by_default[suspend]",
+        "tests/test_os_power_gate_207.py::test_gate_holds_even_with_valid_high_risk_confirmation",
+        "tests/test_os_power_gate_207.py::test_unknown_power_action_is_error_not_success",
+        "tests/test_remote_approval_e2e.py::test_approval_response_does_not_execute_action",
+        "tests/test_remote_approval_e2e.py::test_nao_response_does_not_execute_action",
+        "tests/test_remote_approval_e2e.py::test_replay_approval_does_not_execute_action",
+        "tests/test_remote_approval_e2e.py::test_risky_action_triggers_approval_request",
+        "tests/test_router_integrity.py::test_050_blocked_drive_format_is_not_an_executable_route",
+        "tests/test_router_integrity.py::test_050_mcp_actions_are_not_mapped_or_lazy_loadable",
+        "tests/test_system_env_and_files_list_safety.py::test_system_env_never_echoes_the_value_being_set",
+        "tests/test_system_env_and_files_list_safety.py::test_system_env_refuses_arbitrary_environment_inspection",
+        "tests/test_voice_usability.py::test_missing_backend_returns_friendly_response",
+        "tests/test_voice_usability.py::test_pc_router_exception_fails_closed_without_crashing"
+      ],
+      "fixed": [
+        "tests/test_foundation_smoke.py::TestIPC::test_main_ipc_registration",
+        "tests/test_foundation_smoke.py::TestIntentClassification::test_intent_classifier_imports",
+        "tests/test_foundation_smoke.py::TestIntentClassification::test_local_deterministic_actions_defined",
+        "tests/test_foundation_smoke.py::TestIntentClassification::test_pc_voice_intent_imports",
+        "tests/test_foundation_smoke.py::TestVoiceEngine::test_gemini_live_imports",
+        "tests/test_foundation_smoke.py::TestVoiceEngine::test_voice_tts_imports",
+        "tests/test_os_ops_truth_contracts.py::test_brightness_rejects_observed_value_outside_tolerance",
+        "tests/test_os_ops_truth_contracts.py::test_night_light_never_reports_cloudstore_only_success",
+        "tests/test_os_ops_truth_contracts.py::test_window_close_protects_any_zara_window",
+        "tests/test_ponte_claude.py::test_confirma_quando_a_mensagem_aparece_na_conversa_certa",
+        "tests/test_project_context_control.py::test_active_project_is_persisted_and_context_is_isolated",
+        "tests/test_project_context_control.py::test_budget_keeps_required_project_id_and_reports_omitted_doc",
+        "tests/test_project_context_control.py::test_explicit_project_does_not_mutate_active_selection",
+        "tests/test_remote_approval_bridge.py::test_adapter_token_is_never_stored",
+        "tests/test_remote_approval_bridge.py::test_expiry_during_slow_verification_fails_closed",
+        "tests/test_remote_approval_bridge.py::test_invalid_timeout_is_rejected[inf]",
+        "tests/test_remote_approval_bridge.py::test_missing_failing_and_wrong_verifiers_fail_closed",
+        "tests/test_remote_approval_bridge.py::test_pending_and_approved_requests_expire_without_sleep",
+        "tests/test_remote_approval_bridge.py::test_terminal_history_is_bounded",
+        "tests/test_router_integrity.py::test_050_all_intent_actions_except_known_gap_are_registered"
+      ]
+    }
+  },
+  "notes": [
+    "A ZARA tem 141 ações registradas no total; este relatório testa uma amostra representativa (36 checagens)."
+  ],
+  "tests": [
+    {
+      "id": "SYS-DISK",
+      "label": "Espaço em disco",
+      "state": "PASS",
+      "detail": "22.3GB livres",
+      "latency_ms": 0.0,
+      "category": "system"
+    },
+    {
+      "id": "TECH-001",
+      "label": "Camada técnica (zara_validate.py)",
+      "state": "PASS",
+      "detail": "1632 passou, 25 falha(s) já conhecida(s), 0 nova(s)",
+      "latency_ms": 144763.9,
+      "category": "technical"
+    },
+    {
+      "id": "SYS-BOOT",
+      "label": "Boot do backend",
+      "state": "PASS",
+      "detail": "emitiu o sinal de pronto",
+      "latency_ms": 0.0,
+      "category": "system"
+    },
+    {
+      "id": "SYS-001",
+      "label": "Comando de texto (\"que horas são?\")",
+      "state": "PASS",
+      "detail": "\"Agora são 09:52.\"",
+      "latency_ms": 97.5,
+      "category": "system"
+    },
+    {
+      "id": "SYS-002",
+      "label": "Ver processos (system_processes)",
+      "state": "PASS",
+      "detail": "267 processos reais",
+      "latency_ms": 1177.7,
+      "category": "system"
+    },
+    {
+      "id": "SYS-003",
+      "label": "Métricas de sistema (CPU/RAM/disco)",
+      "state": "PASS",
+      "detail": "{'cpu': 0.0, 'ram': 93.1, 'disk': 91.2, 'netUp': 0, 'netDown': 0}",
+      "latency_ms": 122.6,
+      "category": "system"
+    },
+    {
+      "id": "SYS-004",
+      "label": "Wi-Fi (leitura real do rádio)",
+      "state": "PASS",
+      "detail": "estado: On",
+      "latency_ms": 1597.3,
+      "category": "system"
+    },
+    {
+      "id": "SYS-005",
+      "label": "Planos de energia (powercfg real)",
+      "state": "PASS",
+      "detail": "4 planos",
+      "latency_ms": 139.6,
+      "category": "system"
+    },
+    {
+      "id": "SYS-006",
+      "label": "Diagnóstico interno (self-status)",
+      "state": "PASS",
+      "detail": "14/18 disponíveis",
+      "latency_ms": 1382.2,
+      "category": "system"
+    },
+    {
+      "id": "MEM-001",
+      "label": "Memória de usuário (leitura real)",
+      "state": "PASS",
+      "detail": "12 fatos",
+      "latency_ms": 35.4,
+      "category": "system"
+    },
+    {
+      "id": "MEM-002",
+      "label": "Memória de projeto (leitura real)",
+      "state": "PASS",
+      "detail": "docs: architecture, auditoria_completa_20260824, charter, decisions, roadmap, state",
+      "latency_ms": 31.4,
+      "category": "system"
+    },
+    {
+      "id": "APP-001",
+      "label": "Abrir app real (Bloco de Notas)",
+      "state": "PASS",
+      "detail": "PID 19256, janela verificada",
+      "latency_ms": 197.4,
+      "category": "system"
+    },
+    {
+      "id": "APP-002",
+      "label": "Minimizar app (via texto)",
+      "state": "PASS",
+      "detail": "Janela minimizada e verificada.",
+      "latency_ms": 194.4,
+      "category": "pc_control"
+    },
+    {
+      "id": "REM-001",
+      "label": "Lembretes (criar)",
+      "state": "PASS",
+      "detail": "id REM-1788526342194-4AF6",
+      "latency_ms": 32.0,
+      "category": "system"
+    },
+    {
+      "id": "REM-002",
+      "label": "Lembretes (cancelar, limpa o teste)",
+      "state": "PASS",
+      "detail": "cancelado",
+      "latency_ms": 30.3,
+      "category": "system"
+    },
+    {
+      "id": "FILE-001",
+      "label": "Criar pasta (sandbox)",
+      "state": "PASS",
+      "detail": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.zara-tests\\sandbox\\TesteAutomacao",
+      "latency_ms": 0.5,
+      "category": "system"
+    },
+    {
+      "id": "FILE-002",
+      "label": "Criar arquivo (sandbox)",
+      "state": "PASS",
+      "detail": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.zara-tests\\sandbox\\TesteAutomacao\\teste.txt",
+      "latency_ms": 0.3,
+      "category": "system"
+    },
+    {
+      "id": "FILE-003",
+      "label": "Renomear arquivo (sandbox)",
+      "state": "PASS",
+      "detail": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.zara-tests\\sandbox\\TesteAutomacao\\resultado.txt",
+      "latency_ms": 0.2,
+      "category": "system"
+    },
+    {
+      "id": "FILE-004",
+      "label": "Copiar arquivo (sandbox)",
+      "state": "PASS",
+      "detail": "C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.zara-tests\\sandbox\\Backup\\resultado.txt",
+      "latency_ms": 0.6,
+      "category": "system"
+    },
+    {
+      "id": "FILE-005",
+      "label": "Listar pasta (sandbox)",
+      "state": "PASS",
+      "detail": "['resultado.txt']",
+      "latency_ms": 0.1,
+      "category": "system"
+    },
+    {
+      "id": "ERR-001",
+      "label": "App inexistente falha com erro claro",
+      "state": "PASS",
+      "detail": "Aplicativo não autorizado. Use um aplicativo conhecido da lista segura.",
+      "latency_ms": 22.1,
+      "category": "system"
+    },
+    {
+      "id": "ERR-002",
+      "label": "Comando sem sentido não trava o backend",
+      "state": "FAIL",
+      "detail": "sem resposta (pode ter travado)",
+      "latency_ms": 40108.2,
+      "category": "system"
+    },
+    {
+      "id": "PC-001",
+      "label": "\"abre o youtube\"",
+      "state": "PASS",
+      "detail": "[EXCELLENT] YouTube enviado ao navegador padrão. Não consegui confirmar; se não tiver acontecido, me fala.",
+      "latency_ms": 452.0,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-002",
+      "label": "\"pesquisa hans zimmer no youtube\"",
+      "state": "PASS",
+      "detail": "[EXCELLENT] Pesquisa por “hans zimmer” enviada ao YouTube. Não consegui confirmar; se não tiver acontecido, me fala.",
+      "latency_ms": 425.2,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-003",
+      "label": "\"toca hans zimmer\"",
+      "state": "EXECUTED_UNVERIFIED",
+      "detail": "[SLOW] Não consegui executar essa ação. O vídeo foi selecionado, mas a reprodução não pôde ser confirmada.",
+      "latency_ms": 11705.5,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-004",
+      "label": "\"pula o anuncio\"",
+      "state": "EXECUTED_UNVERIFIED",
+      "detail": "[GOOD] Não consegui executar essa ação. Não encontrei um botão acessível de anúncio pulável no YouTube.",
+      "latency_ms": 4896.5,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-005",
+      "label": "\"diminui o volume\"",
+      "state": "PASS",
+      "detail": "[EXCELLENT] Volume definido para 20%.",
+      "latency_ms": 221.8,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-006",
+      "label": "\"diminui o brilho\"",
+      "state": "PASS",
+      "detail": "[VERY_SLOW] Brilho definido para 30%.",
+      "latency_ms": 5264.2,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-007",
+      "label": "\"pula essa\"",
+      "state": "EXECUTED_UNVERIFIED",
+      "detail": "[EXCELLENT] Não consegui executar essa ação. Não encontrei um vídeo ativo do YouTube.",
+      "latency_ms": 56.6,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-008",
+      "label": "\"pausa\"",
+      "state": "PASS",
+      "detail": "[EXCELLENT] Pausado.",
+      "latency_ms": 1234.4,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-009",
+      "label": "\"continua\"",
+      "state": "EXECUTED_UNVERIFIED",
+      "detail": "[GOOD] Não consegui executar essa ação. Comando enviado, mas a mudança do player não pôde ser confirmada.",
+      "latency_ms": 5290.0,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-010",
+      "label": "\"abre o spotify\"",
+      "state": "PASS",
+      "detail": "[EXCELLENT] Spotify aberto e verificado.",
+      "latency_ms": 2240.6,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-011",
+      "label": "\"minimiza\"",
+      "state": "PASS",
+      "detail": "[EXCELLENT] Janela minimizada e verificada.",
+      "latency_ms": 237.8,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-012",
+      "label": "\"foca no chrome\"",
+      "state": "EXECUTED_UNVERIFIED",
+      "detail": "[EXCELLENT] Não consegui executar essa ação. Encontrei mais de uma janela de chrome. Diga qual delas.",
+      "latency_ms": 52.6,
+      "category": "pc_control"
+    },
+    {
+      "id": "PC-013",
+      "label": "\"abre o chrome no perfil trabalho\"",
+      "state": "BLOCKED",
+      "detail": "[EXCELLENT] Para controlar o computador, ative o Supercérebro.",
+      "latency_ms": 131.9,
+      "category": "pc_control"
+    },
+    {
+      "id": "RESTORE-BRI",
+      "label": "Restaurar brilho original",
+      "state": "PASS",
+      "detail": "de volta para 40%",
+      "latency_ms": 4231.0,
+      "category": "system"
+    }
+  ]
+}

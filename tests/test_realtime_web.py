@@ -8,12 +8,6 @@ import pytest
 
 import core.actions.web as web_actions
 from core.action_registry import ActionResult, get_registry
-import core.actions  # noqa: F401 -- garante que as actions estao registradas
-from core.action_registry import get_registry
-
-
-def load_capability(name):
-    return get_registry().get_spec(name) is not None
 from core.realtime_web import (
     MAX_QUERY_CHARS,
     MAX_REGION_CHARS,
@@ -454,9 +448,6 @@ def test_research_input_limits_fail_before_search_or_process(
 
 def test_action_schemas_publish_runtime_input_bounds() -> None:
     registry = get_registry()
-    assert load_capability("web_research") is True
-    assert load_capability("web_search") is True
-    assert load_capability("web_fetch") is True
     research = registry.get_spec("web_research")
     search = registry.get_spec("web_search")
     fetch = registry.get_spec("web_fetch")
@@ -522,7 +513,6 @@ def test_web_research_action_is_read_only_and_returns_numbered_citations(
     monkeypatch.setattr(web_actions, "_supervise_realtime_research", supervise)
 
     action_result = web_actions.web_research_action("current facts")
-    assert load_capability("web_research") is True
     spec = get_registry().get_spec("web_research")
 
     assert action_result.success is True

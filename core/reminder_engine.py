@@ -17,8 +17,7 @@ import re
 import sqlite3
 import threading
 import time
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,21 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_at_utc);
 CREATE INDEX IF NOT EXISTS idx_reminders_state ON reminders(state);
 """
 
-# ZARA-REMINDER-HIGIENE-001
-# Janela de atraso. Era 24h, o que fazia um lembrete vencido tocar de novo a
-# cada abertura do app durante um dia inteiro. Lembrete atrasado mais de uma
-# hora perdeu o proposito: vira MISSED e aparece na lista, sem falar.
-OVERDUE_WINDOW_SECONDS = 3600
-
-# Lembretes ja resolvidos nao ficam no banco para sempre.
-RETENCAO_RESOLVIDOS_SEGUNDOS = 7 * 24 * 3600
-
-
-class ReminderPersistenceError(RuntimeError):
-    """Raised when create -> commit -> readback cannot be proven for an ID.
-
-    BUG-001: nunca responder sucesso sem prova de persistencia do MESMO id.
-    """
+OVERDUE_WINDOW_SECONDS = 24 * 3600  # dispara como overdue se atraso <= 24h
 
 
 @dataclass
@@ -96,14 +81,10 @@ class ReminderEngine:
         self._thread: threading.Thread | None = None
         self._init_db()
 
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
+    def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=15.0)
         conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-        finally:
-            conn.close()
+        return conn
 
     def _init_db(self) -> None:
         with self._connect() as conn:
@@ -113,17 +94,6 @@ class ReminderEngine:
                 "UPDATE reminders SET state='SCHEDULED', updated_at=? WHERE state='FIRING'",
                 (time.time(),),
             )
-            # ZARA-REMINDER-HIGIENE-001: limpa o que ja foi resolvido ha mais
-            # de uma semana. Sem isso o banco so cresce e lembretes velhos
-            # continuam aparecendo na lista para sempre.
-            corte = time.time() - RETENCAO_RESOLVIDOS_SEGUNDOS
-            apagados = conn.execute(
-                "DELETE FROM reminders WHERE state IN ('FIRED','CANCELLED','COMPLETED','MISSED') "
-                "AND COALESCE(updated_at, created_at, 0) < ?",
-                (corte,),
-            ).rowcount
-            if apagados:
-                print(f"[Reminder] {apagados} lembrete(s) resolvido(s) antigo(s) removido(s)")
             conn.commit()
 
     # ---- CRUD ----
@@ -137,54 +107,15 @@ class ReminderEngine:
                      timezone=timezone, created_at=now, source=source)
         r.updated_at = now
         with self._lock:
-            try:
-                with self._connect() as conn:
-                    conn.execute(
-                        "INSERT INTO reminders (id, message, due_at_utc, timezone, state, "
-                        "created_at, updated_at, source) VALUES (?,?,?,?,?,?,?,?)",
-                        (r.id, r.message, r.due_at_utc, r.timezone, r.state,
-                         r.created_at, r.updated_at, r.source),
-                    )
-                    conn.commit()
-            except Exception as exc:  # commit/insert falhou -> NUNCA sucesso
-                raise ReminderPersistenceError(
-                    f"commit falhou para o lembrete {r.id}: {exc}"
-                ) from exc
-
-        # readback obrigatorio do MESMO id (prova de persistencia)
-        try:
-            stored = self.get(r.id)
-        except Exception as exc:
-            raise ReminderPersistenceError(
-                f"readback falhou para o lembrete {r.id}: {exc}"
-            ) from exc
-        if stored is None:
-            raise ReminderPersistenceError(
-                f"readback nao encontrou o lembrete {r.id} apos o commit"
-            )
-        if (
-            stored.id != r.id
-            or stored.message != r.message
-            or abs(float(stored.due_at_utc) - float(r.due_at_utc)) > 1e-6
-            or stored.state != r.state
-        ):
-            raise ReminderPersistenceError(
-                f"readback divergente para o lembrete {r.id}: "
-                f"gravado={stored.to_row()} esperado={r.to_row()}"
-            )
-        return stored
-
-    def complete(self, rid: str) -> bool:
-        """Mark one unambiguous scheduled reminder complete by its exact id."""
-        with self._lock:
             with self._connect() as conn:
-                cur = conn.execute(
-                    "UPDATE reminders SET state='COMPLETED', updated_at=? "
-                    "WHERE id=? AND state='SCHEDULED'",
-                    (time.time(), rid),
+                conn.execute(
+                    "INSERT INTO reminders (id, message, due_at_utc, timezone, state, "
+                    "created_at, updated_at, source) VALUES (?,?,?,?,?,?,?,?)",
+                    (r.id, r.message, r.due_at_utc, r.timezone, r.state,
+                     r.created_at, r.updated_at, r.source),
                 )
                 conn.commit()
-                return cur.rowcount > 0
+        return r
 
     def get(self, rid: str) -> Reminder | None:
         with self._lock:
@@ -313,24 +244,6 @@ class ReminderEngine:
             except Exception:
                 pass
 
-    def purgar_resolvidos(self, dias: int = 0) -> int:
-        """Remove lembretes ja resolvidos. dias=0 remove todos os resolvidos.
-
-        ZARA-REMINDER-HIGIENE-001. Nunca toca em SCHEDULED: o que ainda vai
-        acontecer e preservado.
-        """
-        corte = time.time() - (dias * 24 * 3600)
-        with self._lock:
-            with self._connect() as conn:
-                n = conn.execute(
-                    "DELETE FROM reminders WHERE state IN "
-                    "('FIRED','CANCELLED','COMPLETED','MISSED') "
-                    "AND COALESCE(updated_at, created_at, 0) <= ?",
-                    (corte,),
-                ).rowcount
-                conn.commit()
-        return int(n or 0)
-
     def fire_due_now(self) -> int:
         """Sync helper (tests): claim + fire all currently due reminders."""
         due = self._claim_due(time.time())
@@ -351,48 +264,6 @@ def parse_natural_due(text: str, now: datetime | None = None) -> float | None:
     now = now or datetime.now()
     t = text.lower().strip()
 
-    def _absolute_due(match) -> float | None:
-        hh = int(match.group('hour'))
-        mm = int(match.group('minute') or 0)
-        period = (match.group('period') or '').casefold()
-        day = int(match.group('day'))
-        month = int(match.group('month'))
-        year = int(match.group('year'))
-        if year < 100:
-            year += 2000
-        if period in {'tarde', 'noite'} and hh < 12:
-            hh += 12
-        elif period in {'manha', 'manhã'} and hh == 12:
-            hh = 0
-        if not 0 <= hh <= 23 or not 0 <= mm <= 59:
-            return None
-        try:
-            due = datetime(year, month, day, hh, mm)
-        except ValueError:
-            return None
-        return due.timestamp() if due > now else None
-
-    # Horário antes da data: "às 10 horas da manhã no dia 18-09-2026".
-    absolute = re.search(
-        r"(?:para\s+)?(?:às|as)?\s*(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*"
-        r"(?:h|horas?)?(?:\s+da\s+(?P<period>manhã|manha|tarde|noite))?\s+"
-        r"(?:no\s+dia\s+|em\s+)?(?P<day>\d{1,2})[-/](?P<month>\d{1,2})[-/]"
-        r"(?P<year>\d{2,4})",
-        t,
-    )
-    if absolute:
-        return _absolute_due(absolute)
-
-    # Data antes do horário: "18-09-2026 às 10".
-    absolute = re.search(
-        r"(?P<day>\d{1,2})[-/](?P<month>\d{1,2})[-/](?P<year>\d{2,4})\s+"
-        r"(?:às|as|a)?\s*(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*"
-        r"(?:h|horas?)?(?:\s+da\s+(?P<period>manhã|manha|tarde|noite))?",
-        t,
-    )
-    if absolute:
-        return _absolute_due(absolute)
-
     # daqui a N minutos/horas
     m = re.search(r"daqui a (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", t)
     if m:
@@ -408,23 +279,7 @@ def parse_natural_due(text: str, now: datetime | None = None) -> float | None:
         day = now + timedelta(days=1 if m.group(1).startswith("amanh") else 0)
         hh = int(m.group(2))
         mm = int(m.group(3) or 0)
-        if not 0 <= hh <= 23 or not 0 <= mm <= 59:
-            return None
         due = day.replace(hour=hh, minute=mm, second=0, microsecond=0)
-        if due <= now:
-            return None
-        return due.timestamp()
-
-    # horário explícito para hoje: "às 16" / "as 16:30"
-    m = re.fullmatch(r"(?:às|as)\s*(\d{1,2})(?::(\d{2}))?", t)
-    if m:
-        hh = int(m.group(1))
-        mm = int(m.group(2) or 0)
-        if not 0 <= hh <= 23 or not 0 <= mm <= 59:
-            return None
-        due = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
-        if due <= now:
-            return None
         return due.timestamp()
 
     # apenas 'em 30 minutos'

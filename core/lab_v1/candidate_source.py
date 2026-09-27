@@ -109,6 +109,22 @@ _MAX_TEST_OUTPUT = 250_000
 _NODE_SUFFIX = re.compile(r"^[A-Za-z0-9_.,:/\[\]\-]+$")
 _SOURCE_EXTENSIONS = frozenset({".py", ".ts", ".tsx", ".js", ".css", ".json", ".svg", ".html"})
 _SOURCE_ROOTS = ("core", "memory", "frontend/src", "assets", "tests")
+# Normalise Windows line endings to LF for source/text files so that anchored
+# edits and diff generation stay byte-consistent between workspace, baseline and
+# candidate copies.  Python source is semantically identical under this rule.
+_TEXT_EXTENSIONS = frozenset(_SOURCE_EXTENSIONS | {
+    ".md", ".txt", ".yaml", ".yml", ".toml", ".cfg", ".ini", ".sh", ".bat",
+    ".ps1", ".scss", ".csv", ".xml", ".sql", ".lock",
+})
+
+
+def _normalize_newlines(data: bytes, relative: str) -> bytes:
+    extension = Path(relative).suffix.lower()
+    if extension not in _TEXT_EXTENSIONS:
+        return data
+    if b"\r\n" not in data and b"\r" not in data:
+        return data
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 _FORBIDDEN_PARTS = {
     ".git", ".env", "data", "__pycache__", "node_modules", "dist", "build",
     "release", ".pytest_cache", ".ruff_cache", "cache", "generated",
@@ -526,7 +542,7 @@ class CandidateSource:
         for relative, editable in sorted(files.items()):
             original = self._workspace_path(relative, may_be_missing=True)
             exists = original.is_file()
-            data = original.read_bytes() if exists else None
+            data = _normalize_newlines(original.read_bytes(), relative) if exists else None
             entry = {
                 "path": relative,
                 "original_path": str(original),
@@ -648,7 +664,9 @@ class CandidateSource:
                 original = self._workspace_path(relative, may_be_missing=True)
                 if entry["exists"]:
                     if (relative not in self.runtime_drift_paths
-                            and (not original.is_file() or _digest(original.read_bytes()) != entry["before_sha256"])):
+                            and (not original.is_file() or _digest(_normalize_newlines(
+                                original.read_bytes(), relative
+                            )) != entry["before_sha256"])):
                         raise CandidateSourceError(f"SOURCE_WORKSPACE_DRIFT: {relative}")
                 elif original.exists():
                     raise CandidateSourceError(f"SOURCE_WORKSPACE_DRIFT: {relative}")
@@ -1489,7 +1507,9 @@ raise SystemExit(status)
 
         for relative, expected in production_before.items():
             original = self._workspace_path(relative)
-            if not original.is_file() or _digest(original.read_bytes()) != expected:
+            if (not original.is_file() or _digest(_normalize_newlines(
+                    original.read_bytes(), relative
+            )) != expected):
                 raise CandidateSourceError(f"PRODUCTION_WRITE_DETECTED: {relative}")
         return TestResult(command, exit_code, stdout, stderr, timed_out, baseline, run_root,
                           counts, test_hashes)

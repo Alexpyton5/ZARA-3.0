@@ -259,6 +259,12 @@ def main() -> int:
         print("[zara_validate] baseline atualizado.")
 
     print(f"[zara_validate] {result['summary_line']}")
+    if result["returncode"] != 0:
+        print(
+            "[zara_validate] ALERTA: pytest terminou com código "
+            f"{result['returncode']}; a validação não pode ser aprovada."
+        )
+        return result["returncode"]
     if classification["new_failures"]:
         print(f"[zara_validate] ALERTA: {len(classification['new_failures'])} falha(s) NOVA(s):")
         for t in classification["new_failures"]:

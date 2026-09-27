@@ -158,15 +158,6 @@ class ConversationHistory:
             connection.commit()
         return [self._row_to_message(row) for row in reversed(rows)]
 
-    def delete(self, message_id: str) -> bool:
-        """Delete one exact message when an accepted voice turn is interrupted."""
-        with self._lock, closing(self._connect()) as connection:
-            cursor = connection.execute(
-                "DELETE FROM conversation_messages WHERE id=?", (str(message_id),)
-            )
-            connection.commit()
-            return cursor.rowcount == 1
-
     def clear(self) -> int:
         """Delete the complete transcript, including SQLite journal files."""
         with self._lock:

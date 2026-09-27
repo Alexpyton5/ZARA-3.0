@@ -66,14 +66,13 @@ def test_mismatched_canary_never_moves_packages(packages):
 
 
 def test_lab_live_canary_requires_isolation_marker(tmp_path, monkeypatch):
-    import core.lab_v1.canary as canary
-    monkeypatch.setattr(canary.tempfile, 'gettempdir', lambda: str(tmp_path))
     home = tmp_path / 'zara-lab-canaries/one'; home.mkdir(parents=True)
-    monkeypatch.setenv('ZARA_LAB_LIVE_CANARY', '1')
     monkeypatch.setenv('ZARA3_HOME', str(home))
-    assert allowed('lab-v1-snapshot') and not allowed('lab-v1-autopilot')
+    assert allowed('lab-v1-snapshot') and not allowed('lab-v1-admit-operation')
     (home / 'CANARY_ONLY').touch()
+    assert allowed('lab-v1-admit-operation')
+    assert allowed('lab-v1-confirm-operation')
     assert allowed('lab-v1-autopilot')
     assert not allowed('action-execute') and not allowed('lab-v1-submit') and not allowed('lab-v1-autonomy-configure')
     monkeypatch.setenv('ZARA3_HOME', str(tmp_path))
-    assert not allowed('lab-v1-autopilot')
+    assert not allowed('lab-v1-admit-operation')

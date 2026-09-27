@@ -9,11 +9,19 @@ import shutil
 import tempfile
 from pathlib import Path
 import sys
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import snapshot_zara
+# This one-shot export script was intentionally archived as historical tooling
+# (see _quarentena/organizacao-2026-09-17/MOVIMENTACOES.txt). Keep the tests
+# discoverable for provenance, but do not make the active suite depend on an
+# unsupported root-level module.
+snapshot_zara = pytest.importorskip(
+    "snapshot_zara",
+    reason="snapshot_zara.py foi arquivado como ferramenta histórica; não faz parte do runtime ativo",
+)
 
 
 def test_redact_api_keys_file():

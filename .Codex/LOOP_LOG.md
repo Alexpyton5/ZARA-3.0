@@ -296,3 +296,11 @@
 - Atualização após a ordem mais recente da Zoe: rodei `tests/test_lab_local_ollama.py` mais duas vezes; as três execuções isoladas completas passaram 12/12 cada. Classificado como flake de carga/infra conforme o critério dela; a causa técnica exata da falha dentro do full não foi reproduzida. Zoe confirmou que essa evidência libera o push da voz.
 - A triagem separa 41 IDs persistentes da linha de base em sete grupos de contrato: build/Home (5), Lab (11), mídia/capability gate (6), fontes de memória (2), identidade/transições do relay (9), roteamento/recibo do canal unificado (3) e aliases/allowlist de janelas (5). O Ollama 429 é o 42º, classificado à parte como não reprodutível isoladamente.
 - Não iniciei correções nas 41 falhas antigas: a Zoe determinou explicitamente que elas vão ao backlog e não travam o push da voz; enfraquecer gates de mídia/janelas seria inseguro. Push limitado ao delta de voz e ao relatório; nenhuma chamada paga.
+- Push realizado e confirmado: commit `3c12d017b7c990fac6933e443870c9777fd27e10` na `origin/wip/ciclo7-20260927`. Só entraram o delta de voz, o relatório de triagem e os logs/inbox relacionados; demais mudanças pré-existentes continuam unstaged/untracked.
+
+## 2026-09-27 — quarentena de caches a pedido do Alex
+
+- Alex esclareceu que queria mover os itens identificados para uma pasta `Lixo`, não apagar nem liberar espaço automaticamente. Inventário atual: uv cache 15,26 GiB; npm cache 1,63 GiB; pnpm store 1,23 GiB; pip cache 0,13 GiB; dois arquivos parciais (archive 1,93 GiB e ACL 1,27 GiB). Soma aproximada: 21,44 GiB = 23,0 GB decimais.
+- Sem processos `uv`, `npm` ou `pip` ativos; movi os quatro caches regeneráveis e os dois parciais para `C:\Users\alexp\Lixo\2026-09-27`, preservando a árvore de caminhos e criando `LEIA-ME.md` com restauração. Os seis caminhos originais foram verificados ausentes e os itens estão no destino; nada foi apagado.
+- Não movi o Temp geral (2,64 GiB), pois contém temporários recentes/possivelmente ativos; nem pacote CUDA do Ollama, Git packs do Hermes, builds, dados do app, Downloads ou D:.
+- A leitura do C: variou de 19,23 para 11,37 e depois 8,81 GiB livres durante a operação. Mover dentro do mesmo volume não deveria liberar capacidade; não atribuo a variação a uma causa sem prova e não fiz outra alteração para compensar.

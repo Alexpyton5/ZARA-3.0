@@ -238,3 +238,61 @@
 - Antes de remover, criar backup datado e validado no C:; remover apenas arquivos cache/temporários sem processo de instalação ativo, preservando arquivos bloqueados.
 - Verificar a concessão mínima solicitada para `zoe` em `AppData\Local` e `AppData\Roaming`; aplicar somente `Modify` recursivo, sem controle total nem acesso ao restante do perfil.
 - A `MISSAO-03` continua aguardando a conclusão da `MISSAO-01`; não iniciar a fila.
+
+## 2026-09-27 — limpeza C: e retomada do Stream A
+
+- Compactação NTFS reversível em `uv\cache\archive-v0` liberou cerca de 4,9 GiB brutos; com os arquivos temporários de backup ainda presentes, C: chegou a 24,36 GiB livres (inventário inicial: 23,26 GiB). Nenhum cache original foi apagado.
+- A tentativa de exclusão de cache foi bloqueada pela política do terminal; não contornei a trava por outro método. O backup integral também falhou parcialmente; o arquivo `uv-archive-v0-20260927-173915.partial.tar.gz` não é íntegro.
+- A cópia de ACL recursiva em `C:\Users\alexp\ZARA3-AppData-ACL-backup-20260927-local.txt` cresceu para ~1,36 GB sem terminar; interrompi a leitura para evitar continuar consumindo espaço. Nenhuma ACL foi alterada; o arquivo é parcial e não serve como backup validado.
+- Perguntei à Zoe qual frente seguir. Ela confirmou Stream A: fechar `sounddevice`, rebuild e teste real do microfone; a MISSÃO 03 só entra quando a fase de voz convergir.
+- `sounddevice 0.5.5` importa no `.venv`. O candidato existente `release-candidate-voice-20260927-1740` tem hashes documentados, mas ainda falta provar que foi empacotado da revisão WIP atual; não declarar teste físico nem pedir validação até identificar/reconstruir o candidato exato.
+
+## 2026-09-27 — continuação rápida: rebuild, microfone e limpeza
+
+- Rebuild fresco do Stream A gerado do WIP `f3d8d0c76ca1035428376edc8df862d65c4c11a4` em `frontend/release-candidate-voice-20260927-1836`; backend contém `sounddevice`, `_sounddevice` e PortAudio. Artefato e sidecars anteriores foram copiados e verificados no backup datado `stream-a-prebuild-20260927-1836`.
+- Teste local do microfone por 1,2 s recebeu 17.600 frames a 16 kHz; áudio não foi salvo nem transmitido e nenhuma chamada paga foi feita. Isso prova captura no Python local, não o fluxo de fala completo no EXE.
+- O perfil isolado do EXE não contém modelo Vosk; sem chave paga, `voice-start` para antes de abrir o stream. Enviei à Zoe o status e perguntei se autoriza instalar no perfil de teste o modelo PT gratuito oficial ou se há modelo existente; aguardo resposta antes de baixar pesos.
+- Espaço de C: medido agora: 23,15 GiB livres, versus 23,26 GiB no inventário inicial. Portanto não há 23 GB líquidos liberados; nenhum cache original foi apagado. A compressão NTFS é reversível, mas não substitui exclusão.
+- As tentativas anteriores de apagar caches e arquivos temporários de backup foram bloqueadas pela política de execução. Não contornei a trava por outro programa ou interface. A pasta Downloads e o disco D: não foram tocados.
+- A aparência da janela nativa e a fala do EXE não estão provadas; interface nativa não ficou acessível à ferramenta de captura, e o modelo local é o bloqueio atual. Suíte completa e push do ciclo #7 continuam pendentes.
+
+## 2026-09-27 — Stream A: Vosk local e smoke empacotado
+
+- Zoe autorizou `vosk-model-small-pt-0.3` da fonte oficial. Baixei o ZIP de 32.453.112 bytes (SHA-256 `6E1CE909032E1AFA7A88E68A3D628ECAFFF302BDF195BEFAB308826C395E93B7`), licença Apache 2.0, somente em `C:\Users\alexp\AppData\Local\Temp\ZARA3-stream-a-vosktest-20260927\models\vosk`; nenhum peso entrou no app ou no perfil normal.
+- Corrigi o retorno do caminho com orchestrator injetado para incluir `cost_status` honesto. Testes focados de voz: 28/28 passaram com chaves removidas, testes live desligados e dados isolados.
+- Recompilei o sidecar e gerei candidato Electron novo após o patch. Build ID `9152b997`; EXE SHA-256 `67DC2A7036860A68E5312C212C31B8772AC463ED0289FCC44897867F55075E89`; ASAR `B9DCF85A90375091741626B91377523071542AC4A70B2D4EED22F07F364AA100`; backend `9152B997FC2D2F1CE38D98640D9BAE649AF98512CD7F07D45D9CC454A9D0D520`.
+- Smoke no backend empacotado exato, perfil temporário sem credenciais: `voice-start` respondeu `LISTENING` no caminho Vosk local e abriu o microfone; após 1,5 s, `voice-stop` confirmou `STANDBY`. Nenhuma fala foi enviada a serviço remoto nem áudio salvo. Isso prova o sidecar empacotado e o dispositivo local, não interação visual do EXE nem validação física por Alex.
+- Suíte Python completa (envio sem chaves; testes `live` bloqueados): 2.782 coletados; 2.708 passaram, 42 falharam, 33 skipped, 6 warnings. A coleta não teve erro de importação; falhas cobrem contratos de build, IPC/Lab/relay, mídia/janelas e voz. Causa raiz ainda precisa ser agrupada; não publicar nem declarar ciclo verde.
+- Antes do segundo build, fiz cópia datada dos outputs que seriam regenerados (`stream-a-prebuild-20260927-1914`, 290.042.094 bytes) e do dist do frontend (`stream-a-pre-electron-20260927-1914`, 9.691.769 bytes). O candidato de 18:36 permanece preservado.
+- A ferramenta bloqueou exclusões de cache; não tentei outro mecanismo. Nenhum cache original, arquivo de Downloads ou dado do app foi apagado. C: segue em 23,15 GiB livres no último readback; limpeza líquida de 23 GiB não ocorreu.
+
+## 2026-09-27 — contrato de convergência da operação de voz
+
+- TASK_ID: ZARA-VOICE-OPERATION-CONVERGENCE-20260927.
+- GOAL: fechar B/C/D em paralelo e fazer a triagem causal das 42 falhas observadas; corrigir regressões de voz e falhas antigas baratas, validar antes de publicar.
+- SCOPE: runtime OmniVoice isolado e gratuito, seletor/estado de motor no painel, fallback não bloqueante, triagem da suíte e correções estritamente causais.
+- FILES_ALLOWED: B=`tools/install_omnivoice_runtime.py`, `core/omnivoice_worker.py`, `tests/test_omnivoice_runtime.py`; C=`frontend/src/renderer/components/zara-home/VoiceDock.tsx`, `frontend/src/renderer/styles/zara-home.css`, `frontend/tests/voice-engine-picker.test.ts`; D=`core/voice_engine_policy.py`, `core/voice_fallback.py` (novo se necessário), `tests/test_voice_fallback.py` (novo); coordenador=`.Codex/LOOP_LOG.md` e relatórios de missão. Sem sobreposição entre escritores.
+- FILES_FORBIDDEN: `core/voice_tts.py` para D e os agentes; segredos, `.env`, dados ativos do Lab/memória, Downloads do usuário, D:, builds antigos sem backup e qualquer rota paga.
+- BASELINE: branch `wip/ciclo7-20260927`, HEAD `f3d8d0c76ca1035428376edc8df862d65c4c11a4`, worktree sujo com 19 entradas; candidato Stream A `20260927-1914`, Build ID `9152b997`, mic empacotado observado `LISTENING → STANDBY`.
+- EXPECTED_DELTA: manter Kore funcional, localizar modelo OmniVoice pequeno/licenciado antes de baixar ao perfil temporário, mostrar motor/fallback real, trocar sem bloquear e separar as 42 falhas por causa/antiguidade; corrigir causas de voz e causas antigas baratas sem ampliar escopo.
+- TESTS: testes isolados de cada stream, suíte de voz, frontend tests/typecheck/build e Python completo. Registrar falhas restantes; suíte vermelha proíbe declarar fechamento.
+- PACKAGED_TEST: revalidar hashes e identidade do candidato exato após convergência; smoke local sem credenciais.
+- PHYSICAL_TEST: nenhum custo pago; teste de voz local sem gravar/transmitir áudio. Não executar chamada NVIDIA neste contrato.
+- ROLLBACK: manter o WIP e os backups datados já existentes; cada arquivo de saída regenerado ou alterado terá backup datado antes da escrita; reverter apenas o delta próprio, nunca reset/clean global.
+- STOP_CONDITION: parar se modelo/licença/tamanho ou custo não forem verificáveis, se uma alteração cruzar FILES_ALLOWED, se os agentes conflitarem, ou se qualquer falha nova de voz aparecer; sem push enquanto gates exigidos não estiverem verdes.
+- Diretriz mais recente da Zoe no Muse: triagem agrupada das 42 falhas, separar regressões da voz das falhas pré-existentes, corrigir todo o grupo de voz e as causas pré-existentes baratas; documentar o resto sem bloquear push da voz somente se for comprovadamente antigo e nenhuma falha nova.
+
+## 2026-09-27 — triagem causal do ciclo #7 (resultado parcial)
+
+- Suíte completa oficial às 19:44:34: 2.708 passaram, 42 falharam, 32 ignorados, 1 desmarcado, 6 avisos; coleta sem erro.
+- Comparação literal com o relatório completo das 16:34: 41 falhas persistem da linha de base; duas antigas deixaram de falhar (`test_labstore_padrao_cai_na_home_isolada...` e `test_text_message_emits_renderer_response`); uma só apareceu no full atual (`test_complete_http_429_is_rate_limited`).
+- A falha nova do Ollama passou ao repetir isolada (1/1) e ao repetir todo `test_lab_local_ollama.py` (12/12); a causa da divergência em execução completa não está provada, então não a classifico como corrigida nem como regressão de voz.
+- Testes focados de usabilidade de voz: 15/15 passaram; nenhum teste de voz falhou na suíte completa. O diff próprio continua restrito a `core/ipc_handlers.py`, incluindo `cost_status` no retorno do caminho com orchestrator injetado.
+- Agrupamento das 42: identidade/manifest de build (2); contratos Home/IPC e isolamento de config (3); Lab — autonomia, workers, estado persistido, OpenCode e protocolo de operações (11, mais o teste Ollama intermitente); controles de mídia bloqueados com Supercérebro OFF (6); fontes/forma da memória (2); identidade e transições do relay (9); roteamento/recibo do canal unificado (3); resolução/allowlist de janelas Windows (5).
+- Evidência da linha de base confirma que 41 são antigas e fora do caminho de voz. Não vou enfraquecer gates de PC/mídia ou de janela para fazer testes passarem. As causas de cada grupo fora da voz ainda não foram corrigidas; só corrigirei causas baratas e seguras após conferir o teste/contrato afetado.
+- Teste do arquivo Ollama e da voz passou, mas isso não substitui a suíte completa: o último full segue vermelho e push permanece bloqueado até esclarecer o único resultado não reprodutível e fechar os gates de voz.
+- Higiene C: readback 19,23 GiB livres; a tentativa anterior de exclusão continuou bloqueada. Não houve exclusão de 23 GB; não usei outro mecanismo para contornar a trava, e Downloads/D: seguem intocados.
+- Zoe já confirmou no Muse: triagem primeiro, push apenas com gates verdes, e aguarda o relatório. Nenhuma nova pergunta enviada para evitar repetição antes do relatório.
+- Atualização após a ordem mais recente da Zoe: rodei `tests/test_lab_local_ollama.py` mais duas vezes; as três execuções isoladas completas passaram 12/12 cada. Classificado como flake de carga/infra conforme o critério dela; a causa técnica exata da falha dentro do full não foi reproduzida. Zoe confirmou que essa evidência libera o push da voz.
+- A triagem separa 41 IDs persistentes da linha de base em sete grupos de contrato: build/Home (5), Lab (11), mídia/capability gate (6), fontes de memória (2), identidade/transições do relay (9), roteamento/recibo do canal unificado (3) e aliases/allowlist de janelas (5). O Ollama 429 é o 42º, classificado à parte como não reprodutível isoladamente.
+- Não iniciei correções nas 41 falhas antigas: a Zoe determinou explicitamente que elas vão ao backlog e não travam o push da voz; enfraquecer gates de mídia/janelas seria inseguro. Push limitado ao delta de voz e ao relatório; nenhuma chamada paga.

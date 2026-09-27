@@ -4853,9 +4853,12 @@ class IPCHandler:
             response = await self.orchestrator.process_message(
                 text, engine=engine, history=history,
             )
+            engine_used = getattr(self.orchestrator, 'last_engine_used', engine)
+            model_config = get_model_config(engine_used) if engine_used else None
             return {
                 'response': str(response),
-                'engine': getattr(self.orchestrator, 'last_engine_used', engine),
+                'engine': engine_used,
+                'cost_status': getattr(model_config, 'cost_status', 'UNKNOWN_COST'),
             }
         if self.lab_v1 is None:
             if not LAB_V1_AVAILABLE or LabV1Service is None:

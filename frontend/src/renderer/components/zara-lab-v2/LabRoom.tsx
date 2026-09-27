@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, Check, ChevronRight, Circle, FileText, Plus, Search, Send, ShieldCheck, Square, Users, X, Zap } from 'lucide-react';
 import { useLabRoom } from './useLabRoom';
 import { useMemo } from 'react';
-import { asList, avatarHue, failureText, HANDOFF_STAGES, handoffStageLabel, initials, label, requireResult, reviewVerdictLabel, timestamp, type Agent } from './labTypes';
+import { asList, avatarHue, failureText, HANDOFF_STAGES, handoffStageLabel, initials, label, requireResult, reviewVerdictLabel, ROLES, timestamp, type Agent } from './labTypes';
 import './lab-room.css';
 import './improvement-opportunities.css';
 import zaraMark from '../../../assets/zara-home/zara-mark.svg';
@@ -142,6 +142,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   const [openPersonMenu, setOpenPersonMenu] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [agentName, setAgentName] = useState('');
+  const [agentRole, setAgentRole] = useState('MEMBER');
   const [agentProvider, setAgentProvider] = useState('');
   const [agentModel, setAgentModel] = useState('');
   const [agentSoul, setAgentSoul] = useState('');
@@ -385,6 +386,8 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
       </> : <>
         <div className="zl-section-heading"><h3>Equipe desta sala</h3><button aria-label="Adicionar participante" onClick={() => setShowAgent(true)}><Plus size={17} /></button></div>
         <article className="zl-person"><Avatar name="ZARA" small /><div><strong>ZARA <em>Regente</em></strong><small>Coordenação do sistema</small><span className="zl-good">{data?.regent?.state || 'Conectando'}</span></div></article>
+        <h3>11 assentos fixos</h3>
+        {asList(data?.fixed_seats).map(seat => <article className="zl-person" key={seat.role}><Avatar name={label(seat.role)} small /><div><strong>{label(seat.role)}</strong><small>{seat.agent_id ? nameOf(seat.agent_id) : 'Vago — sem agente vinculado'}</small><span className="zl-muted">Só fala quando convidado e autorizado</span></div></article>)}
         {members.map(person)}
         {agents.some(a => !members.includes(a)) && <><h3>Outros participantes</h3>{agents.filter(a => !members.includes(a)).map(person)}</>}
         <h3>Células de trabalho</h3>{asList(data?.workcells).map(cell => <article className="zl-person" key={cell.id}><Avatar name={cell.name} small /><div><strong>{cell.name}</strong><small>{cell.detail}</small><span className="zl-muted">{label(cell.availability)}</span></div></article>)}
@@ -402,7 +405,15 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
         })}
       />
     </aside>
-    {showAgent && <div className="zl-modal"><form onSubmit={event => { event.preventDefault(); void perform(async () => { requireResult(await window.zaraIPC?.labV1?.createAgent?.({ name: agentName.trim(), provider_id: agentProvider, model: agentModel, team_id: teamId || undefined })); setShowAgent(false); setAgentName(''); }); }}><header><h2>Adicionar participante</h2><button type="button" aria-label="Fechar cadastro" onClick={() => setShowAgent(false)}><X size={19} /></button></header><label>Nome<input required maxLength={80} value={agentName} onChange={e => setAgentName(e.target.value)} /></label><label>Provedor<select required value={agentProvider} onChange={e => { setAgentProvider(e.target.value); setAgentModel(''); }}><option value="">Selecione</option>{asList(data?.providers).map(p => <option value={p.id} key={p.id}>{p.label}</option>)}</select></label><label>Modelo<select required value={agentModel} onChange={e => setAgentModel(e.target.value)}><option value="">Selecione um modelo do catálogo</option>{asList(data?.models).filter(m => m.provider_id === agentProvider).map(m => <option value={m.model_id} key={m.model_id}>{m.display_name || m.model_id}</option>)}</select></label><p>A disponibilidade depende da autenticação e das respostas reais do provedor.</p><button className="zl-primary" disabled={busy || !agentName.trim() || !agentModel}>Adicionar à equipe</button></form></div>}
+    {showAgent && <div className="zl-modal"><form onSubmit={event => { event.preventDefault(); void perform(async () => {
+      const selectedTeamId = teamId || data?.team?.id;
+      const created = requireResult(await window.zaraIPC?.labV1?.createAgent?.({ name: agentName.trim(), provider_id: agentProvider, model: agentModel, role: agentRole, team_id: selectedTeamId })) as { agent?: Agent };
+      const seat = asList(data?.fixed_seats).find(item => item.role === agentRole);
+      if (seat?.status === 'VACANT' && created.agent?.id && selectedTeamId) {
+        requireResult(await window.zaraIPC?.labV1?.rebindRole?.({ team_id: selectedTeamId, role: agentRole, agent_id: created.agent.id, reason: 'Alex ocupou um assento vago na sala' }));
+      }
+      setShowAgent(false); setAgentName(''); setAgentRole('MEMBER');
+    }); }}><header><h2>Adicionar participante</h2><button type="button" aria-label="Fechar cadastro" onClick={() => setShowAgent(false)}><X size={19} /></button></header><label>Nome<input required maxLength={80} value={agentName} onChange={e => setAgentName(e.target.value)} /></label><label>Papel<select value={agentRole} onChange={e => setAgentRole(e.target.value)}>{ROLES.map(role => <option value={role} key={role}>{label(role)}</option>)}</select></label><label>Provedor<select required value={agentProvider} onChange={e => { setAgentProvider(e.target.value); setAgentModel(''); }}><option value="">Selecione</option>{asList(data?.providers).map(p => <option value={p.id} key={p.id}>{p.label}</option>)}</select></label><label>Modelo<select required value={agentModel} onChange={e => setAgentModel(e.target.value)}><option value="">Selecione um modelo do catálogo</option>{asList(data?.models).filter(m => m.provider_id === agentProvider).map(m => <option value={m.model_id} key={m.model_id}>{m.display_name || m.model_id}</option>)}</select></label><p>Assento vago é vinculado ao agente criado. Assento ocupado não é substituído. Nenhum agente fala sem convite e recurso autorizado.</p><button className="zl-primary" disabled={busy || !agentName.trim() || !agentModel}>Adicionar à equipe</button></form></div>}
     {editingAgent && <div className="zl-modal"><form onSubmit={event => { event.preventDefault(); void perform(async () => {
       const permissions = agentPermissions.split(/[,\n]/).map(value => value.trim()).filter(Boolean);
       requireResult(await window.zaraIPC?.labV1?.updateAgentProfile?.({ agent_id: editingAgent.id, soul: agentSoul, provider_id: agentProvider, model: agentModel, permissions }));

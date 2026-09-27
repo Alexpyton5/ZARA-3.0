@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 from fnmatch import fnmatchcase
+from math import isfinite
 from typing import Iterable
 
 from core.lab_v1.domain import AgentProfile, Availability, ProviderInfo, RoleName
@@ -53,6 +54,11 @@ class WorkforcePolicy:
             'mission_entry_enabled': True,
             'background_enabled': True,
             'paid_allowed': False,
+            # Astra is never enabled by a role invitation alone. A future
+            # explicit owner configuration must also prove authentication and
+            # set a positive cost cap; this task leaves it disabled (R$ 0).
+            'astra_enabled': False,
+            'astra_cost_cap_brl': 0,
             # The reauthorized Claude CLI participates through the same
             # allow-list and resource-class checks as every other provider.
             # An owner can still put it on standby through the persisted policy
@@ -67,6 +73,10 @@ class WorkforcePolicy:
             # WorkforcePolicy.with_bot_override(), which validates first
             # (see validate_bot_configuration) and never applies silently.
             'agent_model_overrides': {},
+            # Optional ordered per-seat routes. Empty means the current bot
+            # resource only. Each fallback still passes authorize() at turn
+            # time; a route is never an authorization by itself.
+            'seat_resource_fallbacks': {},
             # Optional absolute path to agency-agents.json. Catalog discovery
             # alone never grants a team membership or authorizes dispatch.
             'agency_roster_path': None,
@@ -134,7 +144,10 @@ class WorkforcePolicy:
                 'nine_router/alex', 'nine_router/oc/muse-spark-1.2-contributor-free', 'nine_router/oc/muse-spark-1.3-contributor-free', 'nine_router/*',
             ],
             'authorized_providers': ['codex_cli', 'claude_cli', 'nvidia', 'nine_router', 'opencode'],
-            'authorized_roles': ['CEO', 'BUILDER', 'REVIEWER', 'RESEARCHER', 'MEMBER'],
+            'authorized_roles': ['CEO', 'ARCHITECT', 'UI_DESIGNER', 'ENGINEER',
+                                 'SCRIBE', 'REVIEWER', 'CRITIC', 'SECRETARY',
+                                 'TESTER', 'RESEARCHER', 'PACKAGER',
+                                 'BUILDER', 'MEMBER'],
             'max_repair_attempts': 1,
             'cadence_seconds': 60,
             # Cheapest adequate Codex worker first, Claude appended after it in
@@ -162,6 +175,12 @@ class WorkforcePolicy:
                 'REVIEWER': ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'sonnet', 'opus'],
                 'RESEARCHER': ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'oc/nemotron-3.5-lightning-free', 'sonnet', 'opus'],
                 'MEMBER': ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'oc/muse-spark-1.3-contributor-free', 'oc/mimo-v2.5-free', 'sonnet', 'opus'],
+                **{role: ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra',
+                          'oc/muse-spark-1.3-contributor-free', 'sonnet',
+                          'opus', 'gpt-6-astra']
+                   for role in ('ARCHITECT', 'UI_DESIGNER', 'ENGINEER',
+                                'SCRIBE', 'CRITIC', 'SECRETARY', 'TESTER',
+                                'PACKAGER')},
             },
         }
 
@@ -221,6 +240,14 @@ class WorkforcePolicy:
             return WorkforceDecision(False, 'ROLE_NOT_AUTHORIZED', **common)
         if not self._matches(agent.provider_id, agent.model, self.document.get('authorized_models') or ()):
             return WorkforceDecision(False, 'MODEL_NOT_AUTHORIZED', **common)
+        if agent.model == 'gpt-6-astra':
+            try:
+                cap = float(self.document.get('astra_cost_cap_brl') or 0)
+            except (TypeError, ValueError):
+                cap = 0
+            if (self.document.get('astra_enabled') is not True or not isfinite(cap) or cap <= 0
+                    or provider is None or provider.authenticated is not True):
+                return WorkforceDecision(False, 'ASTRA_DISABLED', **common)
         if (provider is None or provider.availability is not Availability.AVAILABLE or not model_available
                 or resource_class is ResourceClass.UNAVAILABLE):
             return WorkforceDecision(False, 'RESOURCE_UNAVAILABLE', **common)
@@ -280,6 +307,25 @@ class WorkforcePolicy:
         and "pick a worker for a role" can never quietly disagree about it.
         """
         return self.bot_override(agent.id) or BotResource(agent.provider_id, agent.model)
+
+    def resource_options(self, agent: AgentProfile) -> tuple[BotResource, ...]:
+        """Ordered, configured routes for one real seat occupant (no agents cloned)."""
+        primary = self.effective_resource(agent)
+        result = [primary]
+        raw = self.document.get('seat_resource_fallbacks') or {}
+        rows = raw.get(agent.role.value, ()) if isinstance(raw, dict) else ()
+        if not isinstance(rows, (list, tuple)):
+            return tuple(result)
+        for row in rows[:8]:
+            if not isinstance(row, dict):
+                continue
+            provider_id, model_id = row.get('provider_id'), row.get('model_id')
+            if not isinstance(provider_id, str) or not isinstance(model_id, str):
+                continue
+            choice = BotResource(provider_id.strip(), model_id.strip())
+            if choice.provider_id and choice.model_id and choice not in result:
+                result.append(choice)
+        return tuple(result)
 
     def describe_bots(self, agents: Iterable[AgentProfile], registry=None) -> list[dict]:
         """One row per bot for the future screen: identity, current resource, cost.

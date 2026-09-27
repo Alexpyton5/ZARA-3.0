@@ -217,47 +217,72 @@ class Autopilot:
         }
 
     def _decision(self, agent, *, retry=False, team_id=None, _providers=None, _health=None):
-        choice = self.policy.effective_resource(agent)
-        # Worker selection must not block behind unrelated adapters (for
-        # example a Codex CLI probe) when this particular agent is assigned to
-        # NVIDIA or another provider.  The UI can still inspect every provider;
-        # the execution path only needs the resource it is about to authorize.
+        # Ordered fallback routes are configuration, not permission. Probe
+        # only providers assigned to this occupant and authorize every route.
+        choices = self.policy.resource_options(agent)
         if _providers is None:
-            adapter = self.runtime.registry.get(choice.provider_id)
-            providers = [adapter.probe()] if adapter is not None else []
+            providers = [adapter.probe() for provider_id in {item.provider_id for item in choices}
+                         if (adapter := self.runtime.registry.get(provider_id)) is not None]
         else:
             providers = _providers
-        info = next((p for p in providers if p.id == choice.provider_id), None)
-        status = (_health if _health is not None else self.runtime.registry.health_snapshot()).get(f'model:{choice.provider_id}:{choice.model_id}', {})
-        available = status.get('availability') == 'AVAILABLE'
+        health = _health if _health is not None else self.runtime.registry.health_snapshot()
         from dataclasses import replace as _replace
-        _candidate = _replace(agent, provider_id=choice.provider_id, model=choice.model_id)
-        if retry and status.get('availability') in _TRANSIENT:
-            available = True
-            if info is not None and info.availability.value in _TRANSIENT:
-                info = _replace(info, availability=Availability.AVAILABLE)
-        return self.policy.authorize(_candidate, info, model_available=available, team_id=team_id)
+        first = None
+        for choice in choices:
+            info = next((p for p in providers if p.id == choice.provider_id), None)
+            status = health.get(f'model:{choice.provider_id}:{choice.model_id}', {})
+            available = status.get('availability') == 'AVAILABLE'
+            if retry and status.get('availability') in _TRANSIENT:
+                available = True
+                if info is not None and info.availability.value in _TRANSIENT:
+                    info = _replace(info, availability=Availability.AVAILABLE)
+            candidate = _replace(agent, provider_id=choice.provider_id, model=choice.model_id)
+            decision = self.policy.authorize(candidate, info, model_available=available, team_id=team_id)
+            if decision.allowed:
+                return decision
+            if first is None:
+                first = decision
+        return first
+
+    def _resource_for(self, agent, team_id):
+        decision = self._decision(agent, team_id=team_id)
+        if not decision.allowed:
+            raise ValueError('WAITING_RESOURCE:' + decision.code)
+        return 'provider:' + decision.provider_id + '/' + decision.model_id
 
     def candidates(self, team_id=None, role=None, exclude=(), *, retry=False):
+        from core.lab_v1.fixed_seats import invited_agents, requires_fixed_seat, InvitationDenied
         result = []
+        decisions = {}
         team_agents = self.store.list_agents(team_id=team_id)
+        team = self.store.get_team(team_id) if team_id else None
         provider_ids = {
-            self.policy.effective_resource(agent).provider_id
+            choice.provider_id
             for agent in team_agents
             if not agent.archived
+            for choice in self.policy.resource_options(agent)
         }
         providers = [adapter.probe() for provider_id in provider_ids
                      if (adapter := self.runtime.registry.get(provider_id)) is not None]
         health = self.runtime.registry.health_snapshot()
         for agent in team_agents:
-            choice = self.policy.effective_resource(agent)
-            adapter = self.runtime.registry.get(choice.provider_id)
             if (agent.archived or agent.id in exclude or (role is not None and agent.role != role)
-                    or 'model.text' not in agent.capabilities or not getattr(adapter, 'controlled_text_only', False)):
+                    or 'model.text' not in agent.capabilities):
                 continue
-            if self._decision(agent, retry=retry, team_id=team_id, _providers=providers, _health=health).allowed: result.append(agent)
+            if requires_fixed_seat(team, agent.role):
+                try:
+                    invited = invited_agents(self.store, team_id, [agent.role], authorize=lambda _: True)
+                except InvitationDenied:
+                    continue
+                if invited[0].id != agent.id:
+                    continue
+            decision = self._decision(agent, retry=retry, team_id=team_id, _providers=providers, _health=health)
+            adapter = self.runtime.registry.get(decision.provider_id)
+            if decision.allowed and getattr(adapter, 'controlled_text_only', False):
+                decisions[agent.id] = decision
+                result.append(agent)
         return sorted(result, key=lambda a: (self.policy.preference_rank(
-            self.policy.effective_resource(a).model_id, role.value if role else a.role.value),
+            decisions[a.id].model_id, role.value if role else a.role.value),
                                              a.created_at, a.id))
 
     def _ensure_architect(self, team):
@@ -328,7 +353,7 @@ class Autopilot:
             source = prepare_source(self, sandbox, intent) if source_requested(intent, mission_kind) else None
             self.store.save_session(session)
             self.store.add_message(Message('owner:' + sid, sid, MessageKind.USER, 'Alex', intent.strip()))
-            resources = tuple(_resource(a) for a in self.candidates(team.id))
+            resources = tuple(self._resource_for(a, team.id) for a in self.candidates(team.id))
             scope = ExecutionScope((str(sandbox), *resources), ('model.text', 'files.write', 'source.prepare', 'source.apply', 'source.tests', 'source.build'),
                 authorization_state='POLICY_AUTHORIZED', authorization_ref='autopilot:internal-dynamic-v1')
             task = Task(sid + ':plan', sid, 'Planejar missão', 'Create a bounded, verifiable task plan for the objective.',
@@ -343,7 +368,7 @@ class Autopilot:
                     capability='source.prepare', resources=(str(sandbox),)))
             self.store.save_task(task)
             initial_steps.append(MissionStep('plan', task.id, 'INVOKE',
-                depends_on=('source_prepare',) if source else (), capability='model.text', resources=(_resource(planner),)))
+                depends_on=('source_prepare',) if source else (), capability='model.text', resources=(self._resource_for(planner, team.id),)))
             metrics = {'workflow': WORKFLOW, 'owner_touches': 1, 'sandbox': str(sandbox), 'planner_id': planner.id,
                 'plan_version': 1, 'agent_selection_automatic': True, 'task_creation_automatic': False,
                 'delegation_automatic': False, 'context_transfer_automatic': False,
@@ -639,7 +664,7 @@ class Autopilot:
                 tasks.append(task)
                 dependencies = tuple(x + ':write' for x in item['depends_on']) or ('plan',)
                 if phase == 'write': dependencies = (item['id'] + ':draft',)
-                resource = _resource(worker) if phase == 'draft' else str(Path(self.metrics(sid)['sandbox']) / item['path'])
+                resource = self._resource_for(worker, team) if phase == 'draft' else str(Path(self.metrics(sid)['sandbox']) / item['path'])
                 steps.append(MissionStep(stepid, task.id, kind, dependencies, capability, (resource,)))
         if self.controller.expand_verified_plan(sid, tasks, steps, metadata=plan):
             with self.controller._transaction() as conn:
@@ -908,16 +933,25 @@ class _AutopilotPorts:
             self.actions.prepare(request)
             return self.actions.execute(dispatch)
         agent = self.store.get_agent(dispatch.agent_id)
-        choice = self.engine.policy.effective_resource(agent)
-        from dataclasses import replace as _replace2
-        effective_agent = _replace2(agent, provider_id=choice.provider_id, model=choice.model_id)
+        from core.lab_v1.fixed_seats import invited_agents, requires_fixed_seat
+        dispatch_team_id = self.store.get_session(self.sid).team_id
+        dispatch_team = self.store.get_team(dispatch_team_id)
+        if requires_fixed_seat(dispatch_team, agent.role):
+            invited = invited_agents(
+                self.store, dispatch_team_id, [agent.role],
+                authorize=lambda candidate: candidate.id == dispatch.agent_id,
+            )
+            if invited[0].id != dispatch.agent_id:
+                raise ScopeViolation('SEAT_NOT_INVITED')
         doc = self.engine.controller.snapshot(self.sid)
         step = next(s for s in doc['steps'] if s['id'] == dispatch.step_id)
         decision = self.engine._decision(agent, retry=bool(step.get('resource_failures') or step.get('quota_waits')),
                                          team_id=self.store.get_session(self.sid).team_id)
         if not decision.allowed:
             raise TextProviderFailure('OFFLINE' if decision.code == 'RESOURCE_UNAVAILABLE' else decision.code)
-        adapter = self.engine.runtime.registry.get(choice.provider_id)
+        from dataclasses import replace as _replace2
+        effective_agent = _replace2(agent, provider_id=decision.provider_id, model=decision.model_id)
+        adapter = self.engine.runtime.registry.get(decision.provider_id)
         if not getattr(adapter, 'controlled_text_only', False): raise ScopeViolation('TEXT_ONLY_REQUIRED')
         dispatch.execution_scope.require('model.text', (_resource(effective_agent),), 'LOW')
         session = self.store.get_session(self.sid)

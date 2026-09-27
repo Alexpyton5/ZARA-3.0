@@ -31,6 +31,7 @@ from typing import Any
 
 from core.lab_v1.domain import (
     AgentProfile,
+    Availability,
     EventType,
     LabEvent,
     Lifecycle,
@@ -1842,6 +1843,11 @@ class LabV1Service:
             supervisor_policy['background_error'] = self._background_error or (
                 supervisor_policy.get('error_detail') if supervisor_policy.get('last_state') == 'FAILED' else None)
             data['autonomy_policy'] = supervisor_policy
+            from core.lab_v1.fixed_seats import seat_snapshot
+            selected_team = data.get('team') or {}
+            data['fixed_seats'] = seat_snapshot(
+                runtime.store, str(selected_team.get('id') or ''),
+            )
             # Agency is catalog-only until a separate invitation/turn gate is
             # implemented. A missing or invalid file must not break the Lab.
             try:
@@ -2015,6 +2021,8 @@ class LabV1Service:
 
         def _turn() -> dict[str, Any]:
             from core.lab_v1 import mentions
+            from core.lab_v1.fixed_seats import invited_agents, requires_fixed_seat
+            from core.lab_v1.workforce_policy import WorkforcePolicy
 
             runtime = self._get_runtime()
             store = runtime.store
@@ -2045,6 +2053,37 @@ class LabV1Service:
             agent = store.get_agent(recipient_id)
             if agent is None or agent.archived:
                 raise ValueError("O participante escolhido não está disponível.")
+
+            # Addressing is not authorization. Recheck the active seat and
+            # actual resource immediately before the only model call.
+            policy = WorkforcePolicy(self._get_supervisor().policy())
+            decision = None
+            effective_agent = None
+            for choice in policy.resource_options(agent):
+                adapter = runtime.registry.get(choice.provider_id)
+                info = adapter.probe() if adapter is not None else None
+                health = runtime.registry.health_snapshot().get(
+                    f'model:{choice.provider_id}:{choice.model_id}', {})
+                available = (info is not None and info.availability is Availability.AVAILABLE
+                             and health.get('availability', 'AVAILABLE') == 'AVAILABLE')
+                candidate = replace(agent, provider_id=choice.provider_id, model=choice.model_id)
+                route = policy.authorize(
+                    candidate, info, model_available=available, team_id=team.id,
+                )
+                if decision is None:
+                    decision = route
+                if route.allowed:
+                    decision, effective_agent = route, candidate
+                    break
+            if effective_agent is None:
+                raise ValueError(f'O participante não está autorizado para este turno: {decision.code}.')
+            if requires_fixed_seat(team, agent.role):
+                invited = invited_agents(
+                    store, team.id, [agent.role],
+                    authorize=lambda candidate: candidate.id == agent.id,
+                )
+                if invited[0].id != agent.id:
+                    raise ValueError('O participante não foi convidado para este turno.')
 
             user_message = runtime._add_message(
                 session, kind=MessageKind.USER, author="Alex", content=text,
@@ -2077,7 +2116,7 @@ class LabV1Service:
                     + ". Não ultrapasse essas permissões."
                 )
             run, provider_result = runtime._run_agent(
-                session, agent, prompt, system, timeout_s=120,
+                session, effective_agent, prompt, system, timeout_s=120,
             )
             if not provider_result.ok or not str(provider_result.text or "").strip():
                 return {

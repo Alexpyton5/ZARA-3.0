@@ -54,3 +54,19 @@
 - Suíte Python completa executada e interrompida na coleta com os **mesmos 22 erros** do ciclo #4, sem falha nova observada. O pacote Electron/backend e o teste físico da missão #2 continuam NÃO PROVADOS.
 - Próximo delta: confirmar contrato contra roster real quando ele aparecer; construir gate explícito de convite e turno/11 papéis em V1 antes de qualquer despacho, mantendo custo R$0.
 - Publicação: commit `8e1323b` enviado para `origin/lab/autonomia-20260911`; `git ls-remote` coincidiu com o commit local e `.Codex/LOOP_INBOX.md` existe no caminho exato. A aba oficial do Gmail foi conferida após o push; não havia novo `[ZARA-LOOP]` além da diretriz de 01:37.
+
+## 2026-09-27 02:16 (-03) — início do ciclo #6
+
+- Gmail oficial atualizado manualmente e lido: `[ZARA-LOOP] Ciclo #6 — formar o grupo de 11 com a trava de invocação`, enviado por Zoe às 02:15. Requer 11 papéis despacháveis no V1, trava de turno, Astra apenas por chamado do CEO/revisão final, escalação por configuração e prova de um turno com 2 chamados e 9 calados; push e relatório no inbox.
+- Baseline `ffcf954`, branch correta, fonte sem modificações rastreadas. Código atual tem `RoleName` fechado com 5 papéis; `ensure_core_team()` vincula CEO/BUILDER/REVIEWER; `room_message()` roteia um único destinatário por mensagem. Logo, não há 11 participantes reais hoje e não se deve criá-los ficticiamente no banco ativo.
+- Perguntei à Zoe no Muse se os 11 são assentos configuráveis que só despacham agentes reais vinculados, com teste fake em banco temporário; mensagem confirmada no chat. Até resposta, preparar apenas contrato e testes de gate, sem chamadas de modelo nem escrita no banco real.
+- Zoe confirmou: onze assentos, vagos até agente real vinculado/ativo/autorizado; teste fake apenas em banco temporário. Astra segue bloqueada sem chave configurada e teto de custo explícito, inclusive se chamada pelo CEO. A restrição superior de Alex mantém custo R$0, portanto nenhuma chamada paga será ativada.
+
+## 2026-09-27 05:52 (-03) — ciclo #6, implementação e prova isolada
+
+- Onze papéis fixos adicionados ao enum, sem criar agentes no banco ativo. Snapshot e painel exibem cada assento como ocupado/vago; criação de participante permite escolher papel e vincula automaticamente apenas um assento vago. Papéis antigos BUILDER/MEMBER seguem aceitos.
+- Gate `fixed_seats` exige convite explícito, vínculo ativo, membership ativo, agente não arquivado, capacidade de texto e autorização independente de recurso. Sala e Autopilot revalidam antes da invocação; equipes legadas personalizadas permanecem compatíveis. Astra permanece bloqueada por política padrão mesmo se chamada pelo CEO; não houve chamada paga.
+- Rotas de fallback por papel são opcionais e ordenadas em `seat_resource_fallbacks`; cada opção passa pelo gate de autorização no turno, mantendo o mesmo ID de agente. Onze papéis têm preferências de modelo configuráveis. Nenhum fallback foi ativado no banco real.
+- Prova automatizada em SQLite temporário, com 11 agentes falsos e callback local sem provedor: `ARCHITECT` e `TESTER` chamados e logados exatamente uma vez cada; nove IDs restantes em `silent_agent_ids`, sem callback. Teste de sala bloqueou assento sem vínculo e Astra sem adicionar chamada ao adaptador falso.
+- Validação: 86 testes focados passaram; `npm run typecheck` e `npm run build` passaram. Coleta Python completa: 2430 itens / os mesmos 22 erros legados / 1 skip. `npm test` mantém falhas anteriores em `aecAudio.test.ts` e `autoScroll.test.ts`. Pacote/EXE e teste físico NÃO PROVADOS; não afirmar conclusão da missão #2 inteira.
+- Durante TDD, teste inicial falhou por falta de `store.initialize()` no fixture temporário; corrigido. Um teste de política legado esperava `MODEL_NOT_AUTHORIZED` para Astra, preservado mantendo a nova trava após a allowlist. Sem falha nova no conjunto focado.

@@ -97,3 +97,18 @@
 **Suggested improvement:** Build wrappers should accept an explicit interpreter/manager path or validate that the selected environment belongs to the project before installing dependencies; retain a process-local PATH fallback for legacy batch files.
 
 **Principle:** Reproducible builds require an explicit, project-owned toolchain boundary; a globally discoverable executable is not proof of the correct environment.
+
+### Observation 7: Verify artifact path casing in Git on Windows
+
+**Status:** OPEN
+**Date:** 2026-09-27
+**Session context:** A loop report was readable locally but absent at the exact path expected by a remote reviewer.
+**Skill:** orientacao-rapida
+**Type:** internal
+**Phase/Area:** Repository handoff verification
+
+**Issue:** Windows resolved `.Codex/` and `.codex/` to the same local directory, while the Git remote treated those as distinct paths. A local existence check passed even though the requested artifact path was absent from the branch.
+
+**Suggested improvement:** When a handoff requires an exact repository path, verify it with `git ls-tree` or `git ls-files` using exact case before reporting the artifact published; confirm the remote path after push.
+
+**Principle:** Case-insensitive local path resolution does not prove the exact artifact path exists in a case-sensitive repository view.

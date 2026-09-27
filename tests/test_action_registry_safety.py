@@ -123,6 +123,21 @@ def test_registration_normalizes_known_policy_values():
     assert spec.capability == "PC_CONTROL"
 
 
+def test_legacy_local_pc_control_uses_existing_gate():
+    registry = _isolated_registry()
+    calls: list[str] = []
+    registry.register(
+        "legacy_pc_control",
+        lambda: calls.append("ran") or "done",
+        capability="LOCAL_PC_CONTROL",
+    )
+
+    assert registry.get_spec("legacy_pc_control").capability == "PC_CONTROL"
+    blocked = registry.execute("legacy_pc_control", confirm=True)
+    assert not blocked.success
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     ("metadata", "value"),
     [("risk", "CRITICAL"), ("capability", "UNRESTRICTED")],

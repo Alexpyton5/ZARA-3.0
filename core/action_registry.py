@@ -109,6 +109,11 @@ class ActionRegistry:
             raise ValueError(f"Invalid action risk: {risk!r}")
 
         normalized_capability = str(capability).strip().upper()
+        # Legacy action modules use this older name for the same guarded
+        # PC-control capability. Store only the canonical value so the
+        # existing Supercerebro gate still applies.
+        if normalized_capability == "LOCAL_PC_CONTROL":
+            normalized_capability = "PC_CONTROL"
         valid_capabilities = {
             "READ_ONLY",
             "PC_CONTROL",

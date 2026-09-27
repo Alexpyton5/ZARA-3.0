@@ -1842,6 +1842,22 @@ class LabV1Service:
             supervisor_policy['background_error'] = self._background_error or (
                 supervisor_policy.get('error_detail') if supervisor_policy.get('last_state') == 'FAILED' else None)
             data['autonomy_policy'] = supervisor_policy
+            # Agency is catalog-only until a separate invitation/turn gate is
+            # implemented. A missing or invalid file must not break the Lab.
+            try:
+                from core.lab_v1.agency_catalog import default_roster_directory, inspect_agency_roster
+                agency_catalog = await asyncio.to_thread(
+                    inspect_agency_roster, supervisor_policy.get('agency_roster_path'),
+                    default_directory=default_roster_directory(),
+                )
+                data['agency_roster'] = {
+                    key: agency_catalog[key]
+                    for key in ('status', 'count', 'dispatch_enabled')
+                }
+            except Exception:
+                data['agency_roster'] = {
+                    'status': 'INVALID', 'count': 0, 'dispatch_enabled': False,
+                }
             from core.lab_v1.scout import TechnologyScout
             data['improvement_opportunities'] = TechnologyScout(runtime.store).snapshot()['opportunities']
             from core.lab_v1.release import ReleaseQueue

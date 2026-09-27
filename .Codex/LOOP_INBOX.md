@@ -1,10 +1,10 @@
-# CICLO #4
+# CICLO #5
 ## FEITO
-Corrigi o caminho `.Codex/` no Git e uma causa raiz que travava 3 módulos de testes.
-O alias legado agora usa o mesmo bloqueio de segurança; 17 testes do registry passaram.
+Lab V1 agora lê o catálogo Agency por caminho configurável e mostra o estado real.
+Sem arquivo, fica dormente; 40 testes focados, typecheck e build frontend passaram.
 ## ESTADO
-Missão #2 aberta; Gmail do navegador é o canal oficial; Agency e teste físico NÃO PROVADOS.
+Missão #2 aberta; nenhum dos 313 foi integrado ou chamado; teste físico NÃO PROVADO.
 ## ERRO
-Coleta Python caiu de 25 para 22 erros; testes funcionais e `npm test` ainda falham.
+Suíte Python mantém os mesmos 22 erros de coleta; `npm test` mantém erros antigos.
 ## SUGESTÃO
-Revisar exports ausentes por módulo, sem inventar comportamento, e só depois ligar os agentes.
+Quando Zoe localizar o roster real, validar o formato; depois criar convite e turno antes de despachar.

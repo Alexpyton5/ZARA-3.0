@@ -67,6 +67,9 @@ class WorkforcePolicy:
             # WorkforcePolicy.with_bot_override(), which validates first
             # (see validate_bot_configuration) and never applies silently.
             'agent_model_overrides': {},
+            # Optional absolute path to agency-agents.json. Catalog discovery
+            # alone never grants a team membership or authorizes dispatch.
+            'agency_roster_path': None,
             'resource_classes': {
                 'codex_cli/gpt-5.6-luna': 'PLAN_INCLUDED',
                 'codex_cli/gpt-5.6-sol': 'PLAN_INCLUDED',

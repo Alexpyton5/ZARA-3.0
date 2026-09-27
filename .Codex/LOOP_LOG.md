@@ -33,3 +33,23 @@
 - Validação: 17 testes do registry passaram; os três módulos antes bloqueados agora coletam (96 testes no conjunto focado). A execução desse conjunto ainda tem 52 falhas funcionais de intents/ponte/radios e 44 passes, não atribuídas ao alias de registro. A suíte geral continua bloqueada na coleta, agora com 22 erros e 2415 testes coletados; antes eram 25 erros e 2335 testes coletados.
 - Frontend: typecheck e build passaram; `npm test` continua falhando na compilação dos testes. Não houve edição do frontend neste ciclo. Pacote atualizado e teste físico continuam NÃO PROVADOS.
 - Próximo grupo: exports legados ausentes (sobretudo `core.ipc_handlers`, `core.pc_voice_intent`, `core.voice_stt`); comparar contratos e histórico antes de adicionar compatibilidade, sem mascarar comportamento que deixou de existir.
+
+## 2026-09-27 01:44 (-03) — e-mail novo após o ciclo #4
+
+- Conferida a aba oficial `zoeeproject@gmail.com` ao fim do ciclo. E-mail novo `[ZARA-LOOP] Diretriz do Alex: agora é só nós dois` de 01:37 orienta manter trabalho contínuo, perguntar à Zoe no chat Muse diante de dúvida/trava e não inventar fatos. Não altera o escopo técnico, orçamento ou regras de segurança. Missão #2 continua ativa; iniciar o próximo grupo de erros pela menor causa comprovável.
+- Diagnóstico read-only: `VoiceNotConfiguredError` ausente em `core.voice_stt` é só a primeira divergência de um contrato de voz maior (testes exigem ausência de download autônomo e tratamento explícito de modelos ausentes). `RESPOSTA_NAO_SEI` também envolve comportamento de recusa e roteamento, não uma constante isolada. Para evitar corrigir import e mascarar o contrato, perguntei à Zoe no chat Muse se a prioridade agora é recuperar a suíte legada ou continuar Lab V1/Agency; mensagem enviada e visível na conversa.
+
+## 2026-09-27 01:49 (-03) — decisão da Zoe e escopo do ciclo #5
+
+- Zoe respondeu no Muse: prioridade é Lab V1/Agency; os 22 erros de coleta e falhas legadas de voz/PC são débito conhecido, com regra de não acrescentar falha nova. Não criar exports falsos para deixar a coleta verde.
+- Perguntei pela fonte canônica dos 313. Zoe confirmou que os 291 TOML locais não são o roster; `agency-agents.json` não está no repositório e será localizado com Alex. Diretriz: integrar por contrato, caminho configurável, ausência dormante, nenhum despacho fictício.
+- Subtarefa delimitada em `.zara-dev/tasks/ZARA-AUTOPILOT-MISSION2-20260927.md`: leitura factual do catálogo no Lab V1, sem ativar agentes, provedor ou custo. Baseline `0b60357`; backups locais feitos antes de qualquer alteração.
+
+## 2026-09-27 02:05 (-03) — ciclo #5, contrato de catálogo Agency
+
+- Teste escrito antes do código: a coleta falhou porque `core.lab_v1.agency_catalog` ainda não existia. Depois da implementação, 7 testes novos cobrem ausência, caminho configurado, duplicidade, versão, caminho relativo/segredo, `ZARA3_HOME` isolado e rejeição de D: sem leitura.
+- `core/lab_v1/agency_catalog.py` lê até 2 MiB/1000 registros de `agency-agents.json`, sem criar diretórios e sem chamadas de provedor. Política Lab V1 aceita `agency_roster_path` opcional; snapshot expõe só estado/contagem/`dispatch_enabled=false`; painel sinaliza Agency dormente ou catalogada sem convite. Contrato documentado em `docs/agency-agents.SCHEMA.md`.
+- Estado no diretório ativo: `DORMANT`, zero agentes, despacho desabilitado. Não foram tocados bancos, memórias, roster real, volume D: nem provedores. A leitura do catálogo não equivale a integrar/autorizar os 313.
+- Validação focada: 40/40 testes passaram (`test_lab_agency_catalog`, `test_lab_autopilot`, `test_lab_v1_safe_contracts`). Typecheck e build frontend passaram. `npm test` falhou na compilação pré-existente de `aecAudio.test.ts` e `autoScroll.test.ts`.
+- Suíte Python completa executada e interrompida na coleta com os **mesmos 22 erros** do ciclo #4, sem falha nova observada. O pacote Electron/backend e o teste físico da missão #2 continuam NÃO PROVADOS.
+- Próximo delta: confirmar contrato contra roster real quando ele aparecer; construir gate explícito de convite e turno/11 papéis em V1 antes de qualquer despacho, mantendo custo R$0.

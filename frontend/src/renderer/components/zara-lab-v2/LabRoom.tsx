@@ -175,6 +175,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
     { label: 'Supervisor', ready: residentHealth?.resident === true, detail: !data ? 'conectando' : residentHealth?.resident ? 'ativo' : 'parado' },
     { label: 'Memória', ready: data?.central_memory?.available === true && !data?.central_memory?.degraded, detail: data?.central_memory?.degraded ? 'degradada' : data?.central_memory?.available ? 'conectada' : 'não verificada' },
     { label: 'Pesquisa', ready: residentHealth?.research_scheduler === 'READY', detail: !data ? 'consultando' : residentHealth?.research_scheduler === 'READY' ? 'pronta' : 'bloqueada' },
+    { label: 'Agency', ready: false, detail: !data ? 'consultando' : data.agency_roster?.status === 'READY' ? `${data.agency_roster.count} catalogados · sem convite` : data.agency_roster?.status === 'DORMANT' ? 'dormente' : 'arquivo indisponível' },
   ];
 
   function pipelineAction(payload: Record<string, unknown>, message: string) {

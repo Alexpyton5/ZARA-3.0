@@ -9,6 +9,7 @@ import zaraMark from '../../../assets/zara-home/zara-mark.svg';
 import { cortarKore, observarKore } from '../../lib/aecAudio';
 import { runDurableLabMutation } from '../../lib/labDurableOperation';
 import { ProposalEvidencePanel } from './ProposalEvidencePanel';
+import { LabPulse } from './LabPulse';
 
 /** M040 — painel de propostas do Scout (leitura proativa). */
 function ImprovementOpportunities({ opportunities, busy, onApprove, onReject }: {
@@ -274,6 +275,7 @@ export function LabRoom({ onClose }: { onClose: () => void }) {
   return <section className={`zl-room ${inspectorOpen ? 'inspector-open' : ''}`} role="dialog" aria-modal="true" aria-label="ZARA Lab" tabIndex={-1} ref={root}>
     <aside className="zl-sidebar">
       <header className="zl-brand"><button aria-label="Voltar para início" onClick={onClose}><ArrowLeft size={19} /></button><img className="zl-mark" src={zaraMark} alt="ZARA" /><div><strong>ZARA <b>LAB</b></strong><small>Sua equipe de inteligência</small></div></header>
+      <LabPulse policy={data?.autonomy_policy} loading={room.loading} error={room.error} />
       <div className="zl-sidebar-title"><h2>Conversas</h2><button aria-label="Nova missão" onClick={() => { setCreating(true); setText(''); }}><Plus size={20} /></button></div>
       <label className="zl-search"><Search size={16} /><input placeholder="Buscar uma missão" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <label className="zl-team-select"><Users size={15} /><select aria-label="Selecionar equipe" value={teamId || data?.team?.id || ''} onChange={e => { select('', e.target.value); setCreating(false); }}><option value="">Todas as equipes disponíveis</option>{asList(data?.teams).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>

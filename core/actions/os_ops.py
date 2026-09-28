@@ -1944,7 +1944,7 @@ def _eligible_windows() -> list[int]:
     return found
 
 
-_NAMED_WINDOW_TARGETS = {"chrome", "zara", "vscode", "project"}
+_NAMED_WINDOW_TARGETS = {"chrome", "zara", "vscode", "project", "notepad"}
 
 
 def _focus_window_verified(hwnd: int) -> bool:
@@ -1988,6 +1988,8 @@ def _window_matches_named_target(hwnd: int, target: str) -> bool:
     except (psutil.AccessDenied, psutil.NoSuchProcess):
         command = ""
     project_name = project_root().name.casefold()
+    if target == "notepad":
+        return Path(process).name.casefold() in _SAFE_WINDOWS_APPS["notepad"]["process_names"]
     if target == "chrome":
         return process == "chrome.exe"
     if target == "vscode":

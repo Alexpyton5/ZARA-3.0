@@ -94,8 +94,12 @@ class AutonomyEngine:
 
     @staticmethod
     def _default_db_path() -> Path:
-        local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-        return local / "ZARA3" / "data" / "autonomy" / "zara_autonomy.db"
+        # Resolve the same isolated home used by the rest of the app at
+        # construction time.  Besides keeping source/frozen paths aligned,
+        # this prevents tests and canaries from opening Alex's real database.
+        from core.paths import data_dir
+
+        return data_dir() / "autonomy" / "zara_autonomy.db"
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

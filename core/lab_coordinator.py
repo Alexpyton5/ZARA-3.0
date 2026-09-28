@@ -27,6 +27,7 @@ from core.lab_research import LabResearch
 from core.lab_worker_runtime import LabWorkerRuntime
 from core.mentor_relay import MentorRelay
 from core.paths import data_dir
+from tools.room_relay.lab_bridge import OpenCodeBridge, resolve_lab_target
 
 
 @dataclass
@@ -53,6 +54,7 @@ class LabCoordinator:
         self.db_path = self.root / "zara_lab.db"
         self.autonomy = AutonomyLabBridge(self.db_path)
         self.mentor_relay = MentorRelay()
+        self.opencode_bridge = OpenCodeBridge()
         self.mission = LabMission(self.db_path)
         self.research = LabResearch(self.db_path)
         self.patches = LabPatchPipeline(self.db_path)
@@ -211,6 +213,7 @@ class LabCoordinator:
     async def get_state(self) -> dict[str, Any]:
         await self.initialize()
         await self._sync_mentor_replies()
+        await self._sync_opencode_replies()
         workers = await self.worker_states()
         async with self._lock:
             return await asyncio.to_thread(self._read_state, workers)
@@ -218,7 +221,7 @@ class LabCoordinator:
     def _read_state(self, workers: list[dict[str, Any]]) -> dict[str, Any]:
         with self._connect() as conn:
             messages = [dict(row) for row in conn.execute(
-                "SELECT * FROM messages ORDER BY created_at DESC LIMIT 120"
+                "SELECT * FROM messages ORDER BY created_at DESC, rowid DESC LIMIT 120"
             ).fetchall()][::-1]
             proposals = [dict(row) for row in conn.execute(
                 "SELECT * FROM proposals ORDER BY updated_at DESC LIMIT 40"
@@ -291,7 +294,7 @@ class LabCoordinator:
     async def send_message(self, author: str, target: str, content: str) -> dict[str, Any]:
         await self.initialize()
         author = (author or "alex").strip().lower()
-        target = (target or "zara").strip().lower()
+        target = resolve_lab_target((target or "zara").strip().lower(), content)
         content = (content or "").strip()
         if not content:
             raise ValueError("Mensagem vazia")
@@ -332,7 +335,20 @@ class LabCoordinator:
                     "relay_id": queued["relay_id"],
                     "relay_online": self.mentor_relay.status().online,
                 }
-            elif target in {"opencode", "openclaw"}:
+            elif target == "opencode":
+                recent = await asyncio.to_thread(self._recent_lab_messages_sync, 6)
+                queued = self.opencode_bridge.enqueue(author, content, recent=recent)
+                await self._activity(author, "OPENCODE_QUEUED", str(queued["task_id"]))
+                return {
+                    "success": True,
+                    "state": "QUEUED",
+                    "response": "OpenCode recebeu a tarefa na fila somente leitura.",
+                    "task_id": queued["task_id"],
+                    "message_id": queued["message_id"],
+                    "authorization": queued["authorization"],
+                    "duplicate": bool(queued.get("duplicate")),
+                }
+            elif target == "openclaw":
                 if not self.worker_runtime:
                     raise RuntimeError("Worker Runtime indisponível")
                 result = await self.worker_runtime.chat(target, content)
@@ -368,19 +384,49 @@ class LabCoordinator:
                     relay_id,
                     str(item["content"]),
                     now,
+                    str(item.get("agent") or "mentor"),
                 )
             if inserted:
-                await self._activity("mentor", "MENTOR_REPLY_IMPORTED", relay_id)
+                await self._activity(str(item.get("agent") or "mentor"), "MENTOR_REPLY_IMPORTED", relay_id)
             await asyncio.to_thread(self.mentor_relay.mark_outbound_processed, relay_id)
 
-    def _insert_mentor_reply_sync(self, msg_id: str, relay_id: str, content: str, now: float) -> bool:
+    async def _sync_opencode_replies(self) -> None:
+        """Import relay replies once, preserving their type and sender."""
+        replies = await asyncio.to_thread(self.opencode_bridge.drain_replies, 20)
+        for item in replies:
+            message_id = str(item.get("message_id") or "").strip()
+            if not message_id:
+                continue
+            msg_id = f"opencode-relay-{message_id}"
+            kind = "status" if str(item.get("type") or "").upper() == "BLOCKER" else "agent"
+            inserted = await self._insert_message(
+                "opencode", "alex", str(item.get("content") or ""), kind, msg_id=msg_id
+            )
+            if inserted:
+                await self._activity("opencode", "OPENCODE_REPLY_IMPORTED", message_id)
+            await asyncio.to_thread(self.opencode_bridge.mark_imported, message_id)
+
+    def _recent_lab_messages_sync(self, limit: int = 6) -> list[dict[str, str]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT author, content FROM messages ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (max(0, int(limit)),),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def _insert_mentor_reply_sync(
+        self, msg_id: str, relay_id: str, content: str, now: float, agent: str = "mentor"
+    ) -> bool:
         with self._connect() as conn:
             exists = conn.execute("SELECT id FROM messages WHERE id=?", (msg_id,)).fetchone()
             if exists:
                 return False
+            author = str(agent or "mentor").strip().lower()
+            if not author or any(not (char.isalnum() or char in "_-") for char in author):
+                author = "mentor"
             conn.execute(
                 "INSERT INTO messages(id,author,target,content,kind,created_at) VALUES(?,?,?,?,?,?)",
-                (msg_id, "mentor", "alex", content, "agent", now),
+                (msg_id, author, "alex", content, "agent", now),
             )
             return True
 
@@ -450,18 +496,23 @@ class LabCoordinator:
                 )
             return {"id": proposal_id, "status": "APPROVED", "task_id": task_id, "execution": "LOCKED"}
 
-    async def _insert_message(self, author: str, target: str, content: str, kind: str) -> None:
+    async def _insert_message(
+        self, author: str, target: str, content: str, kind: str, *, msg_id: str | None = None
+    ) -> bool:
         now = time.time()
-        msg_id = uuid.uuid4().hex
+        msg_id = msg_id or uuid.uuid4().hex
         async with self._lock:
-            await asyncio.to_thread(self._insert_message_sync, msg_id, author, target, content, kind, now)
+            return await asyncio.to_thread(
+                self._insert_message_sync, msg_id, author, target, content, kind, now
+            )
 
-    def _insert_message_sync(self, msg_id: str, author: str, target: str, content: str, kind: str, now: float) -> None:
+    def _insert_message_sync(self, msg_id: str, author: str, target: str, content: str, kind: str, now: float) -> bool:
         with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO messages(id,author,target,content,kind,created_at) VALUES(?,?,?,?,?,?)",
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO messages(id,author,target,content,kind,created_at) VALUES(?,?,?,?,?,?)",
                 (msg_id, author, target, content, kind, now),
             )
+            return cursor.rowcount == 1
 
     async def _activity(self, actor: str, event: str, detail: str = "") -> None:
         now = time.time()

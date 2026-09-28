@@ -18,6 +18,36 @@ def test_approved_candidate_builder_writes_build_identity() -> None:
     assert '"ZARA_ACTIVE_BUILD.txt"' in source
 
 
+@pytest.mark.parametrize(
+    ("porcelain", "expected"),
+    [(" M tools/build_current.py\n", True), ("?? new-file.py\n", True), ("", False)],
+)
+def test_git_dirty_reflects_porcelain_status(
+    monkeypatch: pytest.MonkeyPatch, porcelain: str, expected: bool
+) -> None:
+    monkeypatch.delenv("ZARA_BUILD_GIT_DIRTY", raising=False)
+    monkeypatch.setattr(current, "run", lambda _command: porcelain)
+
+    assert current.git_is_dirty() is expected
+
+
+@pytest.mark.parametrize(("override", "expected"), [("true", True), ("false", False), ("1", True), ("0", False)])
+def test_git_dirty_honors_explicit_boolean_override(
+    monkeypatch: pytest.MonkeyPatch, override: str, expected: bool
+) -> None:
+    monkeypatch.setenv("ZARA_BUILD_GIT_DIRTY", override)
+    monkeypatch.setattr(current, "run", lambda _command: pytest.fail("git should not run when overridden"))
+
+    assert current.git_is_dirty() is expected
+
+
+def test_git_dirty_rejects_ambiguous_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ZARA_BUILD_GIT_DIRTY", "sometimes")
+
+    with pytest.raises(ValueError, match="explicit boolean"):
+        current.git_is_dirty()
+
+
 @pytest.fixture
 def package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(current, "ROOT", tmp_path)

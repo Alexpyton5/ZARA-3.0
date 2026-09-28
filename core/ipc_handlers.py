@@ -19,6 +19,8 @@ from datetime import datetime
 from typing import Any
 
 from core.model_router import get_model_config
+from core.supercerebro_auto_off import SupercerebroAutoOff
+from core.voice_fallback import KoreRecoveryPolicy
 
 from core.pc_voice_intent import RESPOSTA_NAO_SEI
 
@@ -30,6 +32,7 @@ IPC_EVENT_TYPES = frozenset({
     "state-change", "message", "metrics", "voice-level", "voice-output-audio",
     "reminder-created", "reminder-fired", "routing-telemetry",
     "lab-v1-operation-result", "lab-release-ready", "backend-ready",
+    "supercerebro-change",
 })
 
 
@@ -741,6 +744,8 @@ class IPCHandler:
         self._telegram_adapter = None
         self.voice_active: bool = False
         self.supercerebro_active: bool = False
+        self._supercerebro_auto_off = SupercerebroAutoOff(self._auto_disable_supercerebro)
+        self._kore_recovery_policy = KoreRecoveryPolicy()
         # Every new IPC runtime starts fail-closed. A previous handler or
         # test must not leave local PC control enabled for this instance.
         from core.action_registry import get_registry
@@ -1406,7 +1411,10 @@ class IPCHandler:
                 self.lab_v1 = LabV1Service()
                 self.lab_v1.on_release_ready = lambda result: self.send_event('lab-release-ready', {
                     'state': 'READY_TO_ACTIVATE', 'session_id': result['session_id']})
-                await self.lab_v1.start_background()
+                # Startup readiness must not wait for a recovered provider
+                # operation to finish; the durable consumer drains it in the
+                # background before handling later work.
+                await self.lab_v1.start_background(wait_for_operation_recovery=False)
                 self._schedule_lab_v1_task(
                     self._drain_lab_v1_operation_outbox(self.lab_v1),
                     name="zara-lab-v1-operation-outbox",
@@ -3648,9 +3656,13 @@ class IPCHandler:
             if voice_turn_id is not None and not self._voice_turn_is_current(voice_turn_id):
                 return
             self._fala_interrompida = False
+            kore_policy = getattr(self, "_kore_recovery_policy", None)
+            if kore_policy is None:
+                kore_policy = KoreRecoveryPolicy()
+                self._kore_recovery_policy = kore_policy
             if live_voice_available and self.gemini_live_voice:
                 try:
-                    spoken = await self.gemini_live_voice.speak(value)
+                    spoken = await kore_policy.try_kore(self.gemini_live_voice, value)
                 except Exception as exc:
                     spoken = False
                     print(
@@ -3664,10 +3676,10 @@ class IPCHandler:
                     # voz. Alex reconhece a Kore e detesta a voz do Windows;
                     # trocar de voz no meio da conversa é pior do que esperar
                     # mais um instante.
-                    if not live_audio_started:
+                    if not live_audio_started and kore_policy.last_outcome != "timeout":
                         print("[VOICE_TRACE] stage=TTS_RETRY result=KORE_SEGUNDA_TENTATIVA", flush=True)
                         try:
-                            spoken = await self.gemini_live_voice.speak(value)
+                            spoken = await kore_policy.try_kore(self.gemini_live_voice, value)
                         except Exception as exc:
                             spoken = False
                             print(
@@ -3999,6 +4011,8 @@ class IPCHandler:
                 tone=float(payload.get('tone', 0.5) or 0.5),
                 speaking=bool(payload.get('speaking', False)),
             ))
+        elif event_type == 'supercerebro-change':
+            await self.send(IPCMessage(type=event_type, active=data is True))
         else:
             await self.send(IPCMessage(type=event_type, data=data))
 
@@ -4162,7 +4176,28 @@ class IPCHandler:
             await self.send_error(msg, "Project Memory indisponível")
             return
         try:
-            response: dict[str, Any] = {'success': True, 'keys': self.project_memory.list_docs()}
+            projects = []
+            for project_id in self.project_memory.list_projects():
+                keys = self.project_memory.list_project_docs(project_id)
+                timestamps = [
+                    doc.get('updated_at')
+                    for key in keys
+                    if (doc := self.project_memory.get_project_doc(project_id, key))
+                    and doc.get('updated_at') is not None
+                ]
+                projects.append({
+                    'id': project_id,
+                    'keys': keys,
+                    'updated_at': max(timestamps) if timestamps else None,
+                })
+            response: dict[str, Any] = {
+                'success': True,
+                'active_project_id': self.project_memory.get_active_project(),
+                'projects': projects,
+                # Compatibility inventory is keys only; private document
+                # contents are returned only by an explicit build request.
+                'legacy_document_keys': self.project_memory.list_docs(),
+            }
             payload = msg.payload or {}
             if payload.get('build') and hasattr(self.project_memory, 'build_project_context'):
                 envelope = self.project_memory.build_project_context(
@@ -4178,7 +4213,14 @@ class IPCHandler:
     async def handle_memory_galaxy_list(self, msg: IPCMessage):
         """Return a bounded, read-only view of local project and user memory."""
         nodes: list[dict[str, Any]] = []
+        sources = {
+            "project_memory": "OFFLINE",
+            "user_memory": "OFFLINE",
+            "context": "OFFLINE",
+            "history": "OFFLINE",
+        }
         if self.project_memory:
+            sources["project_memory"] = "ONLINE"
             for key in self.project_memory.list_docs()[:50]:
                 doc = self.project_memory.get_doc(key)
                 if doc and str(doc.get('content', '')).strip():
@@ -4189,7 +4231,20 @@ class IPCHandler:
                         'content': str(doc.get('content', ''))[:12000],
                         'source': f'Project Memory · {key}',
                     })
+            load_context = getattr(self.project_memory, 'load_mentor_context', None)
+            if callable(load_context):
+                context = str(load_context() or '').strip()
+                sources["context"] = "ONLINE"
+                if context:
+                    nodes.append({
+                        'id': 'context:mentor',
+                        'kind': 'context',
+                        'title': 'Contexto do Mentor',
+                        'content': context[:12000],
+                        'source': 'Contexto local',
+                    })
         if self.user_memory:
+            sources["user_memory"] = "ONLINE"
             for fact in self.user_memory.list()[:100]:
                 if fact.get('status') != 'forgotten' and str(fact.get('fact', '')).strip():
                     nodes.append({
@@ -4199,8 +4254,21 @@ class IPCHandler:
                         'content': str(fact.get('fact', ''))[:12000],
                         'source': f"User Memory · {fact.get('source') or 'local'}",
                     })
+        if self.conversation_history:
+            sources["history"] = "ONLINE"
+            for item in self.conversation_history.list_recent(30)[:30]:
+                if not isinstance(item, dict) or not str(item.get('content') or '').strip():
+                    continue
+                nodes.append({
+                    'id': f"history:{str(item.get('id') or len(nodes))[:120]}",
+                    'kind': 'history',
+                    'title': str(item.get('role') or 'Conversa')[:120],
+                    'content': str(item.get('content') or '')[:12000],
+                    'source': 'Histórico local',
+                })
         await self.send_response(msg.request_id, {
-            'success': True, 'nodes': nodes, 'count': len(nodes), 'read_only': True, 'links': [],
+            'success': True, 'nodes': nodes, 'count': len(nodes), 'read_only': True,
+            'links': [], 'sources': sources,
         })
 
     async def handle_self_status(self, msg: IPCMessage):
@@ -6249,6 +6317,13 @@ class IPCHandler:
         connected = bool(self.hermes and self.hermes.enabled and self.hermes.is_connected)
         if not connected:
             self._set_supercerebro_state(False)
+
+    async def _auto_disable_supercerebro(self, reason: str) -> None:
+        if not self.supercerebro_active:
+            return
+        self._set_supercerebro_state(False)
+        print(f"[SECURITY] Supercerebro auto-OFF: {reason}", flush=True)
+        await self.send_event("supercerebro-change", False)
     async def handle_lab_mission_state(self, msg: IPCMessage):
         if not self.lab:
             await self.send_error(msg, "ZARA Lab indisponível")
@@ -6486,49 +6561,40 @@ class IPCHandler:
             await self.send_error(msg, "Active state must be a boolean")
             return
 
-        if requested:
-            if not self.hermes:
-                self._set_supercerebro_state(False)
-                await self.send_error(msg, "Hermes integration is unavailable")
-                return
-            connected = await self.hermes.enable_supercerebro()
-            if not connected:
-                self._set_supercerebro_state(False)
-                await self.send_event('supercerebro-change', False)
-                await self.send_error(msg, "Hermes Gateway is offline")
-                return
-            self._set_supercerebro_state(True)
-        else:
-            # Revoke local permission before touching the remote integration.
-            # A disconnect error must never leave PC control enabled.
+        # Chave manual do Alex (decisao dele, 27/09): a chave e LOCAL.
+        # Sem Hermes, sem dependencia externa. ON = ele monitorando; OFF = sozinho.
+        # Fail closed: qualquer erro desliga.
+        try:
+            self._set_supercerebro_state(requested)
+            if requested:
+                self._supercerebro_auto_off.start()
+            else:
+                self._supercerebro_auto_off.stop()
+        except Exception as exc:
             self._set_supercerebro_state(False)
-            if self.hermes:
-                try:
-                    await self.hermes.disable_supercerebro()
-                except Exception as exc:
-                    print(f"[IPC] Hermes disable warning: {exc}")
+            self._supercerebro_auto_off.stop()
+            try:
+                await self.send_event("supercerebro-change", False)
+            except Exception:
+                pass
+            await self.send_error(msg, f"Falha ao alternar: {exc}")
+            return
 
-        print(f"[IPC] Supercerebro {'enabled' if self.supercerebro_active else 'disabled'}")
+        print(f"[IPC] Supercerebro {'enabled' if self.supercerebro_active else 'disabled'} (chave manual do Alex)")
         await self.send_event('supercerebro-change', self.supercerebro_active)
         await self.send_response(msg.request_id, {
             'success': True,
             'active': self.supercerebro_active,
-            'connected': bool(self.hermes and self.hermes.is_connected),
+            'connected': True,
         })
     async def handle_supercerebro_status(self, msg: IPCMessage):
         """Return supercerebro status"""
         status = {
             'active': self.supercerebro_active,
             'url': 'http://127.0.0.1:8642',
-            'connected': bool(self.hermes and self.hermes.is_connected),
-            'enabled': bool(self.hermes and self.hermes.enabled),
+            'connected': True,
+            'enabled': self.supercerebro_active,
         }
-        if self.hermes:
-            try:
-                agent_status = await self.hermes.get_agent_status()
-                status.update(agent_status)
-            except Exception as e:
-                status['error'] = str(e)
         await self.send_response(msg.request_id, status)
 
 

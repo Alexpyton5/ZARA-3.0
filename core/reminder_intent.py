@@ -27,6 +27,10 @@ _INTRO = re.compile(
     r"^\s*(?:zara[\s,]*)?(?:me\s+)?(?:lembre|lembra|lembrar)\s+(?:de\s+|me\s+)?(?:de\s+)?",
     re.IGNORECASE,
 )
+_CREATE = re.compile(
+    r"\b(?:crie|cria|agende|agenda|programe|programa)\s+(?:um\s+)?lembrete\b",
+    re.IGNORECASE,
+)
 
 _LIST = re.compile(
     r"^\s*(?:zara[, ]*)?(?:quais\s+sao\s+(?:(?:os|meus)\s+)?lembretes|"
@@ -39,6 +43,19 @@ _COMPLETE = re.compile(r"^\s*(?:zara[, ]*)?conclua?\s+(?:o\s+)?lembrete\b", re.I
 _REMINDER_ID = re.compile(r"\bREM-[A-Z0-9]+-[A-F0-9]+\b", re.IGNORECASE)
 
 _TIME_PATTERNS = [
+    # Absolute date with an explicit time, in either spoken order.
+    re.compile(
+        r"(?:às|as)\s*\d{1,2}(?::\d{2})?\s*(?:h|horas?)?"
+        r"(?:\s+da\s+(?:manhã|manha|tarde|noite))?\s+"
+        r"(?:no\s+dia\s+|em\s+)?\d{1,2}[-/]\d{1,2}[-/]\d{2,4}",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\s+(?:às|as|a)?\s*"
+        r"\d{1,2}(?::\d{2})?\s*(?:h|horas?)?"
+        r"(?:\s+da\s+(?:manhã|manha|tarde|noite))?",
+        re.IGNORECASE,
+    ),
     # daqui a N minutos/horas
     re.compile(r"daqui a (\d+)\s*(minutos?|min\b|hora|horas?|h\b)", re.IGNORECASE),
     # amanhã às H(:MM)? / hoje às H(:MM)? (aceita amanha/amanhã sem acento)
@@ -104,12 +121,16 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
         except Exception:
             return _failed(raw, "Não consegui confirmar a atualização desse lembrete.")
 
-    # precisa comecar com "lembre de ..." (apos opcional "zara")
+    # Ação explícita determinística: aceitar tanto "me lembre de ..." quanto
+    # "crie/agende um lembrete ...", mas não perguntas sobre como fazê-lo.
     m = _INTRO.match(raw)
-    if not m:
+    create_match = _CREATE.search(raw)
+    if not m and not create_match:
         return IntentResult(kind="not_reminder", raw=raw)
 
-    body = raw[m.end():].strip()
+    body = raw[m.end():].strip() if m else raw
+    if create_match:
+        body = body.replace(create_match.group(0), " ", 1).strip()
     if not body:
         return IntentResult(kind="not_reminder", raw=raw)
 
@@ -131,7 +152,11 @@ def detect_reminder_intent(text: str, engine: ReminderEngine | None = None) -> I
         )
 
     # separa a mensagem do componente temporal
-    message = (body[:time_match.start()] + " " + body[time_match.end():]).strip()
+    before_time = body[:time_match.start()]
+    # Remove only the preposition that introduced the schedule, preserving a
+    # preceding owner-provided context sentence as part of the reminder text.
+    before_time = re.sub(r"\b(?:para|as|às)\s*$", "", before_time, flags=re.IGNORECASE)
+    message = (before_time + " " + body[time_match.end():]).strip()
     message = re.sub(r"\s+", " ", message).strip(" ,;:-")
     if not message:
         return IntentResult(kind="not_reminder", raw=raw)

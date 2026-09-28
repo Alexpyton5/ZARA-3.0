@@ -480,6 +480,10 @@ class ModelRouter:
         if not detected:
             detected = [TaskType.GENERAL_CHAT]
         if context:
+            hint = context.get("smart_router_hint") or []
+            for task_type in reversed(hint):
+                if isinstance(task_type, TaskType) and task_type not in detected:
+                    detected.insert(0, task_type)
             if context.get("voice_mode"):
                 detected.insert(0, TaskType.VOICE)
             if context.get("require_tools"):

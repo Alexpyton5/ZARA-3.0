@@ -194,7 +194,7 @@ async function waitForPythonReadiness(): Promise<void> {
   }
 }
 
-async function sendToPython(type: string, payload: any = {}): Promise<any> {
+async function sendToPython(type: string, payload: any = {}, requestIdOverride?: string): Promise<any> {
   await waitForPythonReadiness()
 
   return new Promise((resolve, reject) => {
@@ -203,7 +203,11 @@ async function sendToPython(type: string, payload: any = {}): Promise<any> {
       return
     }
 
-    const requestId = `${Date.now()}-${++pythonRequestId}`
+    const requestId = requestIdOverride || `${Date.now()}-${++pythonRequestId}`
+    if (pendingRequests.has(requestId)) {
+      reject(new Error(`Request already pending: ${requestId}`))
+      return
+    }
     const message = JSON.stringify({ type, request_id: requestId, payload }) + '\n'
     pendingRequests.set(requestId, { resolve, reject })
 
@@ -224,6 +228,55 @@ async function sendToPython(type: string, payload: any = {}): Promise<any> {
       }
     }, timeoutMs)
   })
+}
+
+type DurableLabCommand = 'lab.v1.submit' | 'lab.v1.message' | 'lab.v1.room' | 'lab.v1.cancel'
+
+async function sendDurableLabOperation(
+  command: DurableLabCommand,
+  payload: Record<string, unknown>,
+  requestIdValue?: unknown,
+): Promise<any> {
+  const requestId = typeof requestIdValue === 'string' ? requestIdValue.trim() : ''
+  if (!/^[A-Za-z0-9_.:-]{1,120}$/.test(requestId)) {
+    return {
+      success: false,
+      accepted: false,
+      state: 'REJECTED',
+      code: 'INVALID_OPERATION',
+      error: 'Identificador da operação do Lab inválido.',
+    }
+  }
+
+  const admission = await sendToPython(
+    'lab-v1-admit-operation', { command, payload }, requestId,
+  )
+  if (admission?.success !== true || admission?.accepted !== true
+      || typeof admission.operation_id !== 'string' || !admission.operation_id) {
+    return admission
+  }
+
+  const confirmation = await sendToPython(
+    'lab-v1-confirm-operation',
+    { operation_id: admission.operation_id },
+    `${requestId}:confirm`,
+  )
+  if (confirmation?.confirmed !== true
+      || confirmation.operation_id !== admission.operation_id) {
+    return { ...admission, ...confirmation, accepted: true, success: false }
+  }
+
+  return {
+    ...admission,
+    ...confirmation,
+    request_id: admission.request_id,
+    operation_id: admission.operation_id,
+    command: admission.command,
+    payload_sha256: admission.payload_sha256,
+    accepted_at: admission.accepted_at,
+    accepted: true,
+    success: true,
+  }
 }
 
 type JsonRecord = Record<string, unknown>
@@ -651,16 +704,24 @@ function setupIPC(): void {
   ipcMain.handle('lab-autonomy-status', () => sendToPython('lab-autonomy-status'))
 
   // ZARA Lab V1 — todos os canais expostos pela ponte preload.
-  ipcMain.handle('lab-v1-room-message', (_event, payload) => sendToPython('lab-v1-room-message', payload))
+  ipcMain.handle('lab-v1-room-message', (_event, payload) => sendDurableLabOperation(
+    'lab.v1.room', { session_id: payload?.session_id, content: payload?.content }, payload?.request_id,
+  ))
   ipcMain.handle('lab-v1-snapshot', (_event, payload) => sendToPython('lab-v1-snapshot', payload))
   ipcMain.handle('lab-v1-proposal-list', (_event, payload) => sendToPython('lab-v1-proposal-list', payload))
   ipcMain.handle('lab-v1-proposal-update', (_event, payload) => sendToPython('lab-v1-proposal-update', payload))
   ipcMain.handle('lab-v1-create-session', (_event, payload) => sendToPython('lab-v1-create-session', payload))
-  ipcMain.handle('lab-v1-submit', (_event, payload) => sendToPython('lab-v1-submit', payload))
-  ipcMain.handle('lab-v1-autopilot', (_event, payload) => sendToPython('lab-v1-autopilot', payload))
+  ipcMain.handle('lab-v1-submit', (_event, payload) => sendDurableLabOperation(
+    'lab.v1.message', { session_id: payload?.session_id, content: payload?.text }, payload?.request_id,
+  ))
+  ipcMain.handle('lab-v1-autopilot', (_event, payload) => sendDurableLabOperation(
+    'lab.v1.submit', { objective: payload?.intent }, payload?.request_id,
+  ))
   ipcMain.handle('lab-v1-autopilot-activate', (_event, payload) => sendToPython('lab-v1-autopilot-activate', payload))
   ipcMain.handle('lab-v1-autonomy-configure', (_event, payload) => sendToPython('lab-v1-autonomy-configure', payload))
-  ipcMain.handle('lab-v1-cancel-mission', (_event, payload) => sendToPython('lab-v1-cancel-mission', payload))
+  ipcMain.handle('lab-v1-cancel-mission', (_event, payload) => sendDurableLabOperation(
+    'lab.v1.cancel', { session_id: payload?.session_id }, payload?.request_id,
+  ))
   ipcMain.handle('lab-v1-delete-session', (_event, payload) => sendToPython('lab-v1-delete-session', payload))
   ipcMain.handle('lab-v1-providers', () => sendToPython('lab-v1-providers'))
   ipcMain.handle('lab-v1-create-agent', (_event, payload) => sendToPython('lab-v1-create-agent', payload))

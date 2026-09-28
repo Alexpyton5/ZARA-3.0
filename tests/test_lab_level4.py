@@ -68,13 +68,21 @@ async def test_background_continues_persisted_mission_without_ui_message(monkeyp
     from core.lab_v1.service import LabV1Service
     service = LabV1Service()
     calls = []
+    loop = asyncio.get_running_loop()
+    twice = asyncio.Event()
+
+    def tick():
+        calls.append('tick')
+        if len(calls) >= 2:
+            loop.call_soon_threadsafe(twice.set)
+
     service._supervisor = SimpleNamespace(
         policy=lambda: {'mission_entry_enabled': True, 'background_enabled': True, 'cadence_seconds': 1},
-        tick=lambda: calls.append('tick') or {'state': 'MONITORING'})
+        tick=tick)
     monkeypatch.setattr(service, '_background_interval', 0.01, raising=False)
     result = await service.start_background()
     assert result['success'] is True
-    await asyncio.sleep(0.035)
+    await asyncio.wait_for(twice.wait(), timeout=1.0)
     await service.stop_background()
     assert len(calls) >= 2
     print('LAB_LEVEL4_BACKGROUND_OK')
@@ -107,4 +115,3 @@ def test_restart_does_not_replay_uncertain_effect(tmp_path):
     state = restarted.tick('session', Ports())
     assert state['state'] == 'BLOCKED' and state['blocker'] == 'UNCERTAIN_EFFECT'
     print('LAB_LEVEL4_RESTART_OK')
-

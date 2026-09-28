@@ -18,14 +18,11 @@ from core.pc_voice_intent import PcVoiceIntentDetector
 
 
 def test_youtube_open_uses_fixed_home_route(monkeypatch):
-    # AUDITORIA_2026-08-27 (Alex, ao vivo): youtube_open e LOCAL_PC_CONTROL de
-    # proposito. Antes este teste simulava browser_open_url via
-    # registry._actions, o que so funcionava porque youtube_open reentrava no
-    # gate de browser_open_url (o bug que bloqueava "abra o youtube" sem
-    # motivo). Agora simula a funcao crua que youtube_open realmente chama.
+    # This route test represents an explicitly enabled local-control key.
     open_url = Mock(return_value=ActionResult(success=True, output="sent", data={"dispatch": "DISPATCH_PROVEN"}))
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
+    registry.pc_control_allowed = True
     assert load_capability("browser_open_url")
 
     result = registry.execute("youtube_open")
@@ -53,6 +50,7 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
 
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
+    registry.pc_control_allowed = True
     assert load_capability("browser_open_url")
 
     result = registry.execute(action_name, query=query)
@@ -71,10 +69,7 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
     ],
 )
 def test_browser_opening_media_actions_work(monkeypatch, action_name, kwargs, expected):
-    # AUDITORIA_2026-08-27 (Alex, ao vivo): "abra o youtube" parou de
-    # funcionar, bloqueado sem motivo -- youtube_open/search e spotify_search
-    # sao LOCAL_PC_CONTROL de proposito e tem que sempre funcionar. Este
-    # teste antes esperava o oposto (bloqueado), o que era o proprio bug.
+    # The real safety contract requires the Supercerebro key for browser IO.
     calls: list[str] = []
 
     def open_url(url):
@@ -83,12 +78,26 @@ def test_browser_opening_media_actions_work(monkeypatch, action_name, kwargs, ex
 
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
+    registry.pc_control_allowed = True
     assert load_capability("browser_open_url")
 
     allowed = registry.execute(action_name, **kwargs)
 
     assert allowed.success
     assert expected in calls[0]
+
+
+def test_media_browser_action_remains_blocked_with_key_off(monkeypatch):
+    open_url = Mock(return_value=ActionResult(success=True, data={"dispatch": "DISPATCH_PROVEN"}))
+    monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
+    registry = get_registry()
+    registry.pc_control_allowed = False
+
+    result = registry.execute("youtube_open")
+
+    assert result.success is False
+    assert "Supercérebro OFF" in result.error
+    open_url.assert_not_called()
 
 
 @pytest.mark.parametrize("query", ["", "   ", "x" * 201, "bad\nquery"])

@@ -12,6 +12,7 @@ import httpx
 
 from core.conversation_compression import compress_history
 from core.model_router import ModelProvider, ModelRouter, normalize_auto_engine, route_message
+from core.smart_router_plug import smart_router_enabled, suggest_task_types
 from core.personality import load_personality
 
 _SKILL_ID = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
@@ -174,6 +175,10 @@ class ZaraOrchestrator:
         else:
             policy = "fast"
         self.last_route_policy = policy
+        if smart_router_enabled():
+            # Sugestao do roteador inteligente da zoe (TaskType a partir do pedido).
+            # So sugere - ranking, health e fallback continuam no ModelRouter.
+            route_context["smart_router_hint"] = suggest_task_types(message)
         primary_model, fallback_chain = route_message(
             message=message,
             context=route_context,

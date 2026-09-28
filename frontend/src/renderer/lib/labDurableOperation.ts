@@ -80,9 +80,10 @@ function concludesJournal(result: any): boolean {
   if (
     result.success === true
     && result.accepted === true
+    && result.confirmed === true
     && typeof result.operation_id === 'string'
     && result.operation_id.length > 0
-    && result.state === 'QUEUED'
+    && result.state === 'DISPATCH_AUTHORIZED'
   ) return true
   return result.success === false
     && result.accepted === false

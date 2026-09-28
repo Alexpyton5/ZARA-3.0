@@ -204,7 +204,7 @@ async def test_failed_kore_speech_is_not_retried_for_another_full_timeout():
 
     await handler._speak_response("oi")
 
-    handler.gemini_live_voice.speak.assert_awaited_once_with("oi")
+    handler.gemini_live_voice.speak.assert_awaited_once_with("oi", timeout=6.0)
     assert handler._voice_speaking is False
 
 

@@ -282,8 +282,16 @@ def modelos_de_voz_reais():
     modelos instalados.
     """
     real = _REAL_ZARA3_HOME / "models"
-    if not real.is_dir():
-        pytest.skip(f"Modelos de voz reais não encontrados em {real}")
+    vosk_dir = real / "vosk"
+    supported_models = (
+        vosk_dir / "vosk-model-small-pt-0.3",
+        vosk_dir / "vosk-model-small-en-us-0.15",
+    )
+    if not any(model.is_dir() for model in supported_models):
+        pytest.skip(
+            "Modelo Vosk real não encontrado; esperava um destes caminhos: "
+            + ", ".join(str(model) for model in supported_models)
+        )
 
     home = Path(os.environ["ZARA3_HOME"])
     link = home / "models"

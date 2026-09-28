@@ -29,7 +29,9 @@ def config_dir() -> Path:
     Source/dev keeps using project/config. Frozen builds use LOCALAPPDATA so an
     installed app never needs to write inside Program Files/resources.
     """
-    if getattr(sys, "frozen", False):
+    if os.environ.get("ZARA3_HOME"):
+        path = user_data_dir() / "config"
+    elif getattr(sys, "frozen", False):
         path = user_data_dir() / "config"
     else:
         path = project_root() / "config"

@@ -1,0 +1,17 @@
+ZARA AUTO-SUITE — como agendar (executar no PC do Alex, como o Alex)
+
+1. Abra o Prompt de Comando e cole esta linha:
+
+schtasks /create /tn "ZARA Auto-Suite" /tr "\"C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\tools\zara_auto_suite.bat\"" /sc HOURLY /mo 6 /f
+
+   (Se o schtasks reclamar das aspas, ajuste-as; o caminho precisa ficar entre aspas por causa dos espacos.)
+
+2. Validação (UMA vez, manual): duplo-clique em tools\zara_auto_suite.bat
+   Esperado:
+   - .zara-tests\auto_suite_baseline.json criado
+   - .zara-tests\auto_suite.log com "baseline inicial criado"
+   Se o Python do projeto (.venv) estiver em outro caminho, ajuste a linha do .bat.
+
+3. Pronto. A tarefa roda sozinha a cada 6h. Ninguém olha o resultado;
+   só aparece algo na ZOE-INBOX (AUTO-SUITE-ALERTA.md) se surgir falha NOVA.
+   Falha antiga conhecida não grita. Correção acontece em paralelo, sem parar a obra.

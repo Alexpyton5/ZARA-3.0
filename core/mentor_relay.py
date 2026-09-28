@@ -130,15 +130,26 @@ class MentorRelay:
                     or not content
                 ):
                     raise ValueError("invalid relay reply")
+                archive_path = self.archive / f"{relay_id}.reply.json"
+                if archive_path.exists():
+                    # A relay may redeliver after losing its acknowledgement.
+                    # Preserve both copies while making delivery exactly-once.
+                    duplicate_path = self.archive / (
+                        f"{relay_id}.reply.duplicate-{time.time_ns()}.json"
+                    )
+                    os.replace(path, duplicate_path)
+                    continue
+                agent = str(data.get("agent") or "mentor").strip().lower()[:32]
+                if not agent or any(not (char.isalnum() or char in "_-") for char in agent):
+                    agent = "mentor"
                 replies.append({
                     "relay_id": relay_id,
                     "content": content,
                     "created_at": float(data.get("created_at") or time.time()),
                     "source": str(data.get("source") or "mentor_external"),
+                    "agent": agent,
+                    "task_id": str(data.get("task_id") or ""),
                 })
-                archive_path = self.archive / f"{relay_id}.reply.json"
-                if archive_path.exists():
-                    archive_path.unlink()
                 os.replace(path, archive_path)
             except Exception:
                 bad = self.archive / f"{path.stem}.invalid-{int(time.time())}.json"
@@ -154,8 +165,41 @@ class MentorRelay:
             return
         dest = self.archive / f"{relay_id}.request.json"
         if dest.exists():
-            dest.unlink()
+            dest = self.archive / f"{relay_id}.request.duplicate-{time.time_ns()}.json"
         os.replace(src, dest)
+
+    def mark_outbound_delivered(self, relay_id: str, detail: str = "") -> bool:
+        """Archive an outbound request only after the relay confirms delivery."""
+        src = self.outbox / f"{relay_id}.json"
+        if not src.is_file():
+            return False
+        try:
+            payload = json.loads(src.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        payload["status"] = "DELIVERED"
+        payload["delivered_at"] = time.time()
+        if detail:
+            payload["delivery_detail"] = str(detail)[:500]
+        self._atomic_json(src, payload)
+        self.mark_outbound_processed(relay_id)
+        return True
+
+    def mark_outbound_failed(self, relay_id: str, reason: str) -> bool:
+        """Keep failed requests queued and truthfully record each failed attempt."""
+        src = self.outbox / f"{relay_id}.json"
+        if not src.is_file():
+            return False
+        try:
+            payload = json.loads(src.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        payload["status"] = "FAILED"
+        payload["attempts"] = int(payload.get("attempts") or 0) + 1
+        payload["last_error"] = str(reason)[:500]
+        payload["last_attempt_at"] = time.time()
+        self._atomic_json(src, payload)
+        return True
 
     def snapshot(self) -> dict[str, Any]:
         s = self.status()

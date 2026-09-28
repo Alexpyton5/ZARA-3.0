@@ -23,19 +23,24 @@ def test_wake_word_local_enabled_via_api_keys(tmp_path, monkeypatch):
     assert cfg.wake_word_enabled is True
 
 
-def test_wake_word_local_detection_via_mock_vosk(tmp_path, monkeypatch, modelos_de_voz_reais):
+def test_wake_word_local_detection_via_mock_vosk(tmp_path, monkeypatch):
     """
     Simulate audio with the word \"zara\" and verify detection by the mocked Vosk gate.
     We mock vosk.Model and vosk.KaldiRecognizer to avoid needing the actual model files.
 
-    The recognizer is mocked, but the gate still refuses to arm when the model
-    directory does not exist — `modelos_de_voz_reais` lends the real read-only
-    model tree into the isolated ZARA3_HOME just for that existence check.
+    The recognizer is mocked, and an isolated placeholder model directory
+    satisfies the gate's path-existence check without requiring owner assets.
     """
     # Arrange: enable local wake word mode
     api_keys_file = tmp_path / "api_keys.json"
     api_keys_file.write_text(json.dumps({"wake_word_mode": "local"}), encoding="utf-8")
     monkeypatch.setattr("core.paths.config_dir", lambda: tmp_path)
+
+    # `_ensure_wake_detector` checks the model path before constructing the
+    # mocked Vosk model. Keep this unit test independent of local model assets.
+    isolated_home = tmp_path / "zara-home"
+    (isolated_home / "models" / "vosk" / "vosk-model-small-pt-0.3").mkdir(parents=True)
+    monkeypatch.setattr("core.paths.user_data_dir", lambda: isolated_home)
 
     # Mock Vosk imports and classes
     mock_vosk = MagicMock()

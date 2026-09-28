@@ -17,6 +17,7 @@ class FakeHermes:
         self.enabled = False
         self.is_connected = False
         self.enable_calls = 0
+        self.disable_calls = 0
 
     async def enable_supercerebro(self) -> bool:
         self.enable_calls += 1
@@ -25,10 +26,27 @@ class FakeHermes:
         return self.connects
 
     async def disable_supercerebro(self) -> None:
+        self.disable_calls += 1
         if self.disable_raises:
             raise RuntimeError("fake disconnect failure")
         self.enabled = False
         self.is_connected = False
+
+
+class FakeAutoOff:
+    def __init__(self, callback=None):
+        self.callback = callback
+        self.started = 0
+        self.stopped = 0
+
+    def start(self):
+        self.started += 1
+
+    def stop(self):
+        self.stopped += 1
+
+    async def trigger(self, reason):
+        await self.callback(reason)
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +67,9 @@ def _handler():
     async def send(message: IPCMessage) -> None:
         sent.append(message)
 
-    return IPCHandler(send), sent
+    handler = IPCHandler(send)
+    handler._supercerebro_auto_off = FakeAutoOff(handler._auto_disable_supercerebro)
+    return handler, sent
 
 
 def test_toggle_rejects_truthy_non_boolean_input():
@@ -85,7 +105,7 @@ def test_toggle_controls_capability_but_does_not_remove_risk_gate():
     assert sent[-1].response["active"] is True
 
 
-def test_failed_enable_is_fail_closed():
+def test_manual_key_enables_locally_without_hermes():
     handler, sent = _handler()
     handler.hermes = FakeHermes(connects=False)
 
@@ -95,12 +115,16 @@ def test_failed_enable_is_fail_closed():
         )
     )
 
-    assert not handler.supercerebro_active
-    assert not get_registry().pc_control_allowed
-    assert sent[-1].error == "Hermes Gateway is offline"
+    assert handler.supercerebro_active
+    assert get_registry().pc_control_allowed
+    assert handler.hermes.enable_calls == 0
+    assert handler._supercerebro_auto_off.started == 1
+    assert sent[-2].type == "supercerebro-change"
+    assert sent[-2].active is True
+    assert sent[-1].response["active"] is True
 
 
-def test_disable_revokes_permission_even_if_remote_disable_fails():
+def test_disable_revokes_permission_and_stops_auto_off_monitor():
     handler, sent = _handler()
     handler.hermes = FakeHermes(disable_raises=True)
     asyncio.run(
@@ -117,7 +141,36 @@ def test_disable_revokes_permission_even_if_remote_disable_fails():
 
     assert not handler.supercerebro_active
     assert not get_registry().pc_control_allowed
+    assert handler.hermes.disable_calls == 0
+    assert handler._supercerebro_auto_off.stopped == 1
+    assert sent[-2].active is False
     assert sent[-1].response["active"] is False
+
+
+def test_status_reports_the_current_local_key_state():
+    handler, sent = _handler()
+    handler._set_supercerebro_state(True)
+
+    asyncio.run(
+        handler.handle_supercerebro_status(
+            IPCMessage(type="supercerebro-status", request_id="status")
+        )
+    )
+
+    assert sent[-1].response["active"] is True
+    assert sent[-1].response["enabled"] is True
+
+
+def test_auto_off_updates_capability_gate_and_renderer_event():
+    handler, sent = _handler()
+    handler._set_supercerebro_state(True)
+
+    asyncio.run(handler._supercerebro_auto_off.trigger("idle-timeout"))
+
+    assert not handler.supercerebro_active
+    assert not get_registry().pc_control_allowed
+    assert sent[-1].type == "supercerebro-change"
+    assert sent[-1].active is False
 
 
 def test_ipc_cannot_bypass_supercerebro_off_with_confirm_true(capsys):

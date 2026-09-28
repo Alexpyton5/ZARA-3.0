@@ -2,8 +2,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from core.lab_v1.domain import (AgentProfile, Availability, ProviderInfo, ProviderResult, RoleName,
-                                Team, TeamMembership)
+from core.lab_v1.domain import (AgentProfile, Availability, ProviderInfo, ProviderResult, RoleBinding,
+                                RoleName, Team, TeamMembership)
 from core.lab_v1.providers.base import ProviderAdapter
 from core.lab_v1.feedback_inbox import FeedbackInbox, looks_like_product_criticism
 from core.lab_v1.providers.registry import ProviderRegistry
@@ -60,6 +60,7 @@ def test_sol_is_provisioned_as_architect_and_owns_planning(tmp_path):
     sol = AgentProfile('sol', 'Sol', 'codex_cli', 'gpt-5.6-sol',
                        role=RoleName.CEO, capabilities=['model.text'])
     store.save_agent(sol); store.save_membership(TeamMembership('member:sol', 'team', 'sol'))
+    store.save_role_binding(RoleBinding('binding:sol:ceo', 'team', RoleName.CEO, 'sol'))
     policy = WorkforcePolicy({'authorized_providers': ['codex_cli'],
         'authorized_models': ['codex_cli/gpt-5.6-sol'],
         'resource_classes': {'codex_cli/gpt-5.6-sol': 'PLAN_INCLUDED'}})

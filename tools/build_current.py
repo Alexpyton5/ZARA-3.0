@@ -272,6 +272,19 @@ def git_value(command: list[str], override: str) -> str:
     return value.strip() if value and value.strip() else run(["git", *command])
 
 
+def git_is_dirty() -> bool:
+    """Report tracked and untracked source changes, honoring explicit build metadata."""
+    override = os.environ.get("ZARA_BUILD_GIT_DIRTY")
+    if override is not None and override.strip():
+        value = override.strip().lower()
+        if value in {"1", "true", "yes", "on"}:
+            return True
+        if value in {"0", "false", "no", "off"}:
+            return False
+        raise ValueError("ZARA_BUILD_GIT_DIRTY must be an explicit boolean")
+    return bool(run(["git", "status", "--porcelain"]).strip())
+
+
 def toolchain() -> dict:
     emit_stage("toolchain")
     node = shutil.which("node.exe") or shutil.which("node")
@@ -391,7 +404,7 @@ def build_package(delta: str, reuse_sidecar: bool = False, clean_incomplete: boo
             "BUILD_LABEL": "ZARA CURRENT BUILD", "BUILD_METHOD": "PyInstaller + TypeScript + Vite + electron-builder NSIS",
             "GIT_BRANCH": git_value(["branch", "--show-current"], "ZARA_BUILD_GIT_BRANCH"),
             "GIT_COMMIT": git_value(["rev-parse", "HEAD"], "ZARA_BUILD_GIT_COMMIT"),
-            "GIT_DIRTY": git_value(["status", "--porcelain"], "ZARA_BUILD_GIT_DIRTY") in {"1", "true", "TRUE"},
+            "GIT_DIRTY": git_is_dirty(),
             "SOURCE_SHA256": before["sha256"],
             "EXE_PATH": str(packaged_paths(package)["EXE_SHA256"]), **hashes, "TOOLCHAIN": chain,
             "INSTALLER_NAME": installers[0].name, "INSTALLER_SHA256": digest(installers[0]), "DELTA": delta,

@@ -8,7 +8,6 @@ timeouts. No real Ollama install is needed.
 from __future__ import annotations
 
 import json
-import socket
 import threading
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -69,15 +68,12 @@ class _RateLimitedHandler(_FakeOllamaHandler):
         super().do_POST()
 
 
-def _free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
 @pytest.fixture()
 def server_base_url():
-    server = ThreadingHTTPServer(("127.0.0.1", _free_port()), _FakeOllamaHandler)
+    # Let the HTTP server bind port 0 directly. Probing a free port with a
+    # temporary socket and binding it afterward leaves a race with other
+    # processes during the full suite.
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeOllamaHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -89,7 +85,7 @@ def server_base_url():
 
 @pytest.fixture()
 def rate_limited_base_url():
-    server = ThreadingHTTPServer(("127.0.0.1", _free_port()), _RateLimitedHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _RateLimitedHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

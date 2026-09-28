@@ -519,6 +519,12 @@ class PcVoiceIntentDetector:
              self._window_project, "window_maximize", "project"),
             (r'^(?:zara[,\s]+)?(?:restaur[ae]|restaurar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?projeto\s*[.!?]*$',
              self._window_project, "window_restore", "project"),
+            (r'^(?:zara[,\s]+)?(?:minimiz[ae]|minimizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?(?:bloco\s+de\s+notas|notepad)\s*[.!?]*$',
+             self._window_notepad, "window_minimize", "notepad"),
+            (r'^(?:zara[,\s]+)?(?:maximiz[ae]|maximizar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?(?:bloco\s+de\s+notas|notepad)\s*[.!?]*$',
+             self._window_notepad, "window_maximize", "notepad"),
+            (r'^(?:zara[,\s]+)?(?:restaur[ae]|restaurar)\s+(?:a\s+janela\s+d[oe]\s+|o\s+|a\s+)?(?:bloco\s+de\s+notas|notepad)\s*[.!?]*$',
+             self._window_notepad, "window_restore", "notepad"),
             (r'\b(?:troc[ae]r?\s+de\s+janela|v[áa]\s+(?:pra|para)\s+a\s+pr[óo]xima\s+janela|pr[óo]xima\s+janela)\b',
              self._window_switch, "window_switch_next", "next"),
             (r'\b(?:traz|traga|coloc[ae]r?|foc[ae]r?|v[áa]\s+(?:pro|para\s+o))\s+(?:n[oa]\s+)?(?:o\s+)?chrome(?:\s+(?:pra|para)\s+frente)?\b',
@@ -1225,6 +1231,9 @@ Respond ONLY with valid JSON, no extra text."""
 
     def _window_project(self, m):
         return "project"
+
+    def _window_notepad(self, m):
+        return "notepad"
 
     def _scroll_down(self, m):
         return "down"

@@ -44,14 +44,19 @@ def test_replies_are_drained_in_arrival_order(relay):
 
 
 def test_duplicate_relay_id_is_delivered_once(relay):
-    _write_reply(relay, "MR-DUP-1", "primeira")
+    first_path = _write_reply(relay, "MR-DUP-1", "primeira")
     first = relay.drain_replies()
     assert [r["content"] for r in first] == ["primeira"]
+    archived = relay.archive / "MR-DUP-1.reply.json"
+    first_payload = json.loads(archived.read_text(encoding="utf-8"))
 
     # A duplicata chega depois com o MESMO id: nao pode reentregar.
     _write_reply(relay, "MR-DUP-1", "primeira")
     second = relay.drain_replies()
     assert second == []
+    assert json.loads(archived.read_text(encoding="utf-8")) == first_payload
+    assert list(relay.archive.glob("MR-DUP-1.reply.duplicate-*.json"))
+    assert not first_path.exists()
 
 
 def test_out_of_order_ids_do_not_break_delivery(relay):

@@ -210,10 +210,12 @@ class LabAutonomy:
             for name in files:
                 if scanned >= 3000:
                     break
-                rel = str(Path(base, name).relative_to(root))
-                if name.endswith(".py") and "/core/" in f"/{rel}":
+                relative_path = Path(base, name).relative_to(root)
+                rel = relative_path.as_posix()
+                parts = relative_path.parts
+                if name.endswith(".py") and parts[0:1] == ("core",):
                     py_files.append(rel)
-                elif name.endswith((".ts", ".tsx")) and "/frontend/src/" in f"/{rel}":
+                elif name.endswith((".ts", ".tsx")) and parts[0:2] == ("frontend", "src"):
                     ts_files.append(rel)
                 else:
                     continue

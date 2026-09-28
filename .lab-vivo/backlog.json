@@ -1,0 +1,189 @@
+{
+ "itens": [
+  {
+   "seq": 1,
+   "item_id": "BLG-0001",
+   "title": "Zerar as 41 falhas persistentes da suíte Python",
+   "description": "Motivo: o portão final da MISSÃO GIGANTE exige suíte verde de verdade antes de qualquer push; enquanto 41 testes falharem, nada publica. Origem: TRIAGEM-42 (grupos: build/home 5, lab 11, mídia 6, memória 2, relay 9, canal 3, janelas 5) — 41/42 já falhavam no baseline, não são regressão. Risco: mexer em teste pra fingir verde é PROIBIDO (gate permanente); corrigir por causa raiz, um grupo por vez. [seed:suite-42-falhas]",
+   "proposed_by": "CEO",
+   "impact": 5,
+   "urgency": 4,
+   "cost": 4,
+   "state": "PROPOSED",
+   "score": 15,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 2,
+   "item_id": "BLG-0002",
+   "title": "Garantir o modelo Vosk PT offline (voz que não abandona)",
+   "description": "Motivo: a voz PT-BR local (Vosk) é a rede de segurança da cascata Kore→OmniVoice→edge→kokoro quando a internet cai; se o modelo não estiver no pacote, a reserva falha justo na hora que mais importa (critério nº 1 do Alex: não deixar na mão). Origem: RECON voz (gemini_live_voice.py:365 lê %LOCALAPPDATA%\\ZARA3\\models\\vosk). Risco: o modelo pesa ~50MB; baixar em runtime sem avisar pode surpreender — avisar no pré-voo antes. [seed:vosk-modelo-offline]",
+   "proposed_by": "CEO",
+   "impact": 4,
+   "urgency": 3,
+   "cost": 2,
+   "state": "PROPOSED",
+   "score": 14,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 9,
+   "item_id": "BLG-0009",
+   "title": "Melhoria 1: dar ao TESTER o verbo RODAR-TESTES",
+   "description": "MOTIVO: hoje o bot TESTER só CHECA arquivos no disco; ele não consegue rodar a suíte de verdade, então a 'prova real' de uma entrega depende de alguém de fora. Com um verbo que roda pytest num alvo, o próprio Lab fecha o ciclo: codou -> testou -> publicou.\nRISCO: baixo. O verbo roda só dentro do sandbox do Lab, com timeout, sem rede e sem tocar no app de verdade. Se o teste travar, o worker responde ERRO e a mãe reatribui — nada publica sem gate verde.",
+   "proposed_by": "RESEARCHER",
+   "impact": 4,
+   "urgency": 3,
+   "cost": 2,
+   "state": "APPROVED",
+   "score": 14,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "RESEARCHER"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 3,
+   "item_id": "BLG-0003",
+   "title": "Ligar a flag ZARA_SMART_ROUTER (roteador já plugado)",
+   "description": "Motivo: o roteador inteligente está plugado no app (smart_router.py + smart_router_plug.py, 25 testes verdes) mas a flag vem desligada por segurança; ligar faz o hint CHAT/LEVE/PESADO guiar o model_router sem mudar nada quando off. Origem: TURNO 22:41 (plug verificado 12/12 contra o model_router real). Risco: ligar cedo demais muda o roteamento de produção; ligar com o Lab observando e rollback pronto. [seed:flag-smart-router]",
+   "proposed_by": "CEO",
+   "impact": 3,
+   "urgency": 3,
+   "cost": 1,
+   "state": "PROPOSED",
+   "score": 13,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 4,
+   "item_id": "BLG-0004",
+   "title": "Fatiar core/ipc_handlers.py (6.716 linhas)",
+   "description": "Motivo: o 'telefonista' virou uma cidade — ninguém conhece tudo; cada mudança ali é cirurgia às cegas e o risco de quebrar outra coisa cresce a cada linha. Origem: MAPA-VIVO (1.932 → 6.716 linhas). Risco: refatorar à toa quebra fiação viva; fatiar por domínio com a suíte como rede de segurança, um pedaço por vez. [seed:ipc-handlers-fatiar]",
+   "proposed_by": "CEO",
+   "impact": 4,
+   "urgency": 3,
+   "cost": 5,
+   "state": "PROPOSED",
+   "score": 8,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 5,
+   "item_id": "BLG-0005",
+   "title": "Ligar o scheduler ao executor (hoje agenda mas não executa)",
+   "description": "Motivo: o agendador existe mas não tem executor — lembrete agendado que nunca dispara é promessa quebrada pro Alex. Origem: MAPA-VIVO (peças de museu). Risco: executor mal feito dispara ação na hora errada; começar só com ações de leitura/notificação. [seed:scheduler-executor]",
+   "proposed_by": "CEO",
+   "impact": 3,
+   "urgency": 2,
+   "cost": 3,
+   "state": "PROPOSED",
+   "score": 7,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 6,
+   "item_id": "BLG-0006",
+   "title": "Implementar ou remover os 4 painéis não implementados do menu",
+   "description": "Motivo: botão que não faz nada é vitrine — e o Alex descarta vitrine na hora (regra permanente: nada de peça de museu). Origem: MAPA-VIVO (peças de museu). Risco: remover painel que alguém usa; checar uso real antes de cortar. [seed:paineis-menu-mortos]",
+   "proposed_by": "CEO",
+   "impact": 3,
+   "urgency": 2,
+   "cost": 3,
+   "state": "PROPOSED",
+   "score": 7,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 7,
+   "item_id": "BLG-0007",
+   "title": "Resolver o Memory Galaxy (placeholder) ou remover",
+   "description": "Motivo: placeholder no app é dívida visível; ou vira função real ligada à memória do Lab, ou sai (regra: nada de peça de museu). Origem: MAPA-VIVO (peças de museu). Risco: virar função real pode duplicar a memória operacional do Lab (lab_memory.py) — integrar, não duplicar. [seed:memory-galaxy]",
+   "proposed_by": "CEO",
+   "impact": 2,
+   "urgency": 2,
+   "cost": 2,
+   "state": "PROPOSED",
+   "score": 6,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  },
+  {
+   "seq": 8,
+   "item_id": "BLG-0008",
+   "title": "Ressuscitar ou remover Chat.tsx e ConversaInstrumento.tsx",
+   "description": "Motivo: dois componentes de chat completos (561 + 218 linhas) que nada renderiza — ou o Chat.tsx vira a base da conversa única (FASE C), ou sai do repo. Origem: RECON 23:50 (mapa da conversa única). Risco: ressuscitar código morto traz dependências velhas; auditar imports antes. [seed:chat-tsx-mortos]",
+   "proposed_by": "CEO",
+   "impact": 2,
+   "urgency": 2,
+   "cost": 2,
+   "state": "PROPOSED",
+   "score": 6,
+   "claimed_by": null,
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    }
+   ]
+  }
+ ]
+}

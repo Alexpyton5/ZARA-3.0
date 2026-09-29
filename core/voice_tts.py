@@ -69,6 +69,7 @@ from core.paths import user_data_dir
 from core.voice_stt import VoiceNotConfiguredError
 from core.omnivoice_runtime import OmniVoiceWorkerTTS
 from core.voice_engine_policy import voice_output_order
+from core.voice_text_norm import normalize_for_tts
 
 
 @dataclass
@@ -406,6 +407,19 @@ class EdgeTTS:
     def _can_stream(self) -> bool:
         return MINIAUDIO_AVAILABLE and SOUNDDEVICE_AVAILABLE and NUMPY_AVAILABLE
 
+    def _producer_timeout(self, text: str) -> float:
+        """Teto da síntese em streaming sem cortar frase longa.
+
+        `edge_timeout` continua sendo o piso (rede morta falha rápido);
+        textos longos ganham folga proporcional ao tamanho, porque a
+        síntese acompanha a fala (~24 caracteres/s) e o teto fixo cortava
+        a frase no meio — erro engolido em silêncio quando o áudio já
+        tinha começado a tocar.
+        """
+        floor = max(1.0, float(self._config.edge_timeout))
+        allowance = max(0, len(text or "")) / 24.0
+        return min(600.0, floor + allowance)
+
     def _play_streaming(self, text: str, voice: str = None, speed: float = 1.0):
         """Toca o primeiro pedaco de audio assim que ele chega da Microsoft.
 
@@ -428,7 +442,7 @@ class EdgeTTS:
                         source.feed(chunk["data"])
 
             try:
-                asyncio.run(asyncio.wait_for(_run(), timeout=self._config.edge_timeout))
+                asyncio.run(asyncio.wait_for(_run(), timeout=self._producer_timeout(text)))
             except BaseException as exc:  # noqa: BLE001 - repassado ao chamador
                 failure.append(exc)
             finally:
@@ -654,6 +668,9 @@ class TTSManager:
 
     def speak(self, text: str, voice: str = None, speed: float = 1.0, blocking: bool = True):
         """Speak text using best available engine."""
+        # Símbolos (R$, %, hora, siglas) viram forma falável antes da
+        # síntese; frase normal volta idêntica, sem mudança de comportamento.
+        text = normalize_for_tts(text)
         self._interrupt_event.clear()
         motores = {"omnivoice": (self.omnivoice, "OmniVoice"),
                    "edge": (self.edge, "Edge"), "kokoro": (self.kokoro, "Kokoro")}

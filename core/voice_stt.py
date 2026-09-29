@@ -528,6 +528,11 @@ class VoicePipeline:
         # Combine all chunks
         audio_data = b"".join(self._speech_buffer)
         self._speech_buffer = []
+        # Zera o contador de silêncio junto com o buffer: sem isto, no modo
+        # push-to-talk (sem Porcupine) cada chunk silencioso seguinte
+        # re-disparava _process_utterance — ~4 chamadas ao Vosk por segundo
+        # de silêncio puro, para sempre.
+        self._silence_chunks = 0
 
         # Final recognition
         text = self.vosk.recognize(audio_data)

@@ -404,14 +404,59 @@ class TestIntegration:
             assert result.verification is not None
 
 
-@pytest.mark.skip(reason="Requires full ActionRegistry setup")
 class TestActionRegistryAdaptor:
     """Tests for ActionRegistry adaptor."""
 
     def test_adapt_from_action_registry(self):
-        """Adapt actions from ActionRegistry to ToolRegistry."""
-        # This test would require full ActionRegistry initialization
-        pass
+        """Adapt actions from ActionRegistry to ToolRegistry.
+
+        Usa um stub de ActionRegistry (get_all_specs + execute) — nao precisa
+        do setup completo do registry real.
+        """
+        from types import SimpleNamespace
+
+        from core.tool_registry import get_tool_registry
+
+        class StubActionRegistry:
+            def __init__(self):
+                self._specs = {
+                    "stub_read": SimpleNamespace(
+                        name="stub_read",
+                        description="stub read-only action",
+                        parameters={"type": "object", "properties": {}},
+                        category="test",
+                        requires_confirmation=False,
+                        async_execution=False,
+                        tags=["test"],
+                        risk="LOW",
+                        capability="READ_ONLY",
+                    ),
+                }
+                self.executed = []
+
+            def get_all_specs(self):
+                return dict(self._specs)
+
+            def execute(self, action_name, **kwargs):
+                self.executed.append((action_name, kwargs))
+                return {"ok": True}
+
+        stub = StubActionRegistry()
+        registry = get_tool_registry()
+        try:
+            count = registry.adapt_from_action_registry(stub)
+
+            assert count == 1
+            tool = registry.get("stub_read")
+            assert tool is not None
+            assert tool.description == "stub read-only action"
+            assert tool.category == "test"
+            # o executor adaptado delega para ActionRegistry.execute
+            assert tool.executor is not None
+            tool.executor(x=1)
+            assert stub.executed == [("stub_read", {"x": 1})]
+        finally:
+            registry.unregister("stub_read")
 
 
 if __name__ == "__main__":

@@ -128,7 +128,7 @@ def vision_find_text_action(text: str, lang: str = "por+eng", region: dict[str, 
 
 @action(name="vision_click_text", category="vision", risk="MEDIUM", capability="PC_CONTROL", description="Clica no centro de um texto encontrado por OCR")
 def vision_click_text_action(text: str, occurrence: int = 0, lang: str = "por+eng") -> ActionResult:
-    found = vision_find_text_action.__wrapped__(text=text, lang=lang)  # avoid a second registry gate
+    found = getattr(vision_find_text_action, "__wrapped__", vision_find_text_action)(text=text, lang=lang)  # avoid a second registry gate
     if not found.success:
         return found
     matches = found.data["matches"]
@@ -153,7 +153,7 @@ def vision_wait_for_text_action(text: str, timeout_seconds: float = 10.0, interv
     deadline = time.monotonic() + timeout_seconds
     last_error = ""
     while time.monotonic() < deadline:
-        found = vision_find_text_action.__wrapped__(text=text, lang=lang)
+        found = getattr(vision_find_text_action, "__wrapped__", vision_find_text_action)(text=text, lang=lang)
         if found.success:
             return found
         last_error = found.error

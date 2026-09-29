@@ -15,6 +15,8 @@ from core.actions import (  # noqa: F401
     aprendizado_acoes,
     browser,
     code,
+    computer_command,
+    computer_use,
     files,
     media_apps,
     os_ops,

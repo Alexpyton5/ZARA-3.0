@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, RefreshCw } from 'lucide-react';
+import "../../styles/zh-drawer-motion.css";
 import { ToolsCard } from './ToolsCard';
 import { TextCommandInput } from './TextCommandInput';
 import { normalizeHistoryResponse, type ChatMessage } from '../../lib/chatHistory';

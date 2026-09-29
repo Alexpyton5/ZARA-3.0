@@ -1,0 +1,31 @@
+/* zh-drawer-motion.css — EQUIPE 5 (vigia-visual, 2026-09-29).
+   Motion de entrada do drawer funcional da Home: o painel sempre abria
+   "seco" (aparecia de uma vez). Agora o backdrop desvanece e o painel
+   desliza da direita com curva de saída exponencial — sofisticado,
+   rápido (abaixo de 400ms) e respeitando prefers-reduced-motion.
+   Carregado via import em HomeDrawer.tsx (após zara-home.css, vence o cascade). */
+
+.zh-drawer-backdrop {
+  animation: zh-backdrop-in 0.28s ease-out both;
+}
+
+.zh-drawer {
+  animation: zh-drawer-in 0.38s cubic-bezier(0.22, 0.9, 0.26, 1) both;
+}
+
+@keyframes zh-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes zh-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zh-drawer-backdrop,
+  .zh-drawer {
+    animation: none;
+  }
+}

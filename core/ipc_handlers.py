@@ -35,6 +35,7 @@ IPC_EVENT_TYPES = frozenset({
     "reminder-created", "reminder-fired", "routing-telemetry",
     "lab-v1-operation-result", "lab-release-ready", "backend-ready",
     "supercerebro-change",
+    "computer-agent-started", "computer-agent-stopped",
 })
 
 
@@ -2406,6 +2407,13 @@ class IPCHandler:
         try:
             if not (text or "").strip():
                 return None
+            # FRENTE A - agente de use-computer: "use o computador para ..." /
+            # "usa o computador para ..." / "no computador, ..." vira objetivo
+            # do agente (observe -> age -> verifica). Mesmo caminho para texto,
+            # voz e celular, como os outros intents de PC.
+            agent_reply = await self._try_computer_agent_intent(text)
+            if agent_reply is not None:
+                return agent_reply
             pending_reply = await self._try_pending_clipboard_confirmation(text)
             if pending_reply is not None:
                 return pending_reply
@@ -4008,6 +4016,7 @@ class IPCHandler:
             'conversation-history-clear': self.handle_conversation_history_clear,
             'supercerebro-toggle': self.handle_supercerebro_toggle,
             'supercerebro-status': self.handle_supercerebro_status,
+            'computer-agent-run': self.handle_computer_agent_run,
         }
 
         # ZOE-PECA4-LAB-BOT-IPC: fia as rotas 'lab-bot-*' no mapa local (modulo proprio)
@@ -6730,6 +6739,71 @@ class IPCHandler:
             'enabled': self.supercerebro_active,
         }
         await self.send_response(msg.request_id, status)
+
+    # FRENTE A - agente de use-computer (observe -> age -> verifica) ---------
+    async def handle_computer_agent_run(self, msg: IPCMessage):
+        """Rota IPC 'computer-agent-run': roda o agente e devolve o relatorio.
+
+        O loop roda em thread (asyncio.to_thread) para nao travar o event loop
+        do backend; inicio/fim vao para o canal de eventos (borda colorida):
+        tipos 'computer_agent_started' / 'computer_agent_stopped'.
+        """
+        from core import computer_agent as _ca
+        payload = msg.payload or {}
+        goal = str(payload.get("goal", "") or "").strip()
+        if not goal:
+            await self.send_error(msg, "Objetivo vazio.")
+            return
+        loop = self._event_loop or asyncio.get_running_loop()
+
+        def _forward(event, data):
+            try:
+                asyncio.run_coroutine_threadsafe(self.send_event(event, data), loop)
+            except Exception:
+                pass
+
+        _ca.add_event_listener(_forward)
+        try:
+            result = await asyncio.to_thread(_ca.run_goal, goal)
+        finally:
+            _ca.remove_event_listener(_forward)
+        await self.send_response(msg.request_id, result)
+
+    async def _try_computer_agent_intent(self, text: str) -> str | None:
+        """Chat/voz/celular -> agente: 'use o computador para X'.
+
+        Devolve None quando nao e um pedido para o agente (o chat segue o
+        fluxo normal). Nunca decide por LLM: so o prefixo do gatilho.
+        """
+        from core import computer_agent as _ca
+        goal = _ca.extract_goal(text)
+        if goal is None:
+            return None
+        loop = self._event_loop or asyncio.get_running_loop()
+
+        def _forward(event, data):
+            try:
+                asyncio.run_coroutine_threadsafe(self.send_event(event, data), loop)
+            except Exception:
+                pass
+
+        _ca.add_event_listener(_forward)
+        try:
+            result = await asyncio.to_thread(_ca.run_goal, goal)
+        finally:
+            _ca.remove_event_listener(_forward)
+        # Selo de verificacao (mesma cadeia do pc_control): a tela mostra se
+        # a ZARA provou o efeito na tela ou nao.
+        try:
+            from types import SimpleNamespace
+            self._ultimo_resultado_de_acao = SimpleNamespace(
+                success=bool(result.get("success")),
+                verificado=bool(result.get("verified")),
+                incerto=bool(result.get("success")) and not bool(result.get("verified")),
+            )
+        except Exception:
+            pass
+        return _ca.reply_for_result(result)
 
 
 

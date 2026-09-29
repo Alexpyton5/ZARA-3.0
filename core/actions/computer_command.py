@@ -69,8 +69,9 @@ _KEY_PT = {
 }
 
 _EXEMPLOS = (
-    "abra o bloco de notas | clique em 500 300 | digite 'texto' | "
-    "pressione enter | role para baixo 2 | traga o chrome para frente"
+    "abra o bloco de notas | clique em 500 300 | clique em 'Salvar' | "
+    "digite 'texto' | pressione enter | role para baixo 2 | "
+    "aguarde o texto 'pronto' | traga o chrome para frente"
 )
 
 # --- parser ------------------------------------------------------------------
@@ -101,7 +102,7 @@ def _split_steps(text: str) -> list[str]:
         if low.startswith(" e ") and len("".join(buf).strip()) > 0:
             # " e " so separa se o que vem depois parece outro comando
             rest = text[i + 3:].strip().lower()
-            if re.match(r"(abra|abrir|clique|click|digite|digita|escreva|pressione|aperte|role|rola|traga|foco)", rest):
+            if re.match(r"(abra|abrir|clique|click|digite|digita|escreva|pressione|aperte|role|rola|traga|foco|aguarde|espere|espera)", rest):
                 parts.append("".join(buf).strip())
                 buf = []
                 i += 3
@@ -129,6 +130,20 @@ def _parse_one(step: str) -> dict | None:
     if m:
         return {"action": "computer_click",
                 "params": {"x": int(m.group(1)), "y": int(m.group(2)), "expected_hwnd": _HWND}}
+
+    # FRENTE A (agente): "clique em '<texto>'" -> grounding por visao (OCR).
+    m = re.fullmatch(r"(?:clique|click)(?:\s+em|\s+no|\s+na)?\s+(.+?)\s*[.!?]*", low)
+    if m:
+        alvo = m.group(1).strip().strip("'\"“”")
+        if alvo:
+            return {"action": "vision_click_text", "params": {"text": alvo}}
+
+    # FRENTE A (agente): "aguarde o texto '<texto>'" -> espera aparecer na tela.
+    m = re.fullmatch(r"(?:aguarde|espere|espera)(?:\s+o\s+texto)?\s+['\"“”]?(.+?)['\"“”]?\s*[.!?]*", s, flags=re.IGNORECASE)
+    if m:
+        alvo = m.group(1).strip()
+        if alvo:
+            return {"action": "vision_wait_for_text", "params": {"text": alvo}}
 
     m = re.fullmatch(r"(?:digite|digita|escreva|escreve)\s+['\"“”](.+?)['\"””]\s*[.!?]*", s, flags=re.IGNORECASE | re.DOTALL)
     if m:

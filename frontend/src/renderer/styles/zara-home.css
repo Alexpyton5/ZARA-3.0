@@ -85,7 +85,7 @@
 .zh-main > .zh-section:first-child { height:calc(308 * var(--u));flex:none; }
 .zh-main > .zh-section:nth-child(2) { height:calc(138 * var(--u));flex:none; }
 .zh-foryou-list { display:flex;flex-direction:column; }
-.zh-foryou-item { width:100%;min-width:0;display:flex;align-items:center;gap:calc(12 * var(--u));height:calc(61 * var(--u));border:0;border-bottom:calc(1 * var(--u)) solid #b1d8c518;background:transparent;text-align:left;padding:0; }
+.zh-foryou-item { width:100%;min-width:0;display:flex;align-items:center;gap:calc(12 * var(--u));height:calc(61 * var(--u));border:0;border-bottom:calc(1 * var(--u)) solid #b1d8c518;background:transparent;text-align:left;padding:0;border-radius:calc(10 * var(--u));transition:background .18s; }
 .zh-foryou-item:last-child { border-bottom:0; }
 .zh-foryou-icon { display:grid;place-items:center;flex:none;width:calc(47 * var(--u));height:calc(49 * var(--u));border-radius:calc(12 * var(--u));background:linear-gradient(145deg,#258e716e,#021b13 75%);box-shadow:inset 0 calc(1 * var(--u)) calc(2 * var(--u)) #a6ffe451,inset 0 0 calc(10 * var(--u)) #00af782d;border:calc(1 * var(--u)) solid #19e8a823;color:#12d998; }
 .zh-foryou-icon img,.zh-foryou-icon svg { width:calc(31 * var(--u));height:calc(31 * var(--u));object-fit:contain; }
@@ -95,7 +95,7 @@
 .zh-foryou-text > span { font-size:calc(15 * var(--u));color:#bfc8c1; }
 .zh-comm-row { display:flex;align-items:flex-start;justify-content:space-between;gap:calc(14 * var(--u)); }
 .zh-comm-item { border:0;padding:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:calc(5 * var(--u)); }
-.zh-comm-badge { display:grid;place-items:center;width:calc(53 * var(--u));height:calc(54 * var(--u));border-radius:calc(13 * var(--u));border:calc(1 * var(--u)) solid #a2d8c620;border-top-color:#ceffeb55;background:linear-gradient(140deg,#52766a55,#00120ecc 78%);box-shadow:inset 0 calc(1 * var(--u)) calc(7 * var(--u)) #c2ffed1e; }
+.zh-comm-badge { display:grid;place-items:center;width:calc(53 * var(--u));height:calc(54 * var(--u));border-radius:calc(13 * var(--u));border:calc(1 * var(--u)) solid #a2d8c620;border-top-color:#ceffeb55;background:linear-gradient(140deg,#52766a55,#00120ecc 78%);box-shadow:inset 0 calc(1 * var(--u)) calc(7 * var(--u)) #c2ffed1e;transition:border-color .2s,box-shadow .2s; }
 .zh-comm-badge img,.zh-comm-badge svg { width:calc(35 * var(--u));height:calc(35 * var(--u));object-fit:contain; }
 .zh-comm-badge--wa img { filter:drop-shadow(0 0 calc(5 * var(--u)) #00c76e66); }
 .zh-comm-value { font-size:calc(16 * var(--u)); }
@@ -113,7 +113,7 @@
 .zh-project-meta > span { font-size:calc(17 * var(--u));color:#c1c8c4; }
 .zh-project-meta .zh-project-percent { color:#09e9a2;font-size:calc(18 * var(--u)); }
 .zh-progress-track { position:absolute;left:calc(133 * var(--u));right:calc(21 * var(--u));top:calc(142 * var(--u));height:calc(5 * var(--u));border-radius:calc(5 * var(--u));background:#7194863b;overflow:hidden; }
-.zh-progress-fill { height:100%;background:linear-gradient(90deg,#00f993,#13d5a6);box-shadow:0 0 calc(7 * var(--u)) #0eefa6; }
+.zh-progress-fill { height:100%;background:linear-gradient(90deg,#00f993,#13d5a6);box-shadow:0 0 calc(7 * var(--u)) #0eefa6;transition:width .6s cubic-bezier(.4,0,.2,1); }
 .zh-project-row { display:flex;align-items:center;justify-content:space-between;gap:calc(10 * var(--u));margin-top:calc(22 * var(--u)); }
 .zh-project-last-session { color:#bdc8c1;font-size:calc(15 * var(--u)); }
 .zh-project-continue,.zh-diagnostic-btn { display:flex;align-items:center;justify-content:space-between;gap:calc(18 * var(--u));height:calc(41 * var(--u));padding:0 calc(21 * var(--u));border:calc(1 * var(--u)) solid #b3e0cf27;border-top-color:#cfffed4d;border-radius:calc(15 * var(--u));background:linear-gradient(150deg,#4065595e,#00110dd9);box-shadow:inset 0 calc(1 * var(--u)) calc(2 * var(--u)) #dfffee12;white-space:nowrap; }
@@ -123,7 +123,7 @@
 .zh-project-dots span { width:calc(9 * var(--u));height:calc(9 * var(--u));border:calc(1 * var(--u)) solid #d2efe1aa;border-radius:50%; }
 .zh-project-dots span[data-active='true'] { background:#12e1a24d;border-color:#42d7ae; }
 .zh-tools-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:calc(25 * var(--u)); }
-.zh-tool-tile { display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:calc(4 * var(--u));border:0;background:transparent;min-width:0;min-height:calc(104 * var(--u));padding:0 calc(4 * var(--u)); }
+.zh-tool-tile { display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:calc(4 * var(--u));border:0;background:transparent;min-width:0;min-height:calc(104 * var(--u));padding:0 calc(4 * var(--u));border-radius:calc(12 * var(--u));transition:background .18s; }
 .zh-tool-tile + .zh-tool-tile { border-left:calc(1 * var(--u)) solid #9abcaf18; }
 .zh-tool-tile > img,.zh-tool-tile > svg { width:calc(38 * var(--u));height:calc(38 * var(--u));object-fit:contain;margin-bottom:calc(12 * var(--u)); }
 .zh-tool-name { font-size:calc(16 * var(--u)); }
@@ -180,8 +180,20 @@
 .zh-dock-voice[data-state='connecting'] { animation:zh-think 1.2s ease-in-out infinite alternate; }
 .zh-dock-voice[data-listening='true'] { animation:zh-lens 1.4s ease-in-out infinite alternate; }
 .zh-dock-voice[data-state='speaking'] { animation:zh-speak 1.1s ease-in-out infinite alternate;border-color:#8ff5d2; }
+/* A ZARA está processando (transcrevendo, verificando, entendendo, pensando, planejando, executando):
+   anel tracejado girando + respiração suave do brilho. Distinto de ouvir (zh-lens) e falar (zh-speak),
+   para o Alex sempre saber que a voz está trabalhando e não travada. */
+.zh-dock-voice[data-state='transcribing']::before,
+.zh-dock-voice[data-state='verifying']::before,
+.zh-dock-voice[data-state='understanding']::before,
+.zh-dock-voice[data-state='thinking']::before,
+.zh-dock-voice[data-state='planning']::before,
+.zh-dock-voice[data-state='executing']::before { content:'';position:absolute;inset:calc(-5 * var(--u));border-radius:50%;border:calc(1.5 * var(--u)) dashed #4df0bd70;pointer-events:none;animation:zh-think-ring 7s linear infinite; }
+.zh-dock-voice[data-state='transcribing'],.zh-dock-voice[data-state='verifying'],.zh-dock-voice[data-state='understanding'],.zh-dock-voice[data-state='thinking'],.zh-dock-voice[data-state='planning'],.zh-dock-voice[data-state='executing'] { animation:zh-thinking 2.6s ease-in-out infinite alternate;border-color:#8ff5d2cc; }
+@keyframes zh-think-ring { to { transform:rotate(360deg); } }
+@keyframes zh-thinking { from { box-shadow:0 0 calc(10 * var(--u)) #19c89622,inset 0 0 calc(10 * var(--u)) #1eff9b12; } to { box-shadow:0 0 calc(24 * var(--u)) #19c89655,inset 0 0 calc(16 * var(--u)) #1eff9b26; } }
 .zh-dock-voice:disabled { opacity:.45; }
-.zh-dock-feedback { position:absolute;left:50%;bottom:calc(69 * var(--u));transform:translateX(-50%);width:90%;padding:calc(8 * var(--u)) calc(12 * var(--u));border-radius:calc(9 * var(--u));background:#00170ff2;color:#edc6ba;font-size:calc(12 * var(--u));text-align:center; }
+.zh-dock-feedback { position:absolute;left:50%;bottom:calc(69 * var(--u));transform:translateX(-50%);width:90%;padding:calc(8 * var(--u)) calc(12 * var(--u));border-radius:calc(9 * var(--u));background:#00170ff2;color:#edc6ba;font-size:calc(12 * var(--u));text-align:center;animation:zh-feedback-in .3s ease both; }
 .zh-system-row { position:relative;flex:1;min-height:calc(326 * var(--u));margin-top:calc(9 * var(--u));padding:calc(13 * var(--u)) calc(18 * var(--u)) calc(19 * var(--u));border-radius:calc(18 * var(--u));box-shadow:inset 0 calc(1 * var(--u)) calc(1 * var(--u)) #d4fff033,0 0 calc(24 * var(--u)) #00d6a02a;background:linear-gradient(160deg,#07352aa3,#00160edb 42%,#06100bdd); }
 .zh-system-title { position:absolute;left:calc(18 * var(--u));top:calc(13 * var(--u));font-size:calc(20 * var(--u)); }
 .zh-system-grid { margin-top:calc(15 * var(--u));height:calc(100% - calc(15 * var(--u)));grid-template-rows:minmax(0,1fr);display:grid;grid-template-columns:228fr 368fr 224fr 215fr 248fr;gap:calc(16 * var(--u));align-items:stretch; }
@@ -207,7 +219,7 @@
 .zh-action-card-text { display:flex;flex-direction:column;gap:calc(3 * var(--u));min-width:0; }
 .zh-action-card-text strong { font-size:calc(13 * var(--u));font-weight:400;line-height:1.1; }
 .zh-action-card-text > span { font-size:calc(12 * var(--u));color:#a6b8ab;line-height:1.1; }
-.zh-action-row { display:flex;align-items:center;gap:calc(10 * var(--u));min-height:calc(46 * var(--u));width:100%;border:0;border-bottom:calc(1 * var(--u)) solid #84b2990f;padding:0;background:transparent;text-align:left; }
+.zh-action-row { display:flex;align-items:center;gap:calc(10 * var(--u));min-height:calc(46 * var(--u));width:100%;border:0;border-bottom:calc(1 * var(--u)) solid #84b2990f;padding:0;background:transparent;text-align:left;transition:background .18s; }
 .zh-action-icon { display:grid;place-items:center;flex:none;width:calc(35 * var(--u));height:calc(38 * var(--u));color:#0ae2a6;border-radius:calc(10 * var(--u));background:linear-gradient(135deg,#127e5959,#02180f); }
 .zh-action-icon svg { width:calc(24 * var(--u));height:calc(24 * var(--u));stroke-width:1.8; }
 .zh-action-row:nth-last-child(1) .zh-action-icon { color:#ff5754; }
@@ -303,3 +315,62 @@
 @media (prefers-reduced-motion:reduce) {
   .zh-root *,.zh-root *::before,.zh-root *::after { animation:none;transition:none; }
 }
+
+/* ============================================================
+   EQUIPE 5 (vigia-visual, 2026-09-29 — rodada 06:25)
+   Refinos visuais CSS-only em zara-home.css (raia exclusiva).
+   Sofisticado e contido: estados de voz mais legíveis para o Alex
+   (voz é o canal principal), entrada coreografada da Home,
+   micro-hovers nos cartões e scrollbar no tema. Nada de TSX mexido
+   aqui — só estilo; lógica e fiação intactas.
+   ============================================================ */
+
+/* --- Entrada coreografada: .zh-content remonta a cada navegação,
+   então os blocos estreiam em sequência (topo -> colunas -> sistema).
+   .zh-core-wrap e .zh-dock-wrap só desvanecem (opacity) para não
+   clobberar o translateX próprio deles no fim da animação. --- */
+.zh-content > .zh-top-bar { animation:zh-enter .55s cubic-bezier(.22,.9,.26,1) both; }
+.zh-main > .zh-section:nth-child(1) { animation:zh-enter .55s cubic-bezier(.22,.9,.26,1) .07s both; }
+.zh-main > .zh-section:nth-child(2) { animation:zh-enter .55s cubic-bezier(.22,.9,.26,1) .14s both; }
+.zh-core-wrap { animation:zh-enter-fade .6s ease .1s both; }
+.zh-dock-wrap { animation:zh-enter-fade .6s ease .18s both; }
+.zh-right > .zh-section:nth-child(1) { animation:zh-enter .55s cubic-bezier(.22,.9,.26,1) .15s both; }
+.zh-right > .zh-section:nth-child(2) { animation:zh-enter .55s cubic-bezier(.22,.9,.26,1) .22s both; }
+.zh-system-row { animation:zh-enter .6s cubic-bezier(.22,.9,.26,1) .28s both; }
+@keyframes zh-enter { from { opacity:0;transform:translateY(calc(8 * var(--u))); } to { opacity:1;transform:none; } }
+@keyframes zh-enter-fade { from { opacity:0; } to { opacity:1; } }
+
+/* --- Botão de voz: estados que faltavam na linguagem visual --- */
+/* Offline real (mic/indisponível): dessatura, não só apaga — o Alex vê na hora que não adianta tocar. */
+.zh-dock-voice[data-offline='true'] { filter:saturate(.35); }
+/* Press tátil, igual aos botões do dock. */
+.zh-dock-voice:active:not(:disabled) { transform:translateX(-50%) scale(.94); }
+/* Aguardando autorização: âmbar pulsante, mesma cor do drop-shadow do core nesse estado. */
+.zh-dock-voice[data-state='awaiting_authorization'] { animation:zh-await 1s ease-in-out infinite alternate;border-color:#e3b443; }
+@keyframes zh-await { from { box-shadow:0 0 calc(10 * var(--u)) #e3b44322,inset 0 0 calc(10 * var(--u)) #e3b44312; } to { box-shadow:0 0 calc(26 * var(--u)) #e3b44366,inset 0 0 calc(16 * var(--u)) #e3b44330; } }
+/* Concluído: brilho verde assentado — confirmação, não atividade; não pulsa. */
+.zh-dock-voice[data-state='success'] { border-color:#52ffc7;box-shadow:0 0 calc(20 * var(--u)) #52ffc744,inset 0 0 calc(12 * var(--u)) #52ffc722; }
+/* Erro: dois pulsos e assenta — chama atenção sem piscar para sempre. */
+.zh-dock-voice[data-state='error'] { animation:zh-err-pulse .9s ease 2; }
+@keyframes zh-err-pulse { 50% { box-shadow:0 0 calc(24 * var(--u)) #e5514499,inset 0 0 calc(14 * var(--u)) #e5514433; } }
+/* Mensagem de erro do dock: entra subindo, não aparece seca. */
+@keyframes zh-feedback-in { from { opacity:0;transform:translate(-50%,calc(4 * var(--u))); } to { opacity:1;transform:translate(-50%,0); } }
+
+/* --- Micro-hovers: cartões que respondiam "secos" ganham feedback tátil --- */
+.zh-foryou-item:hover { background:#94ffd60c; }
+.zh-comm-item:hover .zh-comm-badge { border-color:#8ff5d266;box-shadow:inset 0 calc(1 * var(--u)) calc(7 * var(--u)) #c2ffed1e,0 0 calc(14 * var(--u)) #00e69b2e; }
+.zh-tool-tile:hover { background:#0d3a2d66; }
+.zh-action-row:hover { background:#0e3a2b55; }
+
+/* --- Partículas da órbita do Core: cintilam devagar, com fases alternadas --- */
+.zh-orbit-point { animation:zh-orbit-twinkle 5s ease-in-out infinite alternate; }
+.zh-orbit-point:nth-child(2n) { animation-delay:-1.7s; }
+.zh-orbit-point:nth-child(3n) { animation-delay:-3.4s; }
+@keyframes zh-orbit-twinkle { from { opacity:.55; } to { opacity:1; } }
+
+/* --- Scrollbar no tema esmeralda (drawer, log do lab, painéis) --- */
+.zh-root { scrollbar-width:thin;scrollbar-color:#0f5f4755 transparent; }
+.zh-root ::-webkit-scrollbar { width:calc(10 * var(--u));height:calc(10 * var(--u)); }
+.zh-root ::-webkit-scrollbar-track { background:transparent; }
+.zh-root ::-webkit-scrollbar-thumb { background:#0f5f4755;border-radius:999px;border:calc(2 * var(--u)) solid transparent;background-clip:content-box; }
+.zh-root ::-webkit-scrollbar-thumb:hover { background:#0f5f4799;background-clip:content-box; }

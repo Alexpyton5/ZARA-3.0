@@ -117,3 +117,41 @@ html.ca-overlay-mode #root {
 @keyframes ca-blink {
   50% { opacity: 0.35; }
 }
+
+/* ---- Barra de progresso do passo, logo abaixo do selo (EQUIPE 5) ----
+   Quando o backend informa passo/total, o preenchimento avança de verdade
+   (transição suave). Quando o total é desconhecido, vira um brilho
+   indeterminado deslizando — a pessoa sempre vê movimento, nunca "travou". */
+.ca-progress {
+  position: absolute;
+  top: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, 62vw);
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(34, 255, 136, 0.13);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.ca-progress--active {
+  opacity: 1;
+}
+.ca-progress__fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #22ff88, #a855f7);
+  box-shadow: 0 0 10px rgba(34, 255, 136, 0.6);
+  transition: width 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ca-progress__fill--indeterminate {
+  width: 32%;
+  animation: ca-progress-slide 1.7s ease-in-out infinite;
+}
+@keyframes ca-progress-slide {
+  0% { margin-left: -32%; }
+  100% { margin-left: 100%; }
+}

@@ -3954,6 +3954,7 @@ class IPCHandler:
             'voice-engine-get': self.handle_voice_engine_get,
             'voice-engine-set': self.handle_voice_engine_set,
             'zoe-voice-speak': self.handle_zoe_voice_speak,
+            'voice-selftest': self.handle_voice_selftest,
             'config-get': self.handle_config_get,
             'config-set': self.handle_config_set,
             'lab-state': self.handle_lab_state,
@@ -6420,19 +6421,51 @@ class IPCHandler:
             # fire-and-forget NÃO pausava o mic e a própria voz voltava para o
             # Vosk (eco). O MicGuard pausa, fala e retoma sozinho quando ela cala.
             _guard_item4 = self._mic_guard()
+            # EQUIPE2-20260929: se a cascata esgotar sem falar nada, a UI
+            # recebe 'voice-speak-failed' com o motivo — antes era silencio.
+            _loop_fala = self._event_loop or asyncio.get_running_loop()
+
+            def _avisar_falha(_texto: str, falhas: list) -> None:
+                try:
+                    detalhe = "; ".join(f"{rot}: {err}" for rot, err in falhas) or "motivo desconhecido"
+                    coro = self.send_event("voice-speak-failed", {
+                        "reason": detalhe,
+                        "failures": [{"engine": rot, "error": err} for rot, err in falhas],
+                    })
+                    asyncio.run_coroutine_threadsafe(coro, _loop_fala)
+                except Exception as exc:
+                    print(f"[Voice] voice-speak-failed nao emitido: {exc}", flush=True)
+
             if _guard_item4 is not None:
                 _tarefa_fala = asyncio.create_task(
                     _guard_item4.falar_com_mute(
                         text[:2000],
-                        lambda t: self.tts_manager.speak(t, blocking=False),
+                        lambda t: self.tts_manager.speak(t, blocking=False, on_exhausted=_avisar_falha),
                     )
                 )
                 _tarefa_fala.add_done_callback(self._log_task_error)
             else:
-                self.tts_manager.speak(text[:2000], blocking=False)
+                self.tts_manager.speak(text[:2000], blocking=False, on_exhausted=_avisar_falha)
             await self.send_response(msg.request_id, {'success': True})
         except Exception as exc:
             print(f"[Voice] zoe-voice-speak failed: {exc}", flush=True)
+            await self.send_error(msg, str(exc))
+
+    async def handle_voice_selftest(self, msg: IPCMessage):
+        """Rota IPC 'voice-selftest': diagnostico da cadeia de voz por estagios.
+
+        Roda core.voice_diagnostics.diagnose() (somente leitura: nao abre
+        microfone, nao sintetiza audio, nao faz rede) e devolve o relatorio
+        sanitizado. A UI chama quando a voz falha, para dizer ONDE quebrou
+        (backend, fiacao, mic, vad, stt, llm, tts, speakers) em vez de o
+        Alex ouvir silencio.
+        """
+        try:
+            from core.voice_diagnostics import diagnose
+            report = await asyncio.to_thread(diagnose)
+            await self.send_response(msg.request_id, {"success": True, "report": report})
+        except Exception as exc:
+            print(f"[Voice] voice-selftest failed: {exc}", flush=True)
             await self.send_error(msg, str(exc))
 
     def _set_supercerebro_state(self, active: bool) -> None:

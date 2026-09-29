@@ -22,6 +22,7 @@ import threading
 import wave
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Callable
 
 # Optional imports
 try:
@@ -666,8 +667,15 @@ class TTSManager:
                 "No TTS engine available. Install edge-tts, kokoro-onnx or the local OmniVoice runtime."
             )
 
-    def speak(self, text: str, voice: str = None, speed: float = 1.0, blocking: bool = True):
-        """Speak text using best available engine."""
+    def speak(self, text: str, voice: str = None, speed: float = 1.0, blocking: bool = True,
+              on_exhausted: Callable[[str, list], None] | None = None):
+        """Speak text using best available engine.
+
+        on_exhausted: chamado (na thread da cascata) quando NENHUM motor
+        conseguiu falar no modo fire-and-forget (blocking=False). Recebe
+        (text, failures=[(engine, erro), ...]). Serve para a UI avisar o
+        motivo em vez de ficar muda (evento 'voice-speak-failed').
+        """
         # Símbolos (R$, %, hora, siglas) viram forma falável antes da
         # síntese; frase normal volta idêntica, sem mudança de comportamento.
         text = normalize_for_tts(text)
@@ -699,44 +707,71 @@ class TTSManager:
         # muda" mais importa.
         def _run_cascade():
             self._speaking_event.set()
+            failures: list = []
             try:
-                self._speak_cascade(text, voice, speed, engines, raise_on_exhausted=False)
+                spoke = self._speak_cascade(text, voice, speed, engines,
+                                            raise_on_exhausted=False, failures=failures)
             finally:
                 self._speaking_event.clear()
+            # EQUIPE2-20260929: antes, a cascata esgotada morria aqui em
+            # silencio (so um print no stdout do backend). Agora o chamador
+            # pode ser avisado e a UI mostra o motivo em vez de nada.
+            if not spoke and not self._interrupt_event.is_set() and on_exhausted is not None:
+                try:
+                    on_exhausted(text, failures)
+                except Exception as exc:
+                    print(f"[TTS] on_exhausted callback failed: {exc}")
 
         t = threading.Thread(target=_run_cascade, daemon=True)
         t.start()
         self._current_playback = t
 
-    def _speak_cascade(self, text, voice, speed, engines, raise_on_exhausted: bool):
-        """Walk Edge -> Kokoro -> Gemini, catching failures at every step."""
+    def _speak_cascade(self, text, voice, speed, engines, raise_on_exhausted: bool,
+                       failures: list | None = None) -> bool:
+        """Walk Edge -> Kokoro -> Gemini, catching failures at every step.
+
+        Devolve True quando algum motor realmente falou; False quando a
+        cascata se esgotou (ou foi interrompida). As falhas vao para
+        `failures` como (engine, "TipoErro: mensagem").
+        """
+        if failures is None:
+            failures = []
+        attempted = False
         for engine, label in engines:
             if not engine:
                 continue
+            attempted = True
             try:
                 engine.play(text, voice, speed, blocking=True)
-                return
+                return True
             except Exception as e:
                 if self._interrupt_event.is_set():
-                    return
+                    return False
+                failures.append((label, f"{type(e).__name__}: {e}"))
                 print(f"[TTS] {label} failed, trying fallback: {e}")
 
+        if not attempted:
+            failures.append(("cascata", "nenhum motor de TTS configurado"))
+
         if self._interrupt_event.is_set():
-            return
+            return False
 
         if self.gemini:
             if raise_on_exhausted:
                 asyncio.run(self._gemini_speak(text, voice))
-            else:
-                try:
-                    asyncio.run(self._gemini_speak(text, voice))
-                except Exception as e:
-                    print(f"[TTS] Gemini fallback failed: {e}")
-            return
+                return True
+            try:
+                asyncio.run(self._gemini_speak(text, voice))
+                return True
+            except Exception as e:
+                failures.append(("Gemini", f"{type(e).__name__}: {e}"))
+                print(f"[TTS] Gemini fallback failed: {e}")
+            return False
 
         if raise_on_exhausted:
             raise RuntimeError("No TTS engine available")
         print("[TTS] Cascade exhausted (non-blocking) - nenhuma voz falou este texto")
+        return False
 
     def _omnivoice_ready(self) -> bool:
         return bool(self.omnivoice and getattr(self.omnivoice, "available", True))

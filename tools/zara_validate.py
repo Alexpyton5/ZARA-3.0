@@ -153,6 +153,7 @@ def _run_pytest(targets: list[str] | None, marker_expr: str) -> dict:
         "summary_line": summary_line,
         "targets": targets or ["<marker filtered>"],
         "marker_expr": marker_expr,
+        "raw_output": output,
     }
 
 
@@ -210,6 +211,12 @@ def main() -> int:
     run_id = time.strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = RUNS_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Forense FRENTE1 2026-09-29: guarda a saida crua do pytest. A rodada
+    # 05-16-24 morreu sem deixar rastro porque o validator so guardava
+    # contagens parseadas.
+    raw_output = result.pop("raw_output", "")
+    (run_dir / "pytest-output.txt").write_text(raw_output, encoding="utf-8", errors="replace")
 
     record = {
         "run_id": run_id,

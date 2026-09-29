@@ -59,6 +59,9 @@ from core.lab_v1.memory_adapter import (
 from core.lab_v1.providers.registry import ProviderRegistry
 from core.lab_v1.providers.base import InvocationConfigurationError, InvocationOptions
 from core.lab_v1.review_evidence_packet import LOG_EXCERPT_CHARS
+from core.lab_v1.seat_engines import default_ladder_for
+from core.lab_v1.zoe_brain import ask_zoe
+from core.lab_v1.zoe_answer_reader import ZoeAnswerReader
 from core.lab_v1.store import LabStore
 from core.lab_v1 import messages as message_protocol
 
@@ -445,6 +448,23 @@ class LabRuntime:
         self._active_sessions: set[str] = set()
         self._agent_continuity: Any = None
         self._turn_correlation_id: str | None = None
+        # FASE 2 PECA 2 (28/09/2026): chaves (session_id, task_id) ja escaladas
+        # para a zoe nesta vida do runtime — uma pergunta por tarefa, para a
+        # mesma missao falhada nao encher a caixinha de perguntas repetidas.
+        self._zoe_escalated: set[tuple[str, str | None]] = set()
+        # FASE 2 PECA 4 (28/09/2026): leitor das respostas da zoe — fecha o
+        # loop do "cerebro pesado": a pergunta sai na peca 2 e a resposta
+        # volta no proximo turno da mesma (sessao, tarefa), dentro do prompt.
+        self._zoe_answers = ZoeAnswerReader()
+        # FASE 2 PECA 6 (28/09/2026): o loop sobrevive ao restart — na
+        # subida, escalacoes pendentes na caixinha voltam para o leitor e
+        # as chaves voltam para o _zoe_escalated, para a mesma tarefa nao
+        # gerar pergunta duplicada. Melhor esforco: nunca quebra a subida.
+        try:
+            for _restaurada in self._zoe_answers.restore_from_inbox():
+                self._zoe_escalated.add((_restaurada[0], _restaurada[1]))
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # 2.1 Bootstrap
@@ -1613,12 +1633,84 @@ class LabRuntime:
             return None
         return self._run_agent(session, agent, prompt, system, task=task)
 
+    def _mission_ladder(self, agent: AgentProfile) -> list[tuple[str, str]]:
+        """Degraus da chamada de missao: o provedor do agente primeiro, depois
+        a escada do assento (FRENTE 2: gratis primeiro, Luna via Codex por ultimo).
+        Sem duplicados. Nunca volta vazio."""
+        rungs = [(agent.provider_id, agent.model)]
+        seen = {(agent.provider_id, agent.model)}
+        try:
+            seat_rungs = default_ladder_for(agent.role)
+        except Exception:
+            seat_rungs = []
+        for rung in seat_rungs:
+            key = (rung.provider_id, rung.model)
+            if key not in seen:
+                seen.add(key)
+                rungs.append(key)
+        return rungs
+
+    # FASE 2 PECA 2: tetos anti-gigantismo da pergunta para a zoe.
+    _ZOE_QUESTION_CHARS = 2000
+    _ZOE_CONTEXT_CHARS = 1500
+
+    def _escalate_to_zoe(self, session, agent, task, prompt, run, first_error):
+        """Rota "cerebro pesado" (FRENTE 2) plugada no turno: quando a escada
+        esgota e nenhum motor rodou a missao, deixa uma PERGUNTA-ZOE na
+        caixinha em vez de so falhar em silencio. A zoe responde no turno
+        vanguarda com RESPOSTA-ZOE-<id>.md e o outro lado do loop
+        (zoe_answer_reader) entrega a resposta no proximo turno da mesma
+        (sessao, tarefa). Devolve o id da pergunta, ou None se
+        ja escalou esta tarefa antes ou se a caixinha estiver inacessivel.
+        A escalacao NUNCA mascara a falha: o erro original continua valendo.
+        FASE 2 PECA 6: a pergunta leva o cabecalho sessao:/tarefa: para o
+        restore do restart re-registrar a escalacao pendente.
+        """
+        key = (session.id, task.id if task is not None else None)
+        if key in self._zoe_escalated:
+            return None
+        try:
+            if task is not None:
+                question = (
+                    "Missao do Lab falhou em todos os motores \u2014 preciso de ajuda.\n\n"
+                    f"TAREFA: {task.title}\n"
+                    f"INSTRUCAO: {task.instruction[:self._ZOE_QUESTION_CHARS]}"
+                )
+            else:
+                question = (
+                    "Turno do Lab falhou em todos os motores \u2014 preciso de ajuda.\n\n"
+                    f"PROMPT: {prompt[:self._ZOE_QUESTION_CHARS]}"
+                )
+            role = getattr(agent.role, "value", agent.role)
+            detail = (first_error or "(sem detalhe)")[:self._ZOE_CONTEXT_CHARS]
+            context = (
+                f"run: {run.id}\n"
+                f"session: {session.id}\n"
+                f"agente: {agent.id} ({role})\n"
+                f"motor do agente: {agent.provider_id}/{agent.model}\n"
+                f"erro do motor do agente: {detail}"
+            )
+            qid = ask_zoe(question, context=context, asked_by=agent.id,
+                          session_id=session.id,
+                          task_id=task.id if task is not None else None)
+        except Exception:
+            # Caixinha inacessivel: o turno continua FAILED do mesmo jeito.
+            return None
+        self._zoe_escalated.add(key)
+        # FASE 2 PECA 4: registra a escalacao pendente — o leitor fecha o
+        # loop quando a zoe responder na caixinha.
+        self._zoe_answers.register(
+            qid,
+            session_id=session.id,
+            task_id=task.id if task is not None else None,
+            agent_id=agent.id,
+        )
+        return qid
+
     def _run_agent(
         self, session: Session, agent: AgentProfile, prompt: str, system: str, task: Task | None = None,
         *, timeout_s: int = 240,
     ) -> tuple[Run, ProviderResult]:
-        adapter = self.registry.get(agent.provider_id)
-
         run = Run(
             id=new_id("run"), session_id=session.id, agent_id=agent.id,
             provider_id=agent.provider_id, model=agent.model, state=RunState.STARTED,
@@ -1635,84 +1727,135 @@ class LabRuntime:
             payload={"agent_id": agent.id, "model": agent.model, "provider_id": agent.provider_id},
         )
 
-        if adapter is None:
-            run.state = RunState.FAILED
-            run.error = f"Provedor '{agent.provider_id}' nao esta registrado no runtime."
-            run.ended_at = now()
-            self.store.save_run(run)
-            self._emit(EventType.RUN_FAILED, session_id=session.id, entity_id=run.id, payload={"error": run.error})
-            return run, ProviderResult(ok=False, availability=Availability.OFFLINE, error=run.error)
-
+        # FASE 2 PECA 4 (28/09/2026): o outro lado do loop do "cerebro
+        # pesado" — se a zoe ja respondeu a uma escalacao pendente desta
+        # (sessao, tarefa), a resposta entra no prompt como contexto. O
+        # turno continua sujeito a escada e aos gates normais: a resposta
+        # ajuda, nunca mascara. Melhor esforco: nunca quebra o turno.
+        _zoe_delivered = None
         try:
-            probe = adapter.probe()
-            # OpenCode and NVIDIA cannot prove account/model access without a
-            # first inference. Permit exactly one declared model to be tried
-            # while the provider is UNKNOWN; the resulting Run is the proof.
-            first_use = (
-                probe.availability is Availability.UNKNOWN
-                and adapter.id in {"opencode", "nvidia"}
-                and any(item.model_id == agent.model for item in adapter.declared_models)
+            _zoe_delivered = self._zoe_answers.take_for(
+                session.id, task.id if task is not None else None)
+        except Exception:
+            _zoe_delivered = None
+        if _zoe_delivered is not None:
+            _zoe_qid, _zoe_answer = _zoe_delivered
+            prompt = (
+                f"[RESPOSTA DA ZOE \u2014 escala\u00e7\u00e3o {_zoe_qid}]\n{_zoe_answer}\n\n"
+                f"---\n{prompt}"
             )
-            if agent.archived or (not probe.availability.can_work and not first_use):
-                result = ProviderResult(ok=False, availability=probe.availability, error="Agente arquivado." if agent.archived else probe.detail)
-            else:
-                invocation_options = InvocationOptions(effort=agent.effort)
-                if hasattr(adapter, "invoke"):
-                    result = adapter.invoke(
-                        prompt=prompt, model=agent.model, system=system,
-                        max_turns=agent.max_turns, options=invocation_options,
-                        timeout_s=timeout_s,
-                    )
-                elif agent.effort is None:
-                    # Compatibility for existing duck-typed V1 adapters/tests.
-                    result = adapter.complete(
-                        prompt=prompt, model=agent.model, system=system,
-                        max_turns=agent.max_turns,
-                        timeout_s=timeout_s,
-                    )
-                else:
-                    raise InvocationConfigurationError(
-                        "Este adapter nao aceita opcoes de invocacao."
-                    )
-        except InvocationConfigurationError as exc:
-            run.state = RunState.FAILED
-            run.error = f"{exc.code}: {exc}"
-            run.ended_at = now()
-            self.store.save_run(run)
-            self._emit(EventType.RUN_FAILED, session_id=session.id, entity_id=run.id, payload={"error": run.error, "code": exc.code})
-            # AVAILABLE prevents configuration errors from triggering provider failover.
-            return run, ProviderResult(ok=False, availability=Availability.AVAILABLE, error=run.error)
-        except Exception as exc:
-            # Adapters are contracted not to raise for expected failure modes,
-            # but a Run must never be left dangling in STARTED even if one
-            # does anyway — that would make the UI claim someone is working
-            # forever.
-            run.state = RunState.FAILED
-            run.error = "Falha inesperada ao chamar o provedor."
-            run.ended_at = now()
-            self.store.save_run(run)
-            self._emit(EventType.RUN_FAILED, session_id=session.id, entity_id=run.id, payload={"error": run.error})
-            return run, ProviderResult(ok=False, availability=Availability.ERROR, error=run.error)
+            self._emit(
+                EventType.ZOE_ANSWER_DELIVERED, session_id=session.id,
+                entity_id=run.id,
+                payload={"agent_id": agent.id, "qid": _zoe_qid,
+                         "task_id": task.id if task is not None else None,
+                         "chars": len(_zoe_answer)},
+            )
 
-        if result.ok and result.model_reported:
-            identifies_model = getattr(adapter, "identifies_model", None)
-            model_matches = (
-                identifies_model(agent.model, result.model_reported)
-                if callable(identifies_model)
-                else result.model_reported == agent.model
-            )
-            if not model_matches:
-                # A successful transport response is not a successful run when the
-                # provider identifies a different model. Reject before recording
-                # model health so this receipt cannot certify the requested model.
-                result = replace(
-                    result, ok=False, availability=Availability.MODEL_UNAVAILABLE,
-                    error="CODEX_MODEL_MISMATCH",
+        # FASE 2 (integracao FRENTE 1 + FRENTE 2, 28/09/2026): o turno percorre a
+        # escada do assento em vez de falhar no primeiro provedor — o motor do
+        # agente primeiro, depois os gratis (NVIDIA NIM), Luna via Codex so em
+        # ultimo caso. Quando a cota morre, o app desce um degrau e continua.
+        # Numa escada esgotada, o resultado final e o do PRIMEIRO degrau, para
+        # o failover de papel (2.5) continuar decidindo sobre o motor do agente.
+        result: ProviderResult | None = None
+        winning_rung: tuple[str, str] | None = None
+        hard_stop = False
+        for provider_id, model in self._mission_ladder(agent):
+            mismatch = False
+            adapter = self.registry.get(provider_id)
+            if adapter is None:
+                if result is None:
+                    result = ProviderResult(
+                        ok=False, availability=Availability.OFFLINE,
+                        error=f"Provedor '{provider_id}' nao esta registrado no runtime.",
+                    )
+                continue
+            try:
+                probe = adapter.probe()
+                # OpenCode and NVIDIA cannot prove account/model access without a
+                # first inference. Permit exactly one declared model to be tried
+                # while the provider is UNKNOWN; the resulting Run is the proof.
+                first_use = (
+                    probe.availability is Availability.UNKNOWN
+                    and adapter.id in {"opencode", "nvidia"}
+                    and any(item.model_id == model for item in adapter.declared_models)
+                )
+                if agent.archived or (not probe.availability.can_work and not first_use):
+                    rung_result = ProviderResult(ok=False, availability=probe.availability, error="Agente arquivado." if agent.archived else probe.detail)
+                else:
+                    invocation_options = InvocationOptions(effort=agent.effort)
+                    if hasattr(adapter, "invoke"):
+                        rung_result = adapter.invoke(
+                            prompt=prompt, model=model, system=system,
+                            max_turns=agent.max_turns, options=invocation_options,
+                            timeout_s=timeout_s,
+                        )
+                    elif agent.effort is None:
+                        # Compatibility for existing duck-typed V1 adapters/tests.
+                        rung_result = adapter.complete(
+                            prompt=prompt, model=model, system=system,
+                            max_turns=agent.max_turns,
+                            timeout_s=timeout_s,
+                        )
+                    else:
+                        raise InvocationConfigurationError(
+                            "Este adapter nao aceita opcoes de invocacao."
+                        )
+            except InvocationConfigurationError as exc:
+                run.state = RunState.FAILED
+                run.error = f"{exc.code}: {exc}"
+                run.ended_at = now()
+                self.store.save_run(run)
+                self._emit(EventType.RUN_FAILED, session_id=session.id, entity_id=run.id, payload={"error": run.error, "code": exc.code})
+                # AVAILABLE prevents configuration errors from triggering provider failover.
+                return run, ProviderResult(ok=False, availability=Availability.AVAILABLE, error=run.error)
+            except Exception:
+                # Um degrau que explode nao derruba a escada: vira tentativa
+                # falha e o proximo degrau e tentado (mesma regra da FRENTE 2).
+                # A Run nunca pode ficar pendurada em STARTED.
+                rung_result = ProviderResult(
+                    ok=False, availability=Availability.ERROR,
+                    error="Falha inesperada ao chamar o provedor.",
                 )
 
-        observe = getattr(self.registry, "record_result", None)
-        if callable(observe):
-            observe(agent.provider_id, agent.model, result)
+            if rung_result.ok and rung_result.model_reported:
+                identifies_model = getattr(adapter, "identifies_model", None)
+                model_matches = (
+                    identifies_model(model, rung_result.model_reported)
+                    if callable(identifies_model)
+                    else rung_result.model_reported == model
+                )
+                if not model_matches:
+                    # A successful transport response is not a successful run when the
+                    # provider identifies a different model. Reject before recording
+                    # model health so this receipt cannot certify the requested model.
+                    # E falha DURA do turno (nao desce a escada): trocar de modelo
+                    # sozinho e sinal de integridade, nao de capacidade — o failover
+                    # de papel (2.5) decide o que fazer com MODEL_UNAVAILABLE.
+                    rung_result = replace(
+                        rung_result, ok=False, availability=Availability.MODEL_UNAVAILABLE,
+                        error="CODEX_MODEL_MISMATCH",
+                    )
+                    mismatch = True
+                    hard_stop = True
+
+            observe = getattr(self.registry, "record_result", None)
+            if callable(observe):
+                observe(provider_id, model, rung_result)
+
+            if result is None or mismatch:
+                result = rung_result
+            if mismatch:
+                break
+            if rung_result.ok:
+                winning_rung = (provider_id, model)
+                result = rung_result
+                break
+
+        assert result is not None  # _mission_ladder nunca volta vazio
+        if winning_rung is not None:
+            run.provider_id, run.model = winning_rung
         run.ended_at = now()
         # Provenance and usage matter even when a provider returns a failure.
         run.cost_usd = result.cost_usd
@@ -1724,16 +1867,6 @@ class LabRuntime:
         run.model_reported = result.model_reported
         if result.ok:
             run.state = RunState.COMPLETED
-            run.cost_usd = result.cost_usd
-            run.cost_basis = result.cost_basis
-            run.input_tokens = result.input_tokens
-            run.output_tokens = result.output_tokens
-            run.duration_ms = result.duration_ms
-            run.provider_session_id = result.provider_session_id
-            # The provider's own canonical model id: the one piece of
-            # evidence that this Run was a genuine call and not a fixture
-            # (a fake can invent a cost; it cannot invent this).
-            run.model_reported = result.model_reported
             self.store.save_run(run)
             self._emit(
                 EventType.RUN_COMPLETED, session_id=session.id, entity_id=run.id,
@@ -1743,12 +1876,23 @@ class LabRuntime:
             run.state = RunState.FAILED
             run.error = result.error or "Falha desconhecida do provedor."
             self.store.save_run(run)
+            # FASE 2 PECA 2: escada esgotada sem hard-stop -> a missao que
+            # nenhum motor conseguiu rodar vira pergunta para a zoe.
+            # O hard-stop (mismatch) NAO escala: e sinal de integridade,
+            # nao de capacidade — o failover de papel (2.5) decide.
+            escalated_qid = None
+            if not hard_stop:
+                escalated_qid = self._escalate_to_zoe(
+                    session, agent, task, prompt, run, result.error)
             self._emit(
                 EventType.RUN_FAILED, session_id=session.id, entity_id=run.id,
-                payload={"agent_id": agent.id, "error": run.error, "availability": result.availability.value},
+                payload={"agent_id": agent.id, "error": run.error,
+                         "availability": result.availability.value,
+                         "escalated_to_zoe": escalated_qid},
             )
 
         return run, result
+
 
     # ------------------------------------------------------------------
     # 2.5 Failover

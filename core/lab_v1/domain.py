@@ -709,6 +709,8 @@ class EventType:
     REVIEW_REQUESTED = "review.requested"
     REVIEW_COMPLETED = "review.completed"
     REPAIR_STARTED = "repair.started"
+    # FASE 2 PECA 4 (28/09/2026): a resposta da zoe entrou no prompt do turno.
+    ZOE_ANSWER_DELIVERED = "zoe.answer_delivered"
 
 
 # --------------------------------------------------------------------------

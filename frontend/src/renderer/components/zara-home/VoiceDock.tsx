@@ -126,8 +126,15 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
     }
   }
 
+  const speakingNow = coreState === 'speaking' || playing;
   const label = pending ? 'Conectando voz…' : !voiceAvailable ? 'Modo voz indisponível'
-    : coreState === 'speaking' || playing ? 'Interromper fala' : listening ? 'Parar modo voz' : 'Abrir modo voz';
+    : speakingNow ? 'Interromper fala' : listening ? 'Parar modo voz' : 'Abrir modo voz';
+  // Estado visual do botão: a fala da Kore (playing) anima o botão mesmo quando
+  // o backend ainda não empurrou 'speaking' no coreState — antes o botão dizia
+  // "Interromper fala" mas ficava parado.
+  const visualState = error ? 'error' : pending ? 'connecting' : speakingNow ? 'speaking' : coreState;
+  const statusState = pending ? 'connecting' : speakingNow ? 'speaking' : 'listening';
+  const showStatus = voiceAvailable && !error && (pending || listening || speakingNow);
 
   return (
     <div className="zh-dock-wrap">
@@ -135,7 +142,7 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
         <button className="zh-dock-btn" type="button" aria-label="Aplicativos" title="Aplicativos" onClick={() => onNavigate('Aplicativos')}><LayoutGrid size={25} strokeWidth={1.7} /></button>
         <button className="zh-dock-btn" type="button" aria-label="Arquivos" title="Arquivos e memórias" onClick={() => onNavigate('Arquivos')}><Folder size={27} strokeWidth={1.7} /></button>
         <span className="zh-dock-separator" aria-hidden="true" />
-        <button className="zh-dock-voice" type="button" aria-label={label} title={label} data-listening={listening} data-state={error ? 'error' : pending ? 'connecting' : coreState} data-offline={!voiceAvailable} aria-pressed={listening} aria-busy={pending} disabled={!voiceAvailable || pending} onClick={() => void toggleVoice()}><AudioLines size={29} strokeWidth={1.7} /></button>
+        <button className="zh-dock-voice" type="button" aria-label={label} title={label} data-listening={listening} data-state={visualState} data-offline={!voiceAvailable} aria-pressed={listening} aria-busy={pending} disabled={!voiceAvailable || pending} onClick={() => void toggleVoice()}><AudioLines size={29} strokeWidth={1.7} /></button>
         <span className="zh-dock-separator" aria-hidden="true" />
         <button className="zh-dock-btn" type="button" aria-label="Ajuda" title="Ajuda" onClick={() => onNavigate('Ajuda')}><HelpCircle size={25} strokeWidth={1.7} /></button>
         <button className="zh-dock-btn" type="button" aria-label="Histórico" title="Histórico" onClick={() => onNavigate('Histórico')}><Clock3 size={25} strokeWidth={1.7} /></button>
@@ -150,6 +157,7 @@ export function VoiceDock({ coreState, onNavigate }: VoiceDockProps) {
         </select>
       </label>
       {error && <div className="zh-dock-feedback" role="alert">{error}</div>}
+      {showStatus && <div className="zh-dock-status" role="status" data-state={statusState}>{label}</div>}
     </div>
   );
 }

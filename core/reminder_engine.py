@@ -307,6 +307,26 @@ class ReminderEngine:
                 conn.commit()
         r.state = "FIRED"
         r.fired_at = fired_at
+        # FRENTE D (ZARA-SILENCIO-001): roteia pela política de silêncio.
+        # Se 'reminder' for log_only, vai só para o ops_log interno.
+        try:
+            from core import silent_mode as _sm
+
+            _notify = _sm.should_notify("reminder")
+        except Exception:
+            _notify = True
+        if not _notify:
+            try:
+                from core.ops_log import ops_log
+
+                ops_log().record(
+                    "reminder", "reminder_engine",
+                    f"lembrete '{r.message[:80]}' -> log_only (política silenciosa)",
+                    {"reminder_id": r.id},
+                )
+            except Exception:
+                pass
+            return
         if self.on_fire:
             try:
                 self.on_fire(r)

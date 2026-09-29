@@ -190,18 +190,44 @@ async def test_lab_opencode_failure_surfaces_as_explicit_error(lab_env, monkeypa
 
 @pytest.mark.asyncio
 async def test_lab_read_only_never_alters_functional_files(lab_env):
+    """O caminho read-only do LAB nunca pode alterar arquivos funcionais.
+
+    Endurecido em 2026-09-29 (vigia EQUIPE 1): a assercao fotografa o mtime de
+    todo core/*.py, entao um commit de outra frente caindo no meio do teste
+    gerava falha espuria (visto na rodada das 05:05: 1 falha com commits
+    concorrentes). Retry de ate 3 tentativas: regressao REAL (o coordenador
+    escrevendo em core/) falha nas 3 e continua vermelha; escrita concorrente
+    transitoria passa no retry.
+    """
+    import time
+
     from core.lab_coordinator import LabCoordinator
 
     root = Path(__file__).resolve().parents[1]
-    functional = sorted(
-        p for p in root.joinpath("core").rglob("*.py") if p.stat().st_mtime_ns > 0
+
+    def snapshot():
+        functional = sorted(
+            p for p in root.joinpath("core").rglob("*.py") if p.stat().st_mtime_ns > 0
+        )
+        return {p: p.stat().st_mtime_ns for p in functional}
+
+    last_diff = []
+    for _ in range(3):
+        before = snapshot()
+
+        coordinator = LabCoordinator()
+        result = await coordinator.send_message("alex", "opencode", "@OPENCODE PRESENCE_PROOF")
+        assert result["authorization"] == "READ_ONLY"
+        await coordinator.get_state()
+
+        after = snapshot()
+        changed = [str(p) for p in before if before[p] != after.get(p)]
+        changed += [str(p) for p in after if p not in before]
+        if not changed:
+            return
+        last_diff = changed
+        time.sleep(2)
+    pytest.fail(
+        "LabCoordinator alterou arquivos funcionais em 3 tentativas seguidas: "
+        + ", ".join(last_diff[:10])
     )
-    before = {p: p.stat().st_mtime_ns for p in functional}
-
-    coordinator = LabCoordinator()
-    result = await coordinator.send_message("alex", "opencode", "@OPENCODE PRESENCE_PROOF")
-    assert result["authorization"] == "READ_ONLY"
-    await coordinator.get_state()
-
-    after = {p: p.stat().st_mtime_ns for p in functional}
-    assert before == after

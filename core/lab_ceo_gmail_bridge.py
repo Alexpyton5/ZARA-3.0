@@ -423,7 +423,12 @@ class ChatReply:
 
 
 def parse_chat_reply(body: str) -> ChatReply | None:
-    """Extrai a resposta da zoe; None se o bloco for inválido."""
+    """Extrai a resposta da zoe; None se o bloco for inválido.
+
+    Ignora o template próprio: o e-mail de SAÍDA (build_chat_email)
+    contém o bloco com o placeholder '<sua resposta para o Alex>' —
+    isso NÃO é uma resposta real, então retorna None.
+    """
     match = _CHAT_REPLY_RE.search(body or "")
     if not match:
         return None
@@ -438,6 +443,12 @@ def parse_chat_reply(body: str) -> ChatReply | None:
     cid = fields.get("chat_id", "")
     reply = fields.get("reply", "")
     if not cid.startswith(CHAT_ID_PREFIX) or not reply:
+        return None
+    # Template não preenchido: placeholder do e-mail de saída.
+    _stripped = reply.strip()
+    if _stripped.startswith("<") and _stripped.endswith(">"):
+        return None
+    if "sua resposta" in _stripped.lower():
         return None
     return ChatReply(chat_id=cid, reply=reply)
 

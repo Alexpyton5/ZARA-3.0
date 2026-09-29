@@ -199,6 +199,19 @@ def computer_type_text_action(text: str, expected_hwnd: int) -> ActionResult:
         before_visible = before.rstrip("\r\n")
         after_visible = after.rstrip("\r\n") if after is not None else None
         if after_visible not in (before_visible + value, value):
+            # Fallback: UIA nao le campos do Chromium/Electron; confirma via OCR.
+            try:
+                from core.actions.vision_actions import _ocr_words as _ocr_fb
+                from core.actions.vision_actions import _capture as _cap_fb
+                _shot = _cap_fb()
+                if _shot.success:
+                    _words, _ = _ocr_fb(_shot.data["path"], "por+eng")
+                    _seen = " ".join(w["text"] for w in _words).lower()
+                    _needle = value.strip().lower()[:24]
+                    if _needle and _needle in _seen:
+                        return ActionResult(True, output="Texto digitado e confirmado via OCR.", data={"hwnd": expected_hwnd, "characters": len(value)}, verificado=True)
+            except Exception:
+                pass
             return ActionResult(False, error="A digitação não pôde ser confirmada.", verificado=False)
         return ActionResult(True, output="Texto digitado e confirmado.", data={"hwnd": expected_hwnd, "characters": len(value)}, verificado=True)
     except Exception as exc:

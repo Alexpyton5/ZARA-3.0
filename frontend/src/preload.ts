@@ -21,6 +21,48 @@ const zaraAPI = {
     status: () => ipcRenderer.invoke('supercerebro-status'),
   },
 
+  // Computer-agent (use-computer) — ponte do overlay (Frente B, contrato).
+  // O renderer resolve via window.zaraIPC.computerAgent (ver computerAgentBridge.ts).
+  computerAgent: {
+    run: (goal: string) => ipcRenderer.invoke('computer-agent-run', { goal }),
+    showOverlay: () => ipcRenderer.invoke('computer-agent-overlay-show'),
+    hideOverlay: () => ipcRenderer.invoke('computer-agent-overlay-hide'),
+    onStarted: (callback: (data: { goal: string }) => void) => {
+      const handler = (_event: any, data: { goal: string }) => callback(data)
+      ipcRenderer.on('computer-agent-started', handler)
+      return () => ipcRenderer.off('computer-agent-started', handler)
+    },
+    onStep: (callback: (data: { step: string; index?: number; total?: number }) => void) => {
+      const handler = (_event: any, data: { step: string; index?: number; total?: number }) => callback(data)
+      ipcRenderer.on('computer-agent-step', handler)
+      return () => ipcRenderer.off('computer-agent-step', handler)
+    },
+    onStopped: (
+      callback: (data: {
+        goal?: string
+        success?: boolean
+        refused?: boolean
+        verified?: boolean
+        steps?: number
+        error?: string | null
+      }) => void,
+    ) => {
+      const handler = (
+        _event: any,
+        data: {
+          goal?: string
+          success?: boolean
+          refused?: boolean
+          verified?: boolean
+          steps?: number
+          error?: string | null
+        },
+      ) => callback(data)
+      ipcRenderer.on('computer-agent-stopped', handler)
+      return () => ipcRenderer.off('computer-agent-stopped', handler)
+    },
+  },
+
   // Messaging
   message: {
     send: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) =>

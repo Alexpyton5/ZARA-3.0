@@ -16,6 +16,25 @@ let pythonRequestId = 0
 let zoeBridge: ZoeBridge | null = null
 const pendingRequests = new Map<string, { resolve: (value: any) => void; reject: (err: Error) => void }>()
 
+// --- Watchdog do motor (backend) — Frente C, 2026-09-29 ---
+// Antes, se o zara-backend.exe morria, o app continuava mudo: todo IPC falhava
+// com "ficou indisponível" e nada religava o motor nem avisava o Alex.
+// O watchdog respawna com backoff (máx 3 tentativas) e, se não voltar,
+// mostra um aviso visível em vez de morrer em silêncio.
+type BackendHealth = 'starting' | 'ready' | 'restarting' | 'dead'
+let backendHealth: BackendHealth = 'starting'
+let backendRestartAttempts = 0
+let backendWatchdogRunning = false
+let backendDeathNotified = false
+let appShuttingDown = false
+let zoeBridgeWanted = false
+const BACKEND_MAX_RESTARTS = 3
+const BACKEND_RESTART_BACKOFF_MS = [2000, 5000, 15000]
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function getPythonExecutable(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'backend', 'zara-backend.exe')
@@ -58,6 +77,29 @@ function rejectPendingRequests(reason: string): void {
     pending.reject(new Error(reason))
   }
   pendingRequests.clear()
+}
+
+// Canal 'backend-status' para a interface (a Frente B liga o banner da UI aqui):
+// { status: 'starting' | 'ready' | 'restarting' | 'dead', detail: string | null, attempts: number }
+function broadcastBackendStatus(status: BackendHealth, detail?: string): void {
+  backendHealth = status
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('backend-status', {
+        status,
+        detail: detail ?? null,
+        attempts: backendRestartAttempts,
+      })
+    }
+  } catch (error) {
+    console.error('[Electron] Falha ao avisar a interface sobre o backend:', error)
+  }
+}
+
+function noteBackendReady(): void {
+  backendRestartAttempts = 0
+  backendDeathNotified = false
+  broadcastBackendStatus('ready')
 }
 
 function startPythonSidecar(): Promise<void> {
@@ -127,6 +169,7 @@ function startPythonSidecar(): Promise<void> {
         if (line === 'SYS: Interface neural pronta') {
           isPythonReady = true
           console.log('[Electron] Python sidecar ready')
+          noteBackendReady()
           settleResolve()
           continue
         }
@@ -159,25 +202,48 @@ function startPythonSidecar(): Promise<void> {
 
     child.on('error', (error) => {
       console.error('[Python] Spawn error:', error)
-      if (pythonProcess === child) pythonProcess = null
-      isPythonReady = false
+      const isCurrent = pythonProcess === child
+      if (isCurrent) {
+        pythonProcess = null
+        isPythonReady = false
+      }
       settleReject(error)
+      // Watchdog: falha de spawn também tenta religar o motor.
+      if (isCurrent && !appShuttingDown) {
+        void runBackendWatchdog(false, `falha ao iniciar: ${error.message}`)
+      }
     })
 
-    child.on('exit', (code) => {
-      console.log('[Python] Exited with code:', code)
+    child.on('exit', (code, signal) => {
+      console.log('[Python] Exited with code:', code, 'signal:', signal)
       const wasReady = isPythonReady
-      if (pythonProcess === child) pythonProcess = null
-      isPythonReady = false
-      rejectPendingRequests('Python process exited')
+      const isCurrent = pythonProcess === child
+      if (isCurrent) {
+        pythonProcess = null
+        isPythonReady = false
+        rejectPendingRequests('Python process exited')
+      }
       if (!wasReady) {
         settleReject(new Error(`Python sidecar exited before ready (code ${code})`))
+      }
+      // Watchdog (Frente C): morte fora do desligamento tenta religar o motor
+      // sozinho, com backoff — antes o app simplesmente continuava mudo.
+      if (isCurrent && !appShuttingDown) {
+        void runBackendWatchdog(wasReady, `exit code=${code}${signal ? `, sinal=${signal}` : ''}`)
       }
     })
 
     setTimeout(() => {
       if (!isPythonReady) {
         settleReject(new Error('Python sidecar startup timeout (45s)'))
+        if (!appShuttingDown && pythonProcess === child) {
+          console.error('[Electron] Backend não ficou pronto em 45s — encerrando para o watchdog religar')
+          try {
+            child.kill()
+          } catch {
+            // O processo já morreu por conta própria; o 'exit' resolve.
+          }
+        }
       }
     }, 45000)
   })
@@ -193,7 +259,13 @@ async function waitForPythonReadiness(): Promise<void> {
 
   // startPythonSidecar rejects after its existing 45-second startup timeout,
   // so boot-time IPC calls cannot accumulate indefinitely.
-  await readiness
+  try {
+    await readiness
+  } catch (error) {
+    // Boot lento: o timeout estourou mas o backend ficou pronto mesmo assim.
+    if (pythonProcess && isPythonReady) return
+    throw error
+  }
   if (!pythonProcess || !isPythonReady) {
     throw new Error('Python backend ficou indisponível após a inicialização')
   }
@@ -233,6 +305,123 @@ async function sendToPython(type: string, payload: any = {}, requestIdOverride?:
       }
     }, timeoutMs)
   })
+}
+
+// Religar o motor automaticamente quando ele morre (exit/close do processo).
+// Backoff entre tentativas; após BACKEND_MAX_RESTARTS falhas, aviso visível.
+async function runBackendWatchdog(wasReady: boolean, deathInfo: string): Promise<void> {
+  if (backendWatchdogRunning) return
+  backendWatchdogRunning = true
+  try {
+    // A ponte falava com o backend morto: fecha para recriar após o religamento.
+    if (zoeBridge) {
+      const staleBridge = zoeBridge
+      zoeBridge = null
+      try {
+        await staleBridge.close()
+      } catch (error) {
+        console.error('[Electron] Erro ao fechar ponte do backend morto:', error)
+      }
+    }
+    while (!appShuttingDown && backendRestartAttempts < BACKEND_MAX_RESTARTS) {
+      const waitMs = BACKEND_RESTART_BACKOFF_MS[Math.min(backendRestartAttempts, BACKEND_RESTART_BACKOFF_MS.length - 1)]
+      backendRestartAttempts += 1
+      console.log(`[Electron] Watchdog do backend: tentativa ${backendRestartAttempts}/${BACKEND_MAX_RESTARTS} em ${waitMs}ms (morte: ${deathInfo})`)
+      broadcastBackendStatus('restarting', `Tentativa ${backendRestartAttempts} de ${BACKEND_MAX_RESTARTS} para religar o motor…`)
+      await sleep(waitMs)
+      if (appShuttingDown) break
+      // Outra frente (ex.: religamento manual) já resolveu: não duplicar.
+      if (pythonProcess && isPythonReady) {
+        noteBackendReady()
+        return
+      }
+      try {
+        pythonReadinessPromise = startPythonSidecar()
+        await pythonReadinessPromise
+        noteBackendReady()
+        console.log('[Electron] Watchdog do backend: motor religado com sucesso')
+        await restartZoeBridgeIfWanted()
+        return
+      } catch (error) {
+        console.error(`[Electron] Watchdog do backend: tentativa ${backendRestartAttempts} falhou:`, error)
+      }
+    }
+    if (!appShuttingDown && !isPythonReady) {
+      const detail = wasReady
+        ? 'O motor da ZARA (backend) parou de funcionar.'
+        : 'O motor da ZARA (backend) não conseguiu iniciar.'
+      await showBackendDeadWarning(
+        `${detail} Tentamos religar ${backendRestartAttempts} vezes sem sucesso.`,
+      )
+    }
+  } finally {
+    backendWatchdogRunning = false
+  }
+}
+
+// Aviso visível (nativo) quando o motor não volta: antes isso era silêncio total.
+// A interface também recebe o evento 'backend-status' p/ mostrar banner próprio.
+async function showBackendDeadWarning(detail: string): Promise<void> {
+  if (backendDeathNotified) return
+  backendDeathNotified = true
+  broadcastBackendStatus('dead', detail)
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+    }
+  } catch {
+    // Melhor esforço: o diálogo abaixo já é visível por si só.
+  }
+  const options: MessageBoxOptions = {
+    type: 'warning',
+    title: 'ZARA 3.0 — motor parado',
+    message: 'O motor da ZARA parou.',
+    detail: `${detail}\n\nVoz e controle do PC estão indisponíveis até o motor voltar.`,
+    buttons: ['Reiniciar agora', 'Continuar sem motor'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  }
+  try {
+    const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+    const result = owner
+      ? await dialog.showMessageBox(owner, options)
+      : await dialog.showMessageBox(options)
+    if (result.response === 0) {
+      app.relaunch()
+      app.exit(0)
+    }
+  } catch (error) {
+    console.error('[Electron] Não foi possível exibir o aviso de motor parado:', error)
+  }
+}
+
+// Religamento manual (a interface pode expor num botão "tentar de novo").
+async function retryBackendNow(): Promise<{ ok: boolean; status: BackendHealth }> {
+  if (pythonProcess && isPythonReady) return { ok: true, status: backendHealth }
+  if (backendWatchdogRunning) return { ok: false, status: backendHealth }
+  backendRestartAttempts = 0
+  backendDeathNotified = false
+  await runBackendWatchdog(false, 'religamento manual')
+  return { ok: pythonProcess !== null && isPythonReady, status: backendHealth }
+}
+
+async function startZoeBridgeOnce(): Promise<void> {
+  if (zoeBridge || !isPythonReady) return
+  const base = process.env.ZARA3_HOME || join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ZARA3')
+  zoeBridge = await startZoeBridge(join(base, 'zoe_bridge'), sendToPython)
+  zoeBridgeWanted = true
+  console.log('[Zoe Bridge] Local bridge ready')
+}
+
+async function restartZoeBridgeIfWanted(): Promise<void> {
+  if (!zoeBridgeWanted || zoeBridge || !isPythonReady) return
+  try {
+    await startZoeBridgeOnce()
+  } catch (error) {
+    console.error('[Zoe Bridge] Unavailable after backend restart:', error)
+  }
 }
 
 type DurableLabCommand = 'lab.v1.submit' | 'lab.v1.message' | 'lab.v1.room' | 'lab.v1.cancel'
@@ -508,6 +697,36 @@ function handlePythonEvent(msg: any): void {
       }
       break
     }
+    case 'computer_agent_started': {
+      const data = (msg.data ?? {}) as { goal?: unknown }
+      showComputerAgentOverlay()
+      const payload = { goal: typeof data.goal === 'string' ? data.goal : '' }
+      sendToComputerAgentOverlay('computer-agent-started', payload)
+      mainWindow?.webContents.send('computer-agent-started', payload)
+      break
+    }
+    case 'computer_agent_stopped': {
+      const data = (msg.data ?? {}) as {
+        goal?: unknown
+        success?: unknown
+        refused?: unknown
+        verified?: unknown
+        steps?: unknown
+        error?: unknown
+      }
+      const payload = {
+        goal: typeof data.goal === 'string' ? data.goal : '',
+        success: data.success === true,
+        refused: data.refused === true,
+        verified: data.verified === true,
+        steps: typeof data.steps === 'number' ? data.steps : 0,
+        error: typeof data.error === 'string' ? data.error : null,
+      }
+      sendToComputerAgentOverlay('computer-agent-stopped', payload)
+      mainWindow?.webContents.send('computer-agent-stopped', payload)
+      hideComputerAgentOverlay()
+      break
+    }
     default:
       console.log('[Electron] Ignoring backend event:', msg.type)
   }
@@ -653,6 +872,77 @@ function createWindow(): void {
   })
 }
 
+// --- Overlay do computer-agent (use-computer) — contrato Frente B, 29/09 ---
+// Janela fullscreen transparente, click-through, que mostra a borda neon
+// enquanto o backend usa o PC. O renderer a usa via ?overlay=computer-agent.
+let computerAgentOverlay: BrowserWindow | null = null
+
+function createComputerAgentOverlay(): BrowserWindow {
+  if (computerAgentOverlay && !computerAgentOverlay.isDestroyed()) return computerAgentOverlay
+  const overlay = new BrowserWindow({
+    fullscreen: true,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true, // não aparece na barra de tarefas
+    focusable: false, // nunca rouba o foco
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  overlay.setIgnoreMouseEvents(true) // click-through: o mouse atravessa
+  overlay.setAlwaysOnTop(true, 'screen-saver')
+  if (app.isPackaged) {
+    // loadFile aceita query: a URL final é index.html?overlay=computer-agent
+    overlay.loadFile(join(getFrontendDistPath(), 'index.html'), { query: { overlay: 'computer-agent' } })
+  } else {
+    overlay.loadURL('http://localhost:5173?overlay=computer-agent')
+  }
+  overlay.on('closed', () => {
+    if (computerAgentOverlay === overlay) computerAgentOverlay = null
+  })
+  computerAgentOverlay = overlay
+  return overlay
+}
+
+function showComputerAgentOverlay(): void {
+  const overlay = createComputerAgentOverlay()
+  if (!overlay.isDestroyed() && !overlay.isVisible()) overlay.showInactive() // mostra sem roubar o foco
+}
+
+// Envia para o overlay mesmo que ele ainda esteja carregando: webContents.send
+// numa página em load é descartado em silêncio — sem este helper a borda neon
+// nunca acenderia no primeiro uso (janela recém-criada ainda carregando).
+function sendToComputerAgentOverlay(
+  channel: 'computer-agent-started' | 'computer-agent-stopped',
+  payload: unknown,
+): void {
+  const overlay = computerAgentOverlay
+  if (!overlay || overlay.isDestroyed()) return
+  if (overlay.webContents.isLoading()) {
+    overlay.webContents.once('did-finish-load', () => {
+      if (!overlay.isDestroyed()) overlay.webContents.send(channel, payload)
+    })
+  } else {
+    overlay.webContents.send(channel, payload)
+  }
+}
+
+function hideComputerAgentOverlay(): void {
+  if (computerAgentOverlay && !computerAgentOverlay.isDestroyed()) {
+    computerAgentOverlay.close() // destrói; recria no próximo start
+    computerAgentOverlay = null
+  }
+}
+
 function setupIPC(): void {
   ipcMain.handle('zoe-bridge-status', () => ({ ready: Boolean(zoeBridge && isPythonReady) }))
   ipcMain.handle('engine-change', (_event, engine: string) => sendToPython('engine-change', { engine }))
@@ -766,6 +1056,22 @@ function setupIPC(): void {
     return openDesktopPath(app.getPath(id))
   })
 
+  ipcMain.handle('backend-retry', () => retryBackendNow())
+  ipcMain.handle('backend-health', () => ({
+    status: backendHealth,
+    attempts: backendRestartAttempts,
+    ready: isPythonReady,
+  }))
+  // Computer-agent (use-computer) — contrato Frente B
+  ipcMain.handle('computer-agent-run', (_event, payload) => sendToPython('computer-agent-run', payload))
+  ipcMain.handle('computer-agent-overlay-show', () => {
+    showComputerAgentOverlay()
+    return { ok: true }
+  })
+  ipcMain.handle('computer-agent-overlay-hide', () => {
+    hideComputerAgentOverlay()
+    return { ok: true }
+  })
   ipcMain.handle('window-minimize', () => mainWindow?.minimize())
   ipcMain.handle('window-maximize', () => {
     const win = mainWindow
@@ -784,11 +1090,7 @@ app.whenReady().then(() => {
   void pythonReadinessPromise.catch((error) => {
     console.error('[Electron] Python backend unavailable:', error)
   })
-  void pythonReadinessPromise.then(async () => {
-    const base = process.env.ZARA3_HOME || join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ZARA3')
-    zoeBridge = await startZoeBridge(join(base, 'zoe_bridge'), sendToPython)
-    console.log('[Zoe Bridge] Local bridge ready')
-  }).catch((error) => console.error('[Zoe Bridge] Unavailable:', error))
+  void pythonReadinessPromise.then(() => startZoeBridgeOnce()).catch((error) => console.error('[Zoe Bridge] Unavailable:', error))
   createWindow()
 
   app.on('activate', () => {
@@ -797,6 +1099,7 @@ app.whenReady().then(() => {
 })
 
 function stopPython(): void {
+  appShuttingDown = true
   const bridge = zoeBridge
   zoeBridge = null
   if (bridge) void bridge.close()

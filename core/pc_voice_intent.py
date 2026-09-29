@@ -542,6 +542,12 @@ class PcVoiceIntentDetector:
             (r'^(?:zara[,\s]+)?(?:rol[ae]|scroll|sub[ae]|subir|sobe)(?:\s+(?:a\s+)?p[áa]gina)?(?:\s+(?:pra|para)?\s*cima|\s+um\s+pouco)?\s*[.!?]*$',
              self._scroll_up, "browser_scroll", "up"),
 
+            # ZARA-VOZ-CLIQUE-001: 'clique em X' vira vision_click_text
+            # (OCR real). Exige preposição (em/no/na): 'clique aqui' solto
+            # não dispara clique.
+            (r'^(?:zara[,\s]+)?(?:clique|click|clica)\s+(?:em|no|na)\s+(?P<texto>.+?)\s*[.!?]*$',
+             self._click_text, "vision_click_text", None),
+
             # Explicitly catch unsupported app requests after all known safe
             # commands. The raw text is never executed.
             (r'^(?:zara[,\s]+)?(?:abra|abre|abrir|inicie|inicia|iniciar|executa|execute|executar|quero\s+abrir)\s+'
@@ -1234,6 +1240,10 @@ Respond ONLY with valid JSON, no extra text."""
 
     def _window_notepad(self, m):
         return "notepad"
+
+    def _click_text(self, m):
+        # ZARA-VOZ-CLIQUE-001: texto do alvo em minúsculas p/ o OCR.
+        return m.group("texto").strip().lower()
 
     def _scroll_down(self, m):
         return "down"

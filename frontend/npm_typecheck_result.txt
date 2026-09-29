@@ -1,8 +1,0 @@
-﻿npm.cmd : npm notice run zara-frontend@3.0.0 typecheck
-No linha:1 caractere:70
-+ ... oads\ZARA 3.0 CLEAN 002\frontend'; npm.cmd run typecheck 2>&1 | Out-F ...
-+                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (npm notice run ...3.0.0 typecheck:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
-npm notice run tsc --noEmit

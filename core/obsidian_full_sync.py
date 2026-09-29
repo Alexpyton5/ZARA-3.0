@@ -1,1 +1,0 @@
-# Obsidian Full Sync Module

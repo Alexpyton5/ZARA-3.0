@@ -9,7 +9,7 @@
    "impact": 5,
    "urgency": 4,
    "cost": 4,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 15,
    "claimed_by": null,
    "journal": [
@@ -17,6 +17,116 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
     }
    ]
   },
@@ -29,7 +139,7 @@
    "impact": 4,
    "urgency": 3,
    "cost": 2,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 14,
    "claimed_by": null,
    "journal": [
@@ -37,6 +147,105 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ENGINEER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
     }
    ]
   },
@@ -49,7 +258,7 @@
    "impact": 4,
    "urgency": 3,
    "cost": 2,
-   "state": "APPROVED",
+   "state": "REJECTED",
    "score": 14,
    "claimed_by": null,
    "journal": [
@@ -62,6 +271,111 @@
      "t": "AGORA",
      "event": "approved",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
     }
    ]
   },
@@ -74,7 +388,7 @@
    "impact": 3,
    "urgency": 3,
    "cost": 1,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 13,
    "claimed_by": null,
    "journal": [
@@ -82,6 +396,131 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
+    }
+   ]
+  },
+  {
+   "seq": 101,
+   "item_id": "BLG-0101",
+   "title": "Teste: prova de vida do worker 24x7",
+   "description": "ESCREVER prova-de-vida.md\n# Prova de vida do worker 24x7\nO worker de arquivos do Lab 24x7 executou esta ordem com sucesso.\nSem modelo, sem rede, custo zero - so arquivo no disco.\nContrato: ESCREVER | LER | CHECAR <arq> CONTEM <trecho> | LISTAR\nArea: .lab-vivo/work (o worker nunca sai daqui).",
+   "proposed_by": "CEO",
+   "impact": 2,
+   "urgency": 4,
+   "cost": 1,
+   "state": "DONE",
+   "score": 12,
+   "claimed_by": "REVIEWER",
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO",
+     "detail": "item executavel pelo worker de arquivos; recoloca o loop em verde"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "done",
+     "by": "REVIEWER",
+     "detail": "arquivo prova-de-vida.md escrito (272 bytes)"
     }
    ]
   },
@@ -94,7 +533,7 @@
    "impact": 4,
    "urgency": 3,
    "cost": 5,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 8,
    "claimed_by": null,
    "journal": [
@@ -102,6 +541,120 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "TESTER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
+    }
+   ]
+  },
+  {
+   "seq": 102,
+   "item_id": "BLG-0102",
+   "title": "Documentar o contrato do worker 24x7",
+   "description": "ESCREVER contrato-worker.md\n# Contrato do worker 24x7 (core/lab_workers.py)\nO worker so entende ordens com verbo na linguagem de arquivo:\n- ESCREVER <caminho> : escreve o conteudo (linhas seguintes) no arquivo\n- LER <caminho> : le o arquivo e confirma\n- CHECAR <caminho> CONTEM <trecho> : verifica se o trecho existe\n- LISTAR [caminho] : lista o diretorio\nDescricoes em prosa (ex.: 'Motivo:...') NAO sao ordens - o worker rejeita.\nArea restrita: .lab-vivo/work. Fora dela, caminho recusado.",
+   "proposed_by": "CEO",
+   "impact": 2,
+   "urgency": 2,
+   "cost": 1,
+   "state": "DONE",
+   "score": 8,
+   "claimed_by": "ARCHITECT",
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO",
+     "detail": "documenta a causa raiz do 9/9 falhando (contrato do worker)"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ARCHITECT"
+    },
+    {
+     "t": "AGORA",
+     "event": "done",
+     "by": "ARCHITECT",
+     "detail": "arquivo contrato-worker.md escrito (471 bytes)"
     }
    ]
   },
@@ -114,7 +667,7 @@
    "impact": 3,
    "urgency": 2,
    "cost": 3,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 7,
    "claimed_by": null,
    "journal": [
@@ -122,6 +675,72 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "PACKAGER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "PACKAGER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "PACKAGER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "PACKAGER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "PACKAGER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
     }
    ]
   },
@@ -134,7 +753,7 @@
    "impact": 3,
    "urgency": 2,
    "cost": 3,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 7,
    "claimed_by": null,
    "journal": [
@@ -142,6 +761,61 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "UI_DESIGNER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "UI_DESIGNER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "UI_DESIGNER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "UI_DESIGNER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
     }
    ]
   },
@@ -154,7 +828,7 @@
    "impact": 2,
    "urgency": 2,
    "cost": 2,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 6,
    "claimed_by": null,
    "journal": [
@@ -162,6 +836,50 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ARCHITECT"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ARCHITECT"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "ARCHITECT"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
     }
    ]
   },
@@ -174,7 +892,7 @@
    "impact": 2,
    "urgency": 2,
    "cost": 2,
-   "state": "PROPOSED",
+   "state": "REJECTED",
    "score": 6,
    "claimed_by": null,
    "journal": [
@@ -182,6 +900,87 @@
      "t": "AGORA",
      "event": "proposed",
      "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "UI_DESIGNER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "UI_DESIGNER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "UI_DESIGNER"
+    },
+    {
+     "t": "AGORA",
+     "event": "released",
+     "by": "CEO",
+     "detail": "FALHA_NO_TURNO"
+    },
+    {
+     "t": "AGORA",
+     "event": "archived",
+     "by": "CEO",
+     "detail": "TAREFA_ALEM_DO_WORKER: descricao em prosa, worker 24x7 so executa ordens com verbo (ESCREVER/LER/CHECAR/LISTAR); 9/9 falharam em 3 ciclos. Tarefa de engenharia real fica com zoe/Codex (ver CADERNO 29/09)."
+    }
+   ]
+  },
+  {
+   "seq": 103,
+   "item_id": "BLG-0103",
+   "title": "Teste: inventario da area de trabalho do Lab",
+   "description": "LISTAR .",
+   "proposed_by": "CEO",
+   "impact": 1,
+   "urgency": 2,
+   "cost": 1,
+   "state": "DONE",
+   "score": 5,
+   "claimed_by": "REVIEWER",
+   "journal": [
+    {
+     "t": "AGORA",
+     "event": "proposed",
+     "by": "CEO"
+    },
+    {
+     "t": "AGORA",
+     "event": "approved",
+     "by": "CEO",
+     "detail": "exercita o verbo LISTAR; prova leitura do work dir"
+    },
+    {
+     "t": "AGORA",
+     "event": "claimed",
+     "by": "REVIEWER"
+    },
+    {
+     "t": "AGORA",
+     "event": "done",
+     "by": "REVIEWER",
+     "detail": "listados 3 itens em .: contrato-worker.md, prova-de-vida.md, relatorio-turno-vivo.txt"
     }
    ]
   }

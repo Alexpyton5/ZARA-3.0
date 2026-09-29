@@ -515,5 +515,125 @@
         "tests/test_voice_usability.py::test_pc_router_exception_fails_closed_without_crashing"
       ]
     }
+  },
+  {
+    "run_id": "2026-09-29_03-56-43",
+    "commit": "16fbc842da9a614efe31d2e8e8ad6b556edd32b9",
+    "mode": "full",
+    "passed": 2998,
+    "failed": 19,
+    "new_failures": 19
+  },
+  {
+    "run_id": "2026-09-29_05-05-31",
+    "commit": "1b4653eeb963c9bea78f08e65fa2b12c9e5b8155",
+    "mode": "full",
+    "passed": 3037,
+    "failed": 1,
+    "new_failures": 1
+  },
+  {
+    "run_id": "2026-09-29_05-16-24",
+    "commit": "d3e363956a20df42c47fe37a4810d3a7e9c4cd2f",
+    "mode": "full",
+    "passed": 0,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_05-29-59",
+    "commit": "49096aedb493d8c4b3d1b59b1d119b93d33142d3",
+    "mode": "full",
+    "passed": 3099,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_05-43-23",
+    "commit": "0e9e792e02568029046aaad028842cc09bb942c4",
+    "mode": "incremental",
+    "passed": 2126,
+    "failed": 2,
+    "new_failures": 2
+  },
+  {
+    "run_id": "2026-09-29_06-28-01",
+    "commit": "4601a08d19a755b7c516b309b8ae78492d751f0d",
+    "mode": "full",
+    "passed": 3162,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_06-31-38",
+    "commit": "0e15c45c346a1b63586ccd304c8dfe002ac99479",
+    "mode": "incremental",
+    "passed": 25,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_06-34-19",
+    "commit": "0e15c45c346a1b63586ccd304c8dfe002ac99479",
+    "mode": "full",
+    "passed": 0,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_06-42-39",
+    "commit": "0e15c45c346a1b63586ccd304c8dfe002ac99479",
+    "mode": "full",
+    "passed": 3189,
+    "failed": 1,
+    "new_failures": 1
+  },
+  {
+    "run_id": "2026-09-29_06-45-38",
+    "commit": "0e15c45c346a1b63586ccd304c8dfe002ac99479",
+    "mode": "full",
+    "passed": 3190,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_07-06-12",
+    "commit": "0e15c45c346a1b63586ccd304c8dfe002ac99479",
+    "mode": "full",
+    "passed": 3190,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_07-23-27",
+    "commit": "77616d1fae44c471d3a8c6012fd72bc0c24a4694",
+    "mode": "full",
+    "passed": 3190,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_07-37-11",
+    "commit": "77616d1fae44c471d3a8c6012fd72bc0c24a4694",
+    "mode": "full",
+    "passed": 3190,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_07-58-11",
+    "commit": "1e7d5edbda5ade10f50cbc5c032746593256cbef",
+    "mode": "full",
+    "passed": 3193,
+    "failed": 0,
+    "new_failures": 0
+  },
+  {
+    "run_id": "2026-09-29_08-59-23",
+    "commit": "1e7d5edbda5ade10f50cbc5c032746593256cbef",
+    "mode": "full",
+    "passed": 3193,
+    "failed": 0,
+    "new_failures": 0
   }
 ]

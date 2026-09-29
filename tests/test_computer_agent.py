@@ -243,3 +243,42 @@ def test_reply_sucesso_curto_e_simples():
                                  "error": None, "goal": "clicar"})
     assert reply.startswith("Pronto")
     assert "2 passo" in reply
+
+
+# --- guarda global: simbolos banidos em todo o core/ -------------------------------
+BANNED_SYMBOLS = (
+    "work_mode_active",
+    "work_mode_sentinel",
+    "_watch_supercerebro_work_mode",
+)
+
+
+def test_simbolos_banidos_nao_existem_em_nenhum_modulo_core():
+    """Quarentena permanente (ver ~/AGENTS.md): nenhum modulo de core/ pode
+    reimplementar os simbolos do bypass do supercerebro. Comentarios e
+    docstrings que apenas MENCIONAM os nomes como aviso nao contam — o que
+    nao pode e existir codigo de verdade (nome de variavel, funcao,
+    atributo, chamada) com esses nomes. A varredura ignora strings e
+    comentarios via tokenize; arquivos que nao tokenizam caem num plano B
+    que ignora linhas de comentario."""
+    import io
+    import pathlib
+    import re
+    import tokenize
+
+    core_dir = pathlib.Path(ca.__file__).resolve().parent
+    ofensores = []
+    for py in sorted(core_dir.rglob("*.py")):
+        texto = py.read_text(encoding="utf-8-sig", errors="replace")
+        try:
+            nomes = {t.string for t in tokenize.generate_tokens(io.StringIO(texto).readline)
+                     if t.type == tokenize.NAME}
+        except (tokenize.TokenError, SyntaxError, IndentationError):
+            # Plano B: texto cru sem linhas de comentario (strings podem gerar
+            # falso-positivo aqui, mas e conservador: melhor acusar do que deixar passar)
+            sem_comentarios = "\n".join(l.split("#", 1)[0] for l in texto.splitlines())
+            nomes = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", sem_comentarios))
+        achados = [b for b in BANNED_SYMBOLS if b in nomes]
+        if achados:
+            ofensores.append(f"{py.relative_to(core_dir)}: {', '.join(achados)}")
+    assert not ofensores, "simbolos banidos reimplementados em core/: " + "; ".join(ofensores)

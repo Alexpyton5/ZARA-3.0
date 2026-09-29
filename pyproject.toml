@@ -60,6 +60,12 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "safe: sem efeitos colaterais reais (fake stores, paths temporarios)",
+    "sandbox: roda em sandbox isolado",
+    "live: toca integracoes reais (deselecionado por padrao via -m 'not live')",
+    "real_env: precisa do ambiente real da maquina (fora do isolamento de dados)",
+]
 
 [tool.ruff]
 line-length = 100

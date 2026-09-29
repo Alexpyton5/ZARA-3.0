@@ -248,47 +248,145 @@ class ActionRegistry:
         spec: ActionSpec | None,
         params: dict[str, Any],
         proof: Any = None,
-    ) -> ActionResult | None:
-        """Apply capability and risk gates before any action function runs."""
-        if spec is None:
-            return ActionResult(success=False, error="ACTION_POLICY_METADATA_MISSING")
+    ) -> tuple[ActionResult | None, dict[str, Any]]:
+        """Apply capability and risk gates before any action function runs.
 
-        # The Supercérebro gate grants local computer control only. Other
-        # capabilities keep their own risk/confirmation policy and must not
-        # be intercepted by this gate.
-        if spec.capability == "PC_CONTROL" and not self.pc_control_allowed:
-            if isinstance(proof, ConfirmationProof):
-                self._confirmation_broker.cancel(proof.confirmation_id)
-            return ActionResult(
-                success=False,
-                error=(
-                    f"Action '{name}' exige permissão de controle do PC "
-                    f"(capability={spec.capability}, Supercérebro OFF). "
-                    "Para controlar o computador, ative o Supercérebro."
-                ),
-                duration_ms=0.0,
-                verificado=False,
+        FRENTE B (GIGANTE 3, ZARA-AUTONOMIA-001 + ZARA-FRONTEIRA-DINHEIRO-001):
+        retorna (blocked, decision).
+          - blocked: ActionResult|None — None = liberado, segue p/ execução.
+          - decision: dict {action, autonomous: bool, why: str, grant: str,
+            money: str} — alimenta a auditoria.
+        Ordem rígida dos portões:
+          1. Fronteira de dinheiro — BLOQUEADA sempre, antes de tudo
+             (nem confirmação, nem modo autônomo, nem desafio contornam).
+          2. Trava do Supercérebro p/ PC_CONTROL — chave manual OU grant
+             via WhatsApp (fail-closed). NÃO é confirmação.
+          3. Autonomia ligada (padrão, "sim sempre"): ação direta, sem
+             desafio e sem exigir confirm.
+          4. Modo legado (ZARA_AUTONOMY=perguntar): desafios como antes.
+        """
+        decision: dict[str, Any] = {
+            "action": name,
+            "autonomous": False,
+            "why": "",
+            "grant": "",
+            "money": "",
+        }
+        if spec is None:
+            return (
+                ActionResult(success=False, error="ACTION_POLICY_METADATA_MISSING"),
+                decision,
             )
 
+        # --- 1. FRONTEIRA DE DINHEIRO (antes de tudo, sem exceção) ---
+        try:
+            from core.money_boundary import is_money_action
+
+            money_blocked, money_reason = is_money_action(name, params)
+        except Exception:
+            money_blocked, money_reason = False, ""
+        if money_blocked:
+            decision["money"] = money_reason
+            decision["why"] = "bloqueio:dinheiro"
+            if isinstance(proof, ConfirmationProof):
+                try:
+                    self._confirmation_broker.cancel(proof.confirmation_id)
+                except Exception:
+                    pass
+            return (
+                ActionResult(
+                    success=False,
+                    error=(
+                        f"Ação '{name}' BLOQUEADA pela fronteira de dinheiro "
+                        f"({money_reason}). A ZARA nunca movimenta dinheiro."
+                    ),
+                    duration_ms=0.0,
+                    verificado=False,
+                ),
+                decision,
+            )
+
+        # --- 2. TRAVA DO SUPERCÉREBRO p/ PC_CONTROL ---
+        # Chave manual (pc_control_allowed) OU grant via WhatsApp com prazo
+        # curto. Arquivo ausente/expirado/malformado = NEGAR (fail-closed).
+        if spec.capability == "PC_CONTROL":
+            grant_ok = False
+            grant_reason = ""
+            if not self.pc_control_allowed:
+                try:
+                    from core import supercerebro_grant as _sg
+
+                    grant_ok, grant_reason, _info = _sg.check_whatsapp_grant()
+                except Exception:
+                    grant_ok, grant_reason = False, "grant-check-error"
+            decision["grant"] = (
+                grant_reason or ("chave-manual" if self.pc_control_allowed else "")
+            )
+            if not self.pc_control_allowed and not grant_ok:
+                if isinstance(proof, ConfirmationProof):
+                    self._confirmation_broker.cancel(proof.confirmation_id)
+                decision["why"] = "trava:supercerebro"
+                return (
+                    ActionResult(
+                        success=False,
+                        error=(
+                            f"Action '{name}' exige permissão de controle do PC "
+                            f"(capability={spec.capability}, Supercérebro OFF). "
+                            "Para controlar o computador, ative o Supercérebro."
+                        ),
+                        duration_ms=0.0,
+                        verificado=False,
+                    ),
+                    decision,
+                )
+
+        # --- 3. AUTONOMIA (diretriz do Alex: "sim sempre") ---
+        # Ação direta: sem desafio one-shot, sem exigir confirm. A fronteira
+        # de dinheiro e a trava do Supercérebro já foram aplicadas acima e
+        # NUNCA são afrouxadas por este ponto.
+        try:
+            from core.autonomy_policy import autonomy_enabled
+
+            _auto = autonomy_enabled()
+        except Exception:
+            _auto = False
+        if _auto:
+            if isinstance(proof, ConfirmationProof):
+                try:
+                    self._confirmation_broker.cancel(proof.confirmation_id)
+                except Exception:
+                    pass
+            params.pop("confirm", None)
+            decision["autonomous"] = True
+            decision["why"] = "autonomia:acao-direta"
+            return None, decision
+
+        # --- 4. MODO LEGADO (ZARA_AUTONOMY=perguntar): desafios como antes ---
         # Legacy confirmation remains valid only for MEDIUM actions. HIGH
         # always requires a one-shot proof from the separate confirmation IPC.
         medium_confirmed = params.pop("confirm", False) is True
         if spec.risk == "HIGH":
             if proof is not None and not isinstance(proof, ConfirmationProof):
-                return ActionResult(
-                    success=False,
-                    error="CONFIRMATION_INVALID",
-                    data={"status": "CONFIRMATION_INVALID"},
+                return (
+                    ActionResult(
+                        success=False,
+                        error="CONFIRMATION_INVALID",
+                        data={"status": "CONFIRMATION_INVALID"},
+                    ),
+                    decision,
                 )
 
             metadata = self._confirmation_metadata(spec)
             if proof is None:
                 summary = build_confirmation_summary(name, params)
                 if summary is None:
-                    return ActionResult(
-                        success=False,
-                        error="CONFIRMATION_POLICY_MISSING",
-                        data={"status": "CONFIRMATION_POLICY_MISSING"},
+                    return (
+                        ActionResult(
+                            success=False,
+                            error="CONFIRMATION_POLICY_MISSING",
+                            data={"status": "CONFIRMATION_POLICY_MISSING"},
+                        ),
+                        decision,
                     )
                 try:
                     challenge = self._confirmation_broker.issue(
@@ -298,18 +396,24 @@ class ActionRegistry:
                         summary=summary,
                     )
                 except (ConfirmationCapacityError, ConfirmationSerializationError, RuntimeError):
-                    return ActionResult(
-                        success=False,
-                        error="CONFIRMATION_UNAVAILABLE",
-                        data={"status": "CONFIRMATION_UNAVAILABLE"},
+                    return (
+                        ActionResult(
+                            success=False,
+                            error="CONFIRMATION_UNAVAILABLE",
+                            data={"status": "CONFIRMATION_UNAVAILABLE"},
+                        ),
+                        decision,
                     )
-                return ActionResult(
-                    success=False,
-                    error="CONFIRMATION_REQUIRED",
-                    data={
-                        "status": "CONFIRMATION_REQUIRED",
-                        "confirmation": challenge.to_dict(),
-                    },
+                return (
+                    ActionResult(
+                        success=False,
+                        error="CONFIRMATION_REQUIRED",
+                        data={
+                            "status": "CONFIRMATION_REQUIRED",
+                            "confirmation": challenge.to_dict(),
+                        },
+                    ),
+                    decision,
                 )
 
             allowed, status = self._confirmation_broker.consume(
@@ -319,31 +423,40 @@ class ActionRegistry:
                 params=params,
             )
             if not allowed:
-                return ActionResult(
-                    success=False,
-                    error=status,
-                    data={"status": status},
+                return (
+                    ActionResult(
+                        success=False,
+                        error=status,
+                        data={"status": status},
+                    ),
+                    decision,
                 )
-            return None
+            return None, decision
 
         if isinstance(proof, ConfirmationProof):
             self._confirmation_broker.cancel(proof.confirmation_id)
-            return ActionResult(
-                success=False,
-                error="CONFIRMATION_NOT_APPLICABLE",
-                data={"status": "CONFIRMATION_NOT_APPLICABLE"},
+            return (
+                ActionResult(
+                    success=False,
+                    error="CONFIRMATION_NOT_APPLICABLE",
+                    data={"status": "CONFIRMATION_NOT_APPLICABLE"},
+                ),
+                decision,
             )
 
         if spec.risk == "MEDIUM" and not self.medium_risk_open and not medium_confirmed:
-            return ActionResult(
-                success=False,
-                error=(
-                    f"Action '{name}' é MEDIUM risk e exige confirmação "
-                    "(confirm=true) ou política MEDIUM explícita."
+            return (
+                ActionResult(
+                    success=False,
+                    error=(
+                        f"Action '{name}' é MEDIUM risk e exige confirmação "
+                        "(confirm=true) ou política MEDIUM explícita."
+                    ),
+                    duration_ms=0.0,
                 ),
-                duration_ms=0.0,
+                decision,
             )
-        return None
+        return None, decision
 
     def execute_confirmed(
         self,
@@ -380,9 +493,10 @@ class ActionRegistry:
         start = time.perf_counter()
 
         proof = kwargs.pop("_zara_confirmation_proof", None)
-        gate_result = self._check_action_gates(name, spec, kwargs, proof)
-        if gate_result is not None:
-            return gate_result
+        blocked, decision = self._check_action_gates(name, spec, kwargs, proof)
+        if blocked is not None:
+            self._audit_block(name, spec, blocked, decision)
+            return blocked
 
         try:
             # Check if async
@@ -401,34 +515,96 @@ class ActionRegistry:
 
             if isinstance(result, ActionResult):
                 result.duration_ms = duration
-                self._audit_action(name, spec, result)
+                self._audit_with_decision(name, spec, result, decision)
                 return result
             elif isinstance(result, dict):
                 out = ActionResult(success=True, output=json.dumps(result), data=result, duration_ms=duration)
-                self._audit_action(name, spec, out)
+                self._audit_with_decision(name, spec, out, decision)
                 return out
             else:
                 out = ActionResult(success=True, output=str(result), duration_ms=duration)
-                self._audit_action(name, spec, out)
+                self._audit_with_decision(name, spec, out, decision)
                 return out
 
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
             return ActionResult(success=False, error=str(e), duration_ms=duration)
 
-    def _audit_action(self, name: str, spec: ActionSpec | None, result: ActionResult) -> None:
-        """Audit MEDIUM/HIGH executions without raw parameters (no secrets)."""
+    def _audit_action(
+        self,
+        name: str,
+        spec: ActionSpec | None,
+        result: ActionResult,
+        decision: dict[str, Any] | None = None,
+    ) -> None:
+        """Audit executions without raw parameters (no secrets).
+
+        FRENTE B3: audita TODOS os riscos (LOW inclusive — o teste
+        anti-vazamento exige linha de auditoria mesmo p/ LOW), com
+        autonomous (0/1) e why (motivo curto). Bloqueios de dinheiro
+        e da trava vão por _audit_block.
+        """
         try:
-            if spec and spec.risk in ("MEDIUM", "HIGH"):
-                from core.audit_log import audit_log
+            from core.audit_log import audit_log
+
+            decision = decision or {}
+            audit_log().record(
+                action=name,
+                risk=spec.risk if spec else "LOW",
+                outcome="success" if result.success else "error",
+                error=None if result.success else str(result.error)[:200],
+                autonomous=bool(decision.get("autonomous")),
+                why=str(decision.get("why") or ""),
+            )
+        except Exception:
+            pass
+
+    def _audit_block(
+        self,
+        name: str,
+        spec: ActionSpec | None,
+        blocked: ActionResult,
+        decision: dict[str, Any] | None = None,
+    ) -> None:
+        """Audit a gate block. Money blocks are ALWAYS audited (any risk);
+        other blocks follow the MEDIUM/HIGH rule. Never logs raw params."""
+        try:
+            from core.audit_log import audit_log
+
+            decision = decision or {}
+            why = str(decision.get("why") or "")
+            risk = spec.risk if spec else "LOW"
+            if why == "bloqueio:dinheiro" or risk in ("MEDIUM", "HIGH"):
                 audit_log().record(
                     action=name,
-                    risk=spec.risk,
-                    outcome="success" if result.success else "error",
-                    error=None if result.success else str(result.error)[:200],
+                    risk=risk,
+                    outcome="blocked",
+                    error=str(blocked.error)[:200] if blocked else "",
+                    autonomous=False,
+                    why=why,
                 )
         except Exception:
             pass
+
+    def _audit_with_decision(
+        self,
+        name: str,
+        spec: ActionSpec | None,
+        result: ActionResult,
+        decision: dict[str, Any] | None,
+    ) -> None:
+        """Chama _audit_action tolerando o monkeypatch de 3 args dos testes.
+
+        Os testes antigos fazem `registry._audit_action = lambda _n,_s,_r: None`.
+        Tenta a assinatura nova (4 args); se o mock nao aceitar, cai para 3.
+        """
+        try:
+            self._audit_action(name, spec, result, decision)  # type: ignore[call-arg]
+        except TypeError:
+            try:
+                self._audit_action(name, spec, result)  # type: ignore[call-arg]
+            except Exception:
+                pass
 
     async def execute_confirmed_async(
         self,
@@ -460,9 +636,10 @@ class ActionRegistry:
         start = time.perf_counter()
 
         proof = kwargs.pop("_zara_confirmation_proof", None)
-        gate_result = self._check_action_gates(name, spec, kwargs, proof)
-        if gate_result is not None:
-            return gate_result
+        blocked, decision = self._check_action_gates(name, spec, kwargs, proof)
+        if blocked is not None:
+            self._audit_block(name, spec, blocked, decision)
+            return blocked
 
         try:
             if inspect.iscoroutinefunction(func):

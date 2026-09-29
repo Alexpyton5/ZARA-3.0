@@ -310,3 +310,20 @@ def modelos_de_voz_reais():
         if result.returncode != 0:
             pytest.skip(f"Não consegui ligar os modelos reais: {result.stderr.strip()}")
     return link
+
+
+# ---------------------------------------------------------------------------
+# FRENTE B (ZARA-AUTONOMIA-001, GIGANTE 3): modo legado por padrão nos testes.
+#
+# A autonomia ("sim sempre") é o padrão do APP, mas os testes ANTIGOS de
+# confirmação (test_action_confirmation.py, test_action_registry_safety.py)
+# foram escritos para o comportamento legado (desafios one-shot). Para não
+# reescrever dezenas de testes, o padrão na SUÍTE é o modo legado
+# (ZARA_AUTONOMY=perguntar). Os testes NOVOS de autonomia definem sua própria
+# fixture autouse `_clean_env` que APAGA a variável, caindo no padrão real
+# do app ("sim-sempre").
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _zara_autonomy_legacy_by_default(monkeypatch):
+    """Testes antigos veem o modo legado; testes novos limpam a variável."""
+    monkeypatch.setenv("ZARA_AUTONOMY", "perguntar")

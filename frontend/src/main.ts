@@ -6,25 +6,30 @@ import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { existsSync, readdirSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
+import { startZoeBridge, type ZoeBridge } from './zoeBridge'
 
 let pythonProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let isPythonReady = false
 let pythonReadinessPromise: Promise<void> | null = null
 let pythonRequestId = 0
+let zoeBridge: ZoeBridge | null = null
 const pendingRequests = new Map<string, { resolve: (value: any) => void; reject: (err: Error) => void }>()
 
 function getPythonExecutable(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'backend', 'zara-backend.exe')
   }
+  if (process.env.ZARA_DEV_PYTHON) return process.env.ZARA_DEV_PYTHON
+  const localVenv = join(__dirname, '..', '..', '.venv', 'Scripts', 'python.exe')
+  if (process.platform === 'win32' && existsSync(localVenv)) return localVenv
   return process.platform === 'win32' ? 'python.exe' : 'python3'
 }
 
 function getMainScript(): string {
   if (app.isPackaged) return ''
-  // In development app.getAppPath() is the frontend directory.
-  return join(app.getAppPath(), '..', 'main.py')
+  // __dirname is frontend/dist-electron in development.
+  return join(__dirname, '..', '..', 'main.py')
 }
 
 function getFrontendDistPath(): string {
@@ -474,6 +479,9 @@ function handlePythonEvent(msg: any): void {
     case 'voice-level':
       mainWindow?.webContents.send('voice-level', msg.level, msg.tone, msg.speaking)
       break
+    case 'zoe-voice-input':
+      mainWindow?.webContents.send('zoe-voice-input', msg.data)
+      break
     case 'supercerebro-change':
       mainWindow?.webContents.send('supercerebro-change', msg.active)
       break
@@ -646,6 +654,7 @@ function createWindow(): void {
 }
 
 function setupIPC(): void {
+  ipcMain.handle('zoe-bridge-status', () => ({ ready: Boolean(zoeBridge && isPythonReady) }))
   ipcMain.handle('engine-change', (_event, engine: string) => sendToPython('engine-change', { engine }))
   ipcMain.handle('engine-list', () => sendToPython('engine-list'))
   ipcMain.handle('supercerebro-toggle', (_event, active: boolean) => sendToPython('supercerebro-toggle', { active }))
@@ -677,6 +686,8 @@ function setupIPC(): void {
   ipcMain.handle('self-status', () => sendToPython('self-status'))
   ipcMain.handle('system-info', () => sendToPython('system-info'))
   ipcMain.handle('voice-start', () => sendToPython('voice-start'))
+  ipcMain.handle('zoe-voice-start', () => sendToPython('voice-start', { target: 'zoe' }))
+  ipcMain.handle('zoe-voice-speak', (_event, text: string) => sendToPython('zoe-voice-speak', { text }))
   ipcMain.handle('voice-stop', () => sendToPython('voice-stop'))
   ipcMain.handle('voice-status', () => sendToPython('voice-status'))
   ipcMain.handle('voice-engine-get', () => sendToPython('voice-engine-get'))
@@ -773,6 +784,11 @@ app.whenReady().then(() => {
   void pythonReadinessPromise.catch((error) => {
     console.error('[Electron] Python backend unavailable:', error)
   })
+  void pythonReadinessPromise.then(async () => {
+    const base = process.env.ZARA3_HOME || join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ZARA3')
+    zoeBridge = await startZoeBridge(join(base, 'zoe_bridge'), sendToPython)
+    console.log('[Zoe Bridge] Local bridge ready')
+  }).catch((error) => console.error('[Zoe Bridge] Unavailable:', error))
   createWindow()
 
   app.on('activate', () => {
@@ -781,6 +797,9 @@ app.whenReady().then(() => {
 })
 
 function stopPython(): void {
+  const bridge = zoeBridge
+  zoeBridge = null
+  if (bridge) void bridge.close()
   if (pythonProcess) {
     pythonProcess.kill()
     pythonProcess = null

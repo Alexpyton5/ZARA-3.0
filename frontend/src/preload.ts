@@ -6,6 +6,9 @@ import type { ReminderEvent } from './reminderEvents'
 
 // Define the API we want to expose to the renderer
 const zaraAPI = {
+  zoeBridge: {
+    status: () => ipcRenderer.invoke('zoe-bridge-status') as Promise<{ ready: boolean }>,
+  },
   // Engine management
   engine: {
     change: (engine: string) => ipcRenderer.invoke('engine-change', engine),
@@ -73,6 +76,8 @@ const zaraAPI = {
   // Voice
   voice: {
     start: () => ipcRenderer.invoke('voice-start'),
+    startZoe: () => ipcRenderer.invoke('zoe-voice-start'),
+    speakZoe: (text: string) => ipcRenderer.invoke('zoe-voice-speak', text),
     stop: () => ipcRenderer.invoke('voice-stop'),
     status: () => ipcRenderer.invoke('voice-status'),
     getEngine: () => ipcRenderer.invoke('voice-engine-get'),
@@ -192,6 +197,11 @@ const zaraAPI = {
       const handler = (_event: any, data: any) => callback(data || {})
       ipcRenderer.on('voice-output-audio', handler)
       return () => ipcRenderer.off('voice-output-audio', handler)
+    },
+    zoeVoiceInput: (callback: (data: { text: string }) => void) => {
+      const handler = (_event: any, data: { text: string }) => callback(data)
+      ipcRenderer.on('zoe-voice-input', handler)
+      return () => ipcRenderer.off('zoe-voice-input', handler)
     },
     supercerebroChange: (callback: (active: boolean) => void) => {
       const handler = (_event: any, active: boolean) => callback(active)

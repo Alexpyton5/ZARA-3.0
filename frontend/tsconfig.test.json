@@ -13,6 +13,7 @@
   "include": [
     "src/reminderEvents.ts",
     "src/renderer/lib/chatHistory.ts",
+    "src/renderer/lib/labDurableOperation.ts",
     "tests/**/*.ts"
   ]
 }

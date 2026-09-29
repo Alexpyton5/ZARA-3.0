@@ -10,7 +10,6 @@ declare global {
       webview: React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
         src?: string;
         partition?: string;
-        allowpopups?: boolean | '';
         preload?: string;
       };
     }
@@ -24,6 +23,7 @@ declare global {
 
   interface Window {
     zaraIPC: {
+      zoeBridge?: { status?: () => Promise<{ ready: boolean }> };
       engine?: { change?: (engine: string) => Promise<any>; list?: () => Promise<any> };
       supercerebro?: { toggle?: (active: boolean) => Promise<any>; status?: () => Promise<any> };
       message?: { send?: (payload: { message: string; engine: string; history: Array<{ role: string; content: string }> }) => Promise<any>; interrupt?: () => Promise<any> };
@@ -33,7 +33,7 @@ declare global {
       };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
       system?: { metrics?: () => Promise<any>; info?: () => Promise<any>; selfStatus?: () => Promise<any> };
-      voice?: { start?: () => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any>; getEngine?: () => Promise<any>; setEngine?: (engine: 'kore' | 'omnivoice') => Promise<any>; mute?: (muted?: boolean) => Promise<any>; sendMicChunk?: (pcm: any) => void };
+      voice?: { start?: () => Promise<any>; startZoe?: () => Promise<any>; speakZoe?: (text: string) => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any>; getEngine?: () => Promise<any>; setEngine?: (engine: 'kore' | 'omnivoice') => Promise<any>; mute?: (muted?: boolean) => Promise<any>; sendMicChunk?: (pcm: any) => void };
       config?: { get?: () => Promise<any>; set?: (key: string, value: any) => Promise<any> };
       // Atalhos de desktop (abrir apps, pastas, links externos, configurações)
       desktop?: {
@@ -115,6 +115,7 @@ declare global {
         reminderCreated?: (callback: (reminder: ReminderEvent) => void) => () => void;
         reminderFired?: (callback: (reminder: ReminderEvent) => void) => () => void;
         voiceOutputAudio?: (callback: (data: any) => void) => () => void;
+        zoeVoiceInput?: (callback: (data: { text: string }) => void) => () => void;
         labOperationResult?: (callback: (event: any) => void) => () => void;
         routingTelemetry?: (callback: (telemetry: any) => void) => () => void;
       };

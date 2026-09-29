@@ -20,11 +20,12 @@ import { usePowerPlans } from './usePowerPlans';
 import { useClock } from './useClock';
 import { HomeDrawer } from './HomeDrawer';
 import { LabRoom } from '../zara-lab-v2/LabRoom';
+import { ZoeAppPanel } from '../zara/ZoeAppPanel';
 import auroraBackground from '../../../assets/zara-home/aurora-master-refined.png';
 
 /** MASTER composition with connected data and the Lab product direction. */
 export function ZaraHome() {
-  const [activeNav, setActiveNav] = useState('Hoje');
+  const [activeNav, setActiveNav] = useState('Zoe');
   const closePanel = useCallback(() => setActiveNav('Hoje'), []);
   const navigate = useCallback((section: string) => setActiveNav(section), []);
   const coreState = useZaraCoreState();
@@ -37,7 +38,7 @@ export function ZaraHome() {
   // TODO: nome/foto reais dependem de uma integração de conta ainda não
   // construída (Google/Microsoft) — fora do escopo desta missão, per
   // instrução explícita de não criar autenticação nova agora.
-  const userName = 'Alex Silva';
+  const userName = 'Alex';
 
   return (
     <div className="zh-root">
@@ -85,7 +86,8 @@ export function ZaraHome() {
         <WindowControls />
       </div>
 
-      <div className="zh-content">
+      <div className="zh-zoe-workspace" hidden={activeNav !== 'Zoe'}><ZoeAppPanel /></div>
+      {activeNav !== 'Zoe' && <div className="zh-content">
         <div className="zh-top-bar">
           <Header userFirstName={userName.split(' ')[0] ?? userName} />
           <div className="zh-top-bar-center">
@@ -112,8 +114,8 @@ export function ZaraHome() {
         </div>
 
         <SystemPanel metrics={metrics} battery={battery} wifi={wifi} power={power} />
-      </div>
-      {activeNav === 'ZARA Lab' ? <LabRoom onClose={closePanel} /> : activeNav !== 'Hoje' && <HomeDrawer key={activeNav} section={activeNav} onClose={closePanel} onNavigate={navigate} />}
+      </div>}
+      {activeNav === 'ZARA Lab' ? <LabRoom onClose={closePanel} /> : activeNav !== 'Hoje' && activeNav !== 'Zoe' && <HomeDrawer key={activeNav} section={activeNav} onClose={closePanel} onNavigate={navigate} />}
     </div>
   );
 }

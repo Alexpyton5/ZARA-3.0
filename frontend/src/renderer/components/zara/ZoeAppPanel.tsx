@@ -1,18 +1,14 @@
-// Aba "ZOE" — o app web da zoe (Muse) embutido dentro da janela da ZARA.
-// É a zoe de verdade: mesma conta, mesma memória, mesmos conectores.
-// A sessão é persistente (partition persist:zoe): o login é feito uma vez.
-//
-// Honestidade técnica: a visão embutida é visual. Por aqui a zoe NÃO enxerga
-// o estado interno da ZARA e o Lab NÃO age sobre o que é dito aqui. A conexão
-// nos dois sentidos acontece no painel CONSELHEIRA, pela ponte Gmail.
+// O cliente web oficial do Muse, na janela da ZARA. A sessão é persistente.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, LoaderCircle, RefreshCw, WifiOff } from 'lucide-react';
+import { AudioLines, Bot, LoaderCircle, RefreshCw, WifiOff } from 'lucide-react';
 import { ZOE_APP_URL, ZOE_WEBVIEW_PARTITION } from '../../lib/zoeConfig';
+import { useZoeVoice } from '../../lib/useZoeVoice';
 
 // Interface mínima do <webview> do Electron (só o que este painel usa).
 interface ZoeWebviewElement {
   reload(): void;
   loadURL(url: string): Promise<void>;
+  executeJavaScript(code: string): Promise<unknown>;
   addEventListener(type: string, listener: (...args: any[]) => void): void;
   removeEventListener(type: string, listener: (...args: any[]) => void): void;
 }
@@ -21,14 +17,16 @@ type ZoeStatus = 'loading' | 'ready' | 'offline';
 
 const STATUS_LABEL: Record<ZoeStatus, string> = {
   loading: 'CARREGANDO…',
-  ready: 'ONLINE',
+  ready: 'PÁGINA ABERTA',
   offline: 'OFFLINE',
 };
 
 export const ZoeAppPanel: React.FC = () => {
   const webviewRef = useRef<ZoeWebviewElement | null>(null);
   const [status, setStatus] = useState<ZoeStatus>('loading');
+  const [bridgeReady, setBridgeReady] = useState<boolean | null>(null);
   const [failMessage, setFailMessage] = useState('');
+  const voice = useZoeVoice(webviewRef, status === 'ready');
 
   const setWebviewRef = useCallback((el: HTMLElement | null) => {
     webviewRef.current = el as unknown as ZoeWebviewElement | null;
@@ -45,11 +43,16 @@ export const ZoeAppPanel: React.FC = () => {
       setStatus((s) => (s === 'loading' ? 'ready' : s));
     };
     const onFail = (...args: any[]) => {
-      // args: (event, errorCode, errorDescription, validatedURL, isMainFrame)
-      const isMainFrame = args[4];
+      // Electron <webview> emits one event object. Ignore blocked trackers and
+      // other subresources; only a failed main navigation hides the page.
+      const event = args[0] || {};
+      const isMainFrame = event.isMainFrame ?? args[4];
       if (isMainFrame === false) return; // ignora falha de sub-recurso
-      const errorCode = Number(args[1]);
-      const errorDescription = String(args[2] || '');
+      const errorCode = Number(event.errorCode ?? args[1]);
+      const failedURL = String(event.validatedURL ?? args[3] ?? '');
+      if (!Number.isFinite(errorCode) || (failedURL && !failedURL.startsWith(ZOE_APP_URL))) return;
+      if (errorCode === -3) return; // navigation cancelled by a redirect
+      const errorDescription = String(event.errorDescription ?? args[2] ?? '');
       setStatus('offline');
       setFailMessage(
         errorCode === -106 || errorCode === -105
@@ -66,6 +69,19 @@ export const ZoeAppPanel: React.FC = () => {
       wv.removeEventListener('did-fail-load', onFail);
     };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = () => {
+      void window.zaraIPC?.zoeBridge?.status?.()
+        .then((result) => { if (mounted) setBridgeReady(Boolean(result?.ready)); })
+        .catch(() => { if (mounted) setBridgeReady(null); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => { mounted = false; window.clearInterval(timer); };
+  }, []);
+
 
   const reload = useCallback(() => {
     const wv = webviewRef.current;
@@ -84,14 +100,32 @@ export const ZoeAppPanel: React.FC = () => {
       <section className="lab-topline">
         <div>
           <span className="lab-kicker"><Bot size={14}/> ZOE</span>
-          <h1>O APP DA ZOE — DENTRO DA ZARA</h1>
-          <p>É a zoe de verdade embutida no app: mesma conta, mesma memória e mesmos conectores. O login é feito uma vez e a sessão fica salva.</p>
+          <h1>ZOE</h1>
+          <p>Entre com a mesma conta Muse que você usa no WhatsApp. O login nesta janela fica salvo.</p>
         </div>
-        <div className="lab-runtime-status">
-          <span><Bot size={14}/> STATUS <strong>{STATUS_LABEL[status]}</strong></span>
-          <button onClick={reload} title="Recarregar o app da zoe">
-            <RefreshCw size={14}/>
-          </button>
+        <div className="zoe-header-controls">
+          <div className="lab-runtime-status">
+            <span><Bot size={14}/> STATUS <strong>{STATUS_LABEL[status]}</strong></span>
+            <button onClick={reload} title="Recarregar o app da zoe">
+              <RefreshCw size={14}/>
+            </button>
+          </div>
+          <div className="zoe-voice-toolbar" aria-label="Voz da Zoe">
+            <button
+              type="button"
+              className="lab-primary"
+              onClick={() => void voice.toggle()}
+              disabled={status !== 'ready' || voice.voiceState === 'starting'}
+              aria-pressed={voice.voiceState !== 'off' && voice.voiceState !== 'error'}
+            >
+              <AudioLines size={17}/>
+              {voice.voiceState === 'off' || voice.voiceState === 'error' ? 'Falar com Zoe' : 'Parar voz'}
+            </button>
+            <select aria-label="Voz da ZARA" value={voice.engine} onChange={(event) => void voice.changeEngine(event.target.value as 'kore' | 'omnivoice')}>
+              <option value="kore">Kore</option>
+              <option value="omnivoice" disabled={!voice.omnivoiceAvailable}>OmniVoice</option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -100,7 +134,6 @@ export const ZoeAppPanel: React.FC = () => {
           ref={setWebviewRef}
           src={ZOE_APP_URL}
           partition={ZOE_WEBVIEW_PARTITION}
-          allowpopups
           className="zoe-webview"
         />
         {status === 'loading' && (
@@ -122,10 +155,17 @@ export const ZoeAppPanel: React.FC = () => {
       </section>
 
       <p className="panel-caption zoe-caption">
-        A zoe aqui dentro é visual: você conversa com ela com tudo o que ela já sabe sobre você.
-        A conexão nos dois sentidos — ela enxergando o estado da ZARA e o Lab agindo sobre as
-        respostas — acontece no painel CONSELHEIRA, pela ponte Gmail. As duas abas juntas são
-        a experiência Jarvis.
+        {bridgeReady === null ? '' : `Ponte local da ZARA: ${bridgeReady ? 'pronta' : 'indisponível'}. `}
+        {voice.error || {
+          off: 'Microfone desligado.',
+          starting: 'Ligando o microfone…',
+          listening: 'Ouvindo você…',
+          waiting: 'Aguardando a Zoe…',
+          speaking: 'Lendo a resposta da Zoe…',
+          error: '',
+        }[voice.voiceState]}
+        {voice.museWaitMs !== null && ` Texto: ${(voice.museWaitMs / 1000).toFixed(1)} s.`}
+        {voice.firstSoundMs !== null && ` Áudio: ${(voice.firstSoundMs / 1000).toFixed(1)} s.`}
       </p>
     </main>
   );

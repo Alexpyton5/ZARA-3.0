@@ -331,6 +331,11 @@ class VoicePipeline:
         self._thread: threading.Thread | None = None
         self._running = False
         self._state = "SLEEPING"  # SLEEPING, LISTENING, PROCESSING, PAUSED
+        # FRENTE2-ITEM4 (2026-09-29): contagem de referência do mute. O
+        # _speak_response e o NarradorDeVoz pausam pelo mesmo funil; sem
+        # refcount, um retomaria o mic com a outra fala ainda no ar.
+        self._pause_depth = 0
+        self._pause_lock = threading.Lock()
         self._silence_chunks = 0
         self._speech_buffer: list[bytes] = []
         self._event_loop: asyncio.AbstractEventLoop | None = None
@@ -421,6 +426,7 @@ class VoicePipeline:
         if self.porcupine:
             self.porcupine.delete()
         self._state = "STOPPED"
+        self._pause_depth = 0
         print("[Voice] Pipeline stopped")
 
     def _dispatch(self, callback, *args) -> None:
@@ -437,9 +443,16 @@ class VoicePipeline:
 
         This is the local self-listening guard.  Audio continues to be drained
         by the worker thread, but it is never handed to Vosk while paused.
+
+        FRENTE2-ITEM4: contagem de referência — a segunda pausa aproveita
+        o mute já ativo; só a última retomada religa o microfone.
         """
         if not self._running:
             return
+        with self._pause_lock:
+            self._pause_depth += 1
+            if self._pause_depth > 1:
+                return
         self._state = "PAUSED"
         self._speech_buffer = []
         self._silence_chunks = 0
@@ -447,8 +460,16 @@ class VoicePipeline:
             self.vosk.reset()
 
     def resume_listening(self, *, require_wake_word: bool = False) -> None:
-        """Resume capture, optionally returning behind the wake-word gate."""
+        """Resume capture, optionally returning behind the wake-word gate.
+
+        FRENTE2-ITEM4: só religa de verdade quando a última fala pendente
+        terminar (contagem de referência do pause_listening).
+        """
         if self._running:
+            with self._pause_lock:
+                self._pause_depth = max(0, self._pause_depth - 1)
+                if self._pause_depth > 0:
+                    return
             self._speech_buffer = []
             self._silence_chunks = 0
             if self.vosk:

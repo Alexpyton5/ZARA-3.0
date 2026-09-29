@@ -2577,6 +2577,16 @@ class IPCHandler:
                     return f"Posso copiar esse conteúdo sensível de {len(pending)} caracteres?"
                 return f"Posso copiar ‘{preview}’?"
             stage = "executor"
+            # FRENTE2-ITEM4 (2026-09-29): "responder enquanto executa" — anuncia
+            # em voz curta o que vai fazer ANTES da automação rodar, em vez de
+            # ficar muda até terminar ("zoe cadê você?"). Fire-and-forget: não
+            # atrasa a ação; o mic pausa enquanto ela fala (MicGuard).
+            _narrador_item4 = self._narrador_de_voz()
+            if _narrador_item4 is not None:
+                _tarefa_narracao = asyncio.create_task(
+                    _narrador_item4.anunciar_inicio(action_to_execute, params)
+                )
+                _tarefa_narracao.add_done_callback(self._log_task_error)
             result = await execute_action(action_to_execute, **params)
             # ZARA-NAO-VERIFICADO-001: guardado para o embrulho decidir se a
             # frase pode sair afirmativa ou precisa da ressalva honesta.
@@ -6334,6 +6344,48 @@ class IPCHandler:
         }
         await self.send_response(msg.request_id, status)
 
+    @staticmethod
+    def _log_task_error(tarefa) -> None:
+        """Done-callback: narração/fala em background nunca derruba o IPC."""
+        try:
+            exc = tarefa.exception()
+        except asyncio.CancelledError:
+            return
+        if exc is not None:
+            print(f"[Voice] fala em background falhou: {exc!r}", flush=True)
+
+    def _mic_guard(self):
+        """Guardião único do mute inteligente (FRENTE2-ITEM4).
+
+        Pausa o microfone enquanto a ZARA fala e retoma quando ela cala,
+        com contagem de referência (falas simultâneas não reabrem o mic cedo).
+        """
+        from core.voz_narrador import MicGuard
+
+        guard = getattr(self, "_mic_guard_inst", None)
+        if guard is None:
+            tts = getattr(self, "tts_manager", None)
+            if tts is None:
+                return None
+            pipeline = getattr(self, "voice_pipeline", None)
+            guard = MicGuard(
+                pausar_mic=(lambda: pipeline.pause_listening()) if pipeline is not None else None,
+                retomar_mic=(lambda: pipeline.resume_listening(require_wake_word=True)) if pipeline is not None else None,
+                falando=lambda: bool(tts.is_speaking()),
+            )
+            self._mic_guard_inst = guard
+        return guard
+
+    def _narrador_de_voz(self):
+        """Narrador "responder enquanto executa" (FRENTE2-ITEM4), preguiçoso."""
+        from core.voz_narrador import montar_narrador_para_ipc
+
+        narrador = getattr(self, "_narrador_de_voz_inst", None)
+        if narrador is None:
+            narrador = montar_narrador_para_ipc(self)
+            self._narrador_de_voz_inst = narrador
+        return narrador
+
     async def handle_zoe_voice_speak(self, msg: IPCMessage):
         """Speak text via local TTS cascade (Edge/Kokoro/OmniVoice).
 
@@ -6355,7 +6407,20 @@ class IPCHandler:
                     self._tts_initialized = True
                 except Exception as exc:
                     print(f"[Voice] TTS lazy initialization failed: {exc}", flush=True)
-            self.tts_manager.speak(text[:2000], blocking=False)
+            # FRENTE2-ITEM4 (2026-09-29): mute inteligente — antes, este caminho
+            # fire-and-forget NÃO pausava o mic e a própria voz voltava para o
+            # Vosk (eco). O MicGuard pausa, fala e retoma sozinho quando ela cala.
+            _guard_item4 = self._mic_guard()
+            if _guard_item4 is not None:
+                _tarefa_fala = asyncio.create_task(
+                    _guard_item4.falar_com_mute(
+                        text[:2000],
+                        lambda t: self.tts_manager.speak(t, blocking=False),
+                    )
+                )
+                _tarefa_fala.add_done_callback(self._log_task_error)
+            else:
+                self.tts_manager.speak(text[:2000], blocking=False)
             await self.send_response(msg.request_id, {'success': True})
         except Exception as exc:
             print(f"[Voice] zoe-voice-speak failed: {exc}", flush=True)

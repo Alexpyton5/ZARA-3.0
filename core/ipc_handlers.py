@@ -21,6 +21,8 @@ from typing import Any
 from core.model_router import get_model_config
 from core.supercerebro_auto_off import SupercerebroAutoOff
 from core.voice_fallback import KoreRecoveryPolicy
+from core.lab_bot_ipc import build_lab_bot_handlers  # ZOE-PECA4-LAB-BOT-IPC: rotas lab-bot-*
+from core.shared_memory_ipc import build_shared_memory_handlers  # ZOE-PECA3-SHARED-MEMORY-IPC: rotas shared-memory-*
 
 from core.pc_voice_intent import RESPOSTA_NAO_SEI
 
@@ -551,6 +553,7 @@ def _speak_windows_sapi(text: str) -> None:
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.conversation_history import ConversationHistory
+from core.conselheira_history_bridge import ENGINE_PONTE_ZOE, incoming_turns, outgoing_turn
 
 
 def _read_windows_volume() -> float | None:
@@ -649,10 +652,10 @@ _chat_relay_instance = None
 def _get_chat_relay():
     """Singleton preguiçoso do ChatRelay (ponte da Conselheira).
 
-    TODO (Alex/OpenCode): ligar o Gmail real da ZARA aqui. Implemente o
-    CeoMailAdapter com o código do painel Comunicações e passe
-    ``adapter=...`` para o ChatRelay. Sem isso, o LoggingStubAdapter só
-    registra localmente (sem rede) — ótimo para desenvolvimento.
+    Liga o Gmail real da ZARA aqui: tenta o adaptador Gmail real
+    (core/ceo_gmail_adapter.py — IMAP+SMTP com senha de app, sem API paga).
+    Sem a credencial configurada, cai para o LoggingStubAdapter (só local,
+    sem rede) e registra o modo no log — nunca finge envio/recebimento.
     """
     global _chat_relay_instance
     if _chat_relay_instance is not None:
@@ -662,7 +665,15 @@ def _get_chat_relay():
     except ImportError as e:
         print(f"[IPC Handlers] ChatRelay indisponível: {e}")
         return None
-    _chat_relay_instance = ChatRelay()
+    adapter = None
+    try:
+        from core.ceo_gmail_adapter import build_gmail_adapter
+        adapter = build_gmail_adapter()
+        print("[IPC Handlers] Conselheira: Gmail real ligado (IMAP+SMTP).")
+    except Exception as e:
+        print(f"[IPC Handlers] Conselheira: Gmail real indisponível ({e}); "
+              "usando stub local (sem rede).")
+    _chat_relay_instance = ChatRelay(adapter=adapter) if adapter is not None else ChatRelay()
     return _chat_relay_instance
 
 
@@ -2524,6 +2535,9 @@ class IPCHandler:
                 params["target"] = res.param
             elif res.action == "browser_scroll":
                 params["direction"] = res.param
+            elif res.action == "vision_click_text":
+                # ZARA-VOZ-CLIQUE-001: "clique em <texto>" -> clique real via OCR.
+                params["text"] = res.param
             elif res.action == "input_type_text":
                 params["text"] = res.param
             elif res.action == "input_hotkey":
@@ -2894,6 +2908,19 @@ class IPCHandler:
             f"{index}) [{status}] {label}: {detail}"
             for index, (status, label, detail) in enumerate(outcomes, start=1)
         )
+        # FRENTE D3 (ZARA-SILENCIO-001): o passo a passo de cada clausula
+        # vai para o log interno — o Alex recebe UMA resposta consolidada.
+        try:
+            from core.ops_log import ops_log as _ops_log
+
+            for _status, _label, _detail in outcomes:
+                _ops_log().record(
+                    "progress", "jarvis_multi_action",
+                    f"Clausula [{_status}] {_label}",
+                    {"detail": str(_detail)[:300]},
+                )
+        except Exception:
+            pass
         return (
             f"Plano Jarvis concluído: {completed}/{len(outcomes)} etapa(s) confirmada(s)"
             f"{f', {partial} parcial(is)' if partial else ''}. {details}"
@@ -3973,6 +4000,9 @@ class IPCHandler:
             'supercerebro-status': self.handle_supercerebro_status,
         }
 
+        # ZOE-PECA4-LAB-BOT-IPC: fia as rotas 'lab-bot-*' no mapa local (modulo proprio)
+        handler_map.update(build_lab_bot_handlers(self))
+        handler_map.update(build_shared_memory_handlers(self))  # ZOE-PECA3-SHARED-MEMORY-IPC
         handler = handler_map.get(msg.type)
         if handler:
             try:
@@ -6541,6 +6571,10 @@ class IPCHandler:
             return
         try:
             turn = relay.send_message(text, context=self._conselheira_context(relay))
+            # CONVERSA-UNICA-PONTE-FIO: espelha a fala do Alex no historico unificado.
+            _ponte_turn = outgoing_turn(turn)
+            if _ponte_turn is not None:
+                await self._append_conversation_message(*_ponte_turn)
             await self.send_response(msg.request_id, {
                 'chat_id': turn['chat_id'],
                 'created_at': turn['created_at'],
@@ -6554,7 +6588,11 @@ class IPCHandler:
             await self.send_error(msg, "Ponte Conselheira indisponível")
             return
         try:
-            await self.send_response(msg.request_id, relay.sync())
+            _ponte_sync = relay.sync()
+            # CONVERSA-UNICA-PONTE-FIO: espelha as respostas novas da zoe no historico unificado.
+            for _ponte_turn in incoming_turns(_ponte_sync):
+                await self._append_conversation_message(*_ponte_turn)
+            await self.send_response(msg.request_id, _ponte_sync)
         except Exception as exc:
             await self.send_error(msg, str(exc))
     async def handle_conselheira_messages(self, msg: IPCMessage):

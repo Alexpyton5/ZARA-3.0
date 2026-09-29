@@ -29,8 +29,14 @@ try:
     TESSERACT_AVAILABLE = True
     try:
         _tess_exe = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
         if os.path.exists(_tess_exe):
             pytesseract.pytesseract.tesseract_cmd = _tess_exe
+            _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
+            if os.path.isdir(_tess_data):
+                os.environ["TESSDATA_PREFIX"] = _tess_data  # sistema tem valor errado; forca o certo
+        if os.path.isdir(_tess_data):
+            os.environ["TESSDATA_PREFIX"] = _tess_data  # sistema tem valor errado; forca o certo
     except Exception:
         pass
 except ImportError:

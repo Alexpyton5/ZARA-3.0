@@ -1,11 +1,18 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { ComputerAgentOverlay } from './components/computer-agent/ComputerAgentOverlay';
 import './styles/globals.css';
+
+// Janela de overlay do use-computer (Frente B): o main process abre esta mesma
+// página do renderer numa BrowserWindow fullscreen transparente passando
+// `?overlay=computer-agent` na URL (ver CONTRATO-FRENTE-C.md na pasta
+// components/computer-agent). Nesse modo renderiza SÓ a borda + selo.
+const overlayMode = new URLSearchParams(window.location.search).get('overlay') === 'computer-agent';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {overlayMode ? <ComputerAgentOverlay /> : <App />}
   </React.StrictMode>,
 );
 

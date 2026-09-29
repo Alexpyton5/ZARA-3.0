@@ -31,3 +31,7 @@
 .zh-command-form--brains .zh-command-error { right:0;top:calc(100% + calc(5 * var(--u)));overflow-wrap:anywhere;line-height:1.4; }
 .zh-command-form--brains .zh-command-error button { margin-left:calc(8 * var(--u));padding:0;border:0;background:none;color:#a6efcf;text-decoration:underline; }
 .zh-drawer .zh-command-form--brains { margin-bottom:calc(54 * var(--u)); }
+.zh-command-form--brains .zh-command-pc { display:grid;place-items:center;flex:none;width:calc(32 * var(--u));height:calc(34 * var(--u));padding:0;border:calc(1 * var(--u)) solid transparent;border-radius:calc(8 * var(--u));background:transparent;color:#8fd8b8;cursor:pointer; }
+.zh-command-form--brains .zh-command-pc > svg { display:block;width:calc(18 * var(--u));height:calc(18 * var(--u)); }
+.zh-command-form--brains .zh-command-pc:disabled { opacity:.4;cursor:default; }
+.zh-command-form--brains .zh-command-pc:not(:disabled):hover { background:#5affce16;color:#c8ffe9;border-color:#58d4aa55; }

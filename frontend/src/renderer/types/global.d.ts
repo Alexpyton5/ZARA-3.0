@@ -21,6 +21,36 @@ declare global {
     close: () => Promise<void>;
   }
 
+  // Computer-agent (use-computer) — Frente B. A ponte pode chegar por dois
+  // caminhos (a Frente C escolhe um na integração — ver CONTRATO-FRENTE-C.md):
+  //  - window.zaraComputerAgent (preload separado: src/preload-computer-agent.ts)
+  //  - window.zaraIPC.computerAgent (seção mesclada no preload principal)
+  interface ComputerAgentStartedPayload {
+    goal: string;
+  }
+  interface ComputerAgentStepPayload {
+    step: string;
+    index?: number;
+    total?: number;
+  }
+  interface ComputerAgentStoppedPayload {
+    goal?: string;
+    success?: boolean;
+    refused?: boolean;
+    verified?: boolean;
+    /** Quantidade de passos executados (o backend manda o número, não a lista). */
+    steps?: number;
+    error?: string | null;
+  }
+  interface ComputerAgentPreloadAPI {
+    run?: (goal: string) => Promise<any>;
+    showOverlay?: () => Promise<any>;
+    hideOverlay?: () => Promise<any>;
+    onStarted?: (callback: (data: ComputerAgentStartedPayload) => void) => () => void;
+    onStep?: (callback: (data: ComputerAgentStepPayload) => void) => () => void;
+    onStopped?: (callback: (data: ComputerAgentStoppedPayload) => void) => () => void;
+  }
+
   interface Window {
     zaraIPC: {
       zoeBridge?: { status?: () => Promise<{ ready: boolean }> };
@@ -106,6 +136,9 @@ declare global {
         getStatus?: () => Promise<any>;
       };
       window?: ZaraWindowControl;
+      // Computer-agent (use-computer) — Frente B (só existe se a Frente C
+      // mesclar a seção no preload principal; senão vive em window.zaraComputerAgent).
+      computerAgent?: ComputerAgentPreloadAPI;
       on?: {
         stateChange?: (callback: (state: string) => void) => () => void;
         message?: (callback: (message: { role: string; content: string }) => void) => () => void;
@@ -120,6 +153,9 @@ declare global {
         routingTelemetry?: (callback: (telemetry: any) => void) => () => void;
       };
     };
+    // Computer-agent (use-computer) — Frente B: preload separado
+    // (src/preload-computer-agent.ts). Opcional até a Frente C integrar.
+    zaraComputerAgent?: ComputerAgentPreloadAPI;
   }
 }
 

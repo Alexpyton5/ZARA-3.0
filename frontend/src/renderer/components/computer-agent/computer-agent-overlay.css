@@ -1,0 +1,119 @@
+/* Overlay do use-computer (Frente B) — janela separada, fullscreen, transparente.
+   A página inteira tem que ficar transparente: o fundo escuro do app não pode
+   aparecer aqui, só a borda e o selo. */
+html.ca-overlay-mode,
+html.ca-overlay-mode body,
+html.ca-overlay-mode #root {
+  background: transparent !important;
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.ca-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ---- Borda neon: 4 barras de ~6px, verde -> roxo, com brilho ---- */
+.ca-edges {
+  position: absolute;
+  inset: 0;
+  opacity: 0.25;
+  transition: opacity 0.4s ease;
+}
+.ca-edges--active {
+  opacity: 1;
+}
+.ca-edge {
+  position: absolute;
+  pointer-events: none;
+}
+.ca-edge--top {
+  top: 0; left: 0; right: 0; height: 6px;
+  background: linear-gradient(90deg, #22ff88, #a855f7, #22ff88);
+  background-size: 200% 100%;
+  box-shadow: 0 2px 18px rgba(34, 255, 136, 0.55), 0 2px 42px rgba(168, 85, 247, 0.25);
+  animation: ca-slide 6s linear infinite;
+}
+.ca-edge--bottom {
+  bottom: 0; left: 0; right: 0; height: 6px;
+  background: linear-gradient(90deg, #a855f7, #22ff88, #a855f7);
+  background-size: 200% 100%;
+  box-shadow: 0 -2px 18px rgba(168, 85, 247, 0.55), 0 -2px 42px rgba(34, 255, 136, 0.25);
+  animation: ca-slide 6s linear infinite reverse;
+}
+.ca-edge--left {
+  top: 0; bottom: 0; left: 0; width: 6px;
+  background: linear-gradient(180deg, #22ff88, #a855f7, #22ff88);
+  background-size: 100% 200%;
+  box-shadow: 2px 0 18px rgba(34, 255, 136, 0.55);
+  animation: ca-slide-y 6s linear infinite;
+}
+.ca-edge--right {
+  top: 0; bottom: 0; right: 0; width: 6px;
+  background: linear-gradient(180deg, #a855f7, #22ff88, #a855f7);
+  background-size: 100% 200%;
+  box-shadow: -2px 0 18px rgba(168, 85, 247, 0.55);
+  animation: ca-slide-y 6s linear infinite reverse;
+}
+@keyframes ca-slide {
+  to { background-position: 200% 0; }
+}
+@keyframes ca-slide-y {
+  to { background-position: 0 200%; }
+}
+
+/* ---- Selo "ZARA usando o PC…" com o passo atual ---- */
+.ca-selo {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(680px, 82vw);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(2, 10, 6, 0.85);
+  border: 1px solid rgba(34, 255, 136, 0.45);
+  box-shadow: 0 0 24px rgba(34, 255, 136, 0.25);
+  color: #d8ffe9;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.ca-selo--active {
+  opacity: 1;
+}
+.ca-selo__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22ff88;
+  box-shadow: 0 0 12px #22ff88;
+  animation: ca-blink 1.2s ease-in-out infinite;
+}
+.ca-selo__title {
+  flex: none;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.ca-selo__step {
+  font-size: 12px;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@keyframes ca-blink {
+  50% { opacity: 0.35; }
+}

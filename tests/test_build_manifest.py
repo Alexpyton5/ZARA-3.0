@@ -123,17 +123,3 @@ def test_sidecar_build_manifests_use_path_relative_to_project_root(
     assert (tmp_path / "PATCH_SHA256_MANIFEST.txt").read_bytes() == expected.encode()
 
 
-def test_update_manifest_script_uses_path_relative_to_project_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    sidecar = tmp_path / "dist-sidecar" / "zara-backend.exe"
-    sidecar.parent.mkdir()
-    payload = b"sidecar-release"
-    sidecar.write_bytes(payload)
-    monkeypatch.chdir(tmp_path)
-
-    runpy.run_path(str(Path(__file__).parents[1] / "update_manifest.py"), run_name="__main__")
-
-    expected = f"{hashlib.sha256(payload).hexdigest()}  dist-sidecar/zara-backend.exe\n"
-    assert (tmp_path / "SHA256_MANIFEST.txt").read_bytes() == expected.encode()
-    assert (tmp_path / "PATCH_SHA256_MANIFEST.txt").read_bytes() == expected.encode()

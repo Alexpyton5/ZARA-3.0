@@ -13,6 +13,33 @@ import uuid
 from pathlib import Path
 
 
+def read_wav_mono_pcm16(path: str | Path) -> tuple["np.ndarray", int]:
+    """Le um WAV PCM mono (16 ou 32-bit) com a stdlib.
+
+    Devolve (amostras int16, taxa de amostragem). Existe para o
+    OmniVoiceWorkerTTS tocar o WAV do worker SEM depender do pacote
+    'soundfile' (ausente no .venv e no pacote do backend — a falta dele
+    quebrava o primeiro motor da cascata de TTS e deixava a Zara muda).
+    """
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(path), "rb") as wav:
+        sample_rate = wav.getframerate()
+        sampwidth = wav.getsampwidth()
+        raw = wav.readframes(wav.getnframes())
+    if sampwidth == 2:
+        audio = np.frombuffer(raw, dtype=np.int16).copy()
+    elif sampwidth == 4:
+        audio = (np.frombuffer(raw, dtype=np.float32).copy() * 32767).astype(np.int16)
+    else:
+        raise RuntimeError(
+            f"Formato WAV inesperado do worker OmniVoice: sampwidth={sampwidth}"
+        )
+    return audio, sample_rate
+
+
 class OmniVoiceWorkerTTS:
     READY_MARKER = Path("models") / "omnivoice" / "ready.json"
     TIMEOUT_SECONDS = 180
@@ -99,9 +126,10 @@ class OmniVoiceWorkerTTS:
                     self._stop_worker()
                     raise RuntimeError("Falha de síntese no worker OmniVoice")
             import sounddevice as sd
-            import soundfile as sf
 
-            audio, sample_rate = sf.read(str(output), dtype="float32")
+            # EQUIPE2-20260929: leitura via stdlib (sem 'soundfile') — ver
+            # read_wav_mono_pcm16. O worker grava WAV PCM 16-bit/24kHz.
+            audio, sample_rate = read_wav_mono_pcm16(output)
             sd.play(audio, sample_rate)
             sd.wait()
         except queue.Empty as exc:

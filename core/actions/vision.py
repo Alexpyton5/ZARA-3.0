@@ -3,6 +3,8 @@ Vision Action — Screen capture, OCR, and computer vision.
 """
 from __future__ import annotations
 
+import os
+
 import base64
 import io
 from pathlib import Path
@@ -25,6 +27,12 @@ except ImportError:
 try:
     import pytesseract
     TESSERACT_AVAILABLE = True
+    try:
+        _tess_exe = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        if os.path.exists(_tess_exe):
+            pytesseract.pytesseract.tesseract_cmd = _tess_exe
+    except Exception:
+        pass
 except ImportError:
     TESSERACT_AVAILABLE = False
 

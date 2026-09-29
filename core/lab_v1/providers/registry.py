@@ -30,6 +30,7 @@ from core.lab_v1.providers.nvidia import NvidiaApiAdapter
 from core.lab_v1.providers.harness import DeepSeekHarnessAdapter
 from core.lab_v1.providers.local_ollama import OllamaLocalAdapter
 from core.lab_v1.providers.nine_router import NineRouterAdapter
+from core.lab_v1.providers.freellmapi import FreeLLMAPIAdapter
 from core.paths import api_keys_path, data_dir
 
 __all__ = ["ProviderRegistry", "default_registry", "ClaudeCliAdapter", "CodexCliAdapter", "AnthropicApiAdapter", "NvidiaApiAdapter", "OllamaLocalAdapter", "OpenCodeAdapter"]
@@ -338,4 +339,7 @@ def default_registry() -> ProviderRegistry:
     # OpenCode — 35 modelos gratuitos via instalação local, sem custo extra.
     # Usa login do usuário já configurado no OpenCode no PC.
     registry.register(OpenCodeAdapter())
+    # FreeLLMAPI — agregador local grátis (FASE 2 PEÇA 5): degrau grátis
+    # depois da NVIDIA e antes da Luna paga na escada do Lab.
+    registry.register(FreeLLMAPIAdapter())
     return registry

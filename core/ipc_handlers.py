@@ -1,4 +1,4 @@
-"""
+﻿"""
 ZARA 3.0 - Python IPC Handlers
 Handles all IPC communication between Electron frontend and Python backend.
 """
@@ -3908,6 +3908,7 @@ class IPCHandler:
             'voice-status': self.handle_voice_status,
             'voice-engine-get': self.handle_voice_engine_get,
             'voice-engine-set': self.handle_voice_engine_set,
+            'zoe-voice-speak': self.handle_zoe_voice_speak,
             'config-get': self.handle_config_get,
             'config-set': self.handle_config_set,
             'lab-state': self.handle_lab_state,
@@ -6302,6 +6303,34 @@ class IPCHandler:
             'diagnostic': self._voice_last_error or 'OK',
         }
         await self.send_response(msg.request_id, status)
+
+    async def handle_zoe_voice_speak(self, msg: IPCMessage):
+        """Speak text via local TTS cascade (Edge/Kokoro/OmniVoice).
+
+        Called by the frontend speakZoe() for every response piece.
+        Fire-and-forget: the TTS plays in its own thread and the IPC
+        response returns immediately so the UI never stalls.
+        """
+        text = str((msg.payload or {}).get("text", "")).strip()
+        if not text:
+            await self.send_error(msg, "texto vazio")
+            return
+        if not self.tts_manager:
+            await self.send_error(msg, "TTS indisponivel")
+            return
+        try:
+            if not self._tts_initialized:
+                try:
+                    await asyncio.to_thread(self.tts_manager.initialize)
+                    self._tts_initialized = True
+                except Exception as exc:
+                    print(f"[Voice] TTS lazy initialization failed: {exc}", flush=True)
+            self.tts_manager.speak(text[:2000], blocking=False)
+            await self.send_response(msg.request_id, {'success': True})
+        except Exception as exc:
+            print(f"[Voice] zoe-voice-speak failed: {exc}", flush=True)
+            await self.send_error(msg, str(exc))
+
     def _set_supercerebro_state(self, active: bool) -> None:
         """Mirror Supercerebro state into the physical capability gate.
 

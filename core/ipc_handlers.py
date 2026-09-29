@@ -3968,6 +3968,8 @@ class IPCHandler:
             'memory-galaxy-list': self.handle_memory_galaxy_list,
             'conversation-history-list': self.handle_conversation_history_list,
             'conversation-history-clear': self.handle_conversation_history_clear,
+            'supercerebro-toggle': self.handle_supercerebro_toggle,
+            'supercerebro-status': self.handle_supercerebro_status,
         }
 
         handler = handler_map.get(msg.type)

@@ -9,10 +9,12 @@
  *
  *  Se o site sair do ar, trocar por cópias locais dos mesmos arquivos. */
 
+import zoeLimpa from '../../assets/zoe-limpa.png';
+
 const BASE = 'https://zara-ui-lab.zoeeproject.chatgpt.site/assets';
 
 export const AVATAR_ORIGINAL: Record<string, string> = {
-  zoe: `${BASE}/zoe-reference.webp`,
+  zoe: zoeLimpa, // retrato limpo local (o .webp do molde vinha com texto embutido)
   lyra: `${BASE}/lyra.webp`,
   levi: `${BASE}/levi.webp`,
   azul: `${BASE}/azul.webp`,

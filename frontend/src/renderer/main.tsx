@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ComputerAgentOverlay } from './components/computer-agent/ComputerAgentOverlay';
 import './styles/globals.css';
+import './styles/zara-nova.css';
 
 // Janela de overlay do use-computer (Frente B): o main process abre esta mesma
 // página do renderer numa BrowserWindow fullscreen transparente passando

@@ -36,7 +36,7 @@ const CABECALHO: Record<NavKey, { eyebrow: string; titulo: string }> = {
   voz: { eyebrow: 'A SUA VOZ É O COMANDO', titulo: 'Voz' },
   atividade: { eyebrow: 'O TRABALHO CONTINUA', titulo: 'Enquanto você estava fora' },
   equipe: { eyebrow: 'CADA AVATAR, UMA ESPECIALIDADE', titulo: 'Minha equipe' },
-  lab: { eyebrow: 'A SUA EQUIPE, EM UM SÓ LUGAR', titulo: 'ZARA Lab' },
+  lab: { eyebrow: 'A SUA EQUIPE, EM UM SÓ LUGAR', titulo: 'THE OFFICE' },
 };
 
 /** Saudação honesta pelo horário real (America/Bahia). */

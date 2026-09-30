@@ -53,6 +53,7 @@ function TelasLogadas({ avatar }: { avatar: AvatarInfo }) {
             toast('Pausar a equipe ainda não tem canal no backend — registrado para a etapa de fiação.')
           }
           onConversar={() => setNav('conversa')}
+          onVerOffice={() => setNav('lab')}
         />
       )}
       {nav === 'conversa' && (
@@ -109,5 +110,7 @@ function App() {
     </ThemeProvider>
   );
 }
+
+
 
 export default App;

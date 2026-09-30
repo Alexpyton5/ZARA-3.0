@@ -8,6 +8,7 @@
 
 import { MessageCircle, Pause, Play, Check, User, CircleQuestionMark } from 'lucide-react';
 import type { CuidandoInfo, TrabalhoItem, DecisaoItem, AvatarInfo } from './types';
+import officeHero from '../../assets/the-office-hero.webp';
 
 export interface InicioProps {
   cuidando: CuidandoInfo;
@@ -19,6 +20,8 @@ export interface InicioProps {
   pausado?: boolean;
   /** Ir para a conversa (opcional; o shell pode passar). */
   onConversar?: () => void;
+  /** Abrir o THE OFFICE (opcional). */
+  onVerOffice?: () => void;
   /** Registrar a escolha numa decisão (opcional; fiação real). */
   onDecidir?: (decisaoId: string, opcao: string) => void;
 }
@@ -68,6 +71,7 @@ export function Inicio({
   onPausar,
   pausado = false,
   onConversar,
+  onVerOffice,
   onDecidir,
 }: InicioProps) {
   return (
@@ -91,8 +95,19 @@ export function Inicio({
           ) : null}
         </div>
 
-        <div className="home-office-preview" aria-hidden="true">
-          <div className="office-scene" />
+        <div className="home-office-preview">
+          <div className="office-scene">
+            <img
+              className="office-original"
+              src={officeHero}
+              alt="THE OFFICE — o escritório da equipe"
+            />
+          </div>
+          {onVerOffice ? (
+            <button type="button" className="preview-button" onClick={onVerOffice}>
+              Entrar no THE OFFICE
+            </button>
+          ) : null}
         </div>
       </section>
 

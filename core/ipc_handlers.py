@@ -1,4 +1,4 @@
-﻿"""
+"""
 ZARA 3.0 - Python IPC Handlers
 Handles all IPC communication between Electron frontend and Python backend.
 """
@@ -23,6 +23,7 @@ from core.supercerebro_auto_off import SupercerebroAutoOff
 from core.voice_fallback import KoreRecoveryPolicy
 from core.lab_bot_ipc import build_lab_bot_handlers  # ZOE-PECA4-LAB-BOT-IPC: rotas lab-bot-*
 from core.shared_memory_ipc import build_shared_memory_handlers  # ZOE-PECA3-SHARED-MEMORY-IPC: rotas shared-memory-*
+from core.nova_ui_ipc import build_nova_ui_handlers
 
 from core.pc_voice_intent import RESPOSTA_NAO_SEI
 
@@ -755,13 +756,15 @@ class IPCHandler:
         self._telegram_grupo = None
         self._telegram_adapter = None
         self.voice_active: bool = False
-        self.supercerebro_active: bool = False
+        self._voice_target: str = "zara"
+        self._zoe_tts_lock = asyncio.Lock()
+        self.supercerebro_active: bool = True
         self._supercerebro_auto_off = SupercerebroAutoOff(self._auto_disable_supercerebro)
         self._kore_recovery_policy = KoreRecoveryPolicy()
-        # Every new IPC runtime starts fail-closed. A previous handler or
-        # test must not leave local PC control enabled for this instance.
+        # Alex retired the manual key: PC control stays available after
+        # restart, lock and idle. The registry still records actual outcomes.
         from core.action_registry import get_registry
-        get_registry().pc_control_allowed = False
+        get_registry().pc_control_allowed = True
 
         # Voice pipeline
         self.voice_pipeline: VoicePipeline | None = None
@@ -1675,9 +1678,27 @@ class IPCHandler:
         if VOICE_AVAILABLE and TTSManager and TTSConfig:
             try:
                 from core.voice_preferences import load_voice_output_engine
+                # Chave Gemini (voz Kore): le do config do app ou do env.
+                _gemini_key = os.environ.get("GEMINI_API_KEY", "") or ""
+                if not _gemini_key:
+                    try:
+                        _kf = os.path.join(
+                            os.environ.get("LOCALAPPDATA",
+                                           os.path.expanduser(r"~\AppData\Local")),
+                            "ZARA3", "config", "gemini_api_key.txt")
+                        # perfil do Alex quando rodando como outro usuario
+                        if not os.path.isfile(_kf):
+                            _kf2 = r"C:\Users\alexp\AppData\Local\ZARA3\config\gemini_api_key.txt"
+                            if os.path.isfile(_kf2):
+                                _kf = _kf2
+                        with open(_kf, "r", encoding="utf-8") as _fh:
+                            _gemini_key = _fh.read().strip()
+                    except OSError:
+                        _gemini_key = ""
                 tts_config = TTSConfig(
                     default_voice="pf_dora",
                     output_engine=load_voice_output_engine(),
+                    gemini_api_key=_gemini_key,
                 )
                 self.tts_manager = TTSManager(tts_config)
                 self._voice_output_engine = tts_config.output_engine
@@ -1916,6 +1937,12 @@ class IPCHandler:
             self._anotar_turno_descartado(spoken, "eco_da_propria_voz")
             return
 
+        # Zoe is the owner of this conversation. Gemini Live only transcribes
+        # Alex's microphone; its draft answer must never reach the ZARA chat.
+        if self._voice_target == "zoe":
+            await self.send_event('zoe-voice-input', {'text': spoken, 'source': 'gemini_live'})
+            return
+
         wake = _WAKE_PREFIX_RE.match(spoken)
         if wake:
             command = str(wake.group(1) or "").strip()
@@ -2054,6 +2081,15 @@ class IPCHandler:
     async def _on_speech_recognized(self, text: str):  # type: ignore[return-value]
         """Callback when speech is fully recognized"""
         print(f"[Voice] Recognized speech ({len(text)} chars)")
+        if self._voice_target == "zoe":
+            spoken = str(text or "").strip()
+            if spoken:
+                await self.send_event('zoe-voice-input', {'text': spoken, 'source': 'local'})
+            # VoicePipeline marks a finalized utterance PROCESSING; without
+            # resuming here Zoe hears exactly one turn and then goes deaf.
+            if self.voice_pipeline:
+                self.voice_pipeline.resume_listening(require_wake_word=False)
+            return
         self._voice_level = 0.0
         await self.send_event('voice-level', {
             'level': 0.0,
@@ -4023,6 +4059,7 @@ class IPCHandler:
         # ZOE-PECA4-LAB-BOT-IPC: fia as rotas 'lab-bot-*' no mapa local (modulo proprio)
         handler_map.update(build_lab_bot_handlers(self))
         handler_map.update(build_shared_memory_handlers(self))  # ZOE-PECA3-SHARED-MEMORY-IPC
+        handler_map.update(build_nova_ui_handlers(self))
         handler = handler_map.get(msg.type)
         if handler:
             try:
@@ -5404,6 +5441,15 @@ class IPCHandler:
 
     async def _handle_voice_start_locked(self, msg: IPCMessage):
         """Serialize microphone starts without blocking unrelated IPC requests."""
+        target = 'zoe' if (msg.payload or {}).get('target') == 'zoe' else 'zara'
+        if self.voice_active and self._voice_target != target:
+            if self.gemini_live_voice and self.gemini_live_voice.active:
+                await self.gemini_live_voice.stop()
+            if self.voice_pipeline and self.voice_mode == 'local':
+                await asyncio.to_thread(self.voice_pipeline.stop)
+            self.voice_active = False
+            self.voice_mode = 'off'
+        self._voice_target = target
         # Clicking the microphone is an explicit request for a hands-free
         # conversation. Keep accepting turns until the owner stops the mic;
         # otherwise the UI remains "Ouvindo" while the wake timer silently
@@ -5411,10 +5457,20 @@ class IPCHandler:
         self._manual_voice_session = True
         if self.voice_active:
             if self.gemini_live_voice and self.gemini_live_voice.active:
+                self.gemini_live_voice.can_answer_directly = (
+                    (lambda _text: False) if target == 'zoe' else self._voice_can_answer_directly
+                )
                 self._gemini_wake_armed_until = time.monotonic() + self._JANELA_DE_CONVERSA
                 print("[VOICE_TRACE] stage=WAKE_EVENT result=PASS source=manual_mic", flush=True)
                 await self.send_response(msg.request_id, {
                     'success': True, 'state': 'LISTENING', **self.gemini_live_voice.status()
+                })
+                return
+            if self.voice_mode == 'local' and self.voice_pipeline:
+                if target == 'zoe':
+                    self.voice_pipeline.resume_listening(require_wake_word=False)
+                await self.send_response(msg.request_id, {
+                    'success': True, 'state': 'LISTENING', 'mode': 'local'
                 })
                 return
 
@@ -5433,6 +5489,9 @@ class IPCHandler:
                         on_error=self._on_gemini_live_error,
                         on_output_audio=self._on_gemini_live_output_audio,
                     )
+                self.gemini_live_voice.can_answer_directly = (
+                    (lambda _text: False) if target == 'zoe' else self._voice_can_answer_directly
+                )
                 status = await self.gemini_live_voice.start(timeout=12.0)
                 self.voice_active = True
                 self.voice_mode = 'gemini_live'
@@ -5467,6 +5526,8 @@ class IPCHandler:
                 await asyncio.to_thread(self.voice_pipeline.initialize)
             self.voice_pipeline._event_loop = asyncio.get_running_loop()
             await asyncio.to_thread(self.voice_pipeline.start)
+            if target == 'zoe':
+                self.voice_pipeline.resume_listening(require_wake_word=False)
             # VoicePipeline.start() deliberately catches device/model errors so
             # its worker thread cannot take down IPC.  That means the caller
             # must inspect the resulting state before advertising success;
@@ -6169,6 +6230,8 @@ class IPCHandler:
 
     async def handle_voice_stop(self, msg: IPCMessage):
         """Stop whichever voice transport is currently active."""
+        if self._voice_target == 'zoe' and self.tts_manager:
+            self.tts_manager.interrupt()
         vigia = getattr(self, "_vigia", None)
         if vigia is not None:
             await vigia.parar()
@@ -6180,6 +6243,7 @@ class IPCHandler:
         self.voice_active = False
         self._manual_voice_session = False
         self.voice_mode = 'off'
+        self._voice_target = 'zara'
         self._voice_speaking = False
         self._finish_assistant_output()
         print("[IPC] Voice stopped")
@@ -6397,56 +6461,48 @@ class IPCHandler:
         return narrador
 
     async def handle_zoe_voice_speak(self, msg: IPCMessage):
-        """Speak text via local TTS cascade (Edge/Kokoro/OmniVoice).
+        """Speak one Zoe reply piece and reply only after playback completes.
 
-        Called by the frontend speakZoe() for every response piece.
-        Fire-and-forget: the TTS plays in its own thread and the IPC
-        response returns immediately so the UI never stalls.
+        Kore uses the active Gemini Live connection and renderer AEC. A local
+        engine takes over if Kore cannot deliver audio. Serialized completion
+        lets the frontend keep sentence pieces in their original order.
         """
         text = str((msg.payload or {}).get("text", "")).strip()
         if not text:
             await self.send_error(msg, "texto vazio")
             return
-        if not self.tts_manager:
-            await self.send_error(msg, "TTS indisponivel")
-            return
         try:
-            if not self._tts_initialized:
-                try:
+            from core.voice_preferences import load_voice_output_engine
+            async with self._zoe_tts_lock:
+                live = self.gemini_live_voice
+                if (load_voice_output_engine() != 'omnivoice' and live
+                        and live.active and self._voice_target == 'zoe'):
+                    if await live.speak(text[:2000]) and live.ultimo_audio_entregue() is not None:
+                        await self.send_response(msg.request_id, {'success': True, 'engine': 'kore'})
+                        return
+
+                if not self.tts_manager:
+                    await self.send_error(msg, "Voz indisponivel: Kore e motor local falharam")
+                    return
+                if not self._tts_initialized:
                     await asyncio.to_thread(self.tts_manager.initialize)
                     self._tts_initialized = True
-                except Exception as exc:
-                    print(f"[Voice] TTS lazy initialization failed: {exc}", flush=True)
-            # FRENTE2-ITEM4 (2026-09-29): mute inteligente — antes, este caminho
-            # fire-and-forget NÃO pausava o mic e a própria voz voltava para o
-            # Vosk (eco). O MicGuard pausa, fala e retoma sozinho quando ela cala.
-            _guard_item4 = self._mic_guard()
-            # EQUIPE2-20260929: se a cascata esgotar sem falar nada, a UI
-            # recebe 'voice-speak-failed' com o motivo — antes era silencio.
-            _loop_fala = self._event_loop or asyncio.get_running_loop()
-
-            def _avisar_falha(_texto: str, falhas: list) -> None:
+                local_mic = self.voice_pipeline if self.voice_mode == 'local' else None
+                if local_mic:
+                    local_mic.pause_listening()
+                if live and live.active:
+                    live.pause_input()
                 try:
-                    detalhe = "; ".join(f"{rot}: {err}" for rot, err in falhas) or "motivo desconhecido"
-                    coro = self.send_event("voice-speak-failed", {
-                        "reason": detalhe,
-                        "failures": [{"engine": rot, "error": err} for rot, err in falhas],
-                    })
-                    asyncio.run_coroutine_threadsafe(coro, _loop_fala)
-                except Exception as exc:
-                    print(f"[Voice] voice-speak-failed nao emitido: {exc}", flush=True)
-
-            if _guard_item4 is not None:
-                _tarefa_fala = asyncio.create_task(
-                    _guard_item4.falar_com_mute(
-                        text[:2000],
-                        lambda t: self.tts_manager.speak(t, blocking=False, on_exhausted=_avisar_falha),
-                    )
-                )
-                _tarefa_fala.add_done_callback(self._log_task_error)
-            else:
-                self.tts_manager.speak(text[:2000], blocking=False, on_exhausted=_avisar_falha)
-            await self.send_response(msg.request_id, {'success': True})
+                    played = await asyncio.to_thread(self.tts_manager.speak, text[:2000], blocking=True)
+                finally:
+                    if local_mic:
+                        local_mic.resume_listening(require_wake_word=False)
+                    if live and live.active:
+                        live.resume_input()
+                if played is not True:
+                    await self.send_error(msg, 'A reprodução da voz foi interrompida')
+                    return
+                await self.send_response(msg.request_id, {'success': True, 'engine': 'local'})
         except Exception as exc:
             print(f"[Voice] zoe-voice-speak failed: {exc}", flush=True)
             await self.send_error(msg, str(exc))
@@ -6469,29 +6525,16 @@ class IPCHandler:
             await self.send_error(msg, str(exc))
 
     def _set_supercerebro_state(self, active: bool) -> None:
-        """Mirror Supercerebro state into the physical capability gate.
-
-        This controls capabilities only. Risk gates remain independent, so
-        enabling Supercerebro never opens MEDIUM or HIGH actions by itself.
-        """
-        self.supercerebro_active = active is True
+        """Legacy compatibility: the retired key cannot disable PC control."""
+        del active
+        self.supercerebro_active = True
         from core.action_registry import get_registry
 
-        get_registry().pc_control_allowed = self.supercerebro_active
-    def _revoke_stale_pc_control(self) -> None:
-        """Fail closed if the Hermes session disappeared after enablement."""
-        if not self.supercerebro_active:
-            return
-        connected = bool(self.hermes and self.hermes.enabled and self.hermes.is_connected)
-        if not connected:
-            self._set_supercerebro_state(False)
+        get_registry().pc_control_allowed = True
 
     async def _auto_disable_supercerebro(self, reason: str) -> None:
-        if not self.supercerebro_active:
-            return
-        self._set_supercerebro_state(False)
-        print(f"[SECURITY] Supercerebro auto-OFF: {reason}", flush=True)
-        await self.send_event("supercerebro-change", False)
+        """Old timer callbacks do not revoke Alex's permanent authorization."""
+        print(f"[IPC] Ignored retired Supercerebro timer: {reason}", flush=True)
     async def handle_lab_mission_state(self, msg: IPCMessage):
         if not self.lab:
             await self.send_error(msg, "ZARA Lab indisponível")
@@ -6728,48 +6771,25 @@ class IPCHandler:
         except Exception as exc:
             await self.send_error(msg, str(exc))
     async def handle_supercerebro_toggle(self, msg: IPCMessage):
-        requested = msg.payload.get('active') if msg.payload else None
-        if requested is None:
-            await self.send_error(msg, "Active state not specified")
-            return
-
+        """Retired toggle kept for old frontend versions; always report truth."""
+        requested = (msg.payload or {}).get('active')
         if type(requested) is not bool:
             await self.send_error(msg, "Active state must be a boolean")
             return
-
-        # Chave manual do Alex (decisao dele, 27/09): a chave e LOCAL.
-        # Sem Hermes, sem dependencia externa. ON = ele monitorando; OFF = sozinho.
-        # Fail closed: qualquer erro desliga.
-        try:
-            self._set_supercerebro_state(requested)
-            if requested:
-                self._supercerebro_auto_off.start()
-            else:
-                self._supercerebro_auto_off.stop()
-        except Exception as exc:
-            self._set_supercerebro_state(False)
-            self._supercerebro_auto_off.stop()
-            try:
-                await self.send_event("supercerebro-change", False)
-            except Exception:
-                pass
-            await self.send_error(msg, f"Falha ao alternar: {exc}")
-            return
-
-        print(f"[IPC] Supercerebro {'enabled' if self.supercerebro_active else 'disabled'} (chave manual do Alex)")
-        await self.send_event('supercerebro-change', self.supercerebro_active)
+        self._set_supercerebro_state(True)
         await self.send_response(msg.request_id, {
             'success': True,
-            'active': self.supercerebro_active,
+            'active': True,
             'connected': True,
+            'key_required': False,
         })
     async def handle_supercerebro_status(self, msg: IPCMessage):
         """Return supercerebro status"""
         status = {
-            'active': self.supercerebro_active,
-            'url': 'http://127.0.0.1:8642',
+            'active': True,
             'connected': True,
-            'enabled': self.supercerebro_active,
+            'enabled': True,
+            'key_required': False,
         }
         await self.send_response(msg.request_id, status)
 

@@ -19,6 +19,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -71,6 +72,7 @@ from core.voice_stt import VoiceNotConfiguredError
 from core.omnivoice_runtime import OmniVoiceWorkerTTS
 from core.voice_engine_policy import voice_output_order
 from core.voice_text_norm import normalize_for_tts
+from core.pii_filter import scrub_pii
 
 
 @dataclass
@@ -558,6 +560,13 @@ class GeminiTTS:
 
     async def synthesize(self, text: str, voice: str = None) -> bytes:
         """Synthesize using Gemini TTS API. Returns WAV bytes."""
+        # EQUIPE2-20260929 (item 101 da pesquisa): passada de filtro PII
+        # local antes de mandar texto para a nuvem. Barato, sem rede, com
+        # auditoria em log quando algo e redigido.
+        text, _pii_achados = scrub_pii(text)
+        if _pii_achados:
+            print("[GeminiTTS] PII redigida antes da nuvem: "
+                  + ", ".join(_pii_achados), flush=True)
         voice = voice or self.config.gemini_voice
 
         # Use Gemini's native audio output (requires specific model)
@@ -629,6 +638,10 @@ class TTSManager:
         self._current_playback = None
         self._interrupt_event = threading.Event()
         self._speaking_event = threading.Event()
+        # Disjuntor do OmniVoice: quando o worker quebra (ex.: modelo CUDA
+        # sem VRAM), nao queima ~14s de novo a cada fala — pula direto p/
+        # a Edge por 30 min, depois tenta o OmniVoice de novo.
+        self._omnivoice_cooldown_until = 0.0
 
     def initialize(self):
         """Initialize available TTS engines."""
@@ -695,7 +708,7 @@ class TTSManager:
         if blocking:
             self._speaking_event.set()
             try:
-                self._speak_cascade(text, voice, speed, engines, raise_on_exhausted=True)
+                return self._speak_cascade(text, voice, speed, engines, raise_on_exhausted=True)
             finally:
                 self._speaking_event.clear()
             return
@@ -749,6 +762,8 @@ class TTSManager:
                     return False
                 failures.append((label, f"{type(e).__name__}: {e}"))
                 print(f"[TTS] {label} failed, trying fallback: {e}")
+                if label == "OmniVoice":
+                    self._omnivoice_cooldown_until = time.monotonic() + 1800
 
         if not attempted:
             failures.append(("cascata", "nenhum motor de TTS configurado"))
@@ -774,6 +789,8 @@ class TTSManager:
         return False
 
     def _omnivoice_ready(self) -> bool:
+        if time.monotonic() < self._omnivoice_cooldown_until:
+            return False
         return bool(self.omnivoice and getattr(self.omnivoice, "available", True))
 
     async def _gemini_speak(self, text: str, voice: str = None):

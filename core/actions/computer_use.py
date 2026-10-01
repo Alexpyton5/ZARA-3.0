@@ -11,6 +11,8 @@ import os
 import re
 import time
 from ctypes import wintypes
+from datetime import datetime, timezone
+import hashlib
 
 from core.action_registry import ActionResult, action
 
@@ -23,8 +25,10 @@ def _safe_pyautogui():
     return pyautogui
 
 
-def _type_observed_text(text: str) -> bool:
+def _type_observed_text(text: str, expected_hwnd: int | None = None) -> bool:
     gui = _safe_pyautogui()
+    if expected_hwnd is not None and _target(expected_hwnd)[0] is None:
+        raise RuntimeError('A janela mudou antes da digitação')
     if text.isascii():
         gui.write(text, interval=0)
         return True
@@ -63,6 +67,33 @@ def _target(expected_hwnd: int, x: int | None = None, y: int | None = None) -> t
         if not (rect["left"] <= x < rect["right"] and rect["top"] <= y < rect["bottom"]):
             return None, "Ponto fora da janela ativa."
     return current, ""
+
+
+def _observe_before_input(expected_hwnd: int, x: int | None = None, y: int | None = None) -> dict:
+    """Capture a fresh MSS frame privately; no screenshot pixels enter logs."""
+    current, error = _target(expected_hwnd, x, y)
+    if current is None:
+        raise RuntimeError(error)
+    import mss
+    rect = current['rect']
+    with mss.mss() as capture:
+        monitor = capture.monitors[0]
+        left, top = max(rect['left'], monitor['left']), max(rect['top'], monitor['top'])
+        right = min(rect['right'], monitor['left'] + monitor['width'])
+        bottom = min(rect['bottom'], monitor['top'] + monitor['height'])
+        region = {'left': left, 'top': top, 'width': right - left, 'height': bottom - top}
+        if region['width'] <= 0 or region['height'] <= 0:
+            raise RuntimeError('Janela fora da área visível')
+        frame = capture.grab(region)
+        pixels = bytes(frame.raw)
+        if len(pixels) != region['width'] * region['height'] * 4:
+            raise RuntimeError('Captura de tela incompleta')
+        fingerprint = hashlib.sha256(pixels).hexdigest()
+    after, error = _target(expected_hwnd, x, y)
+    if after is None or after['rect'] != rect:
+        raise RuntimeError(error or 'A janela se moveu durante a observação')
+    return {'frame_sha256': fingerprint, 'observed_at': datetime.now(timezone.utc).isoformat(),
+            'hwnd': expected_hwnd, 'region': region}
 
 
 @action(name="computer_foreground", category="computer", description="Lê a janela ativa para orientar um passo de Use Computer", capability="READ_ONLY")
@@ -107,12 +138,19 @@ def computer_focus_window_action(hwnd: int) -> ActionResult:
     if not listed.success or hwnd not in {item["hwnd"] for item in listed.data["windows"]}:
         return ActionResult(False, error="Janela não está visível; liste novamente.", verificado=False)
     from core.actions.os_ops import _focus_window_verified
-
+    active = _foreground()
+    try:
+        _safe_pyautogui()
+        if active is None:
+            raise RuntimeError('Janela ativa indisponível')
+        observation = _observe_before_input(int(active['hwnd']))
+    except Exception as exc:
+        return ActionResult(False, error=f'Não pude observar antes de focar: {type(exc).__name__}', verificado=False)
     focused = _focus_window_verified(hwnd)
     current = _foreground()
     if not focused or current is None or current["hwnd"] != hwnd:
         return ActionResult(False, error="Não consegui colocar a janela em primeiro plano.", verificado=False)
-    return ActionResult(True, output=f"Janela ativa: {current['title']}", data=current, verificado=True)
+    return ActionResult(True, output=f"Janela ativa: {current['title']}", data={**current, 'observation': observation}, verificado=True)
 
 
 @action(name="computer_click", category="computer", description="Clica uma vez em um ponto da janela ativa observada", capability="PC_CONTROL")
@@ -124,12 +162,11 @@ def computer_click_action(x: int, y: int, expected_hwnd: int) -> ActionResult:
         return ActionResult(False, error=error, verificado=False)
     try:
         gui = _safe_pyautogui()
-        if _target(expected_hwnd, x, y)[0] is None:
-            return ActionResult(False, error='A janela mudou antes do clique.', verificado=False)
+        observation = _observe_before_input(expected_hwnd, x, y)
         gui.click(x, y)
     except Exception as exc:
         return ActionResult(False, error=f'Clique interrompido: {type(exc).__name__}', verificado=False)
-    return ActionResult(True, output="Clique enviado; observe a tela para conferir o efeito.", data={"x": x, "y": y, "hwnd": expected_hwnd}, verificado=False)
+    return ActionResult(True, output="Clique enviado; observe a tela para conferir o efeito.", data={"x": x, "y": y, "hwnd": expected_hwnd, 'observation': observation}, verificado=False)
 
 
 @action(name="computer_scroll", category="computer", description="Rola a janela ativa observada", capability="PC_CONTROL")
@@ -141,12 +178,11 @@ def computer_scroll_action(x: int, y: int, steps: int, expected_hwnd: int) -> Ac
         return ActionResult(False, error=error, verificado=False)
     try:
         gui = _safe_pyautogui()
-        if _target(expected_hwnd, x, y)[0] is None:
-            return ActionResult(False, error='A janela mudou antes da rolagem.', verificado=False)
+        observation = _observe_before_input(expected_hwnd, x, y)
         gui.scroll(steps, x=x, y=y)
     except Exception as exc:
         return ActionResult(False, error=f'Rolagem interrompida: {type(exc).__name__}', verificado=False)
-    return ActionResult(True, output="Rolagem enviada; observe a tela para conferir o efeito.", data={"steps": steps, "hwnd": expected_hwnd}, verificado=False)
+    return ActionResult(True, output="Rolagem enviada; observe a tela para conferir o efeito.", data={"steps": steps, "hwnd": expected_hwnd, 'observation': observation}, verificado=False)
 
 
 _KEYS = {
@@ -169,12 +205,11 @@ def computer_press_key_action(key: str, expected_hwnd: int) -> ActionResult:
         return ActionResult(False, error=error, verificado=False)
     try:
         gui = _safe_pyautogui()
-        if _target(expected_hwnd)[0] is None:
-            return ActionResult(False, error='A janela mudou antes da tecla.', verificado=False)
+        observation = _observe_before_input(expected_hwnd)
         gui.press(canonical)
     except Exception as exc:
         return ActionResult(False, error=f'Tecla interrompida: {type(exc).__name__}', verificado=False)
-    return ActionResult(True, output="Tecla enviada; observe a tela para conferir o efeito.", data={"key": canonical, "hwnd": expected_hwnd}, verificado=False)
+    return ActionResult(True, output="Tecla enviada; observe a tela para conferir o efeito.", data={"key": canonical, "hwnd": expected_hwnd, 'observation': observation}, verificado=False)
 
 
 _BLOCKED_INPUT_TITLE = re.compile(r"(?i)(password|senha|login|pagamento|payment|checkout|terminal|powershell|command prompt|prompt de comando)")
@@ -215,7 +250,10 @@ def computer_type_text_action(text: str, expected_hwnd: int) -> ActionResult:
             return ActionResult(False, error="Não identifiquei um campo de texto seguro nesta janela.", verificado=False)
         state = {"automation": automation, "UIA": UIA, "element": field}
         before = _uia_field_text(state)
-        if before is None or _target(expected_hwnd)[0] is None or not _type_observed_text(value):
+        if before is None:
+            return ActionResult(False, error='Não identifiquei o campo antes de digitar.', verificado=False)
+        observation = _observe_before_input(expected_hwnd)
+        if not _type_observed_text(value, expected_hwnd):
             return ActionResult(False, error="Não consegui digitar no campo observado.", verificado=False)
         time.sleep(0.15)
         after = _uia_field_text(state)
@@ -233,10 +271,10 @@ def computer_type_text_action(text: str, expected_hwnd: int) -> ActionResult:
                     _seen = " ".join(w["text"] for w in _words).lower()
                     _needle = value.strip().lower()[:24]
                     if _needle and _needle in _seen:
-                        return ActionResult(True, output="Texto digitado e confirmado via OCR.", data={"hwnd": expected_hwnd, "characters": len(value)}, verificado=True)
+                        return ActionResult(True, output="Texto digitado e confirmado via OCR.", data={"hwnd": expected_hwnd, "characters": len(value), 'observation': observation}, verificado=True)
             except Exception:
                 pass
             return ActionResult(False, error="A digitação não pôde ser confirmada.", verificado=False)
-        return ActionResult(True, output="Texto digitado e confirmado.", data={"hwnd": expected_hwnd, "characters": len(value)}, verificado=True)
+        return ActionResult(True, output="Texto digitado e confirmado.", data={"hwnd": expected_hwnd, "characters": len(value), 'observation': observation}, verificado=True)
     except Exception as exc:
         return ActionResult(False, error=f"Digitação indisponível: {type(exc).__name__}", verificado=False)

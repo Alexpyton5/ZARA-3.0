@@ -10,6 +10,7 @@ from core.actions import computer_use as pc
 def desktop(monkeypatch):
     gui = SimpleNamespace(FAILSAFE=True, failSafeCheck=Mock(), click=Mock(), scroll=Mock(), press=Mock(), write=Mock())
     monkeypatch.setitem(sys.modules, 'pyautogui', gui)
+    monkeypatch.setattr(pc, '_observe_before_input', lambda *a: {'frame_sha256': 'test-frame'})
     native = Mock()
     monkeypatch.setattr(pc.ctypes, 'windll', SimpleNamespace(user32=native))
     monkeypatch.setattr(pc, '_foreground', lambda: {'hwnd': 7, 'title': 'Editor', 'rect': {'left': 0, 'top': 0, 'right': 400, 'bottom': 400}})

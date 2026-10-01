@@ -63,6 +63,9 @@ class _FakeOllamaHandler(BaseHTTPRequestHandler):
 class _RateLimitedHandler(_FakeOllamaHandler):
     def do_POST(self):  # noqa: N802
         if self.path == "/v1/chat/completions":
+            # Consume the request before closing the HTTP/1.0 connection; an
+            # unread body can reset the connection before the client reads 429.
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
             self._send(429, {"error": {"message": "too many requests, please slow down"}})
             return
         super().do_POST()

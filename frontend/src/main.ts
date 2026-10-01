@@ -7,6 +7,7 @@ import { spawn, ChildProcess } from 'child_process'
 import { existsSync, readdirSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
 import { startZoeBridge, type ZoeBridge } from './zoeBridge'
+import { createZoeTeamDispatch } from './zoeTeamDispatch'
 import { MUSE_CONTEXT_PRESENTATION_SCRIPT, shouldPresentMuseContext } from './museContextPresentation'
 
 let pythonProcess: ChildProcess | null = null
@@ -415,7 +416,9 @@ async function retryBackendNow(): Promise<{ ok: boolean; status: BackendHealth }
 async function startZoeBridgeOnce(): Promise<void> {
   if (zoeBridge || !isPythonReady) return
   const base = process.env.ZARA3_HOME || join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ZARA3')
-  zoeBridge = await startZoeBridge(join(base, 'zoe_bridge'), sendToPython)
+  zoeBridge = await startZoeBridge(
+    join(base, 'zoe_bridge'), createZoeTeamDispatch(sendToPython, sendDurableLabOperation),
+  )
   zoeBridgeWanted = true
   console.log('[Zoe Bridge] Local bridge ready')
 }

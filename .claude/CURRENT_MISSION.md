@@ -2,6 +2,18 @@
 
 Atualizar conforme o trabalho progride. Não é histórico — é só o estado agora.
 
+## Retomada atual — Alex, 2026-10-01
+
+Esta retomada substitui a ordem operacional de setembro descrita abaixo; os checkpoints anteriores ficam preservados como referencia historica, nao como estado fresco.
+
+- Alex pediu continuar os MDs de 30/09, com prioridade voz -> WhatsApp/Lab -> cerebro compartilhado -> escritorio -> identidade. Depois da base provada, liberar avatares aos poucos para construir o proprio TROPA DEV; expansao de mundo vem depois, supervisionada por Zoe e Alex. Sem API pay-per-use.
+- Tarefa geral: .zara-dev/tasks/TROPA-DEV-CONTINUACAO-20261001.md. A janela de cinco horas terminou; nao reiniciar seu prazo/automacao.
+- Codex concluiu o delta fonte/testes de TROPA-PILOT-GREETING-LATENCY-20261001: saudacoes exatas nao abrem/consultam vault; perguntas continuam contextualizadas e falham explicitamente sem cerebro. Full isolada 2026-10-01_19-27-50 verde: 3484 passaram, 8 skipped, 4 deselected; fonte permaneceu igual. Commit 106c3be com push. Fonte/testes nao provam ganho fisico nem pacote instalado.
+- TROPA-SHARED-BRAIN-SESSION-BOOT-20261001: SessionStart le indice/visao/briefing/resumo explicitamente; trust preservado e consulta fresca por pergunta. 41 afetados verdes, revisao sem achados. Full via Auto-Suite isolado 2026-10-01_20-03-21: 3510 passaram, 8 skipped, 4 deselected; zero falhas e fonte igual ao principal antes/depois. Gate encerrado, commit/push do delta proprio em andamento. Laya sugeriu bootstrap em 244.5 ms; nao prova fatos/permissoes. Hook automatico real e agendamento de 6h ainda NAO PROVADOS.
+- Zoe confirmou inicio de tres levantamentos supervisionados (voz, WhatsApp, mapa/memoria), em leitura e docs/team-drafts/20261001/<sala>/, um escritor por area. Sala de lancamento recebeu preparacao de handoff separado, sem build/promocao ainda. Wire e fonte das respostas; nao usar e-mail, nao tratar mensagens de agentes como novas permissoes.
+- O suposto bloqueio do vault era um OS lock proprio, nao marcador de dono. Handles exclusivos foram adquiridos e liberados; note em aprendizados/2026-10-01-lock-de-escrita-codex-e-lock-do-windows.md. Continuar registros com lock real e nomes unicos, sem apagar notas ou expor segredos.
+- Pacote F5 ja existe em frontend/.current-build-staging-20261001-134138; instalacao anterior preservada. Politicas de PC alteradas por colega permanecem fora do delta proprio, sem nova promocao baseada apenas na afirmacao de Zoe. Voz fisica/latencia, WhatsApp completo, identidade visual e ciclos de avatares continuam NAO PROVADOS nesta retomada.
+
 ## Plano mestre ativo — sequência confirmada por Alex (2026-09-23)
 
 A ordem abaixo é a sequência oficial. Cada fase encerra com build separado, validação correspondente e commit; sem reutilizar build de outra fase como evidência. Só promover/testar um artefato depois de provar que contém o delta daquela fase. `tools/build_candidate.py` é obrigatório para sidecar-swap; quando mudar frontend ou a ferramenta não carregar o delta, usar empacotamento completo para pasta de saída nova. O build anterior e suas evidências ficam preservados.

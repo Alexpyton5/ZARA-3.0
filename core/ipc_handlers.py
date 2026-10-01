@@ -2192,12 +2192,17 @@ class IPCHandler:
             return None
 
     async def handle_pilot_context(self, msg: IPCMessage):
-        from memory.pilot_context import build_pilot_context
+        from memory.pilot_context import build_pilot_context, is_context_free_turn
         text = str((msg.payload or {}).get('text') or '').strip()
         if not text or len(text) > 4000:
             await self.send_error(msg, 'Consulta de contexto inválida.')
             return
         try:
+            if is_context_free_turn(text):
+                await self.send_response(msg.request_id, {
+                    "success": True, "context": "", "degraded": [],
+                })
+                return
             # Lazy composition also touches disk; keep it off the audio loop.
             result = await asyncio.to_thread(lambda: build_pilot_context(self.get_second_brain(), text))
             await self.send_response(msg.request_id, result)

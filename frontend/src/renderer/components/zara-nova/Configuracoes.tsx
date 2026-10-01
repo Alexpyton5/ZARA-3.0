@@ -9,6 +9,17 @@ function saved(key: string, fallback: string) {
 }
 
 export function Configuracoes({ onTrocar }: { onTrocar: () => void }) {
+  const [whatsAppFeedback, setWhatsAppFeedback] = useState('');
+  async function openWhatsApp() {
+    setWhatsAppFeedback('Abrindo WhatsApp Web…');
+    try {
+      const result = await window.zaraIPC?.desktop?.openExternal?.('whatsapp');
+      if (result?.success !== true) throw new Error('Não consegui abrir o atalho.');
+      setWhatsAppFeedback('WhatsApp Web aberto. A integração remota continua pendente.');
+    } catch {
+      setWhatsAppFeedback('Não consegui abrir o atalho do WhatsApp Web.');
+    }
+  }
   const pilot = usePilotSession();
   const { theme, availableThemes } = useTheme();
   const bridge = useZoeBridgeStatus();
@@ -39,6 +50,13 @@ export function Configuracoes({ onTrocar }: { onTrocar: () => void }) {
       <label>Quem fala com você <select value={pilot.voice.engine} onChange={event => void pilot.voice.changeEngine(event.target.value === 'omnivoice' ? 'omnivoice' : 'kore')}><option value="kore">Kore</option><option value="omnivoice" disabled={!pilot.voice.omnivoiceAvailable}>OmniVoice{pilot.voice.omnivoiceAvailable ? '' : ' · indisponível'}</option></select></label>
       {pilot.voice.error && <p role="alert">{pilot.voice.error}</p>}
       <p>Ao abrir a conversa com sua conta Muse conectada, a voz inicia automaticamente. Você pode desligar o microfone a qualquer momento.</p>
+    </section>
+    <section className="confidence-card">
+      <h2>WhatsApp</h2>
+      <p>WhatsApp Web — atalho disponível; integração remota pendente.</p>
+      <p>O envio de ordens e a confirmação de ações pelo WhatsApp ainda não foram verificados.</p>
+      <button className="secondary-button" onClick={() => void openWhatsApp()}>Abrir WhatsApp Web</button>
+      {whatsAppFeedback && <p role="status">{whatsAppFeedback}</p>}
     </section>
     <section className="confidence-card">
       <h2>Seu computador</h2>

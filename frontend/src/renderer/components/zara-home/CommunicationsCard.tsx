@@ -55,7 +55,7 @@ export function CommunicationsCard({ onNavigate }: { onNavigate: (section: strin
       <h2>Comunicações</h2>
       <div className="zh-comm-row">
         {CHANNELS.map(({ name, id, icon, Glyph, badgeClass }) => (
-          <button className="zh-comm-item" key={name} type="button" disabled={pending} onClick={() => void run(() => window.zaraIPC?.desktop?.openExternal?.(id), `${name} aberto no navegador.`)} aria-label={`Abrir ${name}`} title={`${name} • contagem de mensagens não conectada`}>
+          <button className="zh-comm-item" key={name} type="button" disabled={pending} onClick={() => void run(() => window.zaraIPC?.desktop?.openExternal?.(id), id === 'whatsapp' ? 'WhatsApp Web aberto; integração remota pendente.' : `${name} aberto no navegador.`)} aria-label={`Abrir ${name}`} title={id === 'whatsapp' ? 'WhatsApp Web — atalho disponível; integração remota pendente.' : `${name} • contagem de mensagens não conectada`}>
             <div
               className={`zh-comm-badge${badgeClass ? ` ${badgeClass}` : ''}`}
               aria-label={name}

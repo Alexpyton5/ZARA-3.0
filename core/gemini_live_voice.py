@@ -577,6 +577,13 @@ class GeminiLiveVoice:
             if self._speech_done is done:
                 await self.interrupt_speech()
             return False
+        except asyncio.CancelledError:
+            # The outer recovery deadline can cancel speak before its own timer.
+            # Release this request so later turns cannot stick behind it.
+            done.set()
+            if self._speech_done is done:
+                await self.interrupt_speech()
+            raise
         finally:
             if self._speech_done is done:
                 self._play_generated_audio = False

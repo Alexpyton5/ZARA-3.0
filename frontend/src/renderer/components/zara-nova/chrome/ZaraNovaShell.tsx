@@ -1,10 +1,11 @@
-/** Shell da interface nova da ZARA — rail lateral + header global + page-head + toast.
+/** Shell da interface da TROPA dev. — rail lateral + header global + page-head + toast.
  *  Visual segue o molde (zara-ui-lab): classes e estrutura idênticas,
  *  cores só por variáveis CSS (contrato da frente TEMA). */
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Clock3, House, MessageCircle, Mic, Users, FlaskConical } from 'lucide-react';
-import type { NavKey } from '../types';
+import { Clock3, House, MessageCircle, Mic, Users, Settings } from 'lucide-react';
+import type { AvatarInfo, NavKey } from '../types';
+import tropaBall from '../../../assets/prototipo/tropa-ball-v2.svg';
 
 /* ------------------------------------------------------------------ */
 /* Toast: contexto exposto para as telas mostrarem avisos curtos.      */
@@ -22,21 +23,21 @@ export function useToast(): (mensagem: string) => void {
 /* ------------------------------------------------------------------ */
 
 const NAV: Array<{ key: NavKey; rotulo: string; Icon: typeof House }> = [
-  { key: 'inicio', rotulo: 'Início', Icon: House },
+  { key: 'inicio', rotulo: 'Painel de confiança', Icon: House },
   { key: 'conversa', rotulo: 'Conversa', Icon: MessageCircle },
-  { key: 'voz', rotulo: 'Voz', Icon: Mic },
-  { key: 'atividade', rotulo: 'Atividade', Icon: Clock3 },
-  { key: 'equipe', rotulo: 'Equipe', Icon: Users },
-  { key: 'lab', rotulo: 'Lab', Icon: FlaskConical },
+  { key: 'voz', rotulo: 'Falar por voz', Icon: Mic },
+  { key: 'atividade', rotulo: 'Enquanto você estava fora', Icon: Clock3 },
+  { key: 'lab', rotulo: 'Equipe & escritório', Icon: Users },
 ];
 
 const CABECALHO: Record<NavKey, { eyebrow: string; titulo: string }> = {
   inicio: { eyebrow: 'SEU TEMPO, DE VOLTA PARA VOCÊ', titulo: 'Início' },
-  conversa: { eyebrow: 'O MUSE PENSA. A ZARA FAZ.', titulo: 'Conversa' },
+  conversa: { eyebrow: 'SEU PILOTO PENSA. A TROPA dev. FAZ.', titulo: 'Conversa' },
   voz: { eyebrow: 'A SUA VOZ É O COMANDO', titulo: 'Voz' },
   atividade: { eyebrow: 'O TRABALHO CONTINUA', titulo: 'Enquanto você estava fora' },
   equipe: { eyebrow: 'CADA AVATAR, UMA ESPECIALIDADE', titulo: 'Minha equipe' },
-  lab: { eyebrow: 'A SUA EQUIPE, EM UM SÓ LUGAR', titulo: 'THE OFFICE' },
+  lab: { eyebrow: 'A SUA EQUIPE, EM UM SÓ LUGAR', titulo: 'Escritório' },
+  configuracoes: { eyebrow: 'DO SEU JEITO', titulo: 'Configurações' },
 };
 
 /** Saudação honesta pelo horário real (America/Bahia). */
@@ -74,12 +75,14 @@ function Relogio() {
 export interface ZaraNovaShellProps {
   active: NavKey;
   onNavigate: (key: NavKey) => void;
-  /** Ações à direita do page-head (ex.: botão "Falar com a ZARA"). */
+  /** Ações à direita do page-head (ex.: botão "Falar com a TROPA dev."). */
   pageActions?: ReactNode;
   children: ReactNode;
+  avatar?: AvatarInfo;
+  providerName?: string;
 }
 
-export function ZaraNovaShell({ active, onNavigate, pageActions, children }: ZaraNovaShellProps) {
+export function ZaraNovaShell({ active, onNavigate, pageActions, children, avatar, providerName }: ZaraNovaShellProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [tituloInicio] = useState(saudacao);
 
@@ -91,15 +94,15 @@ export function ZaraNovaShell({ active, onNavigate, pageActions, children }: Zar
   }, []);
 
   const { eyebrow, titulo } = CABECALHO[active];
-  const tituloVisivel = active === 'inicio' ? tituloInicio : titulo;
+  const tituloVisivel = active === 'inicio' ? tituloInicio : active === 'lab' && providerName === 'OpenAI' ? 'Seu espaço de trabalho' : titulo;
 
   return (
     <ToastContext.Provider value={mostrarToast}>
       <div className="app-shell">
         <aside className="app-rail">
           <button className="brand" onClick={() => onNavigate('inicio')} aria-label="Ir para o Início">
-            <span className="brand-mark">ZA</span>
-            <span>ZARA</span>
+            <img className="brand-symbol" src={tropaBall} alt="" width={48} height={48} />
+            <span className="brand-wordmark"><b className="brand-tropa">TROPA</b> <b className="brand-dev">dev.</b></span>
           </button>
 
           <nav className="main-nav" aria-label="Navegação principal">
@@ -107,12 +110,12 @@ export function ZaraNovaShell({ active, onNavigate, pageActions, children }: Zar
               <button
                 key={key}
                 type="button"
-                className={`nav-item${active === key ? ' active' : ''}`}
-                aria-current={active === key ? 'page' : undefined}
+                className={`nav-item${active === key || (key === 'lab' && active === 'equipe') ? ' active' : ''}`}
+                aria-current={active === key || (key === 'lab' && active === 'equipe') ? 'page' : undefined}
                 onClick={() => onNavigate(key)}
               >
-                <Icon size={20} strokeWidth={2} aria-hidden="true" />
-                <span>{rotulo}</span>
+                {key === 'conversa' && avatar?.imagemUrl ? <img className="nav-avatar" src={avatar.imagemUrl} alt="" /> : <Icon size={20} strokeWidth={2} aria-hidden="true" />}
+                <span>{key === 'conversa' && avatar ? avatar.nome : key === 'lab' && providerName === 'OpenAI' ? 'Equipe' : rotulo}</span>
               </button>
             ))}
           </nav>
@@ -135,12 +138,14 @@ export function ZaraNovaShell({ active, onNavigate, pageActions, children }: Zar
               <small>Administrador</small>
             </div>
           </div>
+          <button className="nav-item rail-settings" type="button" onClick={() => onNavigate('configuracoes')} aria-current={active === 'configuracoes' ? 'page' : undefined}><Settings size={20} aria-hidden="true" /><span>Configurações</span></button>
         </aside>
 
         <div className="main-surface">
           <header className="global-header">
             <div className="breadcrumb">
-              <span>ZARA</span>
+              <span className="brand-wordmark breadcrumb-brand"><b className="brand-tropa">TROPA</b> <b className="brand-dev">dev.</b></span>
+              {providerName && <span className="pilot-provider-chip"><span className="pilot-provider-dot" aria-hidden="true" />{providerName}</span>}
               <span className="breadcrumb-divider" aria-hidden="true">
                 /
               </span>

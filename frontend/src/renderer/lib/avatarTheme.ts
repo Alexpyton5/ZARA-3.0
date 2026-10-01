@@ -1,68 +1,12 @@
 /**
- * avatarTheme.ts — o motor de temas: qual avatar veste qual tema.
- *
- * REGRA DO Alex: trocar o avatar ativo troca o tema do app INTEIRO, sem reload,
- * e a escolha persiste (ver ThemeProvider em components/zara-nova/theme/).
- *
- * ---------------------------------------------------------------------------
- * DECISÃO DE DESIGN (UI designer, 2026-09-30)
- * ---------------------------------------------------------------------------
- * Os 3 temas vêm do molde aprovado (zara-nova.css):
- *   zara-claro  — claro, quente e respirável; a REFERÊNCIA OFICIAL de UI
- *                 (a versão vencedora do duelo de protótipos, no estilo do Muse AI).
- *   zara-escuro — o verde-escuro original do molde; o "modo trabalho".
- *   dots        — dark cinematográfico com gradiente azul→roxo→rosa→amarelo;
- *                 a demonstração viva do motor de temas (1 clique muda tudo).
- *
- * O mapa abaixo segue o papel de cada avatar na equipe:
- *   zoe, lyra, viva -> zara-claro. A zoe é a presença principal — a pessoa com
- *     quem o usuário conversa e em quem confia — então ela veste o tema de
- *     referência. A lyra (voz) e a viva (mídias sociais) pedem acolhimento,
- *     então ficam no claro também.
- *   kai, noa, azul -> zara-escuro. São os avatares de execução (build, cérebro
- *     e integrações): o verde-escuro dá o clima de centro de comando, foco total.
- *   levi, nix -> dots. O levi É o personagem de óculos do molde (identificado
- *     visualmente: óculos no rosto, touca creme, camiseta preta 4UP) — o tema
- *     mais expressivo combina com ele. A nix (Nome & Produto) trabalha criação,
- *     então o dark cinematográfico veste bem o trabalho criativo.
- *
- * Avatar desconhecido cai no zara-claro (o tema de referência é o padrão seguro).
- *
- * ---------------------------------------------------------------------------
- * REGISTRO DE ASSETS — ordem do Alex (2026-09-30): avatares SEMPRE fiéis aos
- * originais, em ótima qualidade. Proibido redesenhar aproximado; nunca inventar
- * traço, cor ou roupa. Onde a interface referenciar um avatar, usar o asset
- * fiel abaixo. Se a resolução do molde for baixa, reconstruir a partir do
- * original fiel — nunca inventar.
- * ---------------------------------------------------------------------------
- *   zoe  -> media-generation-mascote-4up-tranca-0-2b5600e2-5fd4-4e8e-86a7-92a97264113a.webp
- *           origem: ~/workspace/4up/mascote/ (original fiel gerado em 2026-09-28)
- *   lyra -> lyra.png   | origem: ~/workspace/ts-spaces/zara-ui-lab/assets/
- *   levi -> levi.png   |   (cópias locais fiéis dos PNGs do molde,
- *   kai  -> kai.png    |    mesmos arquivos servidos em
- *   noa  -> noa.png    |    https://zara-ui-lab.zoeeproject.chatgpt.site/assets/<nome>.png)
- *   azul -> azul.png   |
- *   nix  -> nix.png    |
- *   dex  -> dex.png    |   (salas adicionais do molde)
- *   atlas-> atlas.png  |
- *   mia  -> mia.png    | origem: só no hotlink do molde (sem cópia local ainda)
- *   viva -> (pendente) | sem asset no molde — a referência visual ainda precisa
- *                        ser fornecida; nada inventado até lá.
- *
- * Descrição visual de cada um (para conferência — tem que bater com o original):
- *   zoe:   mascote 4UP de trança loira; cropped preto 4UP; short verde 4UP;
- *          tatuagens nos braços; relógio branco; bola amarela e preta.
- *   lyra:  hamster, cabelo castanho comprido; headset com microfone; camiseta clara 4UP.
- *   levi:  hamster de óculos (o personagem de óculos); touca creme; camiseta preta 4UP.
- *   kai:   hamster, boné bege 4UP; camiseta bege 4UP; cinto de ferramentas; short jeans.
- *   noa:   hamster, moletom cinza com capuz.
- *   azul:  hamster de pelo escuro; camiseta verde 4UP; headset com microfone.
- *   nix:   hamster, tranças castanhas; camiseta azul 4UP.
- *   dex:   hamster de pelo escuro, óculos na testa; camiseta preta 4UP.
- *   atlas: hamster, cabelo grisalho, óculos; camisa polo azul-petróleo; segura projeto.
+ * Temas e metadados dos avatares da interface nova.
+ * Família Muse: zara-claro / zara-escuro. Alfred: dots, conforme ordem de Alex.
+ * Este mapa define aparência; a disponibilidade dos provedores é tratada fora daqui.
+ * Retratos locais em avatares.ts. O ZIP foi usado como referência visual e de assets.
  */
 
 import type { AvatarId, AvatarInfo, ThemeId } from '../components/zara-nova/types';
+import { avatarOriginal } from '../components/zara-nova/avatares';
 
 /** Opção de tema exibida nos seletores da interface (rótulos em pt-BR). */
 export interface ThemeOption {
@@ -71,13 +15,13 @@ export interface ThemeOption {
   descricao: string;
 }
 
-/** Os 3 temas disponíveis, com rótulos em pt-BR simples. */
+/** Temas já existentes na folha de estilos, com rótulos em pt-BR. */
 export const AVAILABLE_THEMES: ThemeOption[] = [
   {
     id: 'zara-claro',
     rotulo: 'Claro acolhedor',
     descricao:
-      'A referência oficial: fundo claro, quente e respirável, no estilo da interface do Muse AI.',
+      'Fundo claro e quente para a família Muse.',
   },
   {
     id: 'zara-escuro',
@@ -86,9 +30,8 @@ export const AVAILABLE_THEMES: ThemeOption[] = [
   },
   {
     id: 'dots',
-    rotulo: 'Dots cinematográfico',
-    descricao:
-      'Dark com gradiente azul, roxo, rosa e amarelo. A demonstração viva do motor de temas.',
+    rotulo: 'Alfred dourado',
+    descricao: 'Grafite e dourado; identidade visual da tripulação OpenAI.',
   },
 ];
 
@@ -100,8 +43,9 @@ export const AVATAR_THEMES: Record<AvatarId, ThemeId> = {
   kai: 'zara-escuro',
   noa: 'zara-escuro',
   azul: 'zara-escuro',
-  levi: 'dots',
-  nix: 'dots',
+  levi: 'zara-claro',
+  nix: 'zara-claro',
+  alfred: 'dots',
 };
 
 /** Avatar padrão quando não há escolha salva. */
@@ -126,14 +70,15 @@ export const AVATAR_INFO: Record<AvatarId, AvatarResumo> = {
   noa: { nome: 'NOA', papel: 'Cérebro & Autopilot' },
   nix: { nome: 'NIX', papel: 'Nome & Produto' },
   viva: { nome: 'VIVA', papel: 'Mídias Sociais' },
+  alfred: { nome: 'Alfred', papel: 'Seu copiloto' },
 };
 
 /** Monta o AvatarInfo de um id (ponte com o contrato que a FRENTE FIAÇÃO espera). */
 export function avatarInfoPara(id: AvatarId): AvatarInfo {
   const info = AVATAR_INFO[id];
   return info
-    ? { id, nome: info.nome, papel: info.papel }
-    : { id, nome: id, papel: '' };
+    ? { id, nome: info.nome, papel: info.papel, imagemUrl: avatarOriginal(id) }
+    : { id, nome: id, papel: '', imagemUrl: avatarOriginal(id) };
 }
 
 /** Devolve o tema do avatar; avatar desconhecido cai no tema de referência. */
@@ -154,7 +99,7 @@ export function isKnownTheme(value: unknown): value is ThemeId {
 export interface AvatarAsset {
   /** Nome do arquivo do asset fiel. */
   arquivo: string;
-  /** De onde veio o asset (caminho local ou URL do molde). */
+  /** Caminho da referência original dentro do ZIP fornecido. */
   origem: string;
   /** O que o asset mostra — tem que bater com o original na conferência visual. */
   descricao: string;
@@ -163,61 +108,61 @@ export interface AvatarAsset {
 /** Registro de qual asset cada avatar usa e de onde veio. */
 export const AVATAR_ASSETS: Record<string, AvatarAsset> = {
   zoe: {
-    arquivo: 'media-generation-mascote-4up-tranca-0-2b5600e2-5fd4-4e8e-86a7-92a97264113a.webp',
-    origem: '~/workspace/4up/mascote/ (original fiel gerado em 2026-09-28)',
+    arquivo: 'zoe-limpa.png',
+    origem: 'frontend/src/renderer/assets/zoe-limpa.png; mesma personagem da referência zoe-reference.webp do ZIP',
     descricao:
       'Mascote 4UP de trança loira; cropped preto 4UP; short verde 4UP; tatuagens; relógio branco; bola amarela e preta.',
   },
   lyra: {
-    arquivo: 'lyra.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
-    descricao: 'Hamster, cabelo castanho comprido; headset com microfone; camiseta clara 4UP.',
+    arquivo: 'lyra.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
+    descricao: 'Personagem de pelúcia, cabelo castanho comprido, headset e camiseta clara 4UP.',
   },
   levi: {
-    arquivo: 'levi.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
-    descricao: 'Hamster de óculos (o personagem de óculos); touca creme; camiseta preta 4UP.',
+    arquivo: 'levi.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
+    descricao: 'Personagem de pelúcia com óculos, capuz creme e camiseta preta 4UP.',
   },
   kai: {
-    arquivo: 'kai.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
-    descricao: 'Hamster, boné bege 4UP; camiseta bege 4UP; cinto de ferramentas; short jeans.',
+    arquivo: 'kai.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
+    descricao: 'Personagem KAI original no arquivo kai.webp do ZIP fornecido.',
   },
   noa: {
-    arquivo: 'noa.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
-    descricao: 'Hamster, moletom cinza com capuz.',
+    arquivo: 'noa.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
+    descricao: 'Personagem NOA original no arquivo noa.webp do ZIP fornecido.',
   },
   azul: {
-    arquivo: 'azul.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
-    descricao: 'Hamster de pelo escuro; camiseta verde 4UP; headset com microfone.',
+    arquivo: 'azul.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
+    descricao: 'Personagem AZUL original no arquivo azul.webp do ZIP fornecido.',
   },
   nix: {
-    arquivo: 'nix.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
-    descricao: 'Hamster, tranças castanhas; camiseta azul 4UP.',
+    arquivo: 'nix.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
+    descricao: 'Personagem NIX original no arquivo nix.webp do ZIP fornecido.',
   },
   dex: {
-    arquivo: 'dex.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
-    descricao: 'Hamster de pelo escuro, óculos na testa; camiseta preta 4UP. (Sala adicional.)',
+    arquivo: 'dex.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
+    descricao: 'Personagem DEX original no arquivo dex.webp do ZIP fornecido.',
   },
   atlas: {
-    arquivo: 'atlas.png',
-    origem: '~/workspace/ts-spaces/zara-ui-lab/assets/ (cópia fiel do PNG do molde)',
+    arquivo: 'atlas.webp',
+    origem: '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/',
     descricao:
-      'Hamster, cabelo grisalho, óculos; camisa polo azul-petróleo; segura o projeto. (Sala adicional.)',
+      'Personagem ATLAS original no arquivo atlas.webp do ZIP fornecido.',
   },
   mia: {
-    arquivo: 'mia.png',
+    arquivo: 'mia.webp',
     origem:
-      'Apenas no hotlink do molde (https://zara-ui-lab.zoeeproject.chatgpt.site/assets/mia.png) — sem cópia local ainda.',
-    descricao: 'Asset pendente de download local. (Sala adicional.)',
+      '.zara-dev/references/prototipo-gpt-20260930/ZARA_Prototipo/dist/assets/mia.webp',
+    descricao: 'Personagem MIA original no arquivo mia.webp do ZIP fornecido.',
   },
   viva: {
     arquivo: '(pendente)',
-    origem: 'Sem asset no molde — a referência visual ainda precisa ser fornecida.',
+    origem: 'Nenhum arquivo viva encontrado em dist/assets do ZIP fornecido.',
     descricao: 'Avatar pendente: nada inventado até a referência oficial chegar.',
   },
 };

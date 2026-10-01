@@ -1,30 +1,4 @@
-/** Tela Conversa: o avatar no centro, conversa em texto + voz.
- *  REGRA DE LINGUAGEM: quem conversa é o avatar (a presença de confiança).
- *  A ZARA é o motor que executa — nunca personagem, nunca em 1ª pessoa.
- *
- *  VOZ EM DESTAQUE (adendo do Alex): o botão de modo voz é o elemento mais
- *  chamativo da tela, com a ZOE (avatar do Muse dele — mascote de trança
- *  loira, cropped preto + short verde 4UP, original fiel) ao lado/atrás.
- *  A conversa por voz é NATURAL e em tempo real: ele fala, ela responde
- *  FALANDO — via o pipeline real `useZoeVoice` (não é só ler texto em voz alta).
- *
- *  FIAÇÃO (outra frente):
- *  - Histórico inicial: normalizar a resposta do IPC com
- *    `normalizeHistoryResponse(resposta)` (pc-source/renderer/lib/chatHistory.ts).
- *    // TODO(CODEX): carregar o histórico real via IPC e passar em `historico`.
- *  - Texto: `submitToMuse(webview, texto)` + `readMuseReply(webview, sub)`
- *    (pc-source/renderer/lib/museConversation.ts) precisam do webview da conversa
- *    com a zoe.
- *    // TODO(CODEX): ligar onEnviar ao webview (submitToMuse/readMuseReply).
- *  - VOZ: passar em `voz` o controlador ligado ao `useZoeVoice(webviewRef, pageReady)`
- *    (pc-source/renderer/lib/useZoeVoice.ts): { estado, erro, motor, alternar }.
- *    // TODO(CODEX): instanciar useZoeVoice na montagem da tela e fiar `voz`.
- *    // TODO(CODEX): GAP REAL — Manual §8.2: 'zoe-voice-speak' não tem handler no
- *    backend; o TTS por esse caminho não chega. O áudio real chega pelo evento
- *    'voice-output-audio' (PCM da Kore). Registrar o handler ou remover a chamada
- *    morta — documentar a decisão. Ver skill verificacao-voz (os 4 passos).
- *  Sem fiação, NADA é fingido: nenhum estado de voz é simulado, nenhuma
- *  resposta é inventada — o rodapé e o botão explicam honestamente. */
+/** Conversa: texto na sessao do piloto e controlador existente de voz. Sem resposta simulada. */
 
 import { useEffect, useRef, useState } from 'react';
 import { Send, Mic, MicOff, ShieldCheck, MessageCircle } from 'lucide-react';
@@ -38,6 +12,7 @@ export interface ConversaMensagem {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  status?: 'pending' | 'sent' | 'unknown';
 }
 
 /** Controlador do pipeline real de voz (ligado ao useZoeVoice pela FIAÇÃO). */
@@ -59,6 +34,7 @@ export interface ConversaProps {
   voz?: ControladorVoz;
   /** Abrir a tela de voz dedicada. */
   onAbrirVoz?: () => void;
+  providerLabel?: string;
 }
 
 const ZOE_PADRAO: AvatarInfo = {
@@ -86,32 +62,33 @@ function RetratoZoe({ avatar, className }: { avatar: AvatarInfo; className: stri
 }
 
 /** Rótulo honesto do estado real da voz. */
-function rotuloVoz(voz: ControladorVoz | undefined): string {
-  if (!voz) return 'A voz conecta na etapa de fiação.';
+function rotuloVoz(voz: ControladorVoz | undefined, nome: string): string {
+  if (!voz) return 'A voz está indisponível.';
   switch (voz.estado) {
     case 'starting':
       return 'Ligando o microfone…';
     case 'listening':
       return 'Ouvindo — pode falar.';
     case 'waiting':
-      return 'A Zoe está pensando…';
+      return `${nome} está pensando…`;
     case 'controlling':
       return 'Fazendo no seu computador…';
     case 'speaking':
-      return 'A Zoe está falando…';
+      return `${nome} está falando…`;
     case 'error':
       return voz.erro || 'Algo não saiu como esperado — toque para tentar de novo.';
     case 'off':
     default:
-      return 'Toque e fale com a Zoe. Você fala, ela responde falando.';
+      return `Toque e fale com ${nome}. Você fala, o piloto responde falando.`;
   }
 }
 
-export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, onAbrirVoz }: ConversaProps) {
+export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, onAbrirVoz, providerLabel = 'Muse' }: ConversaProps) {
   const toast = useToast();
   const [mensagens, setMensagens] = useState<ConversaMensagem[]>(historico);
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [erroEnvio, setErroEnvio] = useState('');
   const fimRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -121,22 +98,19 @@ export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, o
   async function enviar(raw: string) {
     const conteudo = raw.trim();
     if (!conteudo || enviando) return;
-    const msg: ConversaMensagem = { role: 'user', content: conteudo, timestamp: Date.now() };
+    if (!onEnviar) { setErroEnvio('A conversa está indisponível. Abra sua conta para continuar.'); return; }
+    const msg: ConversaMensagem = { id: crypto.randomUUID(), role: 'user', content: conteudo, timestamp: Date.now(), status: 'pending' };
     setMensagens((atual) => [...atual, msg]);
     setTexto('');
-
-    if (!onEnviar) {
-      // Sem fiação real, não inventamos resposta.
-      toast('Mensagem registrada. A conversa de verdade conecta na etapa de fiação.');
-      return;
-    }
-
+    setErroEnvio('');
     setEnviando(true);
     try {
       const resposta = await onEnviar(conteudo);
-      setMensagens((atual) => [...atual, { role: 'assistant', content: resposta, timestamp: Date.now() }]);
-    } catch {
-      toast('Não consegui enviar agora. Tente de novo em instantes.');
+      setMensagens((atual) => [...atual.map(item => item.id === msg.id ? { ...item, status: 'sent' as const } : item), { role: 'assistant', content: resposta, timestamp: Date.now() }]);
+    } catch (cause) {
+      setMensagens(atual => atual.map(item => item.id === msg.id ? { ...item, status: 'unknown' } : item));
+      setTexto(conteudo);
+      setErroEnvio(cause instanceof Error ? cause.message : 'Não consegui confirmar a resposta. Confira sua conta antes de reenviar.');
     } finally {
       setEnviando(false);
     }
@@ -144,7 +118,7 @@ export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, o
 
   function apertarVoz() {
     if (!voz) {
-      toast('A voz de verdade conecta na etapa de fiação.');
+      toast('A voz está indisponível.');
       return;
     }
     void voz.alternar();
@@ -180,14 +154,14 @@ export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, o
               type="button"
               className="voz-hero-botao"
               onClick={apertarVoz}
-              aria-label={vozAtiva ? 'Encerrar a conversa por voz' : 'Falar com a Zoe por voz'}
+              aria-label={vozAtiva ? 'Encerrar a conversa por voz' : `Falar com ${avatar.nome} por voz`}
               aria-pressed={vozAtiva}
             >
               {vozAtiva ? <MicOff size={34} aria-hidden="true" /> : <Mic size={34} aria-hidden="true" />}
             </button>
           </div>
           <div className="voz-hero-legenda" role="status" aria-live="polite">
-            <strong>{rotuloVoz(voz)}</strong>
+            <strong>{rotuloVoz(voz, avatar.nome)}</strong>
             {voz?.motor ? <span>Voz: {voz.motor === 'kore' ? 'Kore' : 'OmniVoice (reserva)'}</span> : null}
           </div>
         </div>
@@ -205,7 +179,7 @@ export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, o
                 <br />O que vamos fazer hoje?
               </h2>
               <p>
-                Uma conversa para pensar. Uma equipe para fazer. A {avatar.nome} reúne o contexto e a ZARA executa as
+                Uma conversa para pensar. Uma equipe para fazer. A {avatar.nome} reúne o contexto e a TROPA dev. executa as
                 ações no seu computador.
               </p>
               <div className="suggestions">
@@ -222,6 +196,7 @@ export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, o
                 m.role === 'user' ? (
                   <div className="user-bubble" key={m.id ?? i}>
                     {m.content}
+                    {m.status && m.status !== 'sent' && <small style={{ display: 'block', opacity: .8 }}>{m.status === 'pending' ? 'Aguardando resposta…' : 'Resposta não confirmada'}</small>}
                   </div>
                 ) : (
                   <div className="demo-response" key={m.id ?? i}>
@@ -271,17 +246,18 @@ export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, o
           </div>
           <p className="chat-footnote">
             {onEnviar
-              ? 'Suas mensagens vão para a conversa com a zoe.'
-              : 'A conversa de verdade conecta na etapa de fiação — nada aqui é respondido por enquanto.'}
+              ? `Suas mensagens vão para a sua conversa no ${providerLabel}.`
+              : 'A conversa está indisponível.'}
           </p>
+          {erroEnvio && <p role="alert" className="chat-footnote">{erroEnvio}</p>}
         </form>
       </section>
 
       <aside className="zoe-command">
-        <span className="command-label">MUSE + ZARA</span>
+        <span className="command-label">{providerLabel.toUpperCase()} + TROPA dev.</span>
         <h3>Pensa e faz.</h3>
         <p>
-          O Muse é o cérebro. O app é o corpo: voz, visão, memória e ação no computador — com a trava de segurança
+          O piloto conduz a conversa. O motor conecta voz, visão, memória e ação no computador — com a segurança
           sempre ligada.
         </p>
         <div className="command-block">

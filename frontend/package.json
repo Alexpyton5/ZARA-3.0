@@ -1,7 +1,7 @@
 {
   "name": "zara-frontend",
   "version": "3.0.0",
-  "description": "ZARA 3.0 Neural Interface - Electron + React + Three.js",
+  "description": "TROPA dev. — assistente de desktop com Electron, React e Three.js",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -43,7 +43,8 @@
   },
   "build": {
     "appId": "com.zara.neural-interface",
-    "productName": "ZARA 3.0",
+    "productName": "TROPA dev",
+    "executableName": "ZARA 3.0",
     "files": [
       "dist-electron/**/*",
       "dist-frontend/**/*"
@@ -57,13 +58,13 @@
         "to": "backend/zara-backend.exe"
       },
       {
-        "from": "public/zara.ico",
-        "to": "assets/zara.ico"
+        "from": "public/tropa-dev.ico",
+        "to": "assets/tropa-dev.ico"
       }
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/zara.ico",
+      "icon": "public/tropa-dev.ico",
       "signAndEditExecutable": false
     }
   },

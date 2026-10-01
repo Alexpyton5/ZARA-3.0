@@ -5,6 +5,7 @@ interface AtividadeProps {
   itens: AtividadeItem[];
   /** Quando true, mostra o estado honesto de carregamento. */
   carregando?: boolean;
+  onAbrirEntrega: (item: AtividadeItem) => void;
 }
 
 /** Rosto do avatar: foto quando existe, inicial estilizada quando não. */
@@ -29,7 +30,10 @@ function AvatarRosto({ avatar, tamanho = 47 }: { avatar: AvatarInfo; tamanho?: n
  * Resumo do que foi concluído + acesso direto ao que foi produzido.
  * ADENDO #3: não existe capacidade real de desfazer, então NÃO há botão de desfazer.
  */
-export function Atividade({ itens, carregando = false }: AtividadeProps) {
+export function Atividade({ itens, carregando = false, onAbrirEntrega }: AtividadeProps) {
+  const day = (date: Date) => date.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia' });
+  const today = day(new Date());
+  const todayCount = itens.filter(item => day(new Date(item.concluidoEm)) === today).length;
   if (carregando) {
     return (
       <section className="activity-view" aria-label="Atividade">
@@ -67,7 +71,7 @@ export function Atividade({ itens, carregando = false }: AtividadeProps) {
       <div className="activity-summary">
         <div className="summary-cell">
           <span>Pronto hoje</span>
-          <strong>{itens.length} {itens.length === 1 ? 'entrega' : 'entregas'}</strong>
+          <strong>{todayCount} {todayCount === 1 ? 'entrega' : 'entregas'}</strong>
         </div>
         <div className="summary-cell">
           <span>Seu tempo protegido</span>
@@ -76,8 +80,8 @@ export function Atividade({ itens, carregando = false }: AtividadeProps) {
       </div>
 
       <div className="timeline-label">
-        HOJE
-        <span>{itens.length} {itens.length === 1 ? 'entrega' : 'entregas'}</span>
+        ENTREGAS
+          <span>· {itens.length} {itens.length === 1 ? 'entrega' : 'entregas'}</span>
       </div>
 
       {itens.map((item) => (
@@ -87,19 +91,17 @@ export function Atividade({ itens, carregando = false }: AtividadeProps) {
             <h3>{item.titulo}</h3>
             <p>{item.descricao}</p>
             <span className="activity-meta">
-              {item.responsavel.nome} · {item.concluidoEm} · Concluído
+              {item.responsavel.nome} · {new Date(item.concluidoEm).toLocaleString('pt-BR', { timeZone: 'America/Bahia', dateStyle: 'short', timeStyle: 'short' })} · Concluído
             </span>
           </div>
           {item.entregavelUrl ? (
-            <a
+            <button type="button"
               className="secondary-button"
-              href={item.entregavelUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={() => onAbrirEntrega(item)}
             >
               <ExternalLink size={14} aria-hidden="true" />
               Ver resultado
-            </a>
+            </button>
           ) : (
             <span className="done-check" aria-label="Concluído" title="Concluído">
               <Check size={14} aria-hidden="true" />

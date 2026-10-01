@@ -7,7 +7,7 @@
  * se funcionasse.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import React from 'react';
 // DEPENDÊNCIA EXTERNA (Frente B): este arquivo vive em
 // `frontend/src/renderer/components/computer-agent/computerAgentBridge.ts`
@@ -36,10 +36,7 @@ export function useSupercerebroStatus(): SupercerebroStatus {
 
   useEffect(() => {
     let mounted = true;
-    // TODO(CODEX): 'supercerebro-status' existe no preload mas NÃO está
-    // registrado no handler_map do backend (manual §8.1) — hoje cai em
-    // "[IPC] Unknown message type" e o promise expira no timeout.
-    // Decidir: registrar handle_supercerebro_status no mapa ou remover a chamada.
+    // Consulta o estado autoritativo pelo IPC; se falhar, mantém estado desconhecido.
     window.zaraIPC?.supercerebro
       ?.status?.()
       .then((s: any) => {
@@ -67,9 +64,7 @@ export function useSupercerebroStatus(): SupercerebroStatus {
     if (busy) return;
     const sc = window.zaraIPC?.supercerebro;
     if (!sc?.toggle) return;
-    // TODO(CODEX): 'supercerebro-toggle' existe no preload mas NÃO está
-    // registrado no handler_map do backend (manual §8.1). Registrar
-    // handle_supercerebro_toggle no mapa ou remover a chamada.
+    // O backend confirma o estado; eventos também atualizam a tela.
     setBusy(true);
     try {
       const r: any = await sc.toggle(!active);
@@ -99,12 +94,7 @@ export interface VoiceEngine {
   busy: boolean;
   setEngine: (engine: VoiceEngineId) => Promise<boolean>;
   /**
-   * Pede ao backend para falar um texto pela cascata de TTS.
-   * TODO(CODEX): 'zoe-voice-speak' NÃO tem handler registrado no backend
-   * (manual §8.2) — hoje cai em "Unknown message type" e nunca vira fala.
-   * Decidir: registrar o handler (ligando o texto à cascata de TTS) ou
-   * remover a chamada. A voz que o Alex ouve hoje vem pelo EVENTO
-   * 'voice-output-audio', que continua funcionando.
+   * Pede ao backend para falar um texto; resolve após a reprodução ser confirmada.
    */
   speak: (text: string) => Promise<void>;
 }
@@ -146,7 +136,7 @@ export function useVoiceEngine(): VoiceEngine {
   const speak = useCallback(async (text: string): Promise<void> => {
     const result: any = await window.zaraIPC?.voice?.speakZoe?.(text);
     if (result?.success !== true) {
-      throw new Error(result?.error || 'A voz da ZARA não respondeu (canal zoe-voice-speak sem handler no backend).');
+      throw new Error(result?.error || 'O motor não confirmou a fala.');
     }
   }, []);
 
@@ -163,6 +153,7 @@ export function useVoiceEngine(): VoiceEngine {
 /* ------------------------------------------------------------------ */
 
 export interface ComputerAgentCommand {
+  busy: boolean;
   /** true enquanto o agente está executando no PC. */
   running: boolean;
   /** Objetivo que disparou a execução atual (vem do evento started). */
@@ -175,11 +166,13 @@ export interface ComputerAgentCommand {
   error: string | null;
   /** true quando o preload ainda não expôs a ponte (Frente C não ligou). */
   bridgeMissing: boolean;
-  run: (goal: string) => Promise<void>;
+  run: (goal: string) => Promise<boolean>;
   clearError: () => void;
 }
 
 export function useComputerAgent(): ComputerAgentCommand {
+  const pending = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [goal, setGoal] = useState('');
   const [step, setStep] = useState('');
@@ -223,32 +216,43 @@ export function useComputerAgent(): ComputerAgentCommand {
   }, []);
 
   const run = useCallback(async (nextGoal: string) => {
+    if (pending.current || running) return false;
     const clean = nextGoal.trim();
     if (!clean) {
       setError('Diga o que você quer que seja feito no computador.');
-      return;
+      return false;
     }
     const bridge = getComputerAgentBridge();
     if (!bridge) {
       setBridgeMissing(true);
       setError('O controle do computador não está disponível nesta versão do app.');
-      return;
+      return false;
     }
     setError(null);
     setRefused(false);
+    pending.current = true; setBusy(true);
     try {
-      await bridge.run(clean);
+      const result = await bridge.run(clean) as { success?: boolean; verified?: boolean; error?: string };
+      if (result?.success !== true) {
+        setError(result?.error || 'O executor não confirmou a conclusão.');
+        return false;
+      }
+      if (result.verified !== true) setError('O executor terminou, mas o efeito na tela ainda não foi confirmado.');
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível enviar o comando.');
+      return false;
+    } finally {
+      pending.current = false; setBusy(false);
     }
-  }, []);
+  }, [running]);
 
   const clearError = useCallback(() => {
     setError(null);
     setRefused(false);
   }, []);
 
-  return { running, goal, step, refused, error, bridgeMissing, run, clearError };
+  return { running, busy, goal, step, refused, error, bridgeMissing, run, clearError };
 }
 
 /* ------------------------------------------------------------------ */
@@ -331,7 +335,7 @@ export const BotaoOperarComputador: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [pedido, setPedido] = useState('');
 
-  const executar = () => {
+  const executar = async () => {
     const clean = pedido.trim();
     // Validação local: com pedido vazio ou ponte ausente, mantém o painel
     // aberto para o erro honesto aparecer (fechar esconderia o erro).
@@ -339,9 +343,7 @@ export const BotaoOperarComputador: React.FC = () => {
       void agent.run(pedido);
       return;
     }
-    void agent.run(clean);
-    setOpen(false);
-    setPedido('');
+    if (await agent.run(clean)) { setOpen(false); setPedido(''); }
   };
 
   return (
@@ -379,10 +381,10 @@ export const BotaoOperarComputador: React.FC = () => {
             <button
               type="button"
               onClick={executar}
-              disabled={agent.running || agent.bridgeMissing}
+              disabled={agent.busy || agent.running || agent.bridgeMissing || !pedido.trim()}
               style={{ ...btnStyle, padding: '7px 12px', opacity: agent.running || agent.bridgeMissing ? 0.5 : 1 }}
             >
-              {agent.running ? 'Executando…' : 'Executar'}
+              {agent.running ? 'Executando…' : agent.busy ? 'Enviando…' : 'Executar'}
             </button>
           </div>
           {agent.error && (
@@ -397,15 +399,15 @@ export const BotaoOperarComputador: React.FC = () => {
             {ponte.unknown
               ? 'Ponte remota da zoe: verificando…'
               : ponte.ready
-                ? 'Ponte remota da zoe: ligada — ela pode operar o PC de fora (Tailscale).'
-                : 'Ponte remota da zoe: desligada — o controle funciona só aqui no PC.'}
+                ? 'Canal do motor disponível. A conexão pela rede precisa estar configurada.'
+                : 'Canal remoto indisponível.'}
           </div>
         </div>
       )}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="Pedir para o motor da ZARA operar o computador"
+        title="Pedir para o motor da TROPA dev. operar o computador"
         style={btnStyle}
       >
         <span aria-hidden="true" style={{ fontSize: '15px' }}>▣</span>

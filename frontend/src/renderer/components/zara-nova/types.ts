@@ -5,7 +5,7 @@ export type AvatarId = string; // ex.: 'zoe', 'lyra', 'levi', 'azul', 'kai', 'no
 
 export type ThemeId = 'zara-claro' | 'zara-escuro' | 'dots' | string;
 
-export type NavKey = 'inicio' | 'conversa' | 'voz' | 'atividade' | 'equipe' | 'lab';
+export type NavKey = 'inicio' | 'conversa' | 'voz' | 'atividade' | 'equipe' | 'lab' | 'configuracoes';
 
 export interface AvatarInfo {
   id: AvatarId;

@@ -79,6 +79,24 @@ function registrarChunkKore(pcmBase64: string, taxa: number): void {
 }
 
 export function koreTocando(): boolean { return tocando.length > 0 }
+/** Generation completion is not playback completion; wait for the last source. */
+export async function aguardarFimKore(): Promise<void> {
+  if (retomadaSaida) await retomadaSaida;
+  if (!koreTocando()) return;
+  await new Promise<void>((resolve, reject) => {
+    let unsubscribe = () => {};
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('A reprodução da resposta não terminou.'));
+    }, 60000);
+    unsubscribe = observarKore(active => {
+      if (active) return;
+      clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    });
+  });
+}
 export function observarKore(listener: (active: boolean) => void): () => void {
   ouvintesSaida.add(listener)
   listener(koreTocando())

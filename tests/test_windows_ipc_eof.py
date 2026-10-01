@@ -80,6 +80,32 @@ async def test_voice_start_cannot_starve_typed_message_ipc(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('long_request', ['zoe-voice-speak', 'pilot-context'])
+async def test_zoe_speech_does_not_block_microphone_frames_or_stop(monkeypatch, long_request):
+    speech_started = asyncio.Event()
+    speech_finished = asyncio.Event()
+    handled: list[str] = []
+
+    class SpeakingHandler:
+        async def handle_message(self, message: IPCMessage) -> None:
+            if message.type == long_request:
+                speech_started.set()
+                await speech_finished.wait()
+                handled.append("speech-finished")
+                return
+            await asyncio.wait_for(speech_started.wait(), timeout=0.5)
+            handled.append(message.type)
+            if message.type == "voice-stop":
+                speech_finished.set()
+
+    frames = [json.dumps({"type": kind, "request_id": str(index)})
+              for index, kind in enumerate((long_request, "voice-mic-chunk", "voice-stop"))]
+    monkeypatch.setattr(sys, "stdin", io.StringIO("\n".join(frames) + "\n"))
+    await asyncio.wait_for(_run_windows_ipc(SpeakingHandler()), timeout=1.0)
+    assert handled[:2] == ["voice-mic-chunk", "voice-stop"]
+
+
+@pytest.mark.asyncio
 async def test_parent_watchdog_cancels_sidecar_ipc_when_electron_exits(monkeypatch):
     ipc_cancelled = asyncio.Event()
 

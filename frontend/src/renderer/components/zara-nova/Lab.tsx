@@ -1,255 +1,289 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Building2, LayoutGrid, Minus, Plus, RotateCcw, X } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
+import { Building2, LayoutGrid, Maximize2, Minimize2, Minus, Plus, RotateCcw, X } from 'lucide-react';
 import type { AvatarInfo, MembroEquipe, ProjetoUsuario } from './types';
 import { Equipe } from './Equipe';
+import { avatarOriginal } from './avatares';
+import officeImage from '../../assets/prototipo/core-office.webp';
+import type { PilotProvider } from '../../lib/pilotConversation';
 
 interface LabProps {
   projetos: ProjetoUsuario[];
   modo: 'equipe' | 'escritorio';
   onMudarModo: (modo: 'equipe' | 'escritorio') => void;
+  provider?: PilotProvider;
+  onNovoProjeto?: () => void;
 }
 
-/** Ilustração original THE OFFICE do molde (o .png caiu — o site devolve HTML nele). */
-const OFFICE_IMG = 'https://zara-ui-lab.zoeeproject.chatgpt.site/assets/core-office.webp';
+// Coordenadas do app.js original, relativas ao core-office.webp inteiro.
+// São locais na ilustração, não evidência de uma sala/computador provisionado.
+const POSICOES: Readonly<Record<string, readonly [number, number]>> = {
+  lyra: [18, 26], levi: [38, 29], azul: [60, 34],
+  kai: [85, 40], noa: [34, 69], nix: [56, 78],
+};
+const ZOOM_MIN = 0.7;
+const ZOOM_MAX = 1.75;
+const ZOOM_PASSO = 0.15;
 
-/** Posições dos marcadores sobre a ilustração (distribuição visual, sem significado real). */
-const POSICOES: Array<[number, number]> = [
-  [13, 57], [18, 26], [34, 69], [38, 29], [60, 34], [85, 40], [56, 78], [82, 79],
-  [25, 45], [47, 55], [70, 62], [50, 38],
-];
-
-interface MembroComProjeto {
-  membro: MembroEquipe;
+interface VinculoProjeto {
+  projetoId: string;
   projeto: string;
+  membro: MembroEquipe;
+}
+interface MembroComProjetos {
+  avatar: AvatarInfo;
+  vinculos: VinculoProjeto[];
 }
 
-function AvatarRosto({ avatar, tamanho = 44 }: { avatar: AvatarInfo; tamanho?: number }) {
-  if (avatar.imagemUrl) {
-    return (
-      <span className="avatar" style={{ width: tamanho, height: tamanho }}>
-        <img src={avatar.imagemUrl} alt={avatar.nome} loading="lazy" />
-      </span>
-    );
-  }
-  const iniciais = avatar.nome.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '·';
+const STATUS_LABEL: Record<MembroEquipe['status'], string> = {
+  trabalhando: 'Trabalhando', pausado: 'Pausado', disponivel: 'Disponível',
+};
+
+function statusConhecido(valor: unknown): MembroEquipe['status'] | null {
+  return valor === 'trabalhando' || valor === 'pausado' || valor === 'disponivel' ? valor : null;
+}
+
+function statusDoMembro(membro: MembroComProjetos): MembroEquipe['status'] | null {
+  const estados = membro.vinculos.map((v) => statusConhecido(v.membro.status));
+  return estados.length && estados.every((estado) => estado === estados[0]) ? estados[0] : null;
+}
+
+function Status({ valor }: { valor: MembroEquipe['status'] | null }) {
   return (
-    <span className="avatar pending-avatar" style={{ width: tamanho, height: tamanho }} aria-hidden="true">
-      {iniciais}
+    <span className="nova-office-status" data-status={valor ?? 'desconhecido'}>
+      <i aria-hidden="true" />
+      {valor ? STATUS_LABEL[valor] : 'Estado não confirmado'}
     </span>
   );
 }
 
-const STATUS_LABEL: Record<MembroEquipe['status'], string> = {
-  trabalhando: 'Trabalhando',
-  pausado: 'Pausado',
-  disponivel: 'Disponível',
-};
-
-/** Animação de cada marcador = o STATUS REAL do avatar (nada decorativo). */
-function MarcadorStatus({ status }: { status: MembroEquipe['status'] }) {
-  if (status === 'trabalhando') {
-    return (
-      <span className="theoffice-typing" aria-hidden="true" title="Digitando">
-        <i /><i /><i />
-      </span>
-    );
-  }
-  if (status === 'pausado') {
-    return (
-      <span className="theoffice-think" aria-hidden="true" title="Pensando">
-        …
-      </span>
-    );
-  }
-  return <span className="theoffice-glow" aria-hidden="true" title="Disponível" />;
+function AvatarRosto({ avatar, tamanho = 44 }: { avatar: AvatarInfo; tamanho?: number }) {
+  const src = avatarOriginal(avatar.id) ?? avatar.imagemUrl;
+  const [falhou, setFalhou] = useState(false);
+  useEffect(() => setFalhou(false), [src]);
+  const iniciais = avatar.nome.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '·';
+  return (
+    <span className={`avatar${!src || falhou ? ' pending-avatar' : ''}`} style={{ width: tamanho, height: tamanho }} aria-hidden="true">
+      {src && !falhou ? <img src={src} alt="" loading="lazy" onError={() => setFalhou(true)} /> : iniciais}
+    </span>
+  );
 }
 
 function VistaOffice({ projetos }: { projetos: ProjetoUsuario[] }) {
   const [zoom, setZoom] = useState(1);
   const [imgFalhou, setImgFalhou] = useState(false);
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
+  const [telaCheia, setTelaCheia] = useState(false);
+  const [erroTelaCheia, setErroTelaCheia] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fecharRef = useRef<HTMLButtonElement>(null);
+  const origemRef = useRef<HTMLButtonElement | null>(null);
+  const detalheId = useId();
+  const podeTelaCheia = typeof document !== 'undefined' && document.fullscreenEnabled
+    && typeof document.documentElement.requestFullscreen === 'function';
 
-  const membros = useMemo<MembroComProjeto[]>(() => {
-    const vistos = new Set<string>();
-    const lista: MembroComProjeto[] = [];
+  const membros = useMemo<MembroComProjetos[]>(() => {
+    const porId = new Map<string, MembroComProjetos>();
     for (const projeto of projetos) {
       for (const membro of projeto.membros) {
-        if (vistos.has(membro.avatar.id)) continue;
-        vistos.add(membro.avatar.id);
-        lista.push({ membro, projeto: projeto.nome });
+        const existente = porId.get(membro.avatar.id);
+        const vinculo = { projetoId: projeto.id, projeto: projeto.nome, membro };
+        if (existente) existente.vinculos.push(vinculo);
+        else porId.set(membro.avatar.id, { avatar: membro.avatar, vinculos: [vinculo] });
       }
     }
-    return lista;
+    return Array.from(porId.values());
   }, [projetos]);
+  const selecionado = membros.find((m) => m.avatar.id === selecionadoId) ?? null;
 
-  const selecionado = membros.find((m) => m.membro.avatar.id === selecionadoId) || null;
+  const fecharDetalhe = () => {
+    setSelecionadoId(null);
+    if (origemRef.current?.isConnected) origemRef.current.focus({ preventScroll: true });
+  };
 
   useEffect(() => {
-    if (!selecionado) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelecionadoId(null); };
+    if (selecionadoId) fecharRef.current?.focus({ preventScroll: true });
+  }, [selecionadoId]);
+
+  useEffect(() => {
+    if (selecionadoId && !selecionado) setSelecionadoId(null);
+  }, [selecionadoId, selecionado]);
+
+  useEffect(() => {
+    if (!selecionadoId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setSelecionadoId(null);
+      if (origemRef.current?.isConnected) origemRef.current.focus({ preventScroll: true });
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [selecionado]);
+  }, [selecionadoId]);
 
-  const ajustarZoom = (valor: number) => setZoom(Math.min(1.75, Math.max(0.7, Number(valor.toFixed(2)))));
+  useEffect(() => {
+    const root = rootRef.current;
+    const onFullscreen = () => setTelaCheia(document.fullscreenElement === root);
+    document.addEventListener('fullscreenchange', onFullscreen);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreen);
+      if (root && document.fullscreenElement === root) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
+  const ajustarZoom = (valor: number) => {
+    setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(valor.toFixed(2)))));
+  };
+  const alternarTelaCheia = async () => {
+    setErroTelaCheia('');
+    try {
+      if (document.fullscreenElement === rootRef.current) await document.exitFullscreen();
+      else if (rootRef.current && podeTelaCheia) await rootRef.current.requestFullscreen();
+    } catch {
+      setErroTelaCheia('Não foi possível abrir a tela cheia. A vista continua disponível aqui.');
+    }
+  };
+  const selecionar = (id: string, origem: HTMLButtonElement) => {
+    if (selecionadoId === id) { fecharDetalhe(); return; }
+    origemRef.current = origem;
+    setSelecionadoId(id);
+  };
+  const posicaoPara = (id: string) => {
+    const key = id.trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(POSICOES, key) ? POSICOES[key] : undefined;
+  };
 
   return (
-    <div className="office-space theoffice-alive">
-      <style>{`
-        .theoffice-pinwrap{position:absolute;z-index:2;transform:translate(-50%,-50%)}
-        .theoffice-typing{position:absolute;left:50%;top:-22px;transform:translateX(-50%);display:flex;gap:3px;background:#f7f4e9ee;border:1px solid #ffffff88;border-radius:8px;padding:4px 6px;box-shadow:0 2px 7px #0002}
-        .theoffice-typing i{width:5px;height:5px;border-radius:50%;background:#805a37;animation:theoffice-dot 1s ease-in-out infinite}
-        .theoffice-typing i:nth-child(2){animation-delay:.15s}
-        .theoffice-typing i:nth-child(3){animation-delay:.3s}
-        @keyframes theoffice-dot{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(-4px);opacity:1}}
-        .theoffice-think{position:absolute;left:50%;top:-24px;transform:translateX(-50%);background:#f7f4e9ee;border:1px solid #ffffff88;border-radius:8px;padding:2px 8px;font-size:13px;color:#805a37;box-shadow:0 2px 7px #0002;animation:theoffice-float 3s ease-in-out infinite}
-        @keyframes theoffice-float{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,-7px)}}
-        .theoffice-glow{position:absolute;inset:-5px;border-radius:50%;border:2px solid var(--mint);opacity:.7;animation:theoffice-breathe 3.2s ease-in-out infinite;pointer-events:none}
-        @keyframes theoffice-breathe{0%,100%{transform:scale(1);opacity:.35}50%{transform:scale(1.18);opacity:.8}}
-        .theoffice-fallback{min-height:300px;border-radius:16px;background:linear-gradient(135deg,#f6efe2 0%,#efe3cc 45%,#e5d3b3 100%);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
-        .theoffice-fallback p{max-width:460px;color:#6b4f2f;font-size:14px;line-height:1.6}
-        .theoffice-fallback strong{display:block;font-size:15px;margin-bottom:4px}
-        .theoffice-legend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px;color:#e8ecd9}
-        .theoffice-legend b{font-weight:600}
-        @media (prefers-reduced-motion: reduce){
-          .theoffice-alive *,.theoffice-alive *::before,.theoffice-alive *::after{animation:none!important}
-        }
-      `}</style>
-
+    <div ref={rootRef} className={`office-space nova-office${selecionado ? ' has-detail' : ''}`}>
       <div className="office-toolbar">
         <div className="office-title">
-          <strong>THE OFFICE</strong>
-          <span>O escritório da equipe — cada avatar com sua sala e seu computador</span>
+          <strong>Escritório</strong>
+          <span>Escritório ilustrado · membros dos seus projetos</span>
         </div>
-        <div className="zoom-controls" aria-label="Controles da vista">
-          <button className="icon-button" type="button" aria-label="Diminuir zoom" onClick={() => ajustarZoom(zoom - 0.15)}>
-            <Minus size={15} aria-hidden="true" />
+        <div className="zoom-controls" role="group" aria-label="Controles da vista">
+          <button className="icon-button" type="button" aria-label="Diminuir zoom" title="Diminuir zoom" disabled={zoom <= ZOOM_MIN || imgFalhou} onClick={() => ajustarZoom(zoom - ZOOM_PASSO)}>
+            <Minus size={18} aria-hidden="true" />
           </button>
-          <span className="zoom-number" aria-live="polite">{Math.round(zoom * 100)}%</span>
-          <button className="icon-button" type="button" aria-label="Aumentar zoom" onClick={() => ajustarZoom(zoom + 0.15)}>
-            <Plus size={15} aria-hidden="true" />
+          <span className="zoom-number" aria-live="polite" aria-atomic="true">{Math.round(zoom * 100)}%</span>
+          <button className="icon-button" type="button" aria-label="Aumentar zoom" title="Aumentar zoom" disabled={zoom >= ZOOM_MAX || imgFalhou} onClick={() => ajustarZoom(zoom + ZOOM_PASSO)}>
+            <Plus size={18} aria-hidden="true" />
           </button>
-          <button className="icon-button" type="button" aria-label="Restaurar vista" onClick={() => ajustarZoom(1)}>
-            <RotateCcw size={15} aria-hidden="true" />
+          <button className="icon-button" type="button" aria-label="Restaurar vista" title="Restaurar vista" disabled={zoom === 1 || imgFalhou} onClick={() => ajustarZoom(1)}>
+            <RotateCcw size={18} aria-hidden="true" />
+          </button>
+          <button className="icon-button" type="button" aria-label={telaCheia ? 'Sair da tela cheia' : 'Ver escritório em tela cheia'} title={podeTelaCheia ? (telaCheia ? 'Sair da tela cheia' : 'Tela cheia') : 'Tela cheia indisponível neste ambiente'} aria-pressed={telaCheia} disabled={!podeTelaCheia} onClick={() => void alternarTelaCheia()}>
+            {telaCheia ? <Minimize2 size={18} aria-hidden="true" /> : <Maximize2 size={18} aria-hidden="true" />}
           </button>
         </div>
       </div>
+      {erroTelaCheia && <p className="nova-office-notice" role="status">{erroTelaCheia}</p>}
 
-      <div className="office-canvas">
-        <div className="office-scene" style={{ transform: `scale(${zoom})` }}>
-          {imgFalhou ? (
-            <div className="theoffice-fallback" role="status">
-              <p>
-                <strong>Referência visual pendente</strong>
-                A ilustração do escritório não carregou — os marcadores da equipe continuam ativos sobre esta vista.
-              </p>
-            </div>
+      <div className="nova-office-body">
+        <aside className="nova-office-sidebar" aria-label="Membros dos projetos">
+          <div className="nova-office-heading">
+            <h2>Nos seus projetos</h2>
+            <span className="room-count" aria-label={`${membros.length} membros`}>{membros.length}</span>
+          </div>
+          {membros.length ? (
+            <ul className="nova-office-members">
+              {membros.map((m) => (
+                <li key={m.avatar.id}>
+                  <button type="button" className={`nova-office-member${m.avatar.id === selecionadoId ? ' selected' : ''}`} aria-pressed={m.avatar.id === selecionadoId} aria-controls={selecionado ? detalheId : undefined} onClick={(e) => selecionar(m.avatar.id, e.currentTarget)}>
+                    <AvatarRosto avatar={m.avatar} tamanho={40} />
+                    <span className="nova-office-member-copy">
+                      <strong>{m.avatar.nome}</strong>
+                      <small>{m.avatar.papel || 'Especialidade não informada'}</small>
+                      <Status valor={statusDoMembro(m)} />
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <img
-              className="office-original"
-              src={OFFICE_IMG}
-              alt="Ilustração do escritório da equipe"
-              draggable={false}
-              onError={() => setImgFalhou(true)}
-            />
+            <div className="nova-office-empty" role="status">
+              <Building2 size={28} aria-hidden="true" />
+              <strong>{projetos.length ? 'Nenhum membro recebido' : 'Nenhum projeto recebido'}</strong>
+              <p>A equipe aparece aqui quando os seus projetos tiverem membros.</p>
+            </div>
           )}
-          {membros.map(({ membro }, i) => {
-            const [x, y] = POSICOES[i % POSICOES.length] ?? [50, 50];
-            const ativo = selecionadoId === membro.avatar.id;
-            return (
-              <span key={membro.avatar.id} className="theoffice-pinwrap" style={{ left: `${x}%`, top: `${y}%` }}>
-                <MarcadorStatus status={membro.status} />
-                <button
-                  type="button"
-                  className={`room-pin${ativo ? ' selected theoffice-pin-active' : ''}`}
-                  style={{ position: 'relative' }}
-                  aria-label={`Ver ${membro.avatar.nome}, ${membro.avatar.papel} — ${STATUS_LABEL[membro.status]}`}
-                  aria-pressed={ativo}
-                  onClick={() => setSelecionadoId(ativo ? null : membro.avatar.id)}
-                >
-                  <AvatarRosto avatar={membro.avatar} tamanho={29} />
-                  <span className="pin-name">{membro.avatar.nome}</span>
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="office-caption">
-        <span className="hint">Toque em um marcador para ver o avatar</span>
-        <span className="theoffice-legend" aria-label="Legenda dos movimentos">
-          <span><b>···</b> digitando = trabalhando</span>
-          <span><b>…</b> flutuando = pausado</span>
-          <span><b>○</b> brilho = disponível</span>
-        </span>
-      </div>
-
-      {selecionado && (
-        <aside className="room-detail" aria-label={`Detalhe de ${selecionado.membro.avatar.nome}`}>
-          <button className="icon-button detail-close" type="button" aria-label="Fechar detalhe" onClick={() => setSelecionadoId(null)}>
-            <X size={17} aria-hidden="true" />
-          </button>
-          <div className="detail-portrait" style={{ display: 'grid', placeItems: 'center', padding: 12 }}>
-            <AvatarRosto avatar={selecionado.membro.avatar} tamanho={84} />
-          </div>
-          <h2>{selecionado.membro.avatar.nome}</h2>
-          <p className="detail-role">{selecionado.membro.avatar.papel}</p>
-          <p className="detail-description">
-            Bot customizável — com sua sala, seu computador e sua especialidade.
-          </p>
-          <div className="detail-meta">
-            <span>{selecionado.projeto}</span>
-            <strong>{STATUS_LABEL[selecionado.membro.status]}</strong>
-          </div>
-          {selecionado.membro.tarefaAtual && (
-            <p className="detail-description">{selecionado.membro.tarefaAtual}</p>
-          )}
+          <p className="nova-office-sidebar-note">Os estados são os informados pelos projetos.</p>
         </aside>
-      )}
+
+        <div className="nova-office-view">
+          <div className="office-canvas" tabIndex={0} role="region" aria-label="Vista ilustrada do escritório. Ao ampliar, use a rolagem ou as setas para explorar.">
+            {imgFalhou ? (
+              <div className="nova-office-empty nova-office-image-error" role="status">
+                <strong>A ilustração não carregou</strong>
+                <p>Os membros e seus detalhes continuam disponíveis na lista.</p>
+              </div>
+            ) : (
+              <div className="nova-office-stage" style={{ '--office-zoom': zoom } as CSSProperties}>
+                <div className="office-scene">
+                  <img className="office-original" src={officeImage} width={1586} height={992} alt="Ilustração isométrica original: seis avatares nas mesas, estúdio de interface e sala de reuniões." draggable={false} onError={() => setImgFalhou(true)} />
+                  {membros.map((m) => {
+                    const posicao = posicaoPara(m.avatar.id);
+                    if (!posicao) return null;
+                    const ativo = selecionadoId === m.avatar.id;
+                    const status = statusDoMembro(m);
+                    return (
+                      <button key={m.avatar.id} type="button" className={`room-pin${ativo ? ' selected' : ''}`} style={{ left: `${posicao[0]}%`, top: `${posicao[1]}%` }} aria-label={`Ver ${m.avatar.nome} — ${status ? STATUS_LABEL[status] : 'Estado não confirmado'}`} aria-pressed={ativo} aria-controls={selecionado ? detalheId : undefined} onClick={(e) => selecionar(m.avatar.id, e.currentTarget)}>
+                        <AvatarRosto avatar={m.avatar} tamanho={30} />
+                        <span className="nova-office-pin-status" data-status={status ?? 'desconhecido'} aria-hidden="true" />
+                        <span className="pin-name">{m.avatar.nome}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="office-caption">
+            <span>Ilustração de referência. Os marcadores mostram os membros recebidos.</span>
+            <span>Sem sala identificada? Selecione o membro na lista.</span>
+          </div>
+        </div>
+
+        {selecionado && (
+          <aside id={detalheId} className="room-detail" aria-label={`Detalhes de ${selecionado.avatar.nome}`}>
+            <button ref={fecharRef} className="icon-button detail-close" type="button" aria-label="Fechar detalhes" title="Fechar detalhes" onClick={fecharDetalhe}>
+              <X size={18} aria-hidden="true" />
+            </button>
+            <div className="detail-portrait"><AvatarRosto avatar={selecionado.avatar} tamanho={88} /></div>
+            <h2>{selecionado.avatar.nome}</h2>
+            <p className="detail-role">{selecionado.avatar.papel || 'Especialidade não informada'}</p>
+            <p className="detail-description">{posicaoPara(selecionado.avatar.id) ? 'Local identificado na ilustração original.' : 'Este membro ainda não tem sala identificada nesta ilustração.'}</p>
+            <ul className="nova-office-assignments">
+              {selecionado.vinculos.map((v, i) => (
+                <li key={`${v.projetoId}-${i}`}>
+                  <strong>{v.projeto}</strong>
+                  <Status valor={statusConhecido(v.membro.status)} />
+                  <p>{v.membro.tarefaAtual || 'Nenhuma tarefa informada neste projeto.'}</p>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        )}
+      </div>
     </div>
   );
 }
 
-/**
- * Lab — ADENDO #2: o escritório (THE OFFICE) é UMA OPÇÃO, não a experiência inteira.
- * Visão padrão = equipe (reaproveita o grid da Equipe);
- * "Ver THE OFFICE" mostra a vista redesenhada do escritório, viva conforme o status real.
- */
-export function Lab({ projetos, modo, onMudarModo }: LabProps) {
+/** O escritório é uma vista opcional; a equipe mantém a organização por projetos. */
+export function Lab({ projetos, modo, onMudarModo, provider = 'muse', onNovoProjeto }: LabProps) {
+  if (provider === 'openai') return <section className="nova-lab" aria-label="Espaço da equipe OpenAI">
+    <div className="confidence-card"><h2>Seu espaço de trabalho</h2><p>Seu piloto OpenAI na conversa e os projetos reais do motor em um só lugar.</p></div>
+    <Equipe projetos={projetos} onNovoProjeto={onNovoProjeto} />
+  </section>;
   return (
-    <section aria-label="Lab">
-      <div
-        className="segmented"
-        role="group"
-        aria-label="Visão do Lab"
-        style={{ marginBottom: 18, width: 'fit-content' }}
-      >
-        <button
-          type="button"
-          className={modo === 'equipe' ? 'active' : ''}
-          aria-pressed={modo === 'equipe'}
-          onClick={() => onMudarModo('equipe')}
-        >
-          <LayoutGrid size={16} aria-hidden="true" />
-          {modo === 'equipe' ? 'Equipe' : 'Ver como equipe'}
+    <section className="nova-lab" aria-label="Lab">
+      <div className="segmented nova-lab-modes" role="group" aria-label="Visão do Lab">
+        <button type="button" className={modo === 'equipe' ? 'active' : ''} aria-pressed={modo === 'equipe'} onClick={() => onMudarModo('equipe')}>
+          <LayoutGrid size={16} aria-hidden="true" />Equipe
         </button>
-        <button
-          type="button"
-          className={modo === 'escritorio' ? 'active' : ''}
-          aria-pressed={modo === 'escritorio'}
-          onClick={() => onMudarModo('escritorio')}
-        >
-          <Building2 size={16} aria-hidden="true" />
-          {modo === 'escritorio' ? 'THE OFFICE' : 'Ver THE OFFICE'}
+        <button type="button" className={modo === 'escritorio' ? 'active' : ''} aria-pressed={modo === 'escritorio'} onClick={() => onMudarModo('escritorio')}>
+          <Building2 size={16} aria-hidden="true" />Escritório
         </button>
       </div>
-
-      {modo === 'equipe' ? (
-        <Equipe projetos={projetos} />
-      ) : (
-        <VistaOffice projetos={projetos} />
-      )}
+      {modo === 'equipe' ? <Equipe projetos={projetos} onNovoProjeto={onNovoProjeto} /> : <VistaOffice projetos={projetos} />}
     </section>
   );
 }

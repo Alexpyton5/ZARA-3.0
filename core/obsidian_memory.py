@@ -18,13 +18,12 @@ cofre indisponível.
 """
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from memory.project_memory import _detect_real_obsidian_vault
+from memory.project_memory import _resolve_obsidian_vault
 
 _ZARA_SUBFOLDER = "Zara-Memoria"
 _SNIPPET_RADIUS_CHARS = 120
@@ -63,14 +62,17 @@ class SyncResult:
 
 class ObsidianMemoryManager:
     """Aponta pro cofre real do Obsidian: `vault_path` explícito (testes) >
-    `OBSIDIAN_VAULT_PATH` (env) > detecção real via obsidian.json."""
+    cadeia robusta `_resolve_obsidian_vault` (env > obsidian.json > varredura de perfis). Detecção real via obsidian.json."""
 
     def __init__(self, vault_path: Path | str | None = None):
         if vault_path is not None:
             self.vault_path: Path | None = Path(vault_path)
         else:
-            env_path = os.environ.get("OBSIDIAN_VAULT_PATH")
-            self.vault_path = Path(env_path) if env_path else _detect_real_obsidian_vault()
+            # SUPERCREBRO-2026-09-29: cadeia robusta (env > obsidian.json do
+            # usuario atual > varredura de C:/Users/*). O app roda como zoe;
+            # sem isso o vault do Alex nunca era achado e o cerebro
+            # compartilhado ficava em modo degradado.
+            self.vault_path = _resolve_obsidian_vault()
 
     @property
     def available(self) -> bool:

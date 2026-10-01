@@ -12,11 +12,11 @@ import json
 import math
 import re
 import sqlite3
+import threading
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
-
 
 _MAX_NOTE_BYTES = 32_768
 _MAX_FILE_BYTES = 1_048_576
@@ -94,6 +94,7 @@ class SharedSecondBrain:
         self.obsidian_index_db = Path(obsidian_index_db)
         self.obsidian_index_db.parent.mkdir(parents=True, exist_ok=True)
         self._obsidian_degraded = not self._vault_available()
+        self._sync_lock = threading.RLock()
         self._init_index()
 
     def _connect(self) -> sqlite3.Connection:
@@ -120,6 +121,10 @@ class SharedSecondBrain:
 
     def sync_obsidian(self) -> dict[str, int | bool]:
         """Explicit incremental index refresh; never requires Obsidian running."""
+        with self._sync_lock:
+            return self._sync_obsidian_locked()
+
+    def _sync_obsidian_locked(self) -> dict[str, int | bool]:
         result: dict[str, int | bool] = {
             "indexed": 0,
             "unchanged": 0,
@@ -144,6 +149,8 @@ class SharedSecondBrain:
             retained: set[str] = set()
             for path in sorted(self.obsidian_vault.rglob("*.md"), key=lambda p: p.as_posix().casefold()):
                 try:
+                    # Linked notes cannot expose files outside the shared vault.
+                    path.resolve().relative_to(self.obsidian_vault.resolve())
                     relative = path.relative_to(self.obsidian_vault).as_posix()
                     stat = path.stat()
                 except (OSError, ValueError):
@@ -200,6 +207,12 @@ class SharedSecondBrain:
         if budget < 96:
             raise ValueError("budget_bytes must be at least 96")
         cap = max(0, min(int(limit), 100))
+        # Every conversational query sees edits made by another crew member.
+        # SQLite is a derived cache, never a snapshot authoritative until restart.
+        try:
+            self._obsidian_sync_result = self.sync_obsidian()
+        except Exception:
+            self._obsidian_degraded = True
         tokens = self._tokens(text)
         degraded: list[str] = []
         candidates: list[_Candidate] = []

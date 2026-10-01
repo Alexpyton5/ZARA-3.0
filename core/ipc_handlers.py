@@ -781,6 +781,8 @@ class IPCHandler:
         self._voice_start_lock = asyncio.Lock()
         self._tts_initialized: bool = False
         self.gemini_live_voice: GeminiLiveVoice | None = None
+        self.local_whisper_voice = None
+        self._zoe_kore_warmup: asyncio.Task | None = None
         self.voice_mode: str = "off"
         self._gemini_wake_armed_until: float = 0.0
         self._manual_voice_session: bool = False
@@ -1758,6 +1760,10 @@ class IPCHandler:
         return (time.perf_counter() - self._voice_turn_started) * 1000.0
 
     async def _on_gemini_live_state(self, state: str) -> None:
+        if self.voice_mode == 'whisper_local':
+            self.voice_active = bool(self.local_whisper_voice and self.local_whisper_voice.active)
+            await self.send_event('state-change', 'LISTENING' if self.voice_active else 'STOPPED')
+            return
         self.voice_active = state not in {"STANDBY", "STOPPED"}
         # ZARA-VOICE-WAKE-BRIDGE-001
         # The local Vosk gate consumes the audio chunk that carries the wake
@@ -1940,6 +1946,11 @@ class IPCHandler:
         # Zoe is the owner of this conversation. Gemini Live only transcribes
         # Alex's microphone; its draft answer must never reach the ZARA chat.
         if self._voice_target == "zoe":
+            if self._STOP_WORD_RE.fullmatch(spoken):
+                if self.gemini_live_voice and self.gemini_live_voice.active:
+                    await self.gemini_live_voice.interrupt_speech()
+                await self._on_gemini_live_interrupt()
+                return
             await self.send_event('zoe-voice-input', {'text': spoken, 'source': 'gemini_live'})
             return
 
@@ -2035,6 +2046,8 @@ class IPCHandler:
         # voz do Windows continuou lendo sozinha, sem aceitar comando.
         self._fala_interrompida = True
         print("[VOICE_TRACE] stage=BARGE_IN result=PASS", flush=True)
+        if self._voice_target == 'zoe':
+            await self.send_event('zoe-voice-input', {'text': '', 'interrupt': True})
         await self.send_event('state-change', 'LISTENING')
         await self.send_event('voice-level', {
             'level': 0.0, 'tone': self._voice_tone, 'speaking': False,
@@ -2131,7 +2144,7 @@ class IPCHandler:
             brain = self.get_second_brain()
             if brain is not None:
                 from memory.second_brain_composition import render_second_brain_context
-                ctx = render_second_brain_context(brain, text)
+                ctx = await asyncio.to_thread(render_second_brain_context, brain, text)
             if not ctx and self.user_memory:
                 from memory.memory_context import build_memory_context
                 ctx = build_memory_context(self.user_memory, text, top_k=4)
@@ -2149,7 +2162,8 @@ class IPCHandler:
         the Lab service is unavailable. A failed build is not retried every
         message; the legacy fallback keeps answering.
         """
-        if getattr(self, "_shared_brain_failed", False):
+        if (getattr(self, "_shared_brain_failed", False)
+                and time.monotonic() - getattr(self, "_shared_brain_failure_at", 0) < 15):
             return None
         brain = getattr(self, "_shared_brain", None)
         if brain is not None:
@@ -2170,10 +2184,74 @@ class IPCHandler:
                 obsidian=ObsidianMemoryManager(),
             )
             self._shared_brain = brain
+            self._shared_brain_failed = False
             return brain
         except Exception:
             self._shared_brain_failed = True
+            self._shared_brain_failure_at = time.monotonic()
             return None
+
+    async def handle_pilot_context(self, msg: IPCMessage):
+        from memory.pilot_context import build_pilot_context
+        text = str((msg.payload or {}).get('text') or '').strip()
+        if not text or len(text) > 4000:
+            await self.send_error(msg, 'Consulta de contexto inválida.')
+            return
+        try:
+            # Lazy composition also touches disk; keep it off the audio loop.
+            result = await asyncio.to_thread(lambda: build_pilot_context(self.get_second_brain(), text))
+            await self.send_response(msg.request_id, result)
+        except Exception:
+            await self.send_error(msg, 'Segundo cérebro indisponível; contexto não atualizado.')
+
+    async def _execute_pilot_command(self, text: str, channel: str = 'pilot') -> dict:
+        from core.pilot_commands import execute_pilot_command
+        lock = getattr(self, '_pilot_command_lock', None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._pilot_command_lock = lock
+        async with lock:
+            return await execute_pilot_command(self, text, channel=channel)
+
+    async def handle_pilot_command(self, msg: IPCMessage):
+        try:
+            result = await self._execute_pilot_command((msg.payload or {}).get('text'))
+            await self.send_response(msg.request_id, result)
+        except Exception:
+            await self.send_response(msg.request_id, {'handled': True, 'success': False,
+                                    'response': 'Não consegui concluir a ordem; confira o resultado no PC.'})
+
+    async def handle_zoe_remote_command(self, msg: IPCMessage):
+        from core.paths import user_data_dir
+        from core.zoe_remote import ZoeRemote
+        remote = getattr(self, '_zoe_remote', None)
+        if remote is None:
+            remote = ZoeRemote(user_data_dir() / 'zoe_bridge', self._execute_remote_pilot_command)
+            self._zoe_remote = remote
+        result = await remote.receive(msg.payload or {})
+        await self.send_response(msg.request_id, result)
+
+    async def _execute_remote_pilot_command(self, text: str, channel: str) -> dict:
+        from memory.pilot_context import build_pilot_context
+        result = await self._execute_pilot_command(text, channel)
+        try:
+            context = await asyncio.to_thread(build_pilot_context, self.get_second_brain(), text)
+        except Exception:
+            context = {'success': False, 'context': '', 'error': 'Contexto não atualizado.'}
+        return {**result, 'shared_context': context.get('context', ''),
+                'context_updated': context.get('success') is True, 'context_error': context.get('error', '')}
+
+    async def handle_shared_brain_learn(self, msg: IPCMessage):
+        from memory.second_brain_composition import is_safe_text
+        from memory.shared_second_brain import SharedSecondBrain
+        text = (msg.payload or {}).get('text')
+        if (not isinstance(text, str) or not text.strip() or len(text) > 4000
+                or not is_safe_text(text) or SharedSecondBrain._sensitive(text)):
+            await self.send_error(msg, 'Aprendizado inválido ou contém dados privados.')
+            return
+        path = await asyncio.to_thread(self.project_memory.record_shared_learning, text.strip()) if self.project_memory else None
+        await self.send_response(msg.request_id, {'success': bool(path), 'path': str(path or ''),
+                                                 'error': '' if path else 'Não foi possível gravar no vault.'})
 
     @property
     def aprendizado(self):
@@ -2343,6 +2421,11 @@ class IPCHandler:
                 return None
             from core.reminder_intent import detect_reminder_intent
             res = detect_reminder_intent(text, self.reminder_engine)
+            if res.kind != 'not_reminder':
+                from core.action_registry import ActionResult
+                success = (res.kind in {'list', 'cancel', 'complete'}
+                           or (res.kind == 'reminder' and bool(res.reminder_id)))
+                self._ultimo_resultado_de_acao = ActionResult(success, output=res.reply, verificado=success)
             if res.kind == "reminder":
                 await self.send_event('reminder-created', {
                     'id': res.reminder_id, 'text': res.message,
@@ -2359,6 +2442,8 @@ class IPCHandler:
             return None
         except Exception:
             if self._REMINDER_SNIFF_RE.search(text or ""):
+                from core.action_registry import ActionResult
+                self._ultimo_resultado_de_acao = ActionResult(False, error='Lembrete não agendado.', verificado=False)
                 return "Não consegui processar esse lembrete. Ele NÃO está agendado."
             return None
 
@@ -2925,10 +3010,23 @@ class IPCHandler:
             return None
 
         outcomes: list[tuple[str, str, str]] = []
+        receipts: list[tuple[bool, bool]] = []
+
+        async def run_step(handler, command: str, *, informational: bool = False):
+            self._ultimo_resultado_de_acao = None
+            reply = await handler(command)
+            receipt = getattr(self, "_ultimo_resultado_de_acao", None)
+            if receipt is None:
+                read_ok = informational and self._jarvis_reply_status(reply) == "OK"
+                receipts.append((read_ok, read_ok))
+            else:
+                receipts.append((bool(receipt.success), bool(receipt.verificado)))
+            return reply
+
         for _position, kind, match in found[:5]:
             if kind == "conforto":
-                brightness = await self._try_pc_intent("brilho em 45%")
-                night_light = await self._try_pc_intent("ative a luz noturna")
+                brightness = await run_step(self._try_pc_intent, "brilho em 45%")
+                night_light = await run_step(self._try_pc_intent, "ative a luz noturna")
                 statuses = {
                     self._jarvis_reply_status(brightness),
                     self._jarvis_reply_status(night_light),
@@ -2937,23 +3035,23 @@ class IPCHandler:
                 detail = f"Brilho: {brightness or 'sem confirmação'} Luz noturna: {night_light or 'sem confirmação'}"
                 outcomes.append((status, "Conforto", detail))
             elif kind == "projeto":
-                reply = await self._try_pc_intent("abra a pasta da zara")
+                reply = await run_step(self._try_pc_intent, "abra a pasta da zara")
                 outcomes.append((self._jarvis_reply_status(reply), "Projeto", reply or "Sem confirmação."))
             elif kind == "downloads":
-                reply = await self._try_pc_intent("abra Downloads")
+                reply = await run_step(self._try_pc_intent, "abra Downloads")
                 outcomes.append((self._jarvis_reply_status(reply), "Downloads", reply or "Sem confirmação."))
             elif kind == "status_pc":
-                reply = await self._try_pc_intent("como está o computador")
+                reply = await run_step(self._try_pc_intent, "como está o computador", informational=True)
                 outcomes.append((self._jarvis_reply_status(reply), "Estado do PC", reply or "Sem confirmação."))
             elif kind == "musica":
-                reply = await self._try_pc_intent("continue a música")
+                reply = await run_step(self._try_pc_intent, "continue a música")
                 outcomes.append((self._jarvis_reply_status(reply), "Música", reply or "Sem confirmação."))
             elif kind == "pendencias":
-                reply = await self._try_operational_memory_intent("O que ficou pendente?")
+                reply = await run_step(self._try_operational_memory_intent, "O que ficou pendente?", informational=True)
                 outcomes.append((self._jarvis_reply_status(reply), "Pendências", reply or "Sem confirmação."))
             elif kind == "lembrete":
                 reminder_clause = raw[match.start():].strip(" ,;.!?")
-                reply = await self._try_reminder_intent(reminder_clause)
+                reply = await run_step(self._try_reminder_intent, reminder_clause)
                 outcomes.append((self._jarvis_reply_status(reply), "Lembrete", reply or "Sem confirmação."))
 
         completed = sum(status == "OK" for status, _label, _detail in outcomes)
@@ -2961,6 +3059,13 @@ class IPCHandler:
         details = " ".join(
             f"{index}) [{status}] {label}: {detail}"
             for index, (status, label, detail) in enumerate(outcomes, start=1)
+        )
+        from core.action_registry import ActionResult
+
+        success = completed == len(outcomes) and all(ok for ok, _verified in receipts)
+        self._ultimo_resultado_de_acao = ActionResult(
+            success, output=details,
+            verificado=success and all(verified for _ok, verified in receipts),
         )
         # FRENTE D3 (ZARA-SILENCIO-001): o passo a passo de cada clausula
         # vai para o log interno — o Alex recebe UMA resposta consolidada.
@@ -3002,6 +3107,8 @@ class IPCHandler:
         intent = detect_file_intent(text)
         if intent is None:
             return None
+        from core.action_registry import ActionResult
+        self._ultimo_resultado_de_acao = ActionResult(False, error='Arquivo não executado.', verificado=False)
         try:
             from core.action_registry import execute_action
             from core.actions.os_ops import _resolve_safe_folder
@@ -3038,6 +3145,7 @@ class IPCHandler:
             if intent.mutating:
                 params["confirm"] = True
             result = await execute_action(intent.action, **params)
+            self._ultimo_resultado_de_acao = result
             if not getattr(result, "success", False):
                 error = str(getattr(result, "error", "") or "falha sem detalhe")
                 self._remember_action_failure(intent.action, "executor", error)
@@ -3966,6 +4074,7 @@ class IPCHandler:
             'memory-user-search', 'memory-user-list', 'project-memory-get',
             'project-memory-list', 'project-memory-context',
             'memory-galaxy-list', 'conversation-history-list',
+            'pilot-context',
         }:
             await self.send_error(msg, 'SMOKE_READ_ONLY: action blocked during isolated validation')
             return
@@ -3973,6 +4082,10 @@ class IPCHandler:
             'engine-change': self.handle_engine_change,
             'engine-list': self.handle_engine_list,
             'send-message': self.handle_send_message,
+            'pilot-context': self.handle_pilot_context,
+            'pilot-command': self.handle_pilot_command,
+            'zoe-remote-command': self.handle_zoe_remote_command,
+            'shared-brain-learn': self.handle_shared_brain_learn,
             'interrupt': self.handle_interrupt,
             'voice-mute': self.handle_voice_mute,
             'voice-mic-chunk': self.handle_voice_mic_chunk,
@@ -4234,13 +4347,19 @@ class IPCHandler:
             await self.send_error(msg, str(exc))
 
     async def handle_voice_mic_chunk(self, msg: IPCMessage):
-        """Forward renderer microphone PCM to the active Gemini voice session."""
+        """Route AEC PCM exclusively to the selected local or cloud listener."""
         voice = self.gemini_live_voice
         pcm = (msg.payload or {}).get('pcm') or ''
+        if self.voice_mode == 'whisper_local':
+            if pcm and self.local_whisper_voice:
+                try:
+                    self.local_whisper_voice.feed_pcm(base64.b64decode(pcm, validate=True))
+                except (ValueError, TypeError):
+                    print('[VOICE_TRACE] stage=WHISPER_INPUT result=INVALID_PCM', flush=True)
+            return
         if voice is None or not pcm or not getattr(voice, 'usa_renderer', False):
             return
         try:
-            import base64
             voice.push_mic_pcm(base64.b64decode(pcm))
         except Exception as exc:
             print(f"[IPC] chunk de microfone invalido: {exc}", flush=True)
@@ -5439,10 +5558,77 @@ class IPCHandler:
         async with self._voice_start_lock:
             await self._handle_voice_start_locked(msg)
 
+    async def _on_whisper_text(self, text: str) -> None:
+        if self._voice_target != 'zoe':
+            return
+        spoken = text.strip()
+        if self._STOP_WORD_RE.fullmatch(spoken.strip(' .,!?:;')):
+            if self.tts_manager:
+                self.tts_manager.interrupt()
+            if self.gemini_live_voice and self.gemini_live_voice.active:
+                await self.gemini_live_voice.interrupt_speech()
+            await self._on_gemini_live_interrupt()
+        elif spoken and not self._looks_like_own_echo(spoken):
+            print(f'[VOICE_TRACE] stage=WHISPER_TEXT chars={len(spoken)}', flush=True)
+            await self.send_event('zoe-voice-input', {'text': spoken, 'source': 'faster_whisper'})
+
+    async def _warm_zoe_kore(self) -> None:
+        """Prepare speech independently: cloud startup must not hold the local mic."""
+        key = self._resolve_gemini_key()
+        if not key or not GEMINI_LIVE_MODULE_AVAILABLE:
+            return
+        try:
+            if not self.gemini_live_voice:
+                self.gemini_live_voice = GeminiLiveVoice(
+                    self._build_gemini_live_config(key), on_state=self._on_gemini_live_state,
+                    on_level=self._on_gemini_live_level, on_turn=self._on_gemini_live_turn,
+                    can_answer_directly=lambda _text: False,
+                    on_interrupt=self._on_gemini_live_interrupt,
+                    on_error=self._on_gemini_live_error, on_output_audio=self._on_gemini_live_output_audio,
+                )
+            self.gemini_live_voice.can_answer_directly = lambda _text: False
+            await self.gemini_live_voice.start(timeout=6.0)
+        except Exception as exc:
+            print(f'[VOICE_TRACE] stage=KORE_WARMUP result={type(exc).__name__}', flush=True)
+
+    async def _try_start_whisper(self, msg: IPCMessage) -> bool:
+        try:
+            from core.whisper_local import LocalWhisperVoice, resolve_local_whisper_model
+            path = resolve_local_whisper_model()
+            if path is None:
+                return False
+            if self.local_whisper_voice is None:
+                voice = LocalWhisperVoice(path, self._on_whisper_text)
+                await asyncio.to_thread(voice.initialize)
+                self.local_whisper_voice = voice
+            self.local_whisper_voice.start(asyncio.get_running_loop())
+            if not self.local_whisper_voice.active:
+                raise RuntimeError('O reconhecedor local não iniciou')
+            self.voice_active = True
+            self.voice_mode = 'whisper_local'
+            if self._resolve_gemini_key():
+                if self._zoe_kore_warmup is None or self._zoe_kore_warmup.done():
+                    self._zoe_kore_warmup = asyncio.create_task(self._warm_zoe_kore(), name='zoe-kore-warmup')
+            await self.send_response(msg.request_id, {
+                'success': True, 'state': 'LISTENING', 'mode': 'whisper_local',
+                'audio_transport': 'renderer', 'stt_engine': 'faster-whisper', 'stt_offline': True,
+            })
+            print('[VOICE_TRACE] stage=WHISPER_START result=READY', flush=True)
+            return True
+        except Exception as exc:
+            if self.local_whisper_voice:
+                self.local_whisper_voice.stop()
+            self.voice_active = False
+            self.voice_mode = 'off'
+            print(f'[VOICE_TRACE] stage=WHISPER_START result={type(exc).__name__}', flush=True)
+            return False
+
     async def _handle_voice_start_locked(self, msg: IPCMessage):
         """Serialize microphone starts without blocking unrelated IPC requests."""
         target = 'zoe' if (msg.payload or {}).get('target') == 'zoe' else 'zara'
         if self.voice_active and self._voice_target != target:
+            if self.local_whisper_voice:
+                self.local_whisper_voice.stop()
             if self.gemini_live_voice and self.gemini_live_voice.active:
                 await self.gemini_live_voice.stop()
             if self.voice_pipeline and self.voice_mode == 'local':
@@ -5455,6 +5641,9 @@ class IPCHandler:
         # otherwise the UI remains "Ouvindo" while the wake timer silently
         # expires and every later sentence is discarded.
         self._manual_voice_session = True
+        if target == 'zoe' and (not self.voice_active or self.voice_mode == 'whisper_local'):
+            if await self._try_start_whisper(msg):
+                return
         if self.voice_active:
             if self.gemini_live_voice and self.gemini_live_voice.active:
                 self.gemini_live_voice.can_answer_directly = (
@@ -6230,6 +6419,11 @@ class IPCHandler:
 
     async def handle_voice_stop(self, msg: IPCMessage):
         """Stop whichever voice transport is currently active."""
+        if self.local_whisper_voice:
+            self.local_whisper_voice.stop()
+        if self._zoe_kore_warmup and not self._zoe_kore_warmup.done():
+            self._zoe_kore_warmup.cancel()
+            await asyncio.gather(self._zoe_kore_warmup, return_exceptions=True)
         if self._voice_target == 'zoe' and self.tts_manager:
             self.tts_manager.interrupt()
         vigia = getattr(self, "_vigia", None)
@@ -6394,6 +6588,7 @@ class IPCHandler:
 
     async def handle_voice_status(self, msg: IPCMessage):
         """Return current voice transport status."""
+        whisper_ready = bool(self.local_whisper_voice and self.local_whisper_voice.active)
         if self.gemini_live_voice:
             live = self.gemini_live_voice.status()
         else:
@@ -6409,12 +6604,14 @@ class IPCHandler:
             'mode': self.voice_mode,
             'gemini_live': live,
             'wake_word_active': self.voice_pipeline is not None and self.voice_pipeline.porcupine is not None,
-            'stt_ready': self.voice_pipeline is not None and self.voice_pipeline.vosk is not None,
+            'stt_ready': whisper_ready or (self.voice_pipeline is not None and self.voice_pipeline.vosk is not None),
+            'stt_engine': 'faster-whisper' if self.voice_mode == 'whisper_local' else self.voice_mode,
+            'stt_offline': self.voice_mode in {'whisper_local', 'local'},
             'tts_ready': self.tts_manager is not None and (self.tts_manager.kokoro is not None or self.tts_manager.gemini is not None),
-            'pipeline_state': self.voice_pipeline.state if self.voice_pipeline else 'STOPPED',
-            'self_listening_guard': bool(self.voice_pipeline),
+            'pipeline_state': ('LISTENING' if whisper_ready else 'STOPPED') if self.voice_mode == 'whisper_local' else (self.voice_pipeline.state if self.voice_pipeline else 'STOPPED'),
+            'self_listening_guard': self.voice_mode == 'whisper_local' or bool(self.voice_pipeline),
             'interrupt_ready': self.tts_manager is not None or self.gemini_live_voice is not None,
-            'diagnostic': self._voice_last_error or 'OK',
+            'diagnostic': (self.local_whisper_voice.last_error if self.local_whisper_voice else None) or self._voice_last_error or 'OK',
         }
         await self.send_response(msg.request_id, status)
 
@@ -6474,12 +6671,29 @@ class IPCHandler:
         try:
             from core.voice_preferences import load_voice_output_engine
             async with self._zoe_tts_lock:
+                self._fala_interrompida = False
+                self._begin_assistant_output(text[:2000])
+                if self._zoe_kore_warmup and not self._zoe_kore_warmup.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(self._zoe_kore_warmup), timeout=2.0)
+                    except TimeoutError:
+                        pass
                 live = self.gemini_live_voice
                 if (load_voice_output_engine() != 'omnivoice' and live
                         and live.active and self._voice_target == 'zoe'):
-                    if await live.speak(text[:2000]) and live.ultimo_audio_entregue() is not None:
+                    spoken = await self._kore_recovery_policy.try_kore(live, text[:2000])
+                    if getattr(self, '_fala_interrompida', False) or self._voice_target != 'zoe':
+                        await self.send_error(msg, 'A reprodução da voz foi interrompida')
+                        return
+                    delivered = live.ultimo_audio_entregue() is not None
+                    if spoken and delivered:
                         await self.send_response(msg.request_id, {'success': True, 'engine': 'kore'})
                         return
+                    if delivered:
+                        # Restarting the sentence would duplicate audio already heard.
+                        await self.send_error(msg, 'A voz foi interrompida após começar a resposta')
+                        return
+                    print(f'[VOICE_TRACE] stage=ZOE_TTS_FALLBACK result={self._kore_recovery_policy.last_outcome}', flush=True)
 
                 if not self.tts_manager:
                     await self.send_error(msg, "Voz indisponivel: Kore e motor local falharam")
@@ -6506,6 +6720,8 @@ class IPCHandler:
         except Exception as exc:
             print(f"[Voice] zoe-voice-speak failed: {exc}", flush=True)
             await self.send_error(msg, str(exc))
+        finally:
+            self._finish_assistant_output()
 
     async def handle_voice_selftest(self, msg: IPCMessage):
         """Rota IPC 'voice-selftest': diagnostico da cadeia de voz por estagios.
@@ -7011,12 +7227,14 @@ async def _run_windows_ipc(handler: IPCHandler):
                 msg = IPCMessage(**data)
                 if msg.type in {'voice-start', 'voice-stop', 'send-message'}:
                     print(f"[VOICE_TRACE] stage=IPC_RECEIVE type={msg.type}", flush=True)
-                if msg.type == 'voice-start':
-                    # PortAudio/device initialization is isolated from the IPC
-                    # consumer so typed commands remain responsive.
+                if msg.type in {'voice-start', 'zoe-voice-speak', 'pilot-context'}:
+                    # Device startup and awaited speech must not hold the sole
+                    # stdin consumer: mic chunks and stop need to reach Live
+                    # while speech is still playing. Speech ordering remains
+                    # protected by _zoe_tts_lock in the handler.
                     task = asyncio.create_task(
                         handler.handle_message(msg),
-                        name=f"ipc-voice-start-{msg.request_id}",
+                        name=f"ipc-{msg.type}-{msg.request_id}",
                     )
                     background_requests.add(task)
                     task.add_done_callback(background_requests.discard)

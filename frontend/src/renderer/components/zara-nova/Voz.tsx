@@ -11,20 +11,16 @@
  *  Cascata de TTS (Manual §4.3, decisão do Alex 2026-09-27): Kore principal →
  *  OmniVoice como reserva automática (local, grátis) → Edge → Kokoro.
  *
- *  // TODO(CODEX): GAP REAL — Manual §8.2: `window.zaraIPC?.voice?.speakZoe`
- *  invoca 'zoe-voice-speak', que NÃO TEM handler registrado no backend
- *  (cai em "Unknown message type"). Enquanto o handler não existir, o texto
- *  nunca vira fala por esse caminho. O que funciona hoje: o áudio chega pelo
- *  EVENTO 'voice-output-audio' (PCM da Kore, tocado por tocarKore). Registrar
- *  o handler (ligando o texto à cascata de TTS) ou remover a chamada morta —
- *  documentar a decisão. NÃO fingir que o botão fala sem a cadeia íntegra
- *  (ver skill verificacao-voz: os 4 passos do portão).
+ *  A fala contínua chega pelo evento de áudio da Kore; respostas de texto
+ *  também podem solicitar TTS pelo IPC `zoe-voice-speak`, cujo handler está
+ *  registrado no backend. A reprodução física ainda precisa de teste no PC.
  *
  *  Este componente só REFLETE o estado que recebe por props e devolve o clique
  *  no microfone. A fiação (useZoeVoice + webview + window.zaraIPC) é da
  *  frente FIAÇÃO. Sem fiação, os estados ficam em 'ready' e o rodapé explica —
  *  nunca se finge estado de voz. */
 
+import { useState } from 'react';
 import { Mic, MicOff } from 'lucide-react';
 import type { VoiceState, AvatarInfo } from './types';
 import { avatarOriginal } from './avatares';
@@ -63,18 +59,20 @@ export type MotorVoz = 'kore' | 'omnivoice' | 'edge' | 'kokoro';
 export interface VozProps {
   state: VoiceState;
   onMicClick: () => void;
-  /** Avatar exibido na órbita (padrão: LYRA, a voz da ZARA — original fiel). */
+  /** Avatar exibido na órbita (padrão: LYRA, a voz da TROPA dev. — original fiel). */
   avatar?: AvatarInfo;
   /** Motor de TTS ativo (a fiação real informa; Kore principal, OmniVoice reserva). */
   motor?: MotorVoz;
   /** Mensagem de erro real do pipeline, quando houver. */
   erro?: string;
+  onTrocarMotor?: (motor: 'kore' | 'omnivoice') => Promise<void>;
+  omnivoiceAvailable?: boolean;
 }
 
 const LYRA_PADRAO: AvatarInfo = {
   id: 'lyra',
   nome: 'LYRA',
-  papel: 'Voz da ZARA',
+  papel: 'Voz da TROPA dev.',
   imagemUrl: avatarOriginal('lyra'),
 };
 
@@ -114,7 +112,8 @@ const ESTADOS: Array<{ key: VoiceState; rotulo: string }> = [
   { key: 'doing', rotulo: 'Fazendo' },
 ];
 
-export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro }: VozProps) {
+export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro, onTrocarMotor, omnivoiceAvailable }: VozProps) {
+  const [imagemFalhou, setImagemFalhou] = useState(false);
   const { titulo, texto } = COPIA[state];
   const ativo = state === 'listening' || state === 'thinking' || state === 'doing';
 
@@ -123,8 +122,8 @@ export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro }: Vo
       <div className="voice-orbit">
         <span className="orbit-ring" aria-hidden="true" />
         <div className="voice-portrait">
-          {avatar.imagemUrl ? (
-            <img src={avatar.imagemUrl} alt={`${avatar.nome}, ${avatar.papel}`} />
+          {avatar.imagemUrl && !imagemFalhou ? (
+            <img src={avatar.imagemUrl} alt={`${avatar.nome}, ${avatar.papel}`} onError={() => setImagemFalhou(true)} />
           ) : (
             <span className="avatar-initial" aria-label={avatar.nome}>
               {avatar.nome.charAt(0)}
@@ -134,20 +133,18 @@ export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro }: Vo
       </div>
 
       <h2>{titulo}</h2>
-      <p>{state === 'error' && erro ? erro : texto}</p>
+      <p>{erro || texto.replace(/a Zoe|A Zoe/g, avatar.nome)}</p>
 
       <div className="voice-states" aria-label="Estado atual da voz" role="status">
         {ESTADOS.map(({ key, rotulo }) => (
-          <button
+          <span
             key={key}
-            type="button"
             className={state === key ? 'active' : ''}
             aria-current={state === key ? 'true' : undefined}
-            disabled
             title="O estado vem do pipeline real de voz."
           >
             {rotulo}
-          </button>
+          </span>
         ))}
       </div>
 
@@ -161,9 +158,10 @@ export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro }: Vo
         {ativo ? <MicOff size={25} aria-hidden="true" /> : <Mic size={25} aria-hidden="true" />}
       </button>
 
-      <span className="voice-demo">
-        {motor ? `Voz: ${MOTOR_ROTULO[motor]}` : 'A voz de verdade conecta na etapa de fiação.'}
-      </span>
+      {onTrocarMotor ? <label className="voice-demo">Voz: <select aria-label="Escolher voz" value={motor || 'kore'} onChange={event => void onTrocarMotor(event.target.value as 'kore' | 'omnivoice')}>
+        <option value="kore">Kore</option>
+        <option value="omnivoice" disabled={!omnivoiceAvailable}>OmniVoice {omnivoiceAvailable ? '' : '(indisponível)'}</option>
+      </select></label> : <span className="voice-demo">{motor ? `Voz: ${MOTOR_ROTULO[motor]}` : 'Entre na sua conta para conversar.'}</span>}
     </section>
   );
 }

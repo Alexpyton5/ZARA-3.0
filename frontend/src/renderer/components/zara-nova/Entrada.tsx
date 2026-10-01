@@ -1,63 +1,42 @@
-/** Tela de Entrada (onboarding): conectar a mente (Muse / OpenAI) e escolher o avatar.
- *  A interface inteira acompanha a escolha do avatar: personagens, cores, ícones e ambiente.
- *
- *  Integração real de contas: // TODO(CODEX) — os botões de conectar disparam
- *  a fiação da outra frente; aqui eles só registram a intenção localmente. */
+/** Entrada: conta real do piloto e perfil visual escolhido pelo usuario. */
 
 import { useState } from 'react';
 import { Sparkles, KeyRound, Check } from 'lucide-react';
 import type { AvatarInfo } from './types';
-import { avatarOriginal } from './avatares';
-import { useToast } from './chrome/ZaraNovaShell';
+import { getPilotAvatars } from '../../lib/pilotAvatars';
+import type { PilotProvider } from '../../lib/pilotConversation';
 
 /** Avatares da equipe que podem ser a presença com quem o Alex conversa.
  *  Imagens = originais fiéis em alta (avatares.ts). VIVA: sem asset — inicial. */
-const AVATARES: AvatarInfo[] = [
-  { id: 'zoe', nome: 'Zoe', papel: 'Sua conselheira', imagemUrl: avatarOriginal('zoe') },
-  { id: 'lyra', nome: 'LYRA', papel: 'Voz da ZARA', imagemUrl: avatarOriginal('lyra') },
-  { id: 'levi', nome: 'LEVI', papel: 'Use Computer', imagemUrl: avatarOriginal('levi') },
-  { id: 'azul', nome: 'AZUL', papel: 'Integrações', imagemUrl: avatarOriginal('azul') },
-  { id: 'kai', nome: 'KAI', papel: 'Build & Lançamento', imagemUrl: avatarOriginal('kai') },
-  { id: 'noa', nome: 'NOA', papel: 'Cérebro & Autopilot', imagemUrl: avatarOriginal('noa') },
-  { id: 'nix', nome: 'NIX', papel: 'Nome & Produto', imagemUrl: avatarOriginal('nix') },
-  { id: 'viva', nome: 'VIVA', papel: 'Mídias Sociais' },
-];
-
 type Provedor = 'muse' | 'openai';
 
 export interface EntradaProps {
   /** Chamado quando o Alex escolhe o avatar (a frente TEMA troca o tema do app). */
   onEscolherAvatar?: (avatar: AvatarInfo) => void;
   /** Chamado quando ele conclui a entrada e quer ir para o Início. */
-  onConcluir?: () => void;
+  onConcluir: (avatar: AvatarInfo) => void;
+  onConectar: (provider: PilotProvider) => void;
+  provedor: PilotProvider;
+  conectado: boolean;
 }
 
-export function Entrada({ onEscolherAvatar, onConcluir }: EntradaProps) {
-  const toast = useToast();
-  const [avatar, setAvatar] = useState<AvatarInfo>(AVATARES[0]);
-  const [conectados, setConectados] = useState<Set<Provedor>>(new Set());
+export function Entrada({ onConcluir, onConectar, provedor, conectado }: EntradaProps) {
+  const avatares = getPilotAvatars(provedor);
+  const [avatarId, setAvatarId] = useState('');
+  const avatar = avatares.find(item => item.id === avatarId) || avatares[0];
 
   function escolher(novo: AvatarInfo) {
-    setAvatar(novo);
-    onEscolherAvatar?.(novo);
+    setAvatarId(novo.id);
   }
 
   function conectar(provedor: Provedor) {
-    // TODO(CODEX): abrir aqui o fluxo real de conexão da conta
-    // (Muse / OpenAI) e persistir a credencial no cofre do app.
-    // O clique só REGISTRA A INTENÇÃO — não conecta nada de verdade.
-    setConectados((atual) => new Set(atual).add(provedor));
-    toast(
-      provedor === 'muse'
-        ? 'Intenção registrada: conectar o Muse. A conexão de verdade chega na etapa de fiação.'
-        : 'Intenção registrada: conectar a OpenAI. A conexão de verdade chega na etapa de fiação.',
-    );
+    onConectar(provedor);
   }
 
   return (
     <section className="entrada-view" aria-label="Primeiros passos">
       <div className="entrada-hero">
-        <p className="eyebrow">BEM-VINDO À ZARA</p>
+        <p className="eyebrow">BEM-VINDO À TROPA dev.</p>
         <h2>
           Uma mente para pensar.
           <br />
@@ -78,9 +57,9 @@ export function Entrada({ onEscolherAvatar, onConcluir }: EntradaProps) {
 
           <button
             type="button"
-            className={`provider-row${conectados.has('muse') ? ' connected' : ''}`}
+            className={`provider-row${provedor === 'muse' && conectado ? ' connected' : ''}`}
             onClick={() => conectar('muse')}
-            aria-pressed={conectados.has('muse')}
+            aria-pressed={provedor === 'muse' && conectado}
           >
             <span className="provider-icon" aria-hidden="true">
               <Sparkles size={20} />
@@ -89,14 +68,14 @@ export function Entrada({ onEscolherAvatar, onConcluir }: EntradaProps) {
               <strong>Conectar Muse</strong>
               <span>O cérebro que pensa com você.</span>
             </div>
-            {conectados.has('muse') ? <Check size={18} aria-label="Intenção registrada" /> : null}
+            {provedor === 'muse' && conectado ? <Check size={18} aria-label="Conversa disponível" /> : null}
           </button>
 
           <button
             type="button"
-            className={`provider-row${conectados.has('openai') ? ' connected' : ''}`}
+            className={`provider-row${provedor === 'openai' && conectado ? ' connected' : ''}`}
             onClick={() => conectar('openai')}
-            aria-pressed={conectados.has('openai')}
+            aria-pressed={provedor === 'openai' && conectado}
           >
             <span className="provider-icon" aria-hidden="true">
               <KeyRound size={20} />
@@ -105,10 +84,10 @@ export function Entrada({ onEscolherAvatar, onConcluir }: EntradaProps) {
               <strong>Conectar OpenAI</strong>
               <span>Alternativa para conversar e criar.</span>
             </div>
-            {conectados.has('openai') ? <Check size={18} aria-label="Intenção registrada" /> : null}
+            {provedor === 'openai' && conectado ? <Check size={18} aria-label="Conversa disponível" /> : null}
           </button>
 
-          <p className="entrada-note">Você pode pular e conectar depois, nas configurações.</p>
+          <p className="entrada-note">Seu login fica salvo. Você pode abrir sua conta novamente dentro do app.</p>
         </div>
 
         <div className="entrada-card">
@@ -117,7 +96,7 @@ export function Entrada({ onEscolherAvatar, onConcluir }: EntradaProps) {
             <span className="subtle-badge">Vale para o app todo</span>
           </div>
           <div className="avatar-picker" role="radiogroup" aria-label="Escolha do avatar">
-            {AVATARES.map((a) => (
+            {avatares.map((a) => (
               <button
                 key={a.id}
                 type="button"
@@ -139,13 +118,13 @@ export function Entrada({ onEscolherAvatar, onConcluir }: EntradaProps) {
             ))}
           </div>
           <p className="entrada-note">
-            {avatar.nome} vai ser a presença com quem você conversa — e quem você confia.
+            {avatar.nome} será o rosto da sua experiência. {provedor === 'openai' ? 'A conversa usa sua conta ChatGPT; o catálogo nativo de Dots ainda não está conectado.' : 'A conversa segue a sessão Muse que você abrir na sua conta.'}
           </p>
         </div>
       </div>
 
       <div className="entrada-actions">
-        <button type="button" className="primary-button" onClick={() => onConcluir?.()}>
+        <button type="button" className="primary-button" onClick={() => onConcluir(avatar)}>
           Começar com {avatar.nome}
         </button>
       </div>

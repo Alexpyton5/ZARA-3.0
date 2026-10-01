@@ -6,6 +6,17 @@ import type { ReminderEvent } from './reminderEvents'
 
 // Define the API we want to expose to the renderer
 const zaraAPI = {
+  pilot: {
+    context: (text: string) => ipcRenderer.invoke('pilot-context', { text }) as Promise<{ success: boolean; context: string; error?: string }>,
+    command: (text: string) => ipcRenderer.invoke('pilot-command', { text }) as Promise<{ success: boolean; handled: boolean; response: string; error?: string; verified?: boolean }>,
+  },
+  novaUI: {
+    state: () => ipcRenderer.invoke('nova-ui-state'),
+    pause: () => ipcRenderer.invoke('nova-ui-pause'),
+    resume: () => ipcRenderer.invoke('nova-ui-resume'),
+    decide: (id: string, option: string) => ipcRenderer.invoke('nova-ui-decision', { id, option }),
+    openResult: (target: string) => ipcRenderer.invoke('nova-ui-open-result', target),
+  },
   zoeBridge: {
     status: () => ipcRenderer.invoke('zoe-bridge-status') as Promise<{ ready: boolean }>,
   },
@@ -240,8 +251,8 @@ const zaraAPI = {
       ipcRenderer.on('voice-output-audio', handler)
       return () => ipcRenderer.off('voice-output-audio', handler)
     },
-    zoeVoiceInput: (callback: (data: { text: string }) => void) => {
-      const handler = (_event: any, data: { text: string }) => callback(data)
+    zoeVoiceInput: (callback: (data: { text: string; interrupt?: boolean }) => void) => {
+      const handler = (_event: any, data: { text: string; interrupt?: boolean }) => callback(data)
       ipcRenderer.on('zoe-voice-input', handler)
       return () => ipcRenderer.off('zoe-voice-input', handler)
     },

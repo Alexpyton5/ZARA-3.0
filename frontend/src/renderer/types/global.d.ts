@@ -53,6 +53,17 @@ declare global {
 
   interface Window {
     zaraIPC: {
+      pilot?: {
+        context: (text: string) => Promise<{ success: boolean; context: string; error?: string }>;
+        command: (text: string) => Promise<{ success: boolean; handled: boolean; response: string; error?: string; verified?: boolean }>;
+      };
+      novaUI?: {
+        state: () => Promise<any>;
+        pause: () => Promise<any>;
+        resume: () => Promise<any>;
+        decide: (id: string, option: string) => Promise<any>;
+        openResult: (target: string) => Promise<{ success: boolean; error?: string }>;
+      };
       zoeBridge?: { status?: () => Promise<{ ready: boolean }> };
       engine?: { change?: (engine: string) => Promise<any>; list?: () => Promise<any> };
       supercerebro?: { toggle?: (active: boolean) => Promise<any>; status?: () => Promise<any> };
@@ -148,7 +159,7 @@ declare global {
         reminderCreated?: (callback: (reminder: ReminderEvent) => void) => () => void;
         reminderFired?: (callback: (reminder: ReminderEvent) => void) => () => void;
         voiceOutputAudio?: (callback: (data: any) => void) => () => void;
-        zoeVoiceInput?: (callback: (data: { text: string }) => void) => () => void;
+        zoeVoiceInput?: (callback: (data: { text: string; interrupt?: boolean }) => void) => () => void;
         labOperationResult?: (callback: (event: any) => void) => () => void;
         routingTelemetry?: (callback: (telemetry: any) => void) => () => void;
       };

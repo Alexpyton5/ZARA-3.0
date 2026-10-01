@@ -8,6 +8,7 @@ import {
   iniciarAudioAec,
   pararAudioAec,
   tocarKore,
+  aguardarFimKore,
 } from '../src/renderer/lib/aecAudio';
 
 type FakeTrack = { stopped: boolean; stop: () => void; getSettings: () => { echoCancellation: boolean } };
@@ -24,7 +25,7 @@ class FakeAudioContext {
     return Promise.resolve();
   };
   audioWorklet = { addModule: async (_url: string) => undefined };
-  sources: Array<{ started: number; stopped: boolean; stop: () => void }> = [];
+  sources: Array<{ started: number; stopped: boolean; stop: () => void; onended?: () => void }> = [];
   stopCalls = 0;
 
   createMediaStreamSource(_stream: MediaStream) {
@@ -46,6 +47,7 @@ class FakeAudioContext {
       buffer: undefined as unknown,
       onended: undefined as (() => void) | undefined,
       connect: (_destination: unknown) => undefined,
+      disconnect: () => undefined,
       start: (at: number) => { source.started = at; },
       stop: () => { source.stopped = true; this.stopCalls++; source.onended?.(); },
     };
@@ -89,6 +91,25 @@ function installAudioFakes(track: FakeTrack, context: FakeAudioContext) {
     },
   });
 }
+
+test('playback completion waits for all scheduled PCM and interruption releases the wait', async () => {
+  cortarKore(); pararAudioAec();
+  const context = new FakeAudioContext();
+  installAudioFakes({ stopped: false, stop() {}, getSettings: () => ({ echoCancellation: true }) }, context);
+  tocarKore(Buffer.alloc(4800).toString('base64'), 24000);
+  tocarKore(Buffer.alloc(4800).toString('base64'), 24000);
+  let finished = false;
+  const wait = aguardarFimKore().then(() => { finished = true; });
+  await Promise.resolve();
+  assert.equal(finished, false);
+  context.sources[0].onended?.();
+  await Promise.resolve();
+  assert.equal(finished, false);
+  cortarKore();
+  await wait;
+  assert.equal(finished, true);
+  pararAudioAec();
+});
 
 test('iniciarAudioAec pede echoCancellation e envia PCM quando o worklet recebe audio', async () => {
   const track: FakeTrack = { stopped: false, stop() { this.stopped = true; }, getSettings: () => ({ echoCancellation: true }) };

@@ -23,3 +23,12 @@ def test_pyinstaller_bundles_only_the_optional_omnivoice_worker(monkeypatch, tmp
 
     assert "omnivoice_worker.py" in spec
     assert "OmniVoice.from_pretrained" not in spec
+
+
+def test_offline_whisper_is_packaged_without_unaudited_vad_weights(monkeypatch, tmp_path):
+    monkeypatch.setattr(build_exe, "BUILD_DIR", tmp_path)
+    spec = build_exe.create_pyinstaller_spec().read_text(encoding='utf-8')
+    assert 'core.whisper_local' in spec
+    assert 'ctranslate2.dll' in spec
+    assert 'faster_whisper' in spec
+    assert 'silero_vad' not in spec

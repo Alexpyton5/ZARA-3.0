@@ -1,30 +1,26 @@
-/** Avatares originais fiéis em alta — NUNCA redesenhar, NUNCA inventar traço/cor/roupa.
- *
- *  Achado 2026-09-30 (adendo do Alex): os hotlinks .png do molde caíram
- *  (o site agora devolve a página HTML nesses caminhos). Os originais fiéis
- *  estão no ar como .webp — conferidos um a um, são os avatares originais
- *  em alta (a zoe-reference é o mascote 4UP de trança loira, cropped preto +
- *  short verde 4UP). A VIVA não tem asset (era "pendente" no molde) —
- *  quem usa VIVA cai no fallback de inicial.
- *
- *  Se o site sair do ar, trocar por cópias locais dos mesmos arquivos. */
+/** Originais do ZIP fornecido por Alex, preservados sem alteração.
+ * Zoe mantém a cópia limpa já existente do mesmo desenho; VIVA não tem referência.
+ * Este registro contém imagens, não um catálogo de provedores ou capacidades.
+ */
+import atlas from '../../assets/prototipo/atlas.webp';
+import azul from '../../assets/prototipo/azul.webp';
+import dex from '../../assets/prototipo/dex.webp';
+import kai from '../../assets/prototipo/kai.webp';
+import levi from '../../assets/prototipo/levi.webp';
+import lyra from '../../assets/prototipo/lyra.webp';
+import mia from '../../assets/prototipo/mia.webp';
+import nix from '../../assets/prototipo/nix.webp';
+import noa from '../../assets/prototipo/noa.webp';
+import zoe from '../../assets/zoe-avatar.svg';
 
-import zoeLimpa from '../../assets/zoe-limpa.png';
-
-const BASE = 'https://zara-ui-lab.zoeeproject.chatgpt.site/assets';
-
-export const AVATAR_ORIGINAL: Record<string, string> = {
-  zoe: zoeLimpa, // retrato limpo local (o .webp do molde vinha com texto embutido)
-  lyra: `${BASE}/lyra.webp`,
-  levi: `${BASE}/levi.webp`,
-  azul: `${BASE}/azul.webp`,
-  kai: `${BASE}/kai.webp`,
-  noa: `${BASE}/noa.webp`,
-  nix: `${BASE}/nix.webp`,
-  // viva: sem asset original (pendente no molde) — fallback de inicial.
+export const AVATAR_ORIGINAL: Readonly<Record<string, string>> = {
+  zoe, lyra, levi, azul, kai, noa, nix, dex, atlas, mia,
 };
 
-/** URL do avatar original fiel, ou undefined quando não existe. */
+/** Imagem local fiel, ou undefined quando a referência não foi fornecida. */
 export function avatarOriginal(id: string): string | undefined {
-  return AVATAR_ORIGINAL[id];
+  const key = id.trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(AVATAR_ORIGINAL, key)
+    ? AVATAR_ORIGINAL[key]
+    : undefined;
 }

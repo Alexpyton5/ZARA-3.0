@@ -28,6 +28,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "watchdog>=3.0.0",
     "vosk>=0.3.45",
+    "faster-whisper==1.2.1",
     "pvporcupine>=3.0.0",
     "kokoro-onnx>=0.3.0",
     "sounddevice>=0.4.6",

@@ -32,3 +32,12 @@ export function extractComputerGoal(message: string): string | null {
 export function isComputerAgentTrigger(message: string): boolean {
   return TRIGGER_RE.test(message);
 }
+
+/** Spoken commands in the Zoe tab can use natural imperative PT-BR. */
+export function extractZoeComputerGoal(message: string): string | null {
+  const spoken = message.trim().replace(/^(?:zoe|zara)[,\s]+/i, '').trim();
+  const explicit = extractComputerGoal(spoken);
+  if (explicit !== null) return explicit;
+  return /^(?:abra|abre|abrir|feche|fecha|fechar|clique|clica|click|digite|digita|escreva|escreve|pressione|aperte|role|rola|traga|coloque|aguarde|espere)\b/i.test(spoken)
+    ? spoken : null;
+}

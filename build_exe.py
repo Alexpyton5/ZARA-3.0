@@ -28,6 +28,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # ============================================================
@@ -57,6 +58,7 @@ HIDDEN_IMPORTS = [
     "core.voice_stt",
     "core.voice_tts",
     "core.gemini_live_voice",
+    "core.whisper_local",
     "core.token_tracker",
     "core.storage",
     "core.obsidian_bridge",
@@ -118,6 +120,9 @@ HIDDEN_IMPORTS = [
     "pyperclip",
     "watchdog",
     "vosk",
+    "faster_whisper",
+    "ctranslate2",
+    "tokenizers",
     "pvporcupine",
     "kokoro_onnx",
     "sounddevice",
@@ -177,11 +182,13 @@ def create_pyinstaller_spec() -> Path:
     sounddevice_datas = collect_data_files("_sounddevice_data")
     certifi_datas = collect_data_files("certifi")
     jsonschema_specifications_datas = collect_data_files("jsonschema_specifications")
+    # PCM transcription uses no bundled Silero weights until their own audit.
+    whisper_datas = collect_data_files("faster_whisper", excludes=["assets/*.onnx"])
     # Keep OmniVoice's heavy model/dependencies out of the frozen backend. The
     # optional model runs in its own per-user venv; only its small worker script
     # is bundled so the installed app can use that runtime when present.
     omnivoice_worker_data = [(str(PROJECT_ROOT / "core" / "omnivoice_worker.py"), "core")]
-    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas + sounddevice_datas + certifi_datas + jsonschema_specifications_datas + omnivoice_worker_data
+    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas + sounddevice_datas + certifi_datas + jsonschema_specifications_datas + omnivoice_worker_data + whisper_datas
 
     # google-genai has a broad async/live module tree; collect it explicitly so
     # PyInstaller cannot miss modules imported dynamically by the SDK.
@@ -196,7 +203,7 @@ def create_pyinstaller_spec() -> Path:
 
     # Bibliotecas nativas do pvporcupine (se existirem — retornou 13 entradas)
     porcupine_binaries = collect_dynamic_libs("pvporcupine")
-    binaries = vosk_binaries + porcupine_binaries
+    binaries = vosk_binaries + porcupine_binaries + collect_dynamic_libs("ctranslate2")
 
     # Icon: sidecar sem icone (console tool)
     icon_arg = "None"
@@ -205,6 +212,8 @@ def create_pyinstaller_spec() -> Path:
     pathex_str = str(PROJECT_ROOT).replace("\\", "/")
     main_script_str = str(PROJECT_ROOT / MAIN_SCRIPT).replace("\\", "/")
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+
+import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
 
 block_cipher = None
 
@@ -317,8 +326,18 @@ def update_sidecar_manifests(exe_path: Path) -> str:
         ("SHA256_MANIFEST.txt", manifest),
         ("PATCH_SHA256_MANIFEST.txt", manifest),
     ):
-        with (PROJECT_ROOT / name).open("w", encoding="utf-8", newline="\n") as stream:
-            stream.write(content)
+        destination = PROJECT_ROOT / name
+        temporary = destination.with_name(f"{name}.{os.getpid()}.tmp")
+        for attempt in range(6):
+            try:
+                with temporary.open("w", encoding="utf-8", newline="\n") as stream:
+                    stream.write(content)
+                os.replace(temporary, destination)
+                break
+            except OSError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.2 * (attempt + 1))
     return value
 
 

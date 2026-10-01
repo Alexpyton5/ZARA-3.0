@@ -2,7 +2,7 @@
 // Renderer is allowed to open independently; Python sidecar connects when ready.
 
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell, type IpcMainInvokeEvent, type MessageBoxOptions } from 'electron'
-import { join } from 'path'
+import { join, isAbsolute } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { existsSync, readdirSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
@@ -67,9 +67,9 @@ function getFrontendDistPath(): string {
 
 function getWindowIconPath(): string {
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'assets', 'zara.ico')
+    return join(process.resourcesPath, 'assets', 'tropa-dev.ico')
   }
-  return join(app.getAppPath(), 'public', 'zara.ico')
+  return join(app.getAppPath(), 'public', 'tropa-dev.ico')
 }
 
 function rejectPendingRequests(reason: string): void {
@@ -164,9 +164,8 @@ function startPythonSidecar(): Promise<void> {
       for (const rawLine of lines) {
         const line = rawLine.trim()
         if (!line) continue
-        console.log('[Python]', line)
-
         if (line === 'SYS: Interface neural pronta') {
+          console.log('[Python]', line)
           isPythonReady = true
           console.log('[Electron] Python sidecar ready')
           noteBackendReady()
@@ -186,6 +185,7 @@ function startPythonSidecar(): Promise<void> {
           }
         } catch {
           // Human-readable backend log line, not an IPC frame.
+          console.log('[Python]', line)
         }
       }
     })
@@ -297,7 +297,8 @@ async function sendToPython(type: string, payload: any = {}, requestIdOverride?:
 
     // First voice activation may need to download/load the local Vosk model.
     // Keep the UI responsive but allow that explicit user action more time.
-    const timeoutMs = type === 'voice-start' ? 300000 : 60000
+    // The desktop agent may use its full 120-second observe/act/verify loop.
+    const timeoutMs = type === 'voice-start' ? 300000 : type === 'zoe-remote-command' ? 190000 : ['computer-agent-run', 'pilot-command'].includes(type) ? 135000 : 60000
     setTimeout(() => {
       if (pendingRequests.has(requestId)) {
         pendingRequests.delete(requestId)
@@ -365,6 +366,9 @@ async function showBackendDeadWarning(detail: string): Promise<void> {
   if (backendDeathNotified) return
   backendDeathNotified = true
   broadcastBackendStatus('dead', detail)
+  // Disposable package smoke runs must stay invisible and must never invite
+  // a relaunch into the owner's desktop when an isolated backend fails.
+  if (process.env.ZARA_SMOKE_TEST === '1') return
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore()
@@ -375,8 +379,8 @@ async function showBackendDeadWarning(detail: string): Promise<void> {
   }
   const options: MessageBoxOptions = {
     type: 'warning',
-    title: 'ZARA 3.0 — motor parado',
-    message: 'O motor da ZARA parou.',
+    title: 'TROPA dev. — motor parado',
+    message: 'O motor da TROPA dev. parou.',
     detail: `${detail}\n\nVoz e controle do PC estão indisponíveis até o motor voltar.`,
     buttons: ['Reiniciar agora', 'Continuar sem motor'],
     defaultId: 0,
@@ -607,7 +611,7 @@ async function executeActionWithConfirmation(
 
   const options: MessageBoxOptions = {
     type: 'warning',
-    title: 'ZARA 3.0 — Confirmação de segurança',
+    title: 'TROPA dev. — Confirmação de segurança',
     message: `Confirmar ação HIGH: ${challenge.action}`,
     detail: `Resumo: ${challenge.summary}\n\nExpiração: ${formatConfirmationExpiry(challenge.expiresAt)}\n\nA ação só será executada após um clique explícito em “Confirmar ação”.`,
     buttons: ['Cancelar', 'Confirmar ação'],
@@ -668,6 +672,9 @@ function handlePythonEvent(msg: any): void {
     case 'voice-level':
       mainWindow?.webContents.send('voice-level', msg.level, msg.tone, msg.speaking)
       break
+    case 'voice-output-audio':
+      mainWindow?.webContents.send('voice-output-audio', msg.data)
+      break
     case 'zoe-voice-input':
       mainWindow?.webContents.send('zoe-voice-input', msg.data)
       break
@@ -703,6 +710,17 @@ function handlePythonEvent(msg: any): void {
       const payload = { goal: typeof data.goal === 'string' ? data.goal : '' }
       sendToComputerAgentOverlay('computer-agent-started', payload)
       mainWindow?.webContents.send('computer-agent-started', payload)
+      break
+    }
+    case 'computer_agent_step': {
+      const data = (msg.data ?? {}) as { step?: unknown; index?: unknown; total?: unknown }
+      const payload = {
+        step: typeof data.step === 'string' ? data.step : '',
+        index: typeof data.index === 'number' ? data.index : undefined,
+        total: typeof data.total === 'number' ? data.total : undefined,
+      }
+      sendToComputerAgentOverlay('computer-agent-step', payload)
+      mainWindow?.webContents.send('computer-agent-step', payload)
       break
     }
     case 'computer_agent_stopped': {
@@ -834,10 +852,12 @@ function createWindow(): void {
     console.error('[Renderer] render-process-gone', details)
   })
   windowRef.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (message.startsWith('[VOICE_TRACE]')) console.info(message)
     if (level >= 2) console.error('[Renderer console]', { level, message, line, sourceId })
   })
 
   const showWindow = () => {
+    if (process.argv.includes('--minimizada')) return
     if (!windowRef.isDestroyed() && !windowRef.isVisible()) {
       windowRef.show()
       windowRef.focus()
@@ -922,7 +942,7 @@ function showComputerAgentOverlay(): void {
 // numa página em load é descartado em silêncio — sem este helper a borda neon
 // nunca acenderia no primeiro uso (janela recém-criada ainda carregando).
 function sendToComputerAgentOverlay(
-  channel: 'computer-agent-started' | 'computer-agent-stopped',
+  channel: 'computer-agent-started' | 'computer-agent-step' | 'computer-agent-stopped',
   payload: unknown,
 ): void {
   const overlay = computerAgentOverlay
@@ -944,6 +964,33 @@ function hideComputerAgentOverlay(): void {
 }
 
 function setupIPC(): void {
+  ipcMain.handle('pilot-context', (_event, payload) => sendToPython('pilot-context', payload))
+  ipcMain.handle('pilot-command', (_event, payload) => sendToPython('pilot-command', payload))
+  ipcMain.handle('nova-ui-state', () => sendToPython('nova-ui-state'))
+  ipcMain.handle('nova-ui-pause', () => sendToPython('nova-ui-pause'))
+  ipcMain.handle('nova-ui-resume', () => sendToPython('nova-ui-resume'))
+  ipcMain.handle('nova-ui-decision', async (_event, payload) => {
+    const result = await sendToPython('nova-ui-decision', payload)
+    if (result?.success !== true || result?.accepted !== true || typeof result.operation_id !== 'string') return result
+    const confirmation = await sendToPython('lab-v1-confirm-operation', { operation_id: result.operation_id })
+    if (confirmation?.confirmed !== true || confirmation.operation_id !== result.operation_id) {
+      return { ...result, success: false, error: confirmation?.error || 'O motor não confirmou essa decisão.' }
+    }
+    return { ...result, ...confirmation, success: true }
+  })
+  ipcMain.handle('nova-ui-open-result', async (_event, target: unknown) => {
+    if (typeof target !== 'string' || !target.trim()) return { success: false, error: 'O resultado não tem um endereço válido.' }
+    try {
+      if (/^https?:\/\//i.test(target)) {
+        await shell.openExternal(new URL(target).href)
+      } else {
+        if (!isAbsolute(target) || !existsSync(target)) return { success: false, error: 'O arquivo do resultado não foi encontrado.' }
+        const error = await shell.openPath(target)
+        if (error) return { success: false, error }
+      }
+      return { success: true }
+    } catch { return { success: false, error: 'Não consegui abrir esse resultado.' } }
+  })
   ipcMain.handle('zoe-bridge-status', () => ({ ready: Boolean(zoeBridge && isPythonReady) }))
   ipcMain.handle('engine-change', (_event, engine: string) => sendToPython('engine-change', { engine }))
   ipcMain.handle('engine-list', () => sendToPython('engine-list'))

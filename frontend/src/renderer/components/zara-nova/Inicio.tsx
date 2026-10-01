@@ -8,7 +8,7 @@
 
 import { MessageCircle, Pause, Play, Check, User, CircleQuestionMark } from 'lucide-react';
 import type { CuidandoInfo, TrabalhoItem, DecisaoItem, AvatarInfo } from './types';
-import officeHero from '../../assets/the-office-hero.webp';
+import officeHero from '../../assets/prototipo/core-office.webp';
 
 export interface InicioProps {
   cuidando: CuidandoInfo;
@@ -18,9 +18,14 @@ export interface InicioProps {
   onPausar: () => void;
   /** true = equipe pausada (a fiação real informa). */
   pausado?: boolean;
+  pausando?: boolean;
+  estadoConfirmado?: boolean;
+  pilotoConectado?: boolean;
+  pilotoCarregando?: boolean;
+  pilotoErro?: boolean;
   /** Ir para a conversa (opcional; o shell pode passar). */
   onConversar?: () => void;
-  /** Abrir o THE OFFICE (opcional). */
+  /** Abrir o escritório ilustrado (opcional). */
   onVerOffice?: () => void;
   /** Registrar a escolha numa decisão (opcional; fiação real). */
   onDecidir?: (decisaoId: string, opcao: string) => void;
@@ -70,6 +75,11 @@ export function Inicio({
   decisoes,
   onPausar,
   pausado = false,
+  pausando = false,
+  estadoConfirmado = false,
+  pilotoConectado = false,
+  pilotoCarregando = true,
+  pilotoErro = false,
   onConversar,
   onVerOffice,
   onDecidir,
@@ -84,8 +94,11 @@ export function Inicio({
             <br />A equipe cuida.
           </h2>
           <p>
-            {cuidando.avatar.nome} está {cuidando.supervisionado ? 'de olho no seu computador agora' : 'cuidando sozinha'}
-            . Saia tranquilo: o trabalho continua e você vê tudo aqui quando voltar.
+            {estadoConfirmado
+              ? pausado ? 'A equipe está pausada. Você pode retomar quando quiser.'
+                : emAndamento.length ? `A equipe tem ${emAndamento.length} trabalho${emAndamento.length === 1 ? '' : 's'} em andamento. Veja as atualizações quando voltar.`
+                  : 'A equipe está disponível. Diga o que você quer realizar.'
+              : 'Confirmando a conexão e o estado da equipe…'}
           </p>
           {onConversar ? (
             <button type="button" className="primary-button" onClick={onConversar}>
@@ -97,15 +110,15 @@ export function Inicio({
 
         <div className="home-office-preview">
           <div className="office-scene">
-            <img
+            {cuidando.avatar.id === 'alfred' ? <div className="pilot-home-presence"><AvatarMini avatar={cuidando.avatar} size={142} /><strong>Seu tempo, de volta.</strong><span>Uma conversa para conduzir. Uma equipe para realizar.</span></div> : <img
               className="office-original"
               src={officeHero}
-              alt="THE OFFICE — o escritório da equipe"
-            />
+              alt="Escritório — a equipe reunida"
+            />}
           </div>
           {onVerOffice ? (
             <button type="button" className="preview-button" onClick={onVerOffice}>
-              Entrar no THE OFFICE
+              {cuidando.avatar.id === 'alfred' ? 'Ver minha equipe' : 'Ver o escritório'}
             </button>
           ) : null}
         </div>
@@ -114,16 +127,17 @@ export function Inicio({
       <section className="confidence-grid">
         <div className="confidence-card">
           <div className="card-heading">
-            <h2>Quem está cuidando</h2>
+            <h2>Seu piloto</h2>
             <button
               type="button"
               className="secondary-button"
               onClick={onPausar}
+              disabled={pausando || !estadoConfirmado}
               aria-pressed={pausado}
               title={pausado ? 'Retomar o trabalho da equipe' : 'Pausar o trabalho da equipe'}
             >
               {pausado ? <Play size={14} aria-hidden="true" /> : <Pause size={14} aria-hidden="true" />}
-              {pausado ? 'Retomar' : 'Pausar'}
+              {pausando ? 'Aguardando…' : pausado ? 'Retomar equipe' : 'Pausar equipe'}
             </button>
           </div>
           <div className="task-row" role="listitem">
@@ -132,15 +146,16 @@ export function Inicio({
               <strong>{cuidando.avatar.nome}</strong>
               <span>{cuidando.avatar.papel}</span>
               <span>
-                {pausado
-                  ? 'Trabalho pausado por você.'
-                  : cuidando.supervisionado
-                    ? 'Com o supercérebro ligado — você está olhando.'
-                    : 'Operando sozinha, com segurança.'}
-                {cuidando.desde ? ` Desde ${cuidando.desde}.` : ''}
+                {pilotoCarregando ? 'Conferindo a conta…'
+                  : pilotoErro ? 'Não foi possível verificar a conta.'
+                    : pilotoConectado ? 'Conta conectada.' : 'Conecte a conta para conversar com seu piloto.'}
               </span>
             </div>
           </div>
+          <p className="pilot-card-note">{pausado
+            ? 'A equipe está pausada. Comandos diretos no computador são controlados separadamente.'
+            : !estadoConfirmado ? 'Estado da equipe ainda não confirmado.'
+              : `${emAndamento.length} trabalho${emAndamento.length === 1 ? '' : 's'} em andamento na equipe.`}</p>
         </div>
 
         <div className="confidence-card">
@@ -224,7 +239,7 @@ export function Inicio({
       <section className="home-bottom">
         <details className="official-story">
           <summary>
-            A ideia por trás da ZARA
+            A ideia por trás da TROPA dev.
           </summary>
           <blockquote>
             “O Muse AI é tipo um Power Ranger. Ele é foda — inteligente pra caramba, conversa, pensa, resolve. Mas

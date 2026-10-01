@@ -2,6 +2,7 @@ import type { AvatarInfo, MembroEquipe, ProjetoUsuario } from './types';
 
 interface EquipeProps {
   projetos: ProjetoUsuario[];
+  onNovoProjeto?: () => void;
 }
 
 function AvatarRosto({ avatar, tamanho = 44 }: { avatar: AvatarInfo; tamanho?: number }) {
@@ -46,7 +47,7 @@ function MembroCard({ membro }: { membro: MembroEquipe }) {
       <div className="team-card-text">
         <strong>{membro.avatar.nome}</strong>
         <small>{membro.avatar.papel}</small>
-        <small>Bot customizável · sala e computador próprios</small>
+        <small>Membro do projeto</small>
         <span className="team-status">
           <span
             aria-hidden="true"
@@ -80,16 +81,16 @@ function MembroCard({ membro }: { membro: MembroEquipe }) {
  * Os avatares se organizam conforme os PROJETOS do usuário.
  * ADENDO URGENTE: cada avatar = um bot customizável (sala + computador + especialidade próprios).
  */
-export function Equipe({ projetos }: EquipeProps) {
+export function Equipe({ projetos, onNovoProjeto }: EquipeProps) {
   if (!projetos.length) {
     return (
       <section className="team-view" aria-label="Equipe">
         <p className="team-caption">
-          A equipe se organiza conforme os seus projetos — não em salas fixas. Cada avatar é um bot
-          customizável, com sua sala, seu computador e sua especialidade.
+          Seus projetos e os membros ligados a cada trabalho aparecem aqui.
         </p>
         <div className="empty-panel">
           <h2>Nenhum projeto por enquanto</h2>
+          {onNovoProjeto && <button className="primary-button" onClick={onNovoProjeto}>Criar meu primeiro projeto</button>}
           <p>Quando você começar um projeto com a equipe, os avatares se organizam aqui, cada um na sua especialidade.</p>
         </div>
       </section>
@@ -99,8 +100,7 @@ export function Equipe({ projetos }: EquipeProps) {
   return (
     <section className="team-view" aria-label="Equipe">
       <p className="team-caption">
-        A equipe se organiza conforme os seus projetos — não em salas fixas. Cada avatar é um bot
-        customizável, com sua sala, seu computador e sua especialidade. Cada avatar, uma especialidade.
+        Seus projetos e os membros ligados a cada trabalho. Os estados vêm do motor.
       </p>
       {projetos.map((projeto) => (
         <section key={projeto.id} aria-label={`Projeto ${projeto.nome}`} style={{ marginBottom: 26 }}>

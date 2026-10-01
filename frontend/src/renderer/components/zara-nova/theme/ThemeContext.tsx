@@ -44,9 +44,9 @@ import {
   DEFAULT_AVATAR_ID,
   avatarInfoPara,
   isKnownTheme,
-  themeForAvatar,
 } from '../../../lib/avatarTheme';
 import type { ThemeOption } from '../../../lib/avatarTheme';
+import type { PilotProvider } from '../../../lib/pilotConversation';
 
 /** Chave do localStorage onde o tema escolhido é persistido. */
 export const THEME_STORAGE_KEY = 'zara-avatar-theme';
@@ -123,12 +123,14 @@ export interface ThemeProviderProps {
    * que mantém o portão de entrada). Sem a prop, o provider gerencia sozinho.
    */
   avatar?: AvatarInfo | null;
+  provider?: PilotProvider;
 }
 
 export function ThemeProvider({
   children,
   initialAvatar = DEFAULT_AVATAR_ID,
   avatar: avatarProp,
+  provider = 'muse',
 }: ThemeProviderProps): ReactElement {
   const controlado = avatarProp !== undefined;
 
@@ -139,25 +141,28 @@ export function ThemeProvider({
   });
 
   const [theme, setThemeState] = useState<ThemeId>(() => {
-    const savedTheme = readStored(THEME_STORAGE_KEY);
-    if (isKnownTheme(savedTheme)) return savedTheme;
-    if (controlado && avatarProp) return themeForAvatar(avatarProp.id);
-    const savedAvatar = readStored(AVATAR_STORAGE_KEY);
-    return themeForAvatar(
-      savedAvatar !== null && savedAvatar.length > 0 ? savedAvatar : initialAvatar,
-    );
+    return provider === 'openai' ? 'dots' : 'zara-claro';
   });
 
   // Evita reaplicar o tema quando a prop controlada re-renderiza com o mesmo id.
-  const ultimoIdAplicado = useRef<string | null>(null);
+  const ultimoIdAplicado = useRef<string | null>(controlado ? avatarProp?.id ?? null : null);
+  const ultimoProvider = useRef(provider);
 
   const aplicarTemaDoAvatar = useCallback((id: AvatarId) => {
-    const nextTheme = themeForAvatar(id);
+    const nextTheme = provider === 'openai' ? 'dots' : 'zara-claro';
     ultimoIdAplicado.current = id;
     setThemeState(nextTheme);
     store(AVATAR_STORAGE_KEY, id);
     store(THEME_STORAGE_KEY, nextTheme);
-  }, []);
+    store(`${THEME_STORAGE_KEY}-${provider}`, nextTheme);
+  }, [provider]);
+
+  useEffect(() => {
+    document.documentElement.dataset.pilot = provider;
+    if (ultimoProvider.current === provider) return;
+    ultimoProvider.current = provider;
+    setThemeState(provider === 'openai' ? 'dots' : 'zara-claro');
+  }, [provider]);
 
   // Modo controlado: a prop manda. Trocar o id aplica o tema na hora, sem reload.
   useEffect(() => {
@@ -173,10 +178,11 @@ export function ThemeProvider({
   }, [theme]);
 
   const setTheme = useCallback((next: ThemeId) => {
-    if (!isKnownTheme(next)) return;
+    if (!isKnownTheme(next) || (provider === 'openai' ? next !== 'dots' : next === 'dots')) return;
     setThemeState(next);
     store(THEME_STORAGE_KEY, next);
-  }, []);
+    store(`${THEME_STORAGE_KEY}-${provider}`, next);
+  }, [provider]);
 
   const escolherAvatar = useCallback(
     (avatar: AvatarInfo) => {

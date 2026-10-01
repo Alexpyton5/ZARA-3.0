@@ -29,6 +29,7 @@ pyperclip>=1.8.2
 
 # Voice STT (Offline)
 vosk>=0.3.45
+faster-whisper==1.2.1
 
 # Wake Word Detection
 pvporcupine>=3.0.0

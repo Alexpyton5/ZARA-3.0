@@ -14,6 +14,7 @@ Layout (spec do Mentor):
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import threading
@@ -21,6 +22,7 @@ import time
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from core.paths import user_data_dir
 
@@ -39,6 +41,45 @@ def _detect_real_obsidian_vault() -> Path | None:
         most_recent = max(vaults.values(), key=lambda v: v.get("ts", 0))
         vault_path = Path(most_recent["path"])
         return vault_path if vault_path.is_dir() else None
+    except Exception:
+        return None
+
+
+def _resolve_obsidian_vault() -> Path | None:
+    """Cadeia robusta de deteccao do cofre real (SUPERCREBRO-2026-09-29).
+
+    Ordem: env OBSIDIAN_VAULT_PATH > deteccao via obsidian.json do usuario
+    atual > varredura de C:/Users/*/obsidian.json
+    (o app pode rodar como usuario de servico, ex.: zoe, enquanto o
+    Obsidian do Alex esta no perfil dele). Nunca levanta.
+    `_detect_real_obsidian_vault` e mantida ingenua de proposito
+    (contrato dos testes existentes).
+    """
+    env_path = os.environ.get("OBSIDIAN_VAULT_PATH")
+    if env_path:
+        p = Path(env_path)
+        if p.is_dir():
+            return p
+    vault = _detect_real_obsidian_vault()
+    if vault is not None:
+        return vault
+    try:
+        users_root = Path("C:/Users")
+        if not users_root.is_dir():
+            return None
+        best: Path | None = None
+        best_ts = -1
+        for config in users_root.glob("*/AppData/Roaming/obsidian/obsidian.json"):
+            try:
+                data = json.loads(config.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for entry in (data.get("vaults") or {}).values():
+                vp = Path(entry.get("path", ""))
+                ts = entry.get("ts", 0)
+                if vp.is_dir() and ts > best_ts:
+                    best, best_ts = vp, ts
+        return best
     except Exception:
         return None
 
@@ -220,6 +261,42 @@ class ProjectMemory:
             (zara_folder / f"{safe_key}.md").write_text(frontmatter + content, encoding="utf-8")
         except OSError:
             pass
+
+    # ---- supercerebro (cerebro compartilhado com zoe e Codex) ----
+
+    def record_shared_learning(self, texto: str) -> str | None:
+        """Registra um aprendizado no cerebro compartilhado: vault real do Alex,
+        pasta `aprendizados/` - o mesmo lugar onde zoe e Codex escrevem.
+        Best-effort: nunca levanta; retorna o nome do arquivo ou None.
+        Resolve o cofre com `_resolve_obsidian_vault()` quando a deteccao
+        ingenua do __init__ nao achou (app rodando como usuario de servico)."""
+        from memory.second_brain_composition import is_safe_text
+        from memory.shared_second_brain import SharedSecondBrain
+        if (not isinstance(texto, str) or not texto.strip()
+                or not is_safe_text(texto) or SharedSecondBrain._sensitive(texto)):
+            return None
+        vault = self.obsidian_vault_dir or _resolve_obsidian_vault()
+        if vault is None:
+            return None
+        try:
+            pasta = vault / "aprendizados"
+            pasta.mkdir(parents=True, exist_ok=True)
+            slug = re.sub(r"[^a-z0-9]+", "-", texto.strip().lower())[:40].strip("-")
+            agora = datetime.now().astimezone()
+            nome = f"{agora.strftime('%Y-%m-%d-%H%M%S')}-{(slug or 'aprendizado')}-{uuid4().hex[:12]}.md"
+            titulo = texto.strip().split("\n")[0][:80]
+            conteudo = (
+                f"# {titulo}\n\n"
+                f"Data: {agora.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"Fonte: app ZARA (ProjectMemory.record_shared_learning)\n\n"
+                f"{texto.strip()}\n\n[[INDICE]]\n"
+            )
+            temporary = pasta / (nome + '.tmp')
+            temporary.write_text(conteudo, encoding="utf-8")
+            os.replace(temporary, pasta / nome)
+            return nome
+        except OSError:
+            return None
 
     def append_decision(self, decision: str) -> None:
         """Append a decision to the project decisions log."""

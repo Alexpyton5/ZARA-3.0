@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   COMPUTER_TRIGGER_PREFIX,
   extractComputerGoal,
+  extractZoeComputerGoal,
   isComputerAgentTrigger,
 } from '../src/renderer/lib/computerAgentTrigger';
 
@@ -36,4 +37,11 @@ test('não dispara no meio da frase nem com prefixo parecido', () => {
 
 test('o prefixo exportado é o que o botão "usar PC" insere', () => {
   assert.equal(COMPUTER_TRIGGER_PREFIX, 'use o computador para');
+});
+
+test('fala natural na aba Zoe aciona o PC sem confundir conversa comum', () => {
+  assert.equal(extractZoeComputerGoal('Zoe, abre o bloco de notas e escreve "oi"'), 'abre o bloco de notas e escreve "oi"');
+  assert.equal(extractZoeComputerGoal('Zoe, feche o bloco de notas'), 'feche o bloco de notas');
+  assert.equal(extractZoeComputerGoal('use o computador para clique em Salvar'), 'clique em Salvar');
+  assert.equal(extractZoeComputerGoal('me conte como está o projeto'), null);
 });

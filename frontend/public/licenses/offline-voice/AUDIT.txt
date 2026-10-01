@@ -1,0 +1,4 @@
+Offline voice dependencies: faster-whisper 1.2.1 MIT; Systran Whisper small/base model cards MIT; PyAutoGUI 0.9.54 BSD-3; python-mss 10.2.0 MIT.
+PyAV 18.1.0 BSD-3; its installed FFmpeg libraries report LGPL version 3 or later. No claim that the complete binary is exclusively permissive. Public binary redistribution requires complete transitive-license and corresponding-source review, not granted by this development smoke.
+Silero model weights not bundled pending clarification of contradictory README license badge alt-text.
+Primary sources: https://github.com/SYSTRAN/faster-whisper/blob/master/LICENSE ; https://huggingface.co/Systran/faster-whisper-small ; https://github.com/asweigart/pyautogui/blob/master/LICENSE.txt ; https://github.com/BoboTiG/python-mss ; https://github.com/PyAV-Org/PyAV ; https://pypi.org/project/silero-vad/6.2.3/

@@ -253,6 +253,10 @@ def vision_find_template_action(template_path: str, threshold: float = 0.8, regi
 )
 def vision_click_template_action(template_path: str, threshold: float = 0.8, offset_x: int = 0, offset_y: int = 0) -> ActionResult:
     """Find template and click it."""
+    from core.actions.computer_use import _foreground, computer_click_action
+    observed = _foreground()
+    if observed is None:
+        return ActionResult(False, error='Janela ativa indisponível.', verificado=False)
     # First find
     result = vision_find_template_action(template_path, threshold)
     if not result.success:
@@ -267,18 +271,7 @@ def vision_click_template_action(template_path: str, threshold: float = 0.8, off
     click_x = match["x"] + match["width"] // 2 + offset_x
     click_y = match["y"] + match["height"] // 2 + offset_y
 
-    try:
-        import pyautogui
-        pyautogui.click(click_x, click_y)
-        return ActionResult(
-            success=True,
-            output=f"Clicked at ({click_x}, {click_y})",
-            data={"x": click_x, "y": click_y}
-        )
-    except ImportError:
-        return ActionResult(success=False, error="pyautogui not installed. Run: uv pip install pyautogui")
-    except Exception as e:
-        return ActionResult(success=False, error=str(e))
+    return computer_click_action(click_x, click_y, int(observed['hwnd']))
 
 
 get_registry()

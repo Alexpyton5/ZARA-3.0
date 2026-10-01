@@ -15,6 +15,23 @@ from ctypes import wintypes
 from core.action_registry import ActionResult, action
 
 
+def _safe_pyautogui():
+    import pyautogui
+    if pyautogui.FAILSAFE is not True:
+        raise RuntimeError('O failsafe do mouse precisa permanecer ligado')
+    pyautogui.failSafeCheck()
+    return pyautogui
+
+
+def _type_observed_text(text: str) -> bool:
+    gui = _safe_pyautogui()
+    if text.isascii():
+        gui.write(text, interval=0)
+        return True
+    from core.actions.os_ops import _send_unicode_text
+    return _send_unicode_text(text)
+
+
 def _foreground() -> dict[str, object] | None:
     if os.name != "nt":
         return None
@@ -105,12 +122,13 @@ def computer_click_action(x: int, y: int, expected_hwnd: int) -> ActionResult:
     current, error = _target(expected_hwnd, x, y)
     if current is None:
         return ActionResult(False, error=error, verificado=False)
-    user32 = ctypes.windll.user32
-    if not user32.SetCursorPos(x, y):
-        return ActionResult(False, error="Não consegui mover o mouse.", verificado=False)
-    user32.mouse_event(0x0002, 0, 0, 0, 0)  # LEFTDOWN
-    time.sleep(0.03)
-    user32.mouse_event(0x0004, 0, 0, 0, 0)  # LEFTUP
+    try:
+        gui = _safe_pyautogui()
+        if _target(expected_hwnd, x, y)[0] is None:
+            return ActionResult(False, error='A janela mudou antes do clique.', verificado=False)
+        gui.click(x, y)
+    except Exception as exc:
+        return ActionResult(False, error=f'Clique interrompido: {type(exc).__name__}', verificado=False)
     return ActionResult(True, output="Clique enviado; observe a tela para conferir o efeito.", data={"x": x, "y": y, "hwnd": expected_hwnd}, verificado=False)
 
 
@@ -121,10 +139,13 @@ def computer_scroll_action(x: int, y: int, steps: int, expected_hwnd: int) -> Ac
     current, error = _target(expected_hwnd, x, y)
     if current is None:
         return ActionResult(False, error=error, verificado=False)
-    user32 = ctypes.windll.user32
-    if not user32.SetCursorPos(x, y):
-        return ActionResult(False, error="Não consegui mover o mouse.", verificado=False)
-    user32.mouse_event(0x0800, 0, 0, steps * 120, 0)  # WHEEL
+    try:
+        gui = _safe_pyautogui()
+        if _target(expected_hwnd, x, y)[0] is None:
+            return ActionResult(False, error='A janela mudou antes da rolagem.', verificado=False)
+        gui.scroll(steps, x=x, y=y)
+    except Exception as exc:
+        return ActionResult(False, error=f'Rolagem interrompida: {type(exc).__name__}', verificado=False)
     return ActionResult(True, output="Rolagem enviada; observe a tela para conferir o efeito.", data={"steps": steps, "hwnd": expected_hwnd}, verificado=False)
 
 
@@ -146,10 +167,13 @@ def computer_press_key_action(key: str, expected_hwnd: int) -> ActionResult:
     current, error = _target(expected_hwnd)
     if current is None:
         return ActionResult(False, error=error, verificado=False)
-    code = _KEYS[canonical]
-    user32 = ctypes.windll.user32
-    user32.keybd_event(code, 0, 0, 0)
-    user32.keybd_event(code, 0, 0x0002, 0)
+    try:
+        gui = _safe_pyautogui()
+        if _target(expected_hwnd)[0] is None:
+            return ActionResult(False, error='A janela mudou antes da tecla.', verificado=False)
+        gui.press(canonical)
+    except Exception as exc:
+        return ActionResult(False, error=f'Tecla interrompida: {type(exc).__name__}', verificado=False)
     return ActionResult(True, output="Tecla enviada; observe a tela para conferir o efeito.", data={"key": canonical, "hwnd": expected_hwnd}, verificado=False)
 
 
@@ -175,7 +199,7 @@ def computer_type_text_action(text: str, expected_hwnd: int) -> ActionResult:
         except ImportError:
             comtypes.client.GetModule("UIAutomationCore.dll")
             from comtypes.gen import UIAutomationClient as UIA
-        from core.actions.os_ops import _send_unicode_text, _uia_field_text
+        from core.actions.os_ops import _uia_field_text
 
         automation = comtypes.client.CreateObject(
             "{ff48dba4-60ef-4201-aa87-54103eef594e}", interface=UIA.IUIAutomation
@@ -191,7 +215,7 @@ def computer_type_text_action(text: str, expected_hwnd: int) -> ActionResult:
             return ActionResult(False, error="Não identifiquei um campo de texto seguro nesta janela.", verificado=False)
         state = {"automation": automation, "UIA": UIA, "element": field}
         before = _uia_field_text(state)
-        if before is None or _target(expected_hwnd)[0] is None or not _send_unicode_text(value):
+        if before is None or _target(expected_hwnd)[0] is None or not _type_observed_text(value):
             return ActionResult(False, error="Não consegui digitar no campo observado.", verificado=False)
         time.sleep(0.15)
         after = _uia_field_text(state)

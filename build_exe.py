@@ -117,6 +117,7 @@ HIDDEN_IMPORTS = [
     "cv2",
     "pytesseract",
     "mss",
+    "pyautogui",
     "pyperclip",
     "watchdog",
     "vosk",

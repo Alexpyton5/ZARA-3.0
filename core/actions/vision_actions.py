@@ -128,6 +128,10 @@ def vision_find_text_action(text: str, lang: str = "por+eng", region: dict[str, 
 
 @action(name="vision_click_text", category="vision", risk="MEDIUM", capability="PC_CONTROL", description="Clica no centro de um texto encontrado por OCR")
 def vision_click_text_action(text: str, occurrence: int = 0, lang: str = "por+eng") -> ActionResult:
+    from core.actions.computer_use import _foreground, computer_click_action
+    observed = _foreground()
+    if observed is None:
+        return ActionResult(False, error='Janela ativa indisponível.', verificado=False)
     found = getattr(vision_find_text_action, "__wrapped__", vision_find_text_action)(text=text, lang=lang)  # avoid a second registry gate
     if not found.success:
         return found
@@ -137,13 +141,7 @@ def vision_click_text_action(text: str, occurrence: int = 0, lang: str = "por+en
     match = matches[occurrence]
     x = match["left"] + match["width"] // 2
     y = match["top"] + match["height"] // 2
-    try:
-        import pyautogui
-
-        pyautogui.click(x, y)
-    except Exception as exc:
-        return ActionResult(False, error=f"Nao consegui clicar no texto: {exc}")
-    return ActionResult(True, f"Clique enviado em ({x}, {y}); o aplicativo nao confirmou o efeito.", data={"x": x, "y": y}, verificado=False)
+    return computer_click_action(x, y, int(observed['hwnd']))
 
 
 @action(name="vision_wait_for_text", category="vision", description="Aguarda texto aparecer na tela")

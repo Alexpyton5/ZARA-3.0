@@ -16,7 +16,9 @@ type Session = {
   connected: boolean;
   loading: boolean;
   error: string;
+  accountOpen: boolean;
   connect: (provider?: PilotProvider) => void;
+  closeAccount: () => void;
   send: (text: string) => Promise<string>;
   voice: ReturnType<typeof useZoeVoice>;
 };
@@ -100,6 +102,8 @@ export function PilotSessionProvider({ children }: { children: ReactNode }) {
     setPanel(true);
   }, [provider, stopSession]);
 
+  const closeAccount = useCallback(() => setPanel(false), []);
+
   const send = useCallback(async (text: string): Promise<string> => {
     if (sending.current || !['off', 'error'].includes(voice.voiceState)) throw new Error('Espere a resposta ou desligue o microfone antes de enviar por texto.');
     sending.current = true;
@@ -125,7 +129,7 @@ export function PilotSessionProvider({ children }: { children: ReactNode }) {
   }, [provider, connected, connect, voice.voiceState]);
 
   const reload = () => { void stopSession(); setError(''); setLoading(true); mountedWebview?.reload(); };
-  const context = { provider, connected, loading, error, connect, send, voice: { ...voice, stop: stopSession } };
+  const context = { provider, connected, loading, error, accountOpen: panel, connect, closeAccount, send, voice: { ...voice, stop: stopSession } };
 
   return <Context.Provider value={context}>
     {children}
@@ -136,7 +140,7 @@ export function PilotSessionProvider({ children }: { children: ReactNode }) {
         <strong>{config.nome}</strong>
         <span role="status" style={{ flex: 1 }}>{error || (loading ? 'Abrindo sua conta…' : connected ? 'Conversa disponível' : 'Entre na sua conta nesta janela.')}</span>
         <button className="secondary-button" onClick={reload}>Recarregar</button>
-        <button className="primary-button" onClick={() => setPanel(false)}>Voltar ao app</button>
+        <button className="primary-button" onClick={closeAccount}>Voltar ao app</button>
       </div>
       <webview key={provider} ref={ref as any} src={config.url} partition={config.partition}
         webpreferences="contextIsolation=yes,sandbox=yes,backgroundThrottling=no"

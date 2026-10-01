@@ -105,6 +105,31 @@ test('viewing the current Muse account preserves the active voice session', asyn
   assert.equal(h.voice.voiceState, 'listening');
 });
 
+test('the account panel exposes open/close state without stopping an active voice', async () => {
+  const h = sessionHarness();
+  await h.ready();
+  assert.equal(h.session().accountOpen, false);
+  h.voice.voiceState = 'listening';
+  h.render().connect();
+  assert.equal(h.render().accountOpen, true);
+  h.session().closeAccount();
+  assert.equal(h.render().accountOpen, false);
+  assert.equal(h.calls.stops, 0);
+  assert.equal(h.voice.voiceState, 'listening');
+});
+
+test('closing a signed-out account exposes cancellation without pretending it is connected', async () => {
+  const h = sessionHarness({ signedIn: false });
+  await h.ready();
+  h.session().connect();
+  assert.equal(h.render().accountOpen, true);
+  h.session().closeAccount();
+  const session = h.render();
+  assert.equal(session.accountOpen, false);
+  assert.equal(session.connected, false);
+  assert.equal(h.calls.stops, 0);
+});
+
 test('switching providers still stops the old voice session', async () => {
   const h = sessionHarness();
   await h.ready();

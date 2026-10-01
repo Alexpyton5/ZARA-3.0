@@ -16,7 +16,7 @@ import { PILOTS, isPilotProvider } from './lib/pilotConversation';
 import { Configuracoes } from './components/zara-nova/Configuracoes';
 import { useNovaUi } from './lib/useNovaUi';
 import { requireActionResult } from './lib/novaUiState';
-import { useVoiceAutoStart } from './lib/useVoiceAutoStart';
+import { useVoiceAutoStart, type VoiceStartRequest } from './lib/useVoiceAutoStart';
 
 function readAvatar(): AvatarInfo | null {
   try {
@@ -34,6 +34,7 @@ function TelasLogadas({ avatar, onTrocar }: { avatar: AvatarInfo; onTrocar: () =
   const [creating, setCreating] = useState(false);
   const [objective, setObjective] = useState('');
   const [projectBusy, setProjectBusy] = useState(false);
+  const [pendingVoice, setPendingVoice] = useState<VoiceStartRequest | null>(null);
   const pilot = usePilotSession();
   const live = useNovaUi(pilot.provider);
   const run = async (action: () => Promise<unknown>) => {
@@ -41,11 +42,25 @@ function TelasLogadas({ avatar, onTrocar }: { avatar: AvatarInfo; onTrocar: () =
     try { await action(); }
     catch (cause) { setNotice(cause instanceof Error ? cause.message : 'Não consegui concluir essa ação.'); }
   };
+  const markVoiceAttempted = useVoiceAutoStart(
+    pilot.provider === 'muse' && pilot.connected, nav === 'conversa', pilot.voice.voiceState,
+    () => run(pilot.voice.toggle),
+    { provider: pilot.provider, page: nav, ready: pilot.connected, accountOpen: pilot.accountOpen,
+      request: pendingVoice, consume: fulfilled => {
+        setPendingVoice(null);
+        if (fulfilled) pilot.closeAccount();
+      } },
+  );
   const mic = () => {
-    if (!pilot.connected) { pilot.connect(); return; }
+    if (!pilot.connected) {
+      setPendingVoice({ provider: pilot.provider, page: nav });
+      pilot.connect();
+      return;
+    }
+    setPendingVoice(null);
+    markVoiceAttempted();
     void run(pilot.voice.toggle);
   };
-  useVoiceAutoStart(pilot.provider === 'muse' && pilot.connected, nav === 'conversa', pilot.voice.voiceState, mic);
   const result = (item: AtividadeItem) => void run(async () => {
     if (!item.entregavelUrl || !window.zaraIPC?.novaUI) throw new Error('O resultado está indisponível.');
     requireActionResult(await window.zaraIPC.novaUI.openResult(item.entregavelUrl), 'Não consegui abrir o resultado.');
@@ -72,7 +87,7 @@ function TelasLogadas({ avatar, onTrocar }: { avatar: AvatarInfo; onTrocar: () =
   return <ZaraNovaShell active={nav} onNavigate={setNav} pageActions={actions} avatar={avatar} providerName={PILOTS[pilot.provider].nome}>
     {state?.warning && <p role="status">{state.warning}</p>}
     {(notice || live.error || ((nav === 'voz' || nav === 'conversa') && pilot.voice.error)) && <p role="alert" style={{ padding: 12, border: '1px solid currentColor', borderRadius: 12 }}>{notice || live.error || pilot.voice.error}</p>}
-    {nav === 'conversa' && !pilot.connected && <div className="pilot-connection-notice" role={pilot.error ? 'alert' : 'status'}>
+    {(nav === 'conversa' || nav === 'voz') && !pilot.connected && <div className="pilot-connection-notice" role={pilot.error ? 'alert' : 'status'}>
       <span>{pilot.error || (pilot.loading ? 'Conferindo sua conta…' : 'Conecte sua conta para conversar por texto ou voz.')}</span>
       <button className="secondary-button" onClick={() => pilot.connect()}>{pilot.loading ? 'Abrir minha conta' : 'Conectar conta'}</button>
     </div>}

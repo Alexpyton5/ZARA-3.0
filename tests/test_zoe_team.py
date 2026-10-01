@@ -54,6 +54,19 @@ def test_operation_launch_completion_is_not_mission_completion(tmp_path):
     assert read_operation(db, 'another')['success'] is False
 
 
+def test_lost_http_ack_is_recovered_by_original_request_id(tmp_path):
+    from core.lab_v1.operation_ledger import OperationLedger
+    db = tmp_path / 'lab.db'
+    ledger = OperationLedger(db)
+    request_id = remote_request_id('whatsapp', 'same-human-request')
+    admitted = ledger.admit(request_id, 'lab.v1.submit', {'objective': 'revisar'}, dispatch_authorized=False)
+    result = read_operation(db, request_id=request_id)
+    assert result['operation_id'] == admitted.operation_id
+    assert result['mission_complete'] is False
+    assert result['state'] != 'DISPATCHED'
+    assert read_operation(db, 'wrong', request_id=request_id)['success'] is False
+
+
 @pytest.mark.parametrize('command,result', [
     ('lab.v1.submit', {'success': True}),
     ('lab.v1.submit', {'success': True, 'session_id': 42}),

@@ -7,6 +7,7 @@ Zoe must verify that the original request is from Alex before calling start.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -63,22 +64,25 @@ class BridgeClient:
                     'error': 'Ponte indisponível; a ordem não foi confirmada. Use o mesmo ID ao tentar novamente.'}
 
 
-def read_operation(db: Path, operation_id: str) -> dict:
+def read_operation(db: Path, operation_id: str | None = None, *, request_id: str | None = None) -> dict:
     """Read a persisted receipt without opening/creating/migrating a writable DB."""
     try:
-        if not db.is_file() or not operation_id or len(operation_id) > 160:
+        identity = operation_id if operation_id is not None else request_id
+        if (not db.is_file() or (operation_id is not None and request_id is not None)
+                or not isinstance(identity, str) or not identity or len(identity) > 160):
             raise ValueError('missing receipt')
-        with sqlite3.connect(db.resolve().as_uri() + '?mode=ro', uri=True, timeout=3) as conn:
+        column = 'operation_id' if operation_id is not None else 'request_id'
+        with closing(sqlite3.connect(db.resolve().as_uri() + '?mode=ro', uri=True, timeout=3)) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute('''SELECT a.operation_id, a.request_id, a.command,
                 r.state, r.result_json, r.finished_at
                 FROM lab_admitted_operations a
                 LEFT JOIN lab_operation_results r ON r.operation_id=a.operation_id
-                WHERE a.operation_id=?''', (operation_id,)).fetchone()
+                WHERE a.''' + column + '=?', (identity,)).fetchone()
         if row is None:
             raise ValueError('missing receipt')
         result = json.loads(row['result_json']) if row['result_json'] else None
-        state = row['state'] or 'PENDING'
+        state = original_state = row['state'] or 'PENDING'
         session_id = None
         if isinstance(result, dict):
             session_id = result.get('session_id') or (result.get('mission') or {}).get('session_id')
@@ -88,7 +92,7 @@ def read_operation(db: Path, operation_id: str) -> dict:
         if not launch_succeeded and state == 'COMPLETED':
             state = 'OUTCOME_UNVERIFIED'
         return {'success': True, 'operation_id': row['operation_id'], 'request_id': row['request_id'],
-                'state': 'DISPATCHED' if launch_succeeded else state, 'operation_state': state,
+                'state': 'DISPATCHED' if launch_succeeded else state, 'operation_state': original_state,
                 'session_id': session_id, 'result': result, 'finished_at': row['finished_at'],
                 'mission_complete': False,
                 'hint': 'DISPATCHED confirma início. Consulte snapshot da sessão para execução/entrega.'}
@@ -105,7 +109,9 @@ def main() -> int:
     start = sub.add_parser('start')
     start.add_argument('--stdin', action='store_true', required=True, help='JSON: message_id, channel, objective')
     receipt = sub.add_parser('receipt')
-    receipt.add_argument('--operation-id', required=True)
+    identity = receipt.add_mutually_exclusive_group(required=True)
+    identity.add_argument('--operation-id')
+    identity.add_argument('--request-id', help='Recupere o recibo mesmo se o ACK HTTP se perdeu.')
     receipt.add_argument('--db', type=Path)
     snapshot = sub.add_parser('snapshot')
     snapshot.add_argument('--session-id')
@@ -121,7 +127,7 @@ def main() -> int:
         except (ValueError, TypeError):
             result = {'success': False, 'code': 'INVALID_REMOTE_MISSION'}
     elif args.command == 'receipt':
-        result = read_operation(args.db or runtime_directory() / 'data' / 'lab' / 'zara_lab_v1.db', args.operation_id)
+        result = read_operation(args.db or runtime_directory() / 'data' / 'lab' / 'zara_lab_v1.db', args.operation_id, request_id=args.request_id)
     else:
         payload = {'session_id': args.session_id} if args.command == 'snapshot' and args.session_id else {}
         result = client.send('lab-v1-snapshot' if args.command == 'snapshot' else 'status', payload)

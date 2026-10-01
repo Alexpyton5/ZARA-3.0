@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from memory.project_memory import _resolve_obsidian_vault
+from memory.project_memory import _canonical_obsidian_vault, _resolve_obsidian_vault
 
 _ZARA_SUBFOLDER = "Zara-Memoria"
 _SNIPPET_RADIUS_CHARS = 120
@@ -66,7 +66,7 @@ class ObsidianMemoryManager:
 
     def __init__(self, vault_path: Path | str | None = None):
         if vault_path is not None:
-            self.vault_path: Path | None = Path(vault_path)
+            self.vault_path: Path | None = _canonical_obsidian_vault(vault_path)
         else:
             # SUPERCREBRO-2026-09-29: cadeia robusta (env > obsidian.json do
             # usuario atual > varredura de C:/Users/*). O app roda como zoe;
@@ -84,7 +84,11 @@ class ObsidianMemoryManager:
 
     @classmethod
     def _sensitive(cls, text: str) -> bool:
-        return bool(_SECRET_CONTENT.search(str(text or "")))
+        from memory.second_brain_composition import is_safe_text
+        from memory.shared_second_brain import SharedSecondBrain
+        value = str(text or "")
+        return bool(_SECRET_CONTENT.search(value) or SharedSecondBrain._sensitive(value)
+                    or not is_safe_text(value))
 
     @staticmethod
     def _secret_path(relative_path: str) -> bool:
@@ -365,6 +369,9 @@ class ObsidianMemoryManager:
             conflict += f"\n# Canonical projection\n{body}\n"
             if human_tail:
                 conflict += f"\n# Human notes\n{human_tail}\n"
+            # A preserved human tail can itself contain a credential.
+            if self._sensitive(conflict):
+                return SyncResult("unavailable", identity=identity)
             conflict_path.write_text(conflict, encoding="utf-8")
             return SyncResult("conflict", str(path), identity, str(conflict_path))
         except OSError:

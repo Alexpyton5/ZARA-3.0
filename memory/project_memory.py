@@ -45,6 +45,19 @@ def _detect_real_obsidian_vault() -> Path | None:
         return None
 
 
+def _canonical_obsidian_vault(path: Path | str | None) -> Path | None:
+    """Normalize the shared-brain child without changing detection contracts.
+
+    Preserve unavailable explicit paths so injected managers can recover when
+    their directory returns. Writers must separately check availability.
+    """
+    if path is None:
+        return None
+    vault = Path(path)
+    nested = vault / "segundo-cerebro"
+    return nested if nested.is_dir() else vault
+
+
 def _resolve_obsidian_vault() -> Path | None:
     """Cadeia robusta de deteccao do cofre real (SUPERCREBRO-2026-09-29).
 
@@ -59,10 +72,10 @@ def _resolve_obsidian_vault() -> Path | None:
     if env_path:
         p = Path(env_path)
         if p.is_dir():
-            return p
+            return _canonical_obsidian_vault(p)
     vault = _detect_real_obsidian_vault()
     if vault is not None:
-        return vault
+        return _canonical_obsidian_vault(vault)
     try:
         users_root = Path("C:/Users")
         if not users_root.is_dir():
@@ -79,7 +92,7 @@ def _resolve_obsidian_vault() -> Path | None:
                 ts = entry.get("ts", 0)
                 if vp.is_dir() and ts > best_ts:
                     best, best_ts = vp, ts
-        return best
+        return _canonical_obsidian_vault(best)
     except Exception:
         return None
 
@@ -218,9 +231,20 @@ class ProjectMemory:
         # esforco: se o cofre nao existir (HD externo desconectado, cofre
         # mudou de lugar), a memoria interna da Zara continua funcionando
         # normalmente, so o espelho fica pra tras.
-        self.obsidian_vault_dir = obsidian_vault_dir or _detect_real_obsidian_vault()
+        self._explicit_obsidian_vault_dir = obsidian_vault_dir
+        self.obsidian_vault_dir = self._current_obsidian_vault()
         self._lock = threading.RLock()
         self._init_db()
+
+    def _current_obsidian_vault(self) -> Path | None:
+        """Resolve on each shared write, preserving explicit injection."""
+        vault = (
+            _canonical_obsidian_vault(self._explicit_obsidian_vault_dir)
+            if self._explicit_obsidian_vault_dir is not None
+            else _resolve_obsidian_vault()
+        )
+        self.obsidian_vault_dir = vault if vault is not None and vault.is_dir() else None
+        return self.obsidian_vault_dir
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=10.0)
@@ -252,10 +276,14 @@ class ProjectMemory:
     def _mirror_to_obsidian(self, safe_key: str, title: str, content: str) -> None:
         """Best-effort mirror to Alex's real Obsidian vault. Never raises —
         a missing/disconnected vault must not break Zara's own memory."""
-        if self.obsidian_vault_dir is None:
+        from core.obsidian_memory import ObsidianMemoryManager
+        if any(ObsidianMemoryManager._sensitive(value) for value in (safe_key, title, content)):
+            return
+        vault = self._current_obsidian_vault()
+        if vault is None:
             return
         try:
-            zara_folder = self.obsidian_vault_dir / "Zara-Memoria"
+            zara_folder = vault / "Zara-Memoria"
             zara_folder.mkdir(parents=True, exist_ok=True)
             frontmatter = f"---\ntitle: {title}\nfonte: memoria de projeto da Zara\n---\n\n"
             (zara_folder / f"{safe_key}.md").write_text(frontmatter + content, encoding="utf-8")
@@ -268,14 +296,14 @@ class ProjectMemory:
         """Registra um aprendizado no cerebro compartilhado: vault real do Alex,
         pasta `aprendizados/` - o mesmo lugar onde zoe e Codex escrevem.
         Best-effort: nunca levanta; retorna o nome do arquivo ou None.
-        Resolve o cofre com `_resolve_obsidian_vault()` quando a deteccao
-        ingenua do __init__ nao achou (app rodando como usuario de servico)."""
+        Resolve a raiz atual em cada chamada, mantendo injecao explicita
+        e precedencia env na deteccao automatica."""
         from memory.second_brain_composition import is_safe_text
         from memory.shared_second_brain import SharedSecondBrain
         if (not isinstance(texto, str) or not texto.strip()
                 or not is_safe_text(texto) or SharedSecondBrain._sensitive(texto)):
             return None
-        vault = self.obsidian_vault_dir or _resolve_obsidian_vault()
+        vault = self._current_obsidian_vault()
         if vault is None:
             return None
         try:

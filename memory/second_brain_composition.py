@@ -15,6 +15,7 @@ from typing import Any
 
 from core.obsidian_memory import ObsidianMemoryManager
 from core.paths import user_data_dir
+from memory.project_memory import _canonical_obsidian_vault
 from memory.shared_second_brain import SharedSecondBrain
 
 _SENSITIVE_TEXT = re.compile(
@@ -63,8 +64,10 @@ def build_shared_second_brain(
     leave the facade in degraded mode with the derived cache intact.
     """
     vault_path = None
-    if obsidian is not None:
-        vault_path = getattr(obsidian, "vault_path", None)
+    if obsidian is not None and getattr(obsidian, "available", True):
+        vault_path = _canonical_obsidian_vault(getattr(obsidian, "vault_path", None))
+        if vault_path is not None and not vault_path.is_dir():
+            vault_path = None
     brain = SharedSecondBrain(
         user_memory=user_memory,
         lab_store=lab_store,
@@ -234,6 +237,10 @@ def render_second_brain_context(
         if not body or not is_safe_text(body) or repeats_current_message(body, text):
             continue
         source = str((item or {}).get("source") or "unknown")
+        if source == "obsidian" and (
+            not brain._vault_available() or getattr(brain, "_obsidian_degraded", True)
+        ):
+            continue
         origin = str((item or {}).get("provenance") or "unknown")
         lines.append(f"- {body} [fonte: {source}; origem: {origin}]")
     if not lines:

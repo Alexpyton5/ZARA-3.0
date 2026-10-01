@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from memory.project_memory import _canonical_obsidian_vault
+
 _MAX_NOTE_BYTES = 32_768
 _MAX_FILE_BYTES = 1_048_576
 _SECRET_PATH_PARTS = re.compile(
@@ -90,7 +92,7 @@ class SharedSecondBrain:
         self.user_memory = user_memory
         self.lab_store = lab_store
         self.project_workspace = project_workspace
-        self.obsidian_vault = Path(obsidian_vault) if obsidian_vault is not None else None
+        self.obsidian_vault = _canonical_obsidian_vault(obsidian_vault)
         self.obsidian_index_db = Path(obsidian_index_db)
         self.obsidian_index_db.parent.mkdir(parents=True, exist_ok=True)
         self._obsidian_degraded = not self._vault_available()
@@ -523,4 +525,3 @@ class SharedSecondBrain:
             return rendered if isinstance(rendered, dict) else {}
         names = ("id", "ref", "type", "op", "relative_path", "path", "timestamp", "occurred_at", "ts", "sha256", "hash", "metadata", "task_id", "status", "summary")
         return {name: getattr(value, name) for name in names if hasattr(value, name)}
-

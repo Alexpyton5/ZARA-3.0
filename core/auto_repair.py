@@ -403,6 +403,10 @@ class RepairMemory:
         """Escreve a nota em `aprendizados/` do segundo-cérebro. Devolve o
         caminho salvo, ou None se o cofre não estiver disponível."""
         try:
+            from core.obsidian_memory import ObsidianMemoryManager
+            fields = (title, component, error_text, how_broke, how_fixed, verification)
+            if any(ObsidianMemoryManager._sensitive(value) for value in fields):
+                return None
             vault = resolve_segundo_cerebro(self._explicit)
             if vault is None:
                 return None

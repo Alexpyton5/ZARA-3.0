@@ -7,6 +7,7 @@ import { spawn, ChildProcess } from 'child_process'
 import { existsSync, readdirSync } from 'fs'
 import { normalizeReminderEvent } from './reminderEvents'
 import { startZoeBridge, type ZoeBridge } from './zoeBridge'
+import { MUSE_CONTEXT_PRESENTATION_SCRIPT, shouldPresentMuseContext } from './museContextPresentation'
 
 let pythonProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
@@ -1166,6 +1167,11 @@ app.on('window-all-closed', () => {
 })
 
 app.on('web-contents-created', (_event, contents) => {
+  contents.on('dom-ready', () => {
+    if (!shouldPresentMuseContext(contents.getType(), contents.getURL())) return
+    void contents.executeJavaScript(MUSE_CONTEXT_PRESENTATION_SCRIPT)
+      .catch(() => console.warn('[Muse] Message presentation unavailable'))
+  })
   contents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }

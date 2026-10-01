@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -29,7 +30,15 @@ RUNS_DIR = ZARA_TESTS_DIR / "runs"
 BASELINE_PATH = ZARA_TESTS_DIR / "baseline.json"
 LATEST_PATH = ZARA_TESTS_DIR / "latest.json"
 HISTORY_PATH = ZARA_TESTS_DIR / "history.json"
-PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
+PYTHON = Path(os.environ.get("ZARA_VALIDATE_PYTHON", str(ROOT / ".venv" / "Scripts" / "python.exe"))).resolve()
+
+
+def _source_snapshot() -> dict:
+    # Direct script invocation must resolve tools from this workspace.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from tools.build_current import source_identity
+    return source_identity()
 
 # Cooldown: se a última FULL suite rodou há menos de 30 min e nada relevante
 # mudou, não roda de novo -- ver `_should_skip_for_cooldown`.
@@ -187,6 +196,7 @@ def main() -> int:
         print(f"[zara_validate] {reason}")
         return 0
 
+    source_before = _source_snapshot()["sha256"]
     commit = _current_commit()
     changed = _changed_files()
 
@@ -206,6 +216,10 @@ def main() -> int:
             mode = "incremental"
             result = _run_pytest(targets=targets, marker_expr="not live")
 
+    source_after = _source_snapshot()["sha256"]
+    source_changed = source_before != source_after
+    status = "passed" if (not source_changed and result["returncode"] == 0
+                          and result["failed"] == 0 and result["passed"] > 0) else "failed"
     classification = _classify_against_baseline(result["failed_tests"], baseline)
 
     run_id = time.strftime("%Y-%m-%d_%H-%M-%S")
@@ -223,6 +237,10 @@ def main() -> int:
         "epoch": time.time(),
         "commit": commit,
         "mode": mode,
+        "status": status,
+        "source_identity_before": source_before,
+        "source_identity_after": source_after,
+        "source_changed": source_changed,
         "changed_files": changed,
         "result": result,
         "classification": classification,
@@ -258,7 +276,7 @@ def main() -> int:
                      "new_failures": len(classification["new_failures"])})
     HISTORY_PATH.write_text(json.dumps(history[-200:], indent=2), encoding="utf-8")
 
-    if args.update_baseline:
+    if args.update_baseline and not source_changed:
         baseline["commit"] = commit
         baseline["captured_at"] = run_id
         baseline["known_failures"] = sorted(result["failed_tests"])
@@ -266,6 +284,9 @@ def main() -> int:
         print("[zara_validate] baseline atualizado.")
 
     print(f"[zara_validate] {result['summary_line']}")
+    if source_changed:
+        print("[zara_validate] ALERTA: fonte mudou durante a validação; receipt reprovado.")
+        return 1
     if result["returncode"] != 0:
         print(
             "[zara_validate] ALERTA: pytest terminou com código "

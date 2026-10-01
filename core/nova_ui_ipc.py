@@ -174,15 +174,8 @@ def _project(snapshot: dict, facts: dict) -> tuple[list, list, list, list]:
     sessions = facts["sessions"]
     participation = snapshot.get("participation") or {}
 
-    for team in facts["teams"]:
-        if team.get("archived"):
-            continue
+    def project_members(team: dict, scoped: list[dict], project_id: str) -> list[dict]:
         tid = team["id"]
-        working = {r["agent_id"] for s in sessions if s.get("team_id") == tid
-                   for r in s["runs"] if r.get("state") == "STARTED"}
-        if not _text(team.get("name")):
-            unknown.append({"component": "projects", "id": tid, "reason": "Nome do time não confirmado."})
-            continue
         bindings = {b["agent_id"]: b for b in facts["bindings"][tid] if b.get("active") is True}
         members = {m["agent_id"] for m in facts["memberships"][tid] if m.get("left_at") is None}
         members.update(bindings)
@@ -192,43 +185,60 @@ def _project(snapshot: dict, facts: dict) -> tuple[list, list, list, list]:
             if agent and agent.get("archived"):
                 continue
             avatar = _avatar(agent or {}, _text(bindings.get(aid, {}).get("role")) or None)
-            assigned = [t for s in sessions if s.get("team_id") == tid for t in s["tasks"]
-                        if t.get("assigned_agent_id") == aid and t.get("state") not in _TERMINAL]
+            agent_tasks = [t for s in scoped for t in s["tasks"] if t.get("assigned_agent_id") == aid]
+            assigned = [t for t in agent_tasks if t.get("state") not in _TERMINAL]
+            current_ids = {r.get("task_id") for s in scoped for r in s["runs"]
+                           if r.get("agent_id") == aid and r.get("state") == "STARTED"}
+            working = any(r.get("agent_id") == aid and r.get("state") == "STARTED"
+                          for s in scoped for r in s["runs"])
             agent_paused = any((s.get("autonomy") or {}).get("pause_requested") is True
                                and not _inflight(s) and _active(s)
-                               and any(t.get("assigned_agent_id") == aid for t in s["tasks"])
-                               for s in sessions if s.get("team_id") == tid)
-            status = ("trabalhando" if aid in working else "pausado" if agent_paused
-                      else "disponivel" if participation.get(aid) == "IDLE" else None)
+                               and any(t.get("assigned_agent_id") == aid and t.get("state") not in _TERMINAL
+                                       for t in s["tasks"]) for s in scoped)
+            idle_confirmed = participation.get(aid) == "IDLE" and (bool(agent_tasks) or not scoped)
+            status = ("trabalhando" if working else "pausado" if agent_paused
+                      else "disponivel" if idle_confirmed else None)
             if avatar is None or status is None:
-                unknown.append({"component": "members", "id": aid, "project_id": tid,
-                                "reason": "Identidade ou status não representável/confirmado.",
+                unknown.append({"component": "members", "id": aid, "project_id": project_id,
+                                "reason": "Identidade ou status não representável/confirmado nesta sessão.",
                                 "source_status": participation.get(aid)})
                 continue
             row = {"avatar": avatar, "status": status}
-            current_ids = {r.get("task_id") for s in sessions for r in s["runs"]
-                           if r.get("agent_id") == aid and r.get("state") == "STARTED"}
             current = next((t for t in assigned if t["id"] in current_ids), None)
             if current and _text(current.get("title")):
                 row["tarefaAtual"] = current["title"]
             rows.append(row)
-        projects.append({"id": tid, "nome": team["name"], "membros": rows})
+        return rows
 
-    # The owner's projects are persisted sessions; a team is their shared crew.
-    # Keeping only teams would make newly created objectives disappear from this UI.
-    crews = {project["id"]: project for project in projects}
-    session_projects = []
-    used_teams = set()
+    for team in facts["teams"]:
+        if team.get("archived"):
+            continue
+        tid = team["id"]
+        if not _text(team.get("name")):
+            unknown.append({"component": "projects", "id": tid, "reason": "Nome do time não confirmado."})
+            continue
+        scoped = [s for s in sessions if s.get("team_id") == tid]
+        if not scoped:
+            projects.append({"id": tid, "nome": team["name"],
+                             "membros": project_members(team, [], tid)})
+        for session in scoped:
+            title = _text(session.get("objective"))
+            if not title:
+                unknown.append({"component": "projects", "id": session["id"],
+                                "reason": "Objetivo da sessão não confirmado."})
+                continue
+            projects.append({"id": session["id"], "nome": title,
+                             "membros": project_members(team, [session], session["id"])})
+
+    projected = {project["id"] for project in projects}
     for session in sessions:
         title = _text(session.get("objective"))
-        if not title:
-            continue
-        tid = session.get("team_id")
-        crew = crews.get(tid)
-        session_projects.append({"id": session["id"], "nome": title,
-                                 "membros": crew["membros"] if crew else []})
-        used_teams.add(tid)
-    projects = session_projects + [p for p in projects if p["id"] not in used_teams]
+        if title and session["id"] not in projected:
+            projects.append({"id": session["id"], "nome": title, "membros": []})
+            unknown.append({"component": "members", "project_id": session["id"],
+                            "reason": "Equipe da sessão indisponível."})
+    order = {session["id"]: index for index, session in enumerate(sessions)}
+    projects.sort(key=lambda project: order.get(project["id"], len(sessions)))
 
     for session in sessions:
         paused = (session.get("autonomy") or {}).get("pause_requested") is True and not _inflight(session)

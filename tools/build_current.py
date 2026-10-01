@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
 CURRENT = FRONTEND / "ZARA CURRENT BUILD"
 PYTHON = Path(os.environ.get("ZARA_BUILD_PYTHON", str(ROOT / ".venv" / "Scripts" / "python.exe"))).resolve()
-BACKEND_INPUTS = ("main.py", "build_exe.py", "pyproject.toml", "IDENTITY.md", "core", "memory", "voice", "plugins", "tools/build_current.py", "tools/autonomy_release.py", "tools/electron_lab_canary.py")
+BACKEND_INPUTS = ("main.py", "build_exe.py", "pyproject.toml", "requirements.txt", "IDENTITY.md", "core", "memory", "voice", "plugins", "tools", "tests", "pytest.ini", "setup.cfg", "conftest.py")
 FRONTEND_INPUTS = ("frontend/src", "frontend/public", "frontend/package.json", "frontend/package-lock.json", "frontend/index.html", "frontend/vite.config.ts", "frontend/tsconfig.json", "frontend/tsconfig.node.json")
 
 
@@ -368,7 +368,32 @@ def verify_package(package: Path, check_source: bool = True) -> dict:
     return info
 
 
+def _require_full_validation(source: dict) -> dict:
+    """Only an unchanged, passing full receipt authorizes packaging."""
+    try:
+        receipt = json.loads((ROOT / ".zara-tests" / "latest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("passing full validation receipt is required before build") from exc
+    if not isinstance(receipt, dict) or not isinstance(receipt.get("result"), dict):
+        raise ValueError("invalid full validation receipt")
+    result = receipt["result"]
+    passed = result.get("passed")
+    if (receipt.get("mode") != "full" or receipt.get("status") != "passed"
+            or receipt.get("source_changed") is not False
+            or result.get("returncode") != 0 or result.get("failed") != 0
+            or result.get("failed_tests") != [] or result.get("marker_expr") != "not live"
+            or not isinstance(passed, int) or isinstance(passed, bool) or passed <= 0):
+        raise ValueError("passing full validation receipt is required before build")
+    expected = source["sha256"]
+    if (receipt.get("source_identity_before") != expected
+            or receipt.get("source_identity_after") != expected):
+        raise ValueError("full validation receipt source is stale or changed")
+    return receipt
+
+
 def build_package(delta: str, reuse_sidecar: bool = False, clean_incomplete: bool = False) -> Path:
+    before = source_identity()
+    _require_full_validation(before)
     emit_stage("build-package")
     build_preflight(clean_incomplete=clean_incomplete)
     chain = toolchain()
@@ -378,7 +403,6 @@ def build_package(delta: str, reuse_sidecar: bool = False, clean_incomplete: boo
     package = confined_package(FRONTEND / f".current-build-staging-{stamp}")
     if package.exists():
         raise FileExistsError(package)
-    before = source_identity()
     if reuse_sidecar:
         receipt = json.loads((ROOT / "dist-sidecar" / "BUILD_INFO.json").read_text(encoding="utf-8"))
         if receipt.get("SOURCE_SHA256") != source_identity(backend_only=True)["sha256"]:
@@ -397,7 +421,7 @@ def build_package(delta: str, reuse_sidecar: bool = False, clean_incomplete: boo
     hashes = {key: digest(path) for key, path in packaged_paths(package).items()}
     if hashes["BACKEND_SHA256"] != digest(ROOT / "dist-sidecar" / "zara-backend.exe"):
         raise RuntimeError("packaged backend does not match the new sidecar")
-    installers = list(package.glob("ZARA 3.0 Setup *.exe"))
+    installers = list(package.glob("TROPA dev Setup *.exe"))
     if len(installers) != 1:
         raise RuntimeError("expected exactly one newly built installer")
     info = {"BUILD_ID": f"zara-current-{stamp}", "BUILD_TIMESTAMP": datetime.now().astimezone().isoformat(),

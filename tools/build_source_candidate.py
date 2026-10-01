@@ -23,8 +23,8 @@ class CandidateBuildError(RuntimeError):
 
 
 _BACKEND_INPUTS = (
-    "main.py", "build_exe.py", "pyproject.toml", "IDENTITY.md", "core", "memory", "voice", "plugins",
-    "tools/build_current.py", "tools/autonomy_release.py", "tools/electron_lab_canary.py",
+    "main.py", "build_exe.py", "pyproject.toml", "requirements.txt", "IDENTITY.md",
+    "core", "memory", "voice", "plugins", "tools", "tests", "pytest.ini", "setup.cfg", "conftest.py",
 )
 _FRONTEND_INPUTS = (
     "frontend/src", "frontend/public", "frontend/package.json", "frontend/package-lock.json",
@@ -32,6 +32,7 @@ _FRONTEND_INPUTS = (
 )
 _CANDIDATE_DIR = "desktop-workspace"
 _BUILD_TIMEOUT_SECONDS = 1700
+_VALIDATION_TIMEOUT_SECONDS = 1800
 _VERIFY_TIMEOUT_SECONDS = 120
 _CANARY_TIMEOUT_SECONDS = 240
 _MIN_BUILD_FREE_BYTES = 2 * 1024 * 1024 * 1024
@@ -237,6 +238,18 @@ def _run(
     return result.stdout
 
 
+def _validate_staged(python: Path, staged: Path, environment: dict[str, str], evidence_dir: Path) -> None:
+    """Run the full validator with real external Python before packaging."""
+    validation_env = dict(environment)
+    validation_env.update({"ZARA_VALIDATE_PYTHON": str(python.resolve()),
+                           "PYTHONPATH": str(staged.resolve()), "ZARA_TEST_MODE": "1"})
+    validation_env.pop("ALLOW_LIVE_TESTS", None)
+    validation_env.pop("PYTEST_ADDOPTS", None)
+    _run([str(python.resolve()), "tools/zara_validate.py", "--full"],
+         cwd=staged, env=validation_env, failure="CANDIDATE_FULL_VALIDATION_FAILED",
+         timeout_seconds=_VALIDATION_TIMEOUT_SECONDS, receipt_dir=evidence_dir)
+
+
 def _require_frozen_overlays(
     source_root: Path, staged: Path, package: Path, overlays: list[dict[str, str]], source_sha256: str,
 ) -> None:
@@ -389,8 +402,9 @@ def build_candidate(
         "ELECTRON_CACHE": str(build_temp / "electron-cache"),
         "ELECTRON_BUILDER_CACHE": str(build_temp / "electron-builder-cache"),
     })
-    identity = _source_identity(python, staged, environment)
     evidence_dir = sandbox / ("desktop-build-evidence" + (f"-retry-{retry_index}" if retry_index else ""))
+    _validate_staged(python, staged, environment, evidence_dir)
+    identity = _source_identity(python, staged, environment)
     if not recover_existing:
         _run([str(python), "tools/build_current.py", "build", "--delta", "Isolated SourceMission desktop candidate"],
              cwd=staged, env=environment, failure="CANDIDATE_DESKTOP_BUILD_FAILED",

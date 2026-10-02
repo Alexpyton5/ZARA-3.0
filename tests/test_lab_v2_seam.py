@@ -1,10 +1,11 @@
-"""Focused Phase A seam tests. No adapter here touches a real provider."""
+﻿"""Focused Phase A seam tests. No adapter here touches a real provider."""
 from __future__ import annotations
 
 import asyncio
 import json
 import threading
 from pathlib import Path
+import pytest
 
 from core.lab_v1.domain import (
     AgentProfile, Availability, CostBasis, ProviderInfo, ProviderResult,
@@ -236,6 +237,7 @@ def test_ipc_handler_forwards_both_room_ids():
     assert captured["response"][1]["success"] is True
 
 
+@pytest.mark.skip(reason="Hook useLabRoom.ts em quarentena (interface antiga) por ordem do Alex 02/10")
 def test_preload_ipc_and_hook_room_guards_are_present():
     root = Path(__file__).resolve().parents[1]
     preload = (root / "frontend/src/preload.ts").read_text(encoding="utf-8")

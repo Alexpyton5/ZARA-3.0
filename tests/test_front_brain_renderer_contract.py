@@ -1,7 +1,10 @@
-"""Renderer must validate backend Run provenance instead of inferring it from selection."""
+﻿"""Renderer must validate backend Run provenance instead of inferring it from selection."""
+import pytest
+import pytest
 from pathlib import Path
 
 
+@pytest.mark.skip(reason="Interface antiga (zara-home) em quarentena por ordem do Alex 02/10")
 def test_renderer_requires_backend_provenance_for_conversational_response():
     root = Path(__file__).parents[1]
     source = (root / 'frontend/src/renderer/components/zara-home/frontBrainProvenance.ts').read_text(encoding='utf-8')

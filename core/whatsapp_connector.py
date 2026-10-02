@@ -190,6 +190,12 @@ class ConectorWhatsApp:
     def configurado(self) -> bool:
         return self.transporte is not None
 
+    @property
+    def esta_viva(self) -> bool:
+        """A ponte falou com o canal há pouco? É o único fato que importa,
+        não a existência do objeto. (Mesmo padrão da PonteTelegram.)"""
+        return (time.time() - self._ultimo_sucesso) < (_INTERVAL_POLL * 12)
+
     @staticmethod
     def _arquivo_marcador() -> Path | None:
         try:

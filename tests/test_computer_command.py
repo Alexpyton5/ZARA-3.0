@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.actions import computer_command as cc  # noqa: E402
-from core.action_registry import get_registry  # noqa: E402
+from core.action_registry import ActionResult, ActionSpec, get_registry  # noqa: E402
 
 
 def plan_of(text):
@@ -21,6 +21,45 @@ def plan_of(text):
 def test_abrir_bloco_de_notas():
     plan = plan_of("abra o bloco de notas")
     assert plan == [{"action": "os_app", "params": {"app": "notepad"}}]
+
+
+def test_fechar_bloco_de_notas():
+    plan = plan_of("fechar o bloco de notas")
+    assert plan == [{"action": "__close_named__", "params": {"query": "bloco de notas"}}]
+
+
+def test_fechar_janela_exige_alvo_unico(monkeypatch):
+    class FakeRegistry:
+        def execute(self, name, **params):
+            if name == "computer_list_windows":
+                return ActionResult(True, data={"windows": [
+                    {"hwnd": 10, "title": "Sem título - Bloco de Notas"},
+                    {"hwnd": 11, "title": "Notas - Bloco de Notas"},
+                ]})
+            raise AssertionError(f"Não deveria executar {name} {params}")
+
+    monkeypatch.setattr(cc, "get_registry", lambda: FakeRegistry())
+    result = cc._resolve_close_named("bloco de notas")
+    assert not result.success
+    assert "2 janelas" in result.error
+
+
+def test_fechar_janela_despacha_e_exige_resultado(monkeypatch):
+    calls = []
+
+    class FakeRegistry:
+        def execute(self, name, **params):
+            calls.append((name, params))
+            if name == "computer_list_windows":
+                return ActionResult(True, data={"windows": [{"hwnd": 10, "title": "Sem título - Bloco de Notas"}]})
+            if name == "window_close":
+                return ActionResult(True, output="Janela fechada e verificada.", verificado=True)
+            raise AssertionError(name)
+
+    monkeypatch.setattr(cc, "get_registry", lambda: FakeRegistry())
+    result = cc._resolve_close_named("bloco de notas")
+    assert result.success and result.verificado
+    assert calls[-1] == ("window_close", {"hwnd": 10})
 
 
 def test_clique_coordenadas():
@@ -73,13 +112,14 @@ def test_desconhecido_recusa_honesta():
     assert "Não entendi" in refusal
 
 
-def test_trava_segura_com_chave_desligada():
-    """Com pc_control_allowed=False, a action nem executa: o registry barra."""
+def test_sem_grant_bloqueia_controle():
+    """Ordem do Alex (02/10/2026): sem grant via WhatsApp, o PC não é controlado."""
     reg = get_registry()
-    assert reg.pc_control_allowed is False, "a trava precisa estar DESLIGADA neste teste"
-    result = reg.execute("computer_command", command="clique em 10 10")
-    assert result.success is False
-    assert "Supercérebro" in result.error
+    spec = ActionSpec(name="fake_pc", description="", parameters={}, capability="PC_CONTROL")
+    blocked, decision = reg._check_action_gates("fake_pc", spec, {})
+    assert blocked is not None
+    assert blocked.success is False
+    assert "Superc" in blocked.error
 
 
 def test_auditoria_nao_vaza_texto():

@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import profileAndroid from '../../../assets/zara-home/profile-android.png';
 import zaraLogo from '../../../assets/zara-home/zara-mark.svg';
-import { SupercerebroKey } from '../zara/interface/SupercerebroKey';
 
 // Itens 1:1 com o MASTER (ordem exata, incluindo "Dispositivos").
 const NAV_ITEMS: Array<{ label: string; Icon: typeof House }> = [
@@ -36,10 +35,6 @@ export function Sidebar({ active, onSelect, userName, userPhotoUrl }: SidebarPro
       <div className="zh-sidebar-brand">
         <img src={zaraLogo} alt="Logo ZARA" />
         <span>ZARA</span>
-      </div>
-      {/* Chave manual do Supercerebro (Alex, 27/09) - agora visivel de verdade. */}
-      <div style={{ padding: '10px 12px 2px' }}>
-        <SupercerebroKey />
       </div>
       <nav className="zh-nav">
         {NAV_ITEMS.map(({ label, Icon }) => (

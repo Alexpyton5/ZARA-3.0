@@ -20,6 +20,14 @@ def _isolated_registry() -> ActionRegistry:
     return registry
 
 
+def _grant_ok(monkeypatch, tmp_path):
+    """Portão do PC exige grant WhatsApp válido (ordem do Alex, 02/10/2026)."""
+    from core import supercerebro_grant as sg
+    p = tmp_path / "whatsapp_grant.json"
+    sg.write_grant(minutes=30, path=p)
+    monkeypatch.setenv("ZARA_WHATSAPP_GRANT_PATH", str(p))
+
+
 @pytest.mark.parametrize(
     "untrusted_confirmation",
     [None, False, 0, 1, "true", "false", {}, []],
@@ -86,7 +94,8 @@ def test_medium_risk_stays_closed_until_separately_authorized():
     assert calls == ["ran", "ran"]
 
 
-def test_supercerebro_off_blocks_non_read_only_even_with_confirmation():
+def test_retired_supercerebro_field_does_not_block_pc_control(monkeypatch, tmp_path):
+    _grant_ok(monkeypatch, tmp_path)
     registry = _isolated_registry()
     calls: list[str] = []
     registry.register(
@@ -98,9 +107,8 @@ def test_supercerebro_off_blocks_non_read_only_even_with_confirmation():
 
     result = registry.execute("fake_pc_control", confirm=True)
 
-    assert not result.success
-    assert "Superc" in result.error
-    assert calls == []
+    assert result.success
+    assert calls == ["ran"]
 
 
 def test_supercerebro_off_keeps_sanitized_read_only_available():
@@ -123,7 +131,8 @@ def test_registration_normalizes_known_policy_values():
     assert spec.capability == "PC_CONTROL"
 
 
-def test_legacy_local_pc_control_uses_existing_gate():
+def test_legacy_local_pc_control_uses_whatsapp_grant(monkeypatch, tmp_path):
+    _grant_ok(monkeypatch, tmp_path)
     registry = _isolated_registry()
     calls: list[str] = []
     registry.register(
@@ -133,9 +142,9 @@ def test_legacy_local_pc_control_uses_existing_gate():
     )
 
     assert registry.get_spec("legacy_pc_control").capability == "PC_CONTROL"
-    blocked = registry.execute("legacy_pc_control", confirm=True)
-    assert not blocked.success
-    assert calls == []
+    result = registry.execute("legacy_pc_control", confirm=True)
+    assert result.success
+    assert calls == ["ran"]
 
 
 @pytest.mark.parametrize(

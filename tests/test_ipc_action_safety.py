@@ -1,4 +1,4 @@
-"""IPC safety tests using only in-memory actions and a fake Hermes session."""
+"""IPC action truth with the retired Supercerebro key."""
 
 import asyncio
 
@@ -61,6 +61,14 @@ def restore_global_policy():
     registry.medium_risk_open = previous_medium
 
 
+def _grant_ok(monkeypatch, tmp_path):
+    """Portão do PC exige grant WhatsApp válido (ordem do Alex, 02/10/2026)."""
+    from core import supercerebro_grant as sg
+    p = tmp_path / "whatsapp_grant.json"
+    sg.write_grant(minutes=30, path=p)
+    monkeypatch.setenv("ZARA_WHATSAPP_GRANT_PATH", str(p))
+
+
 def _handler():
     sent: list[IPCMessage] = []
 
@@ -83,8 +91,8 @@ def test_toggle_rejects_truthy_non_boolean_input():
         )
     )
 
-    assert not handler.supercerebro_active
-    assert not get_registry().pc_control_allowed
+    assert handler.supercerebro_active
+    assert get_registry().pc_control_allowed
     assert hermes.enable_calls == 0
     assert sent[-1].error == "Active state must be a boolean"
 
@@ -105,7 +113,7 @@ def test_toggle_controls_capability_but_does_not_remove_risk_gate():
     assert sent[-1].response["active"] is True
 
 
-def test_manual_key_enables_locally_without_hermes():
+def test_retired_key_never_starts_idle_monitor_or_hermes():
     handler, sent = _handler()
     handler.hermes = FakeHermes(connects=False)
 
@@ -118,13 +126,12 @@ def test_manual_key_enables_locally_without_hermes():
     assert handler.supercerebro_active
     assert get_registry().pc_control_allowed
     assert handler.hermes.enable_calls == 0
-    assert handler._supercerebro_auto_off.started == 1
-    assert sent[-2].type == "supercerebro-change"
-    assert sent[-2].active is True
+    assert handler._supercerebro_auto_off.started == 0
     assert sent[-1].response["active"] is True
+    assert sent[-1].response["key_required"] is False
 
 
-def test_disable_revokes_permission_and_stops_auto_off_monitor():
+def test_old_disable_request_cannot_revoke_permanent_control():
     handler, sent = _handler()
     handler.hermes = FakeHermes(disable_raises=True)
     asyncio.run(
@@ -139,12 +146,11 @@ def test_disable_revokes_permission_and_stops_auto_off_monitor():
         )
     )
 
-    assert not handler.supercerebro_active
-    assert not get_registry().pc_control_allowed
+    assert handler.supercerebro_active
+    assert get_registry().pc_control_allowed
     assert handler.hermes.disable_calls == 0
-    assert handler._supercerebro_auto_off.stopped == 1
-    assert sent[-2].active is False
-    assert sent[-1].response["active"] is False
+    assert handler._supercerebro_auto_off.stopped == 0
+    assert sent[-1].response["active"] is True
 
 
 def test_status_reports_the_current_local_key_state():
@@ -159,21 +165,22 @@ def test_status_reports_the_current_local_key_state():
 
     assert sent[-1].response["active"] is True
     assert sent[-1].response["enabled"] is True
+    assert sent[-1].response["key_required"] is False
 
 
-def test_auto_off_updates_capability_gate_and_renderer_event():
+def test_old_auto_off_callback_does_not_revoke_control():
     handler, sent = _handler()
     handler._set_supercerebro_state(True)
 
     asyncio.run(handler._supercerebro_auto_off.trigger("idle-timeout"))
 
-    assert not handler.supercerebro_active
-    assert not get_registry().pc_control_allowed
-    assert sent[-1].type == "supercerebro-change"
-    assert sent[-1].active is False
+    assert handler.supercerebro_active
+    assert get_registry().pc_control_allowed
+    assert sent == []
 
 
-def test_ipc_cannot_bypass_supercerebro_off_with_confirm_true(capsys):
+def test_ipc_pc_action_with_grant_and_does_not_log_private_params(capsys, monkeypatch, tmp_path):
+    _grant_ok(monkeypatch, tmp_path)
     handler, sent = _handler()
     registry = get_registry()
     calls: list[str] = []
@@ -201,8 +208,8 @@ def test_ipc_cannot_bypass_supercerebro_off_with_confirm_true(capsys):
 
     response = next(message for message in reversed(sent) if message.type == "response")
     result = response.response["result"]
-    assert not result.success
-    assert calls == []
+    assert result.success
+    assert calls == ["must-not-be-logged"]
     assert "must-not-be-logged" not in capsys.readouterr().out
 
 

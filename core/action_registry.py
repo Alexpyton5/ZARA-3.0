@@ -7,12 +7,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import re
 import threading
 import time
+import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from core.action_confirmation import (
     ConfirmationBroker,
@@ -59,6 +61,50 @@ class ActionSpec:
     capability: str = "READ_ONLY"  # READ_ONLY | PC_CONTROL | FILES_MUTATE | CODE_EXECUTION | SYSTEM_POWER
 
 
+def _json_schema_type(annotation) -> str:
+    """Map a type annotation to a JSON Schema type name.
+
+    Handles string annotations (modules with `from __future__ import
+    annotations`), Optional[X], X | None, and builtin generics.
+    Unknown annotations fall back to "string" (legacy default).
+    """
+    if isinstance(annotation, str):
+        text = annotation.strip().strip("'\"")
+        inner = text
+        m = re.match(r"(?i)^(?:optional|union)\[(.+)\]$", text)
+        if m:
+            inner = m.group(1).split(",")[0]
+        elif "|" in text:  # "int | None"
+            inner = text.split("|")[0]
+        name = inner.strip().lower()
+        if name in ("int", "integer"):
+            return "integer"
+        if name in ("float", "number"):
+            return "number"
+        if name in ("bool", "boolean"):
+            return "boolean"
+        if name.startswith("list") or name == "array":
+            return "array"
+        if name.startswith("dict") or name == "object":
+            return "object"
+        return "string"
+    origin = get_origin(annotation)
+    if origin is Union or origin is types.UnionType:
+        args = [a for a in get_args(annotation) if a is not type(None)]
+        return _json_schema_type(args[0]) if args else "string"
+    if origin is list:
+        return "array"
+    if origin is dict:
+        return "object"
+    return {
+        int: "integer",
+        float: "number",
+        bool: "boolean",
+        list: "array",
+        dict: "object",
+    }.get(annotation, "string")
+
+
 class ActionRegistry:
     """Central registry for all ZARA actions."""
 
@@ -87,7 +133,9 @@ class ActionRegistry:
         self.medium_risk_open = False
         # Capability gate (ZARA-PC-CONTROL-CAPABILITY-GATE-001): while False,
         # no PC_CONTROL action may run, even LOW risk. Set True by Supercérebro.
-        self.pc_control_allowed = False
+        # Alex retired the manual Supercerebro key on 2026-09-29. Retain this
+        # legacy field for callers, but PC_CONTROL no longer depends on it.
+        self.pc_control_allowed = True
 
         # Register core actions
         self._register_core_actions()
@@ -162,6 +210,10 @@ class ActionRegistry:
     def _infer_parameters(self, func: Callable) -> dict:
         """Infer JSON Schema from function signature."""
         sig = inspect.signature(func)
+        try:
+            hints = get_type_hints(func)
+        except Exception:
+            hints = {}
         properties = {}
         required = []
 
@@ -169,18 +221,8 @@ class ActionRegistry:
             if param_name in ("self", "cls", "context"):
                 continue
 
-            param_type = "string"
-            if param.annotation != inspect.Parameter.empty:
-                if param.annotation is int:
-                    param_type = "integer"
-                elif param.annotation is float:
-                    param_type = "number"
-                elif param.annotation is bool:
-                    param_type = "boolean"
-                elif param.annotation is list:
-                    param_type = "array"
-                elif param.annotation is dict:
-                    param_type = "object"
+            annotation = hints.get(param_name, param.annotation)
+            param_type = _json_schema_type(annotation)
 
             properties[param_name] = {"type": param_type}
 
@@ -259,8 +301,8 @@ class ActionRegistry:
         Ordem rígida dos portões:
           1. Fronteira de dinheiro — BLOQUEADA sempre, antes de tudo
              (nem confirmação, nem modo autônomo, nem desafio contornam).
-          2. Trava do Supercérebro p/ PC_CONTROL — chave manual OU grant
-             via WhatsApp (fail-closed). NÃO é confirmação.
+          2. Controle do PC: exige autorização do Alex via WhatsApp
+             (ordem direta dele, 02/10/2026; fail-closed, sem bypass).
           3. Autonomia ligada (padrão, "sim sempre"): ação direta, sem
              desafio e sem exigir confirm.
           4. Modo legado (ZARA_AUTONOMY=perguntar): desafios como antes.
@@ -284,7 +326,8 @@ class ActionRegistry:
 
             money_blocked, money_reason = is_money_action(name, params)
         except Exception:
-            money_blocked, money_reason = False, ""
+            # A failed policy check must never become permission to move money.
+            money_blocked, money_reason = True, "politica-indisponivel"
         if money_blocked:
             decision["money"] = money_reason
             decision["why"] = "bloqueio:dinheiro"
@@ -306,33 +349,35 @@ class ActionRegistry:
                 decision,
             )
 
-        # --- 2. TRAVA DO SUPERCÉREBRO p/ PC_CONTROL ---
-        # Chave manual (pc_control_allowed) OU grant via WhatsApp com prazo
-        # curto. Arquivo ausente/expirado/malformado = NEGAR (fail-closed).
+        # --- 2. CONTROLE DO PC (ordem direta do Alex, 02/10/2026) ---
+        # PC_CONTROL exige autorização do Alex via WhatsApp, com prazo curto.
+        # Arquivo ausente/expirado/malformado ou erro na checagem = NEGAR
+        # (fail-closed). Sem bypass: nem chave manual, nem autonomia, nem
+        # confirmação contornam este portão.
         if spec.capability == "PC_CONTROL":
             grant_ok = False
             grant_reason = ""
-            if not self.pc_control_allowed:
-                try:
-                    from core import supercerebro_grant as _sg
+            try:
+                from core import supercerebro_grant as _sg
 
-                    grant_ok, grant_reason, _info = _sg.check_whatsapp_grant()
-                except Exception:
-                    grant_ok, grant_reason = False, "grant-check-error"
-            decision["grant"] = (
-                grant_reason or ("chave-manual" if self.pc_control_allowed else "")
-            )
-            if not self.pc_control_allowed and not grant_ok:
+                grant_ok, grant_reason, _info = _sg.check_whatsapp_grant()
+            except Exception:
+                grant_ok, grant_reason = False, "grant-check-error"
+            decision["grant"] = grant_reason or ""
+            if not grant_ok:
                 if isinstance(proof, ConfirmationProof):
-                    self._confirmation_broker.cancel(proof.confirmation_id)
-                decision["why"] = "trava:supercerebro"
+                    try:
+                        self._confirmation_broker.cancel(proof.confirmation_id)
+                    except Exception:
+                        pass
+                decision["why"] = "trava:whatsapp-grant"
                 return (
                     ActionResult(
                         success=False,
                         error=(
-                            f"Action '{name}' exige permissão de controle do PC "
-                            f"(capability={spec.capability}, Supercérebro OFF). "
-                            "Para controlar o computador, ative o Supercérebro."
+                            f"Ação '{name}' BLOQUEADA pela trava do Supercérebro: "
+                            "controle do PC exige autorização do Alex via WhatsApp "
+                            f"({grant_reason or 'sem grant válido'})."
                         ),
                         duration_ms=0.0,
                         verificado=False,
@@ -342,8 +387,7 @@ class ActionRegistry:
 
         # --- 3. AUTONOMIA (diretriz do Alex: "sim sempre") ---
         # Ação direta: sem desafio one-shot, sem exigir confirm. A fronteira
-        # de dinheiro e a trava do Supercérebro já foram aplicadas acima e
-        # NUNCA são afrouxadas por este ponto.
+        # de dinheiro já foi aplicada acima.
         try:
             from core.autonomy_policy import autonomy_enabled
 
@@ -641,13 +685,20 @@ class ActionRegistry:
             self._audit_block(name, spec, blocked, decision)
             return blocked
 
-        try:
+        # Teto global de tempo por categoria de risco (M2-corujão 2026-10-02):
+        # uma action travada não pode segurar a corrotina para sempre.
+        risk = (spec.risk if spec else "LOW").upper()
+        timeout = {"LOW": 30, "MEDIUM": 120, "HIGH": 300}.get(risk, 30)
+
+        async def _run() -> Any:
             if inspect.iscoroutinefunction(func):
-                result = await func(**kwargs)
-            else:
-                # Run sync function in thread pool
-                loop = asyncio.get_running_loop()
-                result = await loop.run_in_executor(None, lambda: func(**kwargs))
+                return await func(**kwargs)
+            # Run sync function in thread pool
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, lambda: func(**kwargs))
+
+        try:
+            result = await asyncio.wait_for(_run(), timeout=timeout)
 
             duration = (time.perf_counter() - start) * 1000
 
@@ -659,6 +710,14 @@ class ActionRegistry:
             else:
                 return ActionResult(success=True, output=str(result), duration_ms=duration)
 
+        except asyncio.TimeoutError:
+            duration = (time.perf_counter() - start) * 1000
+            return ActionResult(
+                success=False,
+                error=f"TIMEOUT: action '{name}' excedeu o limite de {timeout}s (risco {risk})",
+                data={"timeout_s": timeout, "risk": risk, "action": name},
+                duration_ms=duration,
+            )
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
             return ActionResult(success=False, error=str(e), duration_ms=duration)

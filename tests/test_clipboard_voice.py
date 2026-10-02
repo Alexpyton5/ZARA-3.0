@@ -7,12 +7,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 import core.actions.os_ops  # noqa: F401 - registers clipboard actions
+import core.supercerebro_grant as sg
 from core.action_registry import execute_action, get_registry
 from core.ipc_handlers import IPCHandler
 
 
 @pytest.fixture
-def clipboard(monkeypatch):
+def clipboard(monkeypatch, tmp_path):
     state = {"value": "ANTES"}
     fake = types.SimpleNamespace(
         paste=lambda: state["value"],
@@ -20,14 +21,16 @@ def clipboard(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "pyperclip", fake)
     get_registry().medium_risk_open = False
-    monkeypatch.setattr(get_registry(), "pc_control_allowed", True)
+    # Portao do WhatsApp: testes exercem a area de transferencia COM grant valido.
+    grant = tmp_path / "grant.json"
+    sg.write_grant(path=grant)
+    monkeypatch.setenv("ZARA_WHATSAPP_GRANT_PATH", str(grant))
     return state
 
 
 @pytest.mark.asyncio
 async def test_voice_write_requires_natural_confirmation_then_readback(clipboard):
     handler = IPCHandler(AsyncMock())
-    get_registry().pc_control_allowed = True
     preview = await handler._try_pc_intent(
         "Zara, coloque ‘reunião amanhã às 10’ na área de transferência"
     )

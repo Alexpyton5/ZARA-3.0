@@ -205,8 +205,10 @@ def test_execute_noop_negado_sem_grant(registry, grant_file):
     assert "Superc" in result.error
 
 
-def test_chave_manual_continua_valendo(registry, grant_file):
-    """A chave manual LIGADA permite mesmo sem grant (OR, nao substituicao)."""
+def test_chave_manual_nao_burla_grant_whatsapp(registry, grant_file):
+    """Ordem do Alex (02/10/2026): controle do PC SÓ com autorização via WhatsApp.
+    A chave manual LIGADA não burla o portão."""
     registry.pc_control_allowed = True
     result = registry.execute("grant_test_noop")
-    assert result.success is True
+    assert result.success is False
+    assert "Superc" in result.error

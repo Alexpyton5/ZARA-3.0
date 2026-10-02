@@ -86,7 +86,7 @@ export function ZaraHome() {
         <WindowControls />
       </div>
 
-      <div className="zh-zoe-workspace" hidden={activeNav !== 'Zoe'}><ZoeAppPanel /></div>
+      <div className="zh-zoe-workspace" hidden={activeNav !== 'Zoe'}><ZoeAppPanel visible={activeNav === 'Zoe'} /></div>
       {activeNav !== 'Zoe' && <div className="zh-content">
         <div className="zh-top-bar">
           <Header userFirstName={userName.split(' ')[0] ?? userName} />

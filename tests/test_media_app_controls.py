@@ -17,12 +17,20 @@ from core.ipc_handlers import IPCHandler
 from core.pc_voice_intent import PcVoiceIntentDetector
 
 
-def test_youtube_open_uses_fixed_home_route(monkeypatch):
-    # This route test represents an explicitly enabled local-control key.
+def _grant_ok(monkeypatch, tmp_path):
+    """Portão do PC exige grant WhatsApp válido (ordem do Alex, 02/10/2026)."""
+    from core import supercerebro_grant as sg
+    p = tmp_path / "whatsapp_grant.json"
+    sg.write_grant(minutes=30, path=p)
+    monkeypatch.setenv("ZARA_WHATSAPP_GRANT_PATH", str(p))
+
+
+def test_youtube_open_uses_fixed_home_route(monkeypatch, tmp_path):
+    # This route test needs a valid WhatsApp grant for the PC gate.
+    _grant_ok(monkeypatch, tmp_path)
     open_url = Mock(return_value=ActionResult(success=True, output="sent", data={"dispatch": "DISPATCH_PROVEN"}))
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
-    registry.pc_control_allowed = True
     assert load_capability("browser_open_url")
 
     result = registry.execute("youtube_open")
@@ -41,7 +49,8 @@ def test_youtube_open_uses_fixed_home_route(monkeypatch):
         ("spotify_search", "jazz focus", "open.spotify.com/search/jazz%20focus"),
     ],
 )
-def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, expected):
+def test_media_search_uses_fixed_service_host(monkeypatch, tmp_path, action_name, query, expected):
+    _grant_ok(monkeypatch, tmp_path)
     opened = []
 
     def open_url(url):
@@ -50,7 +59,6 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
 
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
-    registry.pc_control_allowed = True
     assert load_capability("browser_open_url")
 
     result = registry.execute(action_name, query=query)
@@ -68,8 +76,9 @@ def test_media_search_uses_fixed_service_host(monkeypatch, action_name, query, e
         ("spotify_search", {"query": "jazz focus"}, "open.spotify.com/search/jazz%20focus"),
     ],
 )
-def test_browser_opening_media_actions_work(monkeypatch, action_name, kwargs, expected):
-    # The real safety contract requires the Supercerebro key for browser IO.
+def test_browser_opening_media_actions_work(monkeypatch, tmp_path, action_name, kwargs, expected):
+    # The real safety contract requires a WhatsApp grant for browser IO.
+    _grant_ok(monkeypatch, tmp_path)
     calls: list[str] = []
 
     def open_url(url):
@@ -78,7 +87,6 @@ def test_browser_opening_media_actions_work(monkeypatch, action_name, kwargs, ex
 
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
-    registry.pc_control_allowed = True
     assert load_capability("browser_open_url")
 
     allowed = registry.execute(action_name, **kwargs)
@@ -87,17 +95,16 @@ def test_browser_opening_media_actions_work(monkeypatch, action_name, kwargs, ex
     assert expected in calls[0]
 
 
-def test_media_browser_action_remains_blocked_with_key_off(monkeypatch):
+def test_media_browser_action_runs_with_whatsapp_grant(monkeypatch, tmp_path):
+    _grant_ok(monkeypatch, tmp_path)
     open_url = Mock(return_value=ActionResult(success=True, data={"dispatch": "DISPATCH_PROVEN"}))
     monkeypatch.setattr(media_apps, "_send_url_to_default_browser", open_url)
     registry = get_registry()
-    registry.pc_control_allowed = False
 
     result = registry.execute("youtube_open")
 
-    assert result.success is False
-    assert "Supercérebro OFF" in result.error
-    open_url.assert_not_called()
+    assert result.success is True
+    open_url.assert_called_once()
 
 
 @pytest.mark.parametrize("query", ["", "   ", "x" * 201, "bad\nquery"])

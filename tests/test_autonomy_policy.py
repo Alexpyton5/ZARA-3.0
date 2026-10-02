@@ -25,6 +25,14 @@ def _isolated_registry() -> ActionRegistry:
     return registry
 
 
+def _grant_ok(monkeypatch, tmp_path):
+    """Portão do PC exige grant WhatsApp válido (ordem do Alex, 02/10/2026)."""
+    from core import supercerebro_grant as sg
+    p = tmp_path / "whatsapp_grant.json"
+    sg.write_grant(minutes=30, path=p)
+    monkeypatch.setenv("ZARA_WHATSAPP_GRANT_PATH", str(p))
+
+
 @pytest.fixture
 def temp_audit(tmp_path, monkeypatch):
     log = AuditLog(db_path=tmp_path / "audit.db")
@@ -90,8 +98,9 @@ def test_legacy_mode_still_issues_high_risk_challenge(monkeypatch):
     assert calls == []
 
 
-def test_pc_control_gate_still_holds_in_autonomy_mode():
-    """A trava do Supercérebro NÃO é confirmação: continua fail-closed."""
+def test_pc_control_runs_with_whatsapp_grant_in_autonomy_mode(monkeypatch, tmp_path):
+    """Ordem do Alex (02/10/2026): PC só com grant via WhatsApp; auditado pelo registry."""
+    _grant_ok(monkeypatch, tmp_path)
     registry = _isolated_registry()
     calls: list[str] = []
     registry.register(
@@ -100,9 +109,8 @@ def test_pc_control_gate_still_holds_in_autonomy_mode():
 
     result = registry.execute("fake_pc")
 
-    assert not result.success
-    assert "Superc" in result.error
-    assert calls == []
+    assert result.success
+    assert calls == ["ran"]
 
 
 # ------------------------------------------------- B2: fronteira de dinheiro
@@ -187,6 +195,25 @@ def test_money_blocked_before_challenge_is_issued(monkeypatch):
     assert not result.success
     assert "BLOQUEADA" in result.error
     assert result.data is None or "confirmation" not in (result.data or {})
+
+
+def test_money_policy_failure_blocks_action(monkeypatch):
+    """Policy errors fail closed instead of silently allowing an action."""
+    import core.money_boundary as money_boundary
+
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("policy unavailable")
+
+    monkeypatch.setattr(money_boundary, "is_money_action", unavailable)
+    registry = _isolated_registry()
+    calls: list[str] = []
+    registry.register("computer_click", lambda: calls.append("ran"), risk="LOW", capability="PC_CONTROL")
+
+    result = registry.execute("computer_click")
+
+    assert not result.success
+    assert "BLOQUEADA" in result.error
+    assert calls == []
 
 
 # ---------------------------------------------------------------- B3: auditoria

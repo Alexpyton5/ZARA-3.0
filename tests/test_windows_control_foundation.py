@@ -11,6 +11,7 @@ import importlib
 import pytest
 
 from core.action_registry import get_registry
+import core.supercerebro_grant as sg
 from core.tool_router import ToolRequest, ToolRouter
 
 
@@ -25,10 +26,13 @@ def registry(foundation):
 
 
 @pytest.fixture(autouse=True)
-def _enable_pc_control_for_foundation_contract(monkeypatch):
+def _grant_whatsapp_for_foundation_contract(monkeypatch, tmp_path):
     # These tests exercise platform and risk behavior behind the
-    # Supercérebro gate. IPC safety tests cover the gate itself.
-    monkeypatch.setattr(get_registry(), "pc_control_allowed", True)
+    # Supercerebro WhatsApp gate, with a valid grant. IPC safety
+    # tests cover the gate itself.
+    grant = tmp_path / "grant.json"
+    sg.write_grant(path=grant)
+    monkeypatch.setenv("ZARA_WHATSAPP_GRANT_PATH", str(grant))
 
 
 def test_actions_register_in_existing_action_registry_and_route_without_new_router(foundation, registry, monkeypatch):

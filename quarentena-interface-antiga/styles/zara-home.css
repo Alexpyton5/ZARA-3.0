@@ -324,6 +324,8 @@
 .zoe-voice-toolbar { display:flex;align-items:center;justify-content:flex-end;gap:calc(7 * var(--u));color:#cce8dc;font-size:calc(13 * var(--u)); }
 .zoe-voice-toolbar button { display:inline-flex;align-items:center;justify-content:center;gap:calc(8 * var(--u));min-width:calc(145 * var(--u));min-height:calc(37 * var(--u));font-size:calc(12 * var(--u)); }
 .zoe-voice-toolbar select { background:#071a14;color:#dff7e9;border:1px solid #67b98c77;border-radius:6px;padding:4px 7px; }
+.zoe-voice-toolbar button.zoe-voice-live { border-color:#3fe8a3aa;animation:zoe-voice-pulse 2.2s ease-in-out infinite; }
+@keyframes zoe-voice-pulse { from { box-shadow:0 0 0 rgba(63,232,163,0); } to { box-shadow:0 0 calc(14 * var(--u)) rgba(63,232,163,.38); } }
 @media (max-aspect-ratio:4/3) {
   .zh-root { --u:.0598444vw;overflow-y:auto; }
   .zh-content { min-height:calc(941 * var(--u)); }

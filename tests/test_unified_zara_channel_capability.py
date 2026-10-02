@@ -149,7 +149,7 @@ async def test_front_brain_receives_factual_identity_channel_and_capabilities(fr
     assert 'channel=VOICE' in voice_prompt
     for call in adapter.calls:
         instructions = call['system']
-        assert 'mesma ZARA' in instructions
+        assert 'o mesmo motor' in instructions
         assert 'ambiente separado' in instructions
 
 

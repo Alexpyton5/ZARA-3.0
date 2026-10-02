@@ -1,0 +1,12 @@
+﻿LEIAME - quarentena da interface antiga (02/10/2026)
+
+Estes arquivos sao da INTERFACE ANTIGA (verde, estilo JARVIS velho), substituida pela interface nova (zara-nova, estilo claro) em 30/09/2026.
+Movidos para ca por ordem do Alex (verificada pela Sala de Reunioes, 02/10/2026). NADA foi apagado - so movido.
+
+Conteudo:
+- components/zara/ (2 arquivos)
+- components/zara-home/ (26 arquivos)
+- components/zara-lab-v2/ (7 arquivos)
+- styles/zara-home.css`r`n- styles/zh-drawer-motion.css (drawer da interface antiga, sem imports ativos)
+
+O App.tsx usa SOMENTE zara-nova; nenhum codigo ativo referencia estes arquivos.

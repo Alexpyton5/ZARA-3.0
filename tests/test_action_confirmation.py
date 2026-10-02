@@ -14,6 +14,14 @@ def _isolated_registry() -> ActionRegistry:
     return registry
 
 
+def _grant_ok(monkeypatch, tmp_path):
+    """Portão do PC exige grant WhatsApp válido (ordem do Alex, 02/10/2026)."""
+    from core import supercerebro_grant as sg
+    p = tmp_path / "whatsapp_grant.json"
+    sg.write_grant(minutes=30, path=p)
+    monkeypatch.setenv("ZARA_WHATSAPP_GRANT_PATH", str(p))
+
+
 def _proof(result):
     return result.data["confirmation"]
 
@@ -133,7 +141,8 @@ def test_expired_proof_is_rejected_without_sleeping():
     assert calls == []
 
 
-def test_capability_gate_runs_before_challenge_and_again_before_consumption():
+def test_retired_capability_gate_does_not_revoke_valid_high_risk_proof(monkeypatch, tmp_path):
+    _grant_ok(monkeypatch, tmp_path)
     registry = _isolated_registry()
     calls: list[str] = []
     registry.register(
@@ -143,20 +152,15 @@ def test_capability_gate_runs_before_challenge_and_again_before_consumption():
         capability="PC_CONTROL",
     )
 
-    blocked = registry.execute("terminal", command="echo safe")
-    assert blocked.data is None
-
-    registry.pc_control_allowed = True
     challenge = registry.execute("terminal", command="echo safe")
     proof = _proof(challenge)
     registry.pc_control_allowed = False
-    revoked = registry.execute_confirmed(
+    executed = registry.execute_confirmed(
         "terminal",
         proof["confirmation_id"],
         proof["action_fingerprint"],
         command="echo safe",
     )
-    registry.pc_control_allowed = True
     retry = registry.execute_confirmed(
         "terminal",
         proof["confirmation_id"],
@@ -164,10 +168,9 @@ def test_capability_gate_runs_before_challenge_and_again_before_consumption():
         command="echo safe",
     )
 
-    assert "Superc" in blocked.error
-    assert "Superc" in revoked.error
+    assert executed.success
     assert retry.error == "CONFIRMATION_INVALID"
-    assert calls == []
+    assert calls == ["echo safe"]
 
 
 def test_policy_metadata_change_invalidates_proof():

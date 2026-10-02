@@ -118,9 +118,14 @@ export function useVoiceEngine(): VoiceEngine {
   }, []);
 
   const speak = useCallback(async (text: string): Promise<void> => {
-    const result: any = await window.zaraIPC?.voice?.speakZoe?.(text);
-    if (result?.success !== true) {
-      throw new Error(result?.error || 'O motor não confirmou a fala.');
+    setBusy(true);
+    try {
+      const result: any = await window.zaraIPC?.voice?.speakZoe?.(text);
+      if (result?.success !== true) {
+        throw new Error(result?.error || 'O motor não confirmou a fala.');
+      }
+    } finally {
+      setBusy(false);
     }
   }, []);
 

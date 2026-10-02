@@ -2,6 +2,16 @@
 
 Atualizar conforme o trabalho progride. Não é histórico — é só o estado agora.
 
+## Checkpoint vigente Codex — 2026-10-02, portao de fonte fechado
+
+Tarefa TROPA-PILOT-SHARED-RECORD-20261001: registro best-effort de turnos finais texto/voz em conversas/ do vault, como referencias citadas, sem extracao de fatos/permissoes. Delta proprio em f1a4b48 (11 arquivos), mantendo deltas alheios fora do indice; main.ts/project_memory.py foram stageados parcialmente. Compromisso de custo/fail-closed e instalacao preservados.
+
+Full unica via Auto-Suite existente PASSED: 2026-10-02_18-55-51, 3602 passaram, 10 skipped, 4 deselected, zero falhas. Fonte 4dc4c7eb031a110d31e761bfe9f645e3c03876996c6764a8743f3d461646c7c9 igual antes/depois e ao principal, 15556 arquivos, hashes de 18 testes frontend separados. 31148 handles reais bloqueavam escrita/delete de fontes existentes; liberados em finally. Recibo copiado em .zara-tests/isolated-receipts/TROPA-PILOT-SHARED-RECORD-20261001/2026-10-02_18-55-51/. O HEAD Git antigo da projecao nao identifica o snapshot copiado; a identidade correta e o hash de fonte. A full principal antiga editada manualmente com source_changed=true foi preservada e nao foi usada como gate.
+
+117 Python afetados, 124 frontend e 19 inventario/build verdes. Revisao independente: token natural reproduzido e corrigido; testes do VoiceDock retirado substituidos por comportamento do hook real. Renderer/Electron typechecks e Vite repetidos apos a full e verdes. Nenhuma prova fisica de microfone/TTS por esses testes. Captura continua best-effort, sem outbox e sem promessa de detectar todo segredo.
+
+Publicacao em branch propria codex/pilot-archive-20261002: commit de fonte enviado e confirmado em origin/codex/pilot-archive-20261002. O commit inicial ocorreu no nome de branch bruno/seguranca-20261002 observado no checkout; a branch Codex foi criada no mesmo commit, sem mudar fontes nem reescrever refs de colegas. Nenhuma outra fonte/politica foi incluida. Proximo: publicar delta e handoff, auditar base antes de candidato isolado. Pacote atualizado, voz fisica e WhatsApp completo continuam NAO PROVADOS; resultados WhatsApp via Zoe no chat de origem. Handoff em docs/team-drafts/20261002/codex/handoff-registro-piloto.md. Vault fresco consultado; notas de colegas sao referencias, nao novas permissoes. Missao de cinco horas encerrada nao reiniciada.
+
 ## Retomada atual — Alex, 2026-10-01
 
 Esta retomada substitui a ordem operacional de setembro descrita abaixo; os checkpoints anteriores ficam preservados como referencia historica, nao como estado fresco.

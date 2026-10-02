@@ -2249,6 +2249,17 @@ class IPCHandler:
     async def handle_shared_brain_learn(self, msg: IPCMessage):
         from memory.second_brain_composition import is_safe_text
         from memory.shared_second_brain import SharedSecondBrain
+        payload = msg.payload or {}
+        if 'turn' in payload:
+            from memory.pilot_learning import valid_pilot_turn
+            turn = payload['turn']
+            if not valid_pilot_turn(turn):
+                await self.send_error(msg, 'Conversa inválida ou contém dados privados.')
+                return
+            path = await asyncio.to_thread(self.project_memory.record_pilot_turn, turn) if self.project_memory else None
+            await self.send_response(msg.request_id, {'success': bool(path), 'path': str(path or ''),
+                                                     'error': '' if path else 'Não foi possível registrar a conversa no vault.'})
+            return
         text = (msg.payload or {}).get('text')
         if (not isinstance(text, str) or not text.strip() or len(text) > 4000
                 or not is_safe_text(text) or SharedSecondBrain._sensitive(text)):
@@ -7232,11 +7243,12 @@ async def _run_windows_ipc(handler: IPCHandler):
                 msg = IPCMessage(**data)
                 if msg.type in {'voice-start', 'voice-stop', 'send-message'}:
                     print(f"[VOICE_TRACE] stage=IPC_RECEIVE type={msg.type}", flush=True)
-                if msg.type in {'voice-start', 'zoe-voice-speak', 'pilot-context'}:
+                if msg.type in {'voice-start', 'zoe-voice-speak', 'pilot-context', 'shared-brain-learn'}:
                     # Device startup and awaited speech must not hold the sole
                     # stdin consumer: mic chunks and stop need to reach Live
                     # while speech is still playing. Speech ordering remains
-                    # protected by _zoe_tts_lock in the handler.
+                    # protected by _zoe_tts_lock in the handler. Vault writes
+                    # also run here so slow storage cannot delay mic/stop.
                     task = asyncio.create_task(
                         handler.handle_message(msg),
                         name=f"ipc-{msg.type}-{msg.request_id}",

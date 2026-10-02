@@ -58,6 +58,44 @@ test('each ordinary turn consults the command executor before fetching fresh con
   assert.deepEqual(calls, ['command:Oi', 'context:Oi', 'command:Outra pergunta', 'context:Outra pergunta']);
 });
 
+test('OpenAI reply reader rejects an intervening user turn instead of selecting its answer', async () => {
+  const nodes = [
+    { role: 'user', id: 'u-one', text: 'Plano' }, { role: 'assistant', id: 'a-one', text: 'Proposta um' },
+    { role: 'user', id: 'u-two', text: 'Outra pergunta' }, { role: 'assistant', id: 'a-two', text: 'Resposta dois' },
+  ].map(node => ({ dataset: { messageAuthorRole: node.role }, getAttribute: (name: string) => name === 'data-message-id' ? node.id : null,
+    closest: () => null, querySelector: () => null, innerText: node.text, compareDocumentPosition: () => 4 }));
+  const webview = { executeJavaScript: async (code: string) => vm.runInNewContext(code, {
+    document: { querySelectorAll: () => nodes, querySelector: () => null }, Node: { DOCUMENT_POSITION_FOLLOWING: 4 },
+  }) };
+  const result = await readPilotReply(webview, 'openai', { submitted: true, confirmed: true, userId: 'u-one', previousAssistantId: 'old' });
+  assert.equal(result.correlation, 'superseded');
+  assert.equal(result.assistantId, '');
+  assert.equal(result.text, '');
+});
+
+test('OpenAI submission must confirm exactly the sent text, not merely a new last user node', async () => {
+  for (const incoming of ['sent', 'different', 'two-new'] as const) {
+    let inserted = '';
+    const user = (id: string, text: string) => ({ dataset: { messageAuthorRole: 'user' }, innerText: text,
+      getAttribute: (name: string) => name === 'data-message-id' ? id : null, closest: () => null, querySelector: () => null });
+    const nodes = [user('old', 'historical')];
+    const input = { tagName: 'DIV', innerText: '', focus: () => {} };
+    const button = { disabled: false, click: () => {
+      nodes.push(user('new', incoming === 'different' ? 'Outra pergunta' : inserted));
+      if (incoming === 'two-new') nodes.push(user('other', 'Outra pergunta'));
+    } };
+    const context = vm.createContext({
+      document: { querySelectorAll: () => nodes, querySelector: (selector: string) => selector === '#prompt-textarea' ? input : button,
+        execCommand: (_command: string, _flag: boolean, text: string) => { inserted = text; } },
+      requestAnimationFrame: (callback: () => void) => callback(), setTimeout: (callback: () => void) => callback(),
+    });
+    const result = await submitToPilot({ executeJavaScript: async code => vm.runInContext(code, context) }, 'openai', 'Plano', 'referencia');
+    assert.equal(result.submitted, true);
+    assert.equal(result.confirmed, incoming === 'sent');
+    assert.equal(result.userId, incoming === 'sent' ? 'new' : '');
+  }
+});
+
 test('handled commands return executor success or failure without querying context', async () => {
   for (const success of [true, false]) {
     let contexts = 0;
@@ -161,6 +199,17 @@ test('stopping a provider clicks only its stop control and never submits again',
     await cancelPilotReply({ executeJavaScript: async value => { code = value; } }, provider);
     assert.match(code, /stop\.click/);
     assert.doesNotMatch(code, /send-button|Enviar mensagem|insertText/);
+  }
+});
+
+test('ambiguous or superseded text replies cannot trigger the completion recorder', async () => {
+  for (const correlation of ['ambiguous', 'superseded'] as const) {
+    let completed = 0, calls = 0;
+    const webview = { executeJavaScript: async () => ++calls === 1
+      ? { submitted: true, confirmed: true, userId: 'user', previousAssistantId: 'old' }
+      : { assistantId: 'unrelated', text: 'Outra conversa.', busy: false, correlation } };
+    await assert.rejects(sendPilotMessage(webview, 'muse', 'Plano', () => false, undefined, () => { completed++; }), /Outra conversa/);
+    assert.equal(completed, 0);
   }
 });
 

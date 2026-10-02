@@ -77,6 +77,8 @@ export async function submitToPilot(webview: MuseWebview, provider: PilotProvide
     const id = el => el?.getAttribute('data-message-id') || el?.closest('[data-testid^="conversation-turn"]')?.getAttribute('data-testid') || '';
     const previousAssistantId = id(messages().filter(el => el.dataset.messageAuthorRole === 'assistant').at(-1));
     const previousUser = id(messages().filter(el => el.dataset.messageAuthorRole === 'user').at(-1));
+    const existingUserIds = messages().filter(el => el.dataset.messageAuthorRole === 'user').map(id);
+    const normalized = text => text.trim().replace(/\\s+/g, ' ');
     if (!input) return {submitted:false,confirmed:false,userId:'',previousAssistantId,error:'Abra sua conta OpenAI e entre na conversa.'};
     if ((input.value || input.innerText || '').trim()) return {submitted:false,confirmed:false,userId:'',previousAssistantId,error:'Há uma mensagem em edição na sua conta. Envie ou apague antes de continuar.'};
     input.focus();
@@ -94,8 +96,14 @@ export async function submitToPilot(webview: MuseWebview, provider: PilotProvide
     for (let attempt = 0; attempt < 30; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 100));
       if (cancelled()) return {submitted:true,confirmed:false,userId:'',previousAssistantId,error:'A conversa foi interrompida.'};
-      const userId = id(messages().filter(el => el.dataset.messageAuthorRole === 'user').at(-1));
-      if (userId && userId !== previousUser) return {submitted:true,confirmed:true,userId,previousAssistantId};
+      const newUsers = messages().filter(el => el.dataset.messageAuthorRole === 'user' && id(el) && !existingUserIds.includes(id(el)));
+      if (newUsers.length > 1) return {submitted:true,confirmed:false,userId:'',previousAssistantId,error:'Mais de uma mensagem apareceu no envio. Confira a conversa na sua conta.'};
+      const user = newUsers[0];
+      const userId = id(user);
+      const content = user?.querySelector('[data-message-content],.whitespace-pre-wrap');
+      const observed = content?.innerText || content?.textContent || user?.innerText || user?.textContent || '';
+      if (userId && userId !== previousUser && normalized(observed) === ${JSON.stringify(message.trim().replace(/\s+/g, ' '))})
+        return {submitted:true,confirmed:true,userId,previousAssistantId,turnEpoch:epoch};
     }
     return {submitted:true,confirmed:false,userId:'',previousAssistantId};
   })()`) as MuseSubmission;
@@ -108,12 +116,17 @@ export async function readPilotReply(webview: MuseWebview, provider: PilotProvid
   return webview.executeJavaScript(`(() => {
     const messages = [...document.querySelectorAll('[data-message-author-role]')];
     const id = el => el?.getAttribute('data-message-id') || el?.closest('[data-testid^="conversation-turn"]')?.getAttribute('data-testid') || '';
-    const user = messages.find(el => el.dataset.messageAuthorRole === 'user' && id(el) === ${JSON.stringify(submission.userId)});
-    const agent = messages.filter(el => el.dataset.messageAuthorRole === 'assistant' && id(el) !== ${JSON.stringify(submission.previousAssistantId)} && user &&
-      (user.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+    const epoch = ${JSON.stringify(submission.turnEpoch ?? null)};
+    const empty = correlation => ({assistantId:'',text:'',busy:false,correlation});
+    if (epoch !== null && globalThis.__zaraPilotTurnEpoch !== epoch) return empty('superseded');
+    const anchors = messages.filter(el => el.dataset.messageAuthorRole === 'user' && id(el) === ${JSON.stringify(submission.userId)});
+    if (anchors.length !== 1) return empty(anchors.length ? 'ambiguous' : 'missing');
+    const later = messages.slice(messages.indexOf(anchors[0]) + 1);
+    if (later.some(el => el.dataset.messageAuthorRole === 'user')) return empty('superseded');
+    const agent = later.filter(el => el.dataset.messageAuthorRole === 'assistant' && id(el) !== ${JSON.stringify(submission.previousAssistantId)}).at(-1);
     const stop = document.querySelector('[data-testid="stop-button"],button[aria-label="Stop generating"],button[aria-label="Parar de gerar"]');
     return {assistantId:id(agent),text:(agent?.querySelector('.markdown,[data-message-content]')?.innerText || agent?.innerText || agent?.textContent || '').trim(),
-      busy:!!stop && !stop.disabled};
+      busy:!!stop && !stop.disabled,correlation:'matched'};
   })()`) as Promise<MuseReply>;
 }
 
@@ -122,11 +135,13 @@ export async function cancelPilotReply(webview: MuseWebview, provider: PilotProv
   await webview.executeJavaScript(`(() => { globalThis.__zaraPilotTurnEpoch = (globalThis.__zaraPilotTurnEpoch || 0) + 1; const stop = document.querySelector(${JSON.stringify(selector)}); if (stop && !stop.disabled) stop.click(); })()`);
 }
 
-export async function sendPilotMessage(webview: MuseWebview, provider: PilotProvider, text: string, cancelled: () => boolean = () => false, context?: string): Promise<string> {
+export async function sendPilotMessage(webview: MuseWebview, provider: PilotProvider, text: string, cancelled: () => boolean = () => false, context?: string,
+  onComplete?: (submission: MuseSubmission, reply: MuseReply) => void): Promise<string> {
   const submission = await submitToPilot(webview, provider, text, context, cancelled);
   checkPilotCancellation(cancelled);
   if (!submission.submitted || !submission.confirmed) throw new Error(submission.error || 'O envio não foi confirmado. Confira a conversa na sua conta.');
   let last = '';
+  let lastAssistantId = '';
   let changedAt = Date.now();
   for (let attempt = 0; attempt < 600; attempt++) {
     checkPilotCancellation(cancelled);
@@ -134,8 +149,17 @@ export async function sendPilotMessage(webview: MuseWebview, provider: PilotProv
     checkPilotCancellation(cancelled);
     const reply = await readPilotReply(webview, provider, submission);
     checkPilotCancellation(cancelled);
-    if (reply.text !== last) { last = reply.text; changedAt = Date.now(); }
-    if (reply.assistantId && last && !reply.busy && Date.now() - changedAt >= 800) return last;
+    if (reply.correlation === 'superseded' || reply.correlation === 'ambiguous') {
+      throw new Error('Outra conversa entrou no mesmo turno. Confira sua conta antes de continuar.');
+    }
+    if (reply.correlation === 'missing') continue;
+    if (reply.text !== last || reply.assistantId !== lastAssistantId) {
+      last = reply.text; lastAssistantId = reply.assistantId; changedAt = Date.now();
+    }
+    if (reply.assistantId && last && !reply.busy && Date.now() - changedAt >= 800) {
+      try { onComplete?.(submission, reply); } catch { /* persistence cannot block the answer */ }
+      return last;
+    }
   }
   throw new Error('O piloto demorou a responder. Abra sua conta para acompanhar.');
 }

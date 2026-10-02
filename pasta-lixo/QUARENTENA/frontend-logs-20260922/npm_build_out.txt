@@ -1,0 +1,46 @@
+npm notice run zara-frontend@3.0.0 electron:build
+npm notice run npm run build && npm run build:electron && electron-builder
+npm notice run zara-frontend@3.0.0 build
+npm notice run tsc && vite build
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+
+./zara-alex.css?v=42 doesn't exist at build time, it will remain unchanged to be resolved at runtime
+transforming...
+[32m✓[39m 1924 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist-frontend/[22m[32mindex.html                                 [39m[1m[2m    1.05 kB[22m[1m[22m[2m │ gzip:  0.66 kB[22m
+[2mdist-frontend/[22m[32massets/roboto-regular-BKwBj7lc.ttf         [39m[1m[2m  123.72 kB[22m[1m[22m
+[2mdist-frontend/[22m[32massets/core-glass-Bctd3FqN.png             [39m[1m[2m1,312.97 kB[22m[1m[22m
+[2mdist-frontend/[22m[32massets/profile-android-hI9Cunc4.png        [39m[1m[2m1,516.09 kB[22m[1m[22m
+[2mdist-frontend/[22m[32massets/aurora-master-refined-BBbjUiyy.png  [39m[1m[2m1,577.58 kB[22m[1m[22m
+[2mdist-frontend/[22m[35massets/index-sQ0RAvYF.css                  [39m[1m[2m  114.90 kB[22m[1m[22m[2m │ gzip: 24.49 kB[22m
+[2mdist-frontend/[22m[36massets/index-BvzVwOQE.js                   [39m[1m[2m  300.48 kB[22m[1m[22m[2m │ gzip: 91.57 kB[22m
+[32m✓ built in 3.19s[39m
+npm notice run zara-frontend@3.0.0 build:electron
+npm notice run tsc -p tsconfig.node.json
+  • electron-builder  version=24.13.3 os=10.0.22621
+  • loaded configuration  file=package.json ("build" field)
+  • author is missed in the package.json  appPackageFile=C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\package.json
+  • packaging       platform=win32 arch=x64 electron=28.3.3 appOutDir=release\win-unpacked
+  ⨯ remove C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\release\win-unpacked\d3dcompiler_47.dll: Acesso negado.
+github.com/develar/go-fs-util.EnsureEmptyDir
+	/Volumes/data/go/pkg/mod/github.com/develar/go-fs-util@v0.0.0-20190620175131-69a2d4542206/fs.go:98
+github.com/develar/app-builder/pkg/electron.UnpackElectron.func1.1
+	/Volumes/data/Documents/app-builder/pkg/electron/electronUnpack.go:38
+github.com/develar/app-builder/pkg/util.MapAsyncConcurrency.func2
+	/Volumes/data/Documents/app-builder/pkg/util/async.go:68
+runtime.goexit
+	/usr/local/Cellar/go/1.17/libexec/src/runtime/asm_amd64.s:1581  
+  ⨯ C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\node_modules\.pnpm\app-builder-bin@4.0.0\node_modules\app-builder-bin\win\x64\app-builder.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1  failedTask=build stackTrace=Error: C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\node_modules\.pnpm\app-builder-bin@4.0.0\node_modules\app-builder-bin\win\x64\app-builder.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1
+    at ChildProcess.<anonymous> (C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\node_modules\.pnpm\builder-util@24.13.1_supports-color@8.1.1\node_modules\builder-util\src\util.ts:252:14)
+    at Object.onceWrapper (node:events:631:26)
+    at ChildProcess.emit (node:events:509:28)
+    at ChildProcess.cp.emit (C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\frontend\node_modules\.pnpm\cross-spawn@7.0.6\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at maybeClose (node:internal/child_process:1124:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:306:5)

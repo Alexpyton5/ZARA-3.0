@@ -1,0 +1,336 @@
+145 INFO: PyInstaller: 6.22.0, contrib hooks: unknown
+146 INFO: Python: 3.11.15
+152 INFO: Platform: Windows-10-10.0.22621-SP0
+152 INFO: Python environment: C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\.venv
+154 INFO: Removing temporary files and cleaning cache in C:\Users\zoe.000\AppData\Local\pyinstaller
+158 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002',
+ 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN '
+ '002\\.venv\\Scripts\\python311.zip',
+ 'C:\\Users\\alexp\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\DLLs',
+ 'C:\\Users\\alexp\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\Lib',
+ 'C:\\Users\\alexp\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none',
+ 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv',
+ 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages',
+ 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002']
+379 WARNING: discover_hook_directories: Failed to process hook entry point 'EntryPoint(name='hook-dirs', value='_pyinstaller_hooks_contrib:get_hook_dirs', group='pyinstaller40')': AttributeError: module '_pyinstaller_hooks_contrib' has no attribute 'get_hook_dirs'
+725 INFO: Appending 'binaries' from .spec
+727 INFO: Appending 'datas' from .spec
+738 INFO: checking Analysis
+738 INFO: Building Analysis because Analysis-00.toc is non existent
+738 INFO: Looking for Python shared library...
+738 INFO: Using Python shared library: C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\.venv\Scripts\python311.dll
+738 INFO: Running Analysis Analysis-00.toc
+738 INFO: Target bytecode optimization level: 0
+738 INFO: Initializing module dependency graph...
+739 INFO: Initializing module graph hook caches...
+749 INFO: Analyzing modules for base_library.zip ...
+1534 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+1584 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+2314 INFO: Processing standard module hook 'hook-math.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+2635 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5527 INFO: Caching module dependency graph...
+5577 INFO: Analyzing C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\main.py
+5765 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5944 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6362 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7306 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7387 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8673 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+8674 INFO: SetuptoolsInfo: initializing cached setuptools info...
+15057 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15216 INFO: Processing standard module hook 'hook-webbrowser.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15243 INFO: Processing standard module hook 'hook-pygments.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+17943 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+18514 INFO: Processing standard module hook 'hook-playwright.async_api.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\playwright\\_impl\\__pyinstaller'
+20311 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+20392 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+24782 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+24999 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25412 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26234 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26750 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+28464 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+28464 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+28471 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28485 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+28486 INFO: Processing pre-find-module-path hook 'hook-distutils.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+28792 INFO: Processing standard module hook 'hook-distutils.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28823 INFO: Processing standard module hook 'hook-distutils.util.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28885 INFO: Processing standard module hook 'hook-_osx_support.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29263 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29263 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+29276 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29278 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29294 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29294 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+29607 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29610 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+29635 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29637 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29637 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+29996 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29997 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+30608 INFO: Processing standard module hook 'hook-pkg_resources.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30881 INFO: Processing pre-safe-import-module hook 'hook-platformdirs.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+30881 INFO: Setuptools: 'platformdirs' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.platformdirs'!
+31171 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+31171 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+33852 INFO: Processing standard module hook 'hook-babel.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+34766 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+50612 INFO: Analyzing hidden import 'core.actions.macro_actions'
+50634 INFO: Analyzing hidden import 'core.actions.system_advanced'
+50657 INFO: Analyzing hidden import 'core.identity'
+50658 INFO: Analyzing hidden import 'core.lab_v1.audit_contract'
+50669 INFO: Analyzing hidden import 'core.lab_v1.group_chat'
+50693 INFO: Analyzing hidden import 'core.lab_v1.hermes_runner'
+50697 INFO: Analyzing hidden import 'core.lab_v1.oncall'
+50701 INFO: Analyzing hidden import 'core.lab_v1.research_inbox'
+50722 INFO: Analyzing hidden import 'core.lab_v1.router'
+50727 INFO: Analyzing hidden import 'core.lab_v1.skill_lifecycle'
+50761 INFO: Analyzing hidden import 'core.lab_v1.test_agent_inventory_adapter'
+50770 INFO: Analyzing hidden import 'core.lab_v1.test_group_chat'
+50789 INFO: Analyzing hidden import 'core.lab_v1.test_oncall'
+50799 INFO: Analyzing hidden import 'core.obsidian_bridge'
+50809 INFO: Analyzing hidden import 'google.genai._local_tokenizer_loader'
+50817 INFO: Analyzing hidden import 'google.genai._test_api_client'
+50826 INFO: Analyzing hidden import 'google.genai.interactions'
+50838 INFO: Analyzing hidden import 'google.genai.local_tokenizer'
+50857 INFO: Analyzing hidden import 'google.genai.tests'
+50859 INFO: Analyzing hidden import 'google.genai.tests.afc'
+50860 INFO: Analyzing hidden import 'google.genai.tests.afc.test_convert_if_exist_pydantic_model'
+50876 INFO: Analyzing hidden import 'google.genai.tests.afc.test_convert_number_values_for_function_call_args'
+50879 INFO: Analyzing hidden import 'google.genai.tests.afc.test_find_afc_incompatible_tool_indexes'
+50889 INFO: Analyzing hidden import 'google.genai.tests.afc.test_generate_content_stream_afc'
+50903 INFO: Analyzing hidden import 'google.genai.tests.afc.test_generate_content_stream_afc_thoughts'
+50915 INFO: Analyzing hidden import 'google.genai.tests.afc.test_get_function_map'
+50921 INFO: Analyzing hidden import 'google.genai.tests.afc.test_get_function_response_parts'
+50931 INFO: Analyzing hidden import 'google.genai.tests.afc.test_get_max_remote_calls_for_afc'
+50936 INFO: Analyzing hidden import 'google.genai.tests.afc.test_get_usage_header'
+50945 INFO: Analyzing hidden import 'google.genai.tests.afc.test_invoke_function_from_dict_args'
+50958 INFO: Analyzing hidden import 'google.genai.tests.afc.test_raise_error_for_afc_incompatible_config'
+50963 INFO: Analyzing hidden import 'google.genai.tests.afc.test_should_append_afc_history'
+50966 INFO: Analyzing hidden import 'google.genai.tests.afc.test_should_disable_afc'
+50971 INFO: Analyzing hidden import 'google.genai.tests.batches'
+50972 INFO: Analyzing hidden import 'google.genai.tests.batches.test_cancel'
+50975 INFO: Analyzing hidden import 'google.genai.tests.batches.test_create'
+50979 INFO: Analyzing hidden import 'google.genai.tests.batches.test_create_with_bigquery'
+50983 INFO: Analyzing hidden import 'google.genai.tests.batches.test_create_with_file'
+50987 INFO: Analyzing hidden import 'google.genai.tests.batches.test_create_with_gcs'
+50992 INFO: Analyzing hidden import 'google.genai.tests.batches.test_create_with_inlined_requests'
+51002 INFO: Analyzing hidden import 'google.genai.tests.batches.test_create_with_vertex_dataset'
+51007 INFO: Analyzing hidden import 'google.genai.tests.batches.test_delete'
+51011 INFO: Analyzing hidden import 'google.genai.tests.batches.test_embedding'
+51019 INFO: Analyzing hidden import 'google.genai.tests.batches.test_get'
+51022 INFO: Analyzing hidden import 'google.genai.tests.batches.test_list'
+51025 INFO: Analyzing hidden import 'google.genai.tests.caches'
+51026 INFO: Analyzing hidden import 'google.genai.tests.caches.constants'
+51027 INFO: Analyzing hidden import 'google.genai.tests.caches.test_create'
+51031 INFO: Analyzing hidden import 'google.genai.tests.caches.test_create_custom_url'
+51034 INFO: Analyzing hidden import 'google.genai.tests.caches.test_delete'
+51037 INFO: Analyzing hidden import 'google.genai.tests.caches.test_delete_custom_url'
+51038 INFO: Analyzing hidden import 'google.genai.tests.caches.test_get'
+51041 INFO: Analyzing hidden import 'google.genai.tests.caches.test_get_custom_url'
+51043 INFO: Analyzing hidden import 'google.genai.tests.caches.test_list'
+51045 INFO: Analyzing hidden import 'google.genai.tests.caches.test_update'
+51047 INFO: Analyzing hidden import 'google.genai.tests.caches.test_update_custom_url'
+51048 INFO: Analyzing hidden import 'google.genai.tests.chats'
+51049 INFO: Analyzing hidden import 'google.genai.tests.chats.test_get_history'
+51066 INFO: Analyzing hidden import 'google.genai.tests.chats.test_send_message'
+51097 INFO: Analyzing hidden import 'google.genai.tests.chats.test_validate_response'
+51099 INFO: Analyzing hidden import 'google.genai.tests.client'
+51100 INFO: Analyzing hidden import 'google.genai.tests.client.test_async_stream'
+51121 INFO: Analyzing hidden import 'google.genai.tests.client.test_client_close'
+51155 INFO: Analyzing hidden import 'google.genai.tests.client.test_client_initialization'
+51300 INFO: Analyzing hidden import 'google.genai.tests.client.test_client_requests'
+51306 INFO: Analyzing hidden import 'google.genai.tests.client.test_custom_client'
+51310 INFO: Analyzing hidden import 'google.genai.tests.client.test_http_options'
+51315 INFO: Analyzing hidden import 'google.genai.tests.client.test_httpx2_client'
+51320 INFO: Analyzing hidden import 'google.genai.tests.client.test_replay_client_equality'
+51324 INFO: Analyzing hidden import 'google.genai.tests.client.test_retries'
+51369 INFO: Analyzing hidden import 'google.genai.tests.client.test_upload_errors'
+51376 INFO: Analyzing hidden import 'google.genai.tests.common'
+51377 INFO: Analyzing hidden import 'google.genai.tests.common.test_common'
+51403 INFO: Analyzing hidden import 'google.genai.tests.common.test_duck_type'
+51407 INFO: Analyzing hidden import 'google.genai.tests.conftest'
+51415 INFO: Analyzing hidden import 'google.genai.tests.documents'
+51416 INFO: Analyzing hidden import 'google.genai.tests.documents.test_delete'
+51419 INFO: Analyzing hidden import 'google.genai.tests.documents.test_get'
+51421 INFO: Analyzing hidden import 'google.genai.tests.documents.test_list'
+51423 INFO: Analyzing hidden import 'google.genai.tests.errors'
+51424 INFO: Analyzing hidden import 'google.genai.tests.errors.test_api_error'
+51437 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores'
+51438 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores.test_create'
+51441 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores.test_delete'
+51443 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores.test_get'
+51447 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores.test_import_file'
+51453 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores.test_list'
+51455 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores.test_multimodal_flow'
+51459 INFO: Analyzing hidden import 'google.genai.tests.file_search_stores.test_upload_to_file_search_store'
+51465 INFO: Analyzing hidden import 'google.genai.tests.files'
+51466 INFO: Analyzing hidden import 'google.genai.tests.files.test_delete'
+51468 INFO: Analyzing hidden import 'google.genai.tests.files.test_download'
+51473 INFO: Analyzing hidden import 'google.genai.tests.files.test_get'
+51476 INFO: Analyzing hidden import 'google.genai.tests.files.test_list'
+51480 INFO: Analyzing hidden import 'google.genai.tests.files.test_register'
+51496 INFO: Analyzing hidden import 'google.genai.tests.files.test_register_table'
+51500 INFO: Analyzing hidden import 'google.genai.tests.files.test_upload'
+51517 INFO: Analyzing hidden import 'google.genai.tests.gaos'
+51517 INFO: Analyzing hidden import 'google.genai.tests.gaos.test_environments_lifecycle'
+51522 INFO: Analyzing hidden import 'google.genai.tests.gaos.test_triggers_lifecycle'
+51527 INFO: Analyzing hidden import 'google.genai.tests.interactions'
+51527 INFO: Analyzing hidden import 'google.genai.tests.interactions.test_auth'
+51553 INFO: Analyzing hidden import 'google.genai.tests.interactions.test_httpx_compat'
+51562 INFO: Analyzing hidden import 'google.genai.tests.interactions.test_integration'
+51567 INFO: Analyzing hidden import 'google.genai.tests.interactions.test_paths'
+51573 INFO: Analyzing hidden import 'google.genai.tests.live'
+51574 INFO: Analyzing hidden import 'google.genai.tests.live.test_live'
+51665 INFO: Analyzing hidden import 'google.genai.tests.live.test_live_music'
+51684 INFO: Analyzing hidden import 'google.genai.tests.live.test_live_response'
+51688 INFO: Analyzing hidden import 'google.genai.tests.live.test_send_client_content'
+51695 INFO: Analyzing hidden import 'google.genai.tests.live.test_send_realtime_input'
+51708 INFO: Analyzing hidden import 'google.genai.tests.live.test_send_tool_response'
+51715 INFO: Analyzing hidden import 'google.genai.tests.local_tokenizer'
+51716 INFO: Analyzing hidden import 'google.genai.tests.local_tokenizer.test_local_tokenizer'
+51734 INFO: Analyzing hidden import 'google.genai.tests.local_tokenizer.test_local_tokenizer_loader'
+51741 INFO: Analyzing hidden import 'google.genai.tests.mcp'
+51742 INFO: Analyzing hidden import 'google.genai.tests.mcp.test_has_mcp_tool_usage'
+51744 INFO: Analyzing hidden import 'google.genai.tests.mcp.test_mcp_to_gemini_tools'
+51753 INFO: Analyzing hidden import 'google.genai.tests.mcp.test_parse_config_for_mcp_sessions'
+51760 INFO: Analyzing hidden import 'google.genai.tests.mcp.test_parse_config_for_mcp_usage'
+51766 INFO: Analyzing hidden import 'google.genai.tests.mcp.test_set_mcp_usage_header'
+51770 INFO: Analyzing hidden import 'google.genai.tests.models'
+51771 INFO: Analyzing hidden import 'google.genai.tests.models.constants'
+51772 INFO: Analyzing hidden import 'google.genai.tests.models.test_compute_tokens'
+51778 INFO: Analyzing hidden import 'google.genai.tests.models.test_count_tokens'
+51786 INFO: Analyzing hidden import 'google.genai.tests.models.test_delete'
+51791 INFO: Analyzing hidden import 'google.genai.tests.models.test_edit_image'
+51796 INFO: Analyzing hidden import 'google.genai.tests.models.test_embed_content'
+51804 INFO: Analyzing hidden import 'google.genai.tests.models.test_function_call_streaming'
+51931 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content'
+52000 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_cached_content'
+52003 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_config_zero_value'
+52006 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_from_apikey'
+52008 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_http_options'
+52009 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_image_generation'
+52013 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_mcp'
+52022 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_media_resolution'
+52024 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_model'
+52028 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_multi_regional'
+52031 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_part'
+52047 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_content_thought'
+52050 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_images'
+52054 INFO: Analyzing hidden import 'google.genai.tests.models.test_generate_videos'
+52074 INFO: Analyzing hidden import 'google.genai.tests.models.test_get'
+52078 INFO: Analyzing hidden import 'google.genai.tests.models.test_list'
+52086 INFO: Analyzing hidden import 'google.genai.tests.models.test_recontext_image'
+52089 INFO: Analyzing hidden import 'google.genai.tests.models.test_segment_image'
+52093 INFO: Analyzing hidden import 'google.genai.tests.models.test_update'
+52096 INFO: Analyzing hidden import 'google.genai.tests.operations'
+52097 INFO: Analyzing hidden import 'google.genai.tests.operations.test_get'
+52098 INFO: Analyzing hidden import 'google.genai.tests.public_samples'
+52099 INFO: Analyzing hidden import 'google.genai.tests.public_samples.test_gemini_text_only'
+52100 INFO: Analyzing hidden import 'google.genai.tests.shared'
+52101 INFO: Analyzing hidden import 'google.genai.tests.shared.batches'
+52102 INFO: Analyzing hidden import 'google.genai.tests.shared.batches.test_create_delete'
+52103 INFO: Analyzing hidden import 'google.genai.tests.shared.batches.test_create_get_cancel'
+52105 INFO: Analyzing hidden import 'google.genai.tests.shared.batches.test_list'
+52106 INFO: Analyzing hidden import 'google.genai.tests.shared.caches'
+52107 INFO: Analyzing hidden import 'google.genai.tests.shared.caches.test_create_get_delete'
+52109 INFO: Analyzing hidden import 'google.genai.tests.shared.caches.test_create_update_get'
+52111 INFO: Analyzing hidden import 'google.genai.tests.shared.caches.test_list'
+52112 INFO: Analyzing hidden import 'google.genai.tests.shared.chats'
+52113 INFO: Analyzing hidden import 'google.genai.tests.shared.chats.test_send_message'
+52115 INFO: Analyzing hidden import 'google.genai.tests.shared.chats.test_send_message_stream'
+52118 INFO: Analyzing hidden import 'google.genai.tests.shared.files'
+52119 INFO: Analyzing hidden import 'google.genai.tests.shared.files.test_list'
+52121 INFO: Analyzing hidden import 'google.genai.tests.shared.files.test_upload_get_delete'
+52122 INFO: Analyzing hidden import 'google.genai.tests.shared.models'
+52123 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_compute_tokens'
+52125 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_count_tokens'
+52126 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_edit_image'
+52128 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_embed'
+52129 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_generate_content'
+52131 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_generate_content_stream'
+52133 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_generate_images'
+52134 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_generate_videos'
+52136 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_list'
+52137 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_recontext_image'
+52138 INFO: Analyzing hidden import 'google.genai.tests.shared.models.test_segment_image'
+52140 INFO: Analyzing hidden import 'google.genai.tests.shared.tunings'
+52140 INFO: Analyzing hidden import 'google.genai.tests.shared.tunings.test_create'
+52142 INFO: Analyzing hidden import 'google.genai.tests.shared.tunings.test_create_get_cancel'
+52144 INFO: Analyzing hidden import 'google.genai.tests.shared.tunings.test_list'
+52145 INFO: Analyzing hidden import 'google.genai.tests.tokens'
+52145 INFO: Analyzing hidden import 'google.genai.tests.tokens.test_create'
+52149 INFO: Analyzing hidden import 'google.genai.tests.transformers'
+52149 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_blobs'
+52153 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_bytes'
+52154 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_function_responses'
+52156 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_schema'
+52173 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_t_batch'
+52183 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_t_content'
+52188 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_t_contents'
+52200 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_t_part'
+52203 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_t_parts'
+52207 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_t_tool'
+52211 INFO: Analyzing hidden import 'google.genai.tests.transformers.test_t_tools'
+52216 INFO: Analyzing hidden import 'google.genai.tests.tunings'
+52217 INFO: Analyzing hidden import 'google.genai.tests.tunings.test_cancel'
+52218 INFO: Analyzing hidden import 'google.genai.tests.tunings.test_end_to_end'
+52221 INFO: Analyzing hidden import 'google.genai.tests.tunings.test_get'
+52223 INFO: Analyzing hidden import 'google.genai.tests.tunings.test_list'
+52226 INFO: Analyzing hidden import 'google.genai.tests.tunings.test_tune'
+52236 INFO: Analyzing hidden import 'google.genai.tests.tunings.test_validate_reward'
+52240 INFO: Analyzing hidden import 'google.genai.tests.types'
+52241 INFO: Analyzing hidden import 'google.genai.tests.types.test_bytes_internal'
+52248 INFO: Analyzing hidden import 'google.genai.tests.types.test_bytes_type'
+52254 INFO: Analyzing hidden import 'google.genai.tests.types.test_future'
+52257 INFO: Analyzing hidden import 'google.genai.tests.types.test_optional_types'
+52259 INFO: Analyzing hidden import 'google.genai.tests.types.test_part_type'
+52274 INFO: Analyzing hidden import 'google.genai.tests.types.test_schema_from_json_schema'
+52287 INFO: Analyzing hidden import 'google.genai.tests.types.test_schema_json_schema'
+52303 INFO: Analyzing hidden import 'google.genai.tests.types.test_types'
+52387 INFO: Analyzing hidden import 'pydantic_settings'
+52690 INFO: Analyzing hidden import 'scipy'
+52694 INFO: Processing standard module hook 'hook-scipy.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+54350 INFO: Analyzing hidden import 'watchdog'
+54351 INFO: Processing module hooks (post-graph stage)...
+54887 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+59155 INFO: Performing binary vs. data reclassification (1342 entries)
+59538 INFO: Looking for ctypes DLLs
+60295 WARNING: Library _handle.dll required via ctypes not found
+60296 WARNING: Library _name.dll required via ctypes not found
+60629 INFO: Analyzing run-time hooks ...
+60643 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+60646 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+60647 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+60650 INFO: Including run-time hook 'pyi_rth_pkgres.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+60655 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+60776 INFO: Creating base_library.zip...
+60802 INFO: Looking for dynamic libraries
+64913 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\vosk', 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\scipy.libs', 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\cv2\\../../x64/vc17/bin']
+64913 INFO: Extra DLL search directories (PATH): ['C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\cv2\\../../x64/vc17/bin', 'C:\\Users\\alexp\\Downloads\\ZARA 3.0 CLEAN 002\\.venv\\Lib\\site-packages\\vosk']
+66263 INFO: Warnings written to C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\build-sidecar\work\zara-backend\warn-zara-backend.txt
+66770 INFO: Graph cross-reference written to C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\build-sidecar\work\zara-backend\xref-zara-backend.html
+66943 INFO: checking PYZ
+66943 INFO: Building PYZ because PYZ-00.toc is non existent
+66943 INFO: Building PYZ (ZlibArchive) C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\build-sidecar\work\zara-backend\PYZ-00.pyz
+69604 INFO: Building PYZ (ZlibArchive) C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\build-sidecar\work\zara-backend\PYZ-00.pyz completed successfully.
+69726 INFO: checking PKG
+69726 INFO: Building PKG because PKG-00.toc is non existent
+69726 INFO: Building PKG (CArchive) zara-backend.pkg
+120703 INFO: Building PKG (CArchive) zara-backend.pkg completed successfully.
+120757 INFO: Bootloader C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+120757 INFO: checking EXE
+120757 INFO: Building EXE because EXE-00.toc is non existent
+120757 INFO: Building EXE from EXE-00.toc
+120757 INFO: Copying bootloader EXE to C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\dist-sidecar\zara-backend.exe
+120762 INFO: Copying icon to EXE
+120765 INFO: Copying 0 resources to EXE
+120766 INFO: Embedding manifest in EXE
+120768 INFO: Appending PKG archive to EXE
+120898 INFO: Fixing EXE headers
+121732 INFO: Building EXE from EXE-00.toc completed successfully.
+121797 INFO: Build complete! The results are available in: C:\Users\alexp\Downloads\ZARA 3.0 CLEAN 002\dist-sidecar
+

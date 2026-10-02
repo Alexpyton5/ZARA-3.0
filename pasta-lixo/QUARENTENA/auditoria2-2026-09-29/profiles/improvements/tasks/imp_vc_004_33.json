@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar captura de reação do usuário após execução de ação (elogio, correção, silêncio)",
+  "context": "Parte do sistema de aprendizado: registrar como o usuário respondeu à ação realizada",
+  "expected_behavior": [
+    "Detecta elogios explícitos ('obrigado', 'valeu', 'perfeito') nos minutos seguintes",
+    "Detecta correções explícitas ('não era isso', 'você deveria ter feito X')",
+    "Registra silêncio como reação neutra quando nenhum feedback é dado",
+    "Associa reação à ação específica através de timestamp e ID de correlação",
+    "Funciona com comandos de voz e texto para capturar reação em ambos os modos"
+  ],
+  "verification": [
+    "Teste unitario: test_explicit_praise_detected_as_positive_reaction()",
+    "Teste unitario: test_explicit_correction_detected_as_negative_reaction()",
+    "Teste unitario: test_silence_registered_as_neutral_reaction()",
+    "Teste real: após ação, dar feedback positivo ou negativo, verifique registro adequado",
+    "Teste de janela: confirme que reações fora da janela de 5 minutos são ignoradas"
+  ],
+  "files_to_touch": [
+    "core/aprendizado.py",
+    "core/aprendizado_storage.py",
+    "tests/aprendizado/test_user_reaction_capture.py"
+  ]
+}

@@ -1,0 +1,12 @@
+﻿Superado pelo ZARA-3.0-Setup-d3e3639.exe em 2026-09-29
+
+2026-09-29 ~06:10 (-03) EQUIPE 6 (garimpeiros): recebida leva auditoria2-2026-09-29 (lote da AUDITORIA-2, veredito item a item em pasta-lixo/2026-09-29/REGISTRO.md). NADA resgatado para a raiz; NADA duvidoso.
+
+2026-09-29 ~07:05 (-03) EQUIPE 6 (garimpeiros, rodada 06:55): recebida leva frontend-logs-20260922 (16 logs de debug de 22/09, ~16 KB, 0 refs, simbolos banidos 0). NADA resgatado para a raiz; NADA duvidoso. Movido para QUARENTENA/frontend-logs-20260922/.
+2026-09-29 ~07:35 (-03) EQUIPE 6 (garimpeiros, rodada 07:25): recebida leva rodada4-2026-09-29 (run_diag.bat + run_diag_src.bat, launchers one-off 22/09, dir frontend\release\ inexistente, unicas refs em historico .zara-tests, 0 simbolos banidos). NADA resgatado para a raiz; NADA duvidoso. Movido para QUARENTENA/rodada4-2026-09-29/.
+
+2026-09-29 ~09:14 (-03) TIME 7 (build/install e35b204): ZARA-3.0-Setup-d3e3639.exe (206,5 MB) superado pelo ZARA-3.0-Setup-e35b204.exe (203,4 MB, em instaladores/ desde 09:05). Backup do app anterior em instaladores/backup-app-20260929-0915/ (app completo: ZARA 3.0.exe + resources). Quarentena correta, recuperavel.
+2026-09-29 ~01:27 (-03) EQUIPE 4/TIME 7: ZARA-3.0-Setup-3721fd7.exe (206,5 MB) superado pelo d3e3639 (registrado a posteriori nesta rodada). Quarentena correta.
+2026-09-29 ~09:30 (-03) EQUIPE 6 (garimpeiros, rodada 09:25): audita instalador d3e3639 na QUARENTENA. VERIFICADO: e35b204.exe em instaladores/ (203,4 MB, commit e35b204 09:02 "install-20260929") + backup-app-20260929-0915/ completo. 0 refs ativas aos instaladores antigos (unica mencao: exemplo de doc em skills-compartilhadas/manual-zara/manual-snapshot.md:45 - inofensivo). NADA resgatado; instaladores antigos seguem quarentenados, corretos.
+
+2026-10-02 ~15:45 (-03) EQUIPE 6 (garimpeiros, vigia-melhoria-app-30min): recebida leva rodada5-2026-10-02 (6 arquivos soltos da staging 2026-09-29: TESTAR-VOZ-AGORA.bat, COMO-TESTAR-A-VOZ.txt, CADASTRO-ROSTO-E-VOZ.md, medicao-tts-frente3.py, medicao-tts-frente3-resultado.json, temp-probe-zoe.py - probes e guias de voz de 28-29/09; varredura independente em 410721 arquivos = 0 refs ativas; missao de voz concluida 02/10; scripts-alvo tools/teste_fisico_voz_alex.py e scripts/cadastrar_identidade.py continuam ativos na raiz). NADA resgatado para a raiz; NADA duvidoso. Movido para QUARENTENA/rodada5-2026-10-02/ (recuperavel). Regra de 7+ dias: nada elegivel p/ exclusao permanente (entradas de 29/09).

@@ -1,0 +1,24 @@
+COMO TESTAR A VOZ DA ZARA (2 minutos)
+
+PASSO 1 - Abra o teste
+  Na pasta do projeto, de dois cliques em: TESTAR-VOZ-AGORA.bat
+  Uma janela preta vai abrir. Nao feche ela.
+
+PASSO 2 - Ouca
+  A ZARA vai falar: "Oi Alex, aqui e a ZARA..."
+  Aumente o volume antes.
+  Ouviu a voz dela? Anote: [ ] OUVI   [ ] NAO OUVI
+
+PASSO 3 - Fale
+  Quando aparecer "Aperte ENTER", aperte e fale por 5 segundos
+  (pode ser: "testando o microfone, um dois tres").
+  Depois voce vai SE OUVIR de volta.
+  Se ouviu sua propria voz: o microfone esta OK.
+  Anote: [ ] OUVI   [ ] NAO OUVI
+
+FIM - Mande o resumo para a zoe
+  Exemplo: "VOZ OUVI, MIC OUVI" ou "VOZ NAO OUVI, MIC OUVI".
+  Se algo falhou, tire uma foto da janela preta e mande junto.
+
+OBS: esse teste usa as vozes gratuitas do PC. A voz principal
+(Kore) e testada dentro do app ZARA com internet.

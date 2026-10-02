@@ -1,0 +1,353 @@
+/* ZARA Interface Custom Styles */
+/* We use the existing CSS variables from the aparencia system */
+
+/* Text colors and other fixed colors from the reference visual */
+:root {
+  --txt-1: rgba(238,246,235,0.97);
+  --txt-2: rgba(214,230,208,0.70);
+  --txt-3: rgba(198,218,192,0.48);
+  --txt-4: rgba(190,212,184,0.31);
+  --glass: rgba(30,41,28,0.50);
+  --glass-hi: rgba(36,49,33,0.58);
+  --edge: rgba(176,208,164,0.16);
+  --edge-soft: rgba(176,208,164,0.10);
+  --inner: inset 0 1px 0 rgba(205,232,194,0.11);
+}
+
+/* Background */
+.zara-interface-background {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: -1; /* Behind content */
+}
+
+.zara-interface-wallpaper {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(40px) saturate(105%) brightness(0.36) hue-rotate(48deg);
+  transform: scale(1.2);
+}
+
+.zara-interface-overlay {
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(1200px 700px at 18% 6%, rgba(143,193,127,0.13), transparent 62%),
+    linear-gradient(158deg, rgba(8,14,9,0.72) 0%, rgba(6,11,7,0.85) 58%, rgba(9,16,11,0.9) 100%);
+}
+
+/* Main content */
+.zara-interface-content {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 0;
+}
+
+/* Sidebar */
+.zara-interface-sidebar {
+  width: 62px;
+  flex-shrink: 0;
+  padding: 20px 0 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: var(--sidebar); /* From aparencia system */
+  backdrop-filter: blur(46px) saturate(160%);
+  -webkit-backdrop-filter: blur(46px) saturate(160%);
+  border-right: 1px solid var(--edge-soft);
+}
+
+/* Sidebar inner components */
+.zara-sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.zara-sidebar-logo {
+  margin-bottom: 15px;
+}
+
+.zara-sidebar-logo-img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  object-position: center 26%;
+  border-radius: 8px;
+}
+
+.zara-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  align-items: center;
+}
+
+.zara-sidebar-nav-item {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(143,193,127,0.18);
+  border: 1px solid rgba(143,193,127,0.30);
+  color: var(--txt-3);
+  transition: all 0.2s ease;
+}
+
+.zara-sidebar-nav-item:hover {
+  background: rgba(143,193,127,0.3);
+  border-color: rgba(143,193,127,0.5);
+  color: var(--txt-1);
+}
+
+.zara-sidebar-spacer {
+  flex-grow: 1;
+}
+
+.zara-sidebar-settings {
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  background: linear-gradient(150deg, #7f9d72, #40573a);
+  border: 1px solid var(--edge);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--txt-1);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.zara-sidebar-settings:hover {
+  transform: scale(1.05);
+}
+
+/* Header */
+.zara-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--edge-soft);
+  margin-bottom: 14px;
+}
+
+.zara-header-greeting {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zara-header-greeting-title {
+  font-size: 25px;
+  font-weight: 600;
+  color: var(--txt-1);
+  letter-spacing: -0.022em;
+  line-height: 1.14;
+}
+
+.zara-header-greeting-subtitle {
+  font-size: 12.5px;
+  color: var(--txt-3);
+}
+
+.zara-header-spacer {
+  flex-grow: 1;
+}
+
+.zara-header-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 15px;
+  height: 35px;
+  width: 270px;
+  background: rgba(176,208,164,0.07);
+  backdrop-filter: blur(30px);
+  border: 1px solid var(--edge-soft);
+  border-radius: 999px;
+  color: var(--txt-4);
+  font-size: 12.5px;
+}
+
+.zara-header-notifications {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  background: rgba(176,208,164,0.07);
+  backdrop-filter: blur(30px);
+  border: 1px solid var(--edge-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.zara-header-notifications-badge {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e0705f;
+  border: 1.5px solid #0d150f;
+}
+
+.zara-header-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 35px;
+  padding: 0 5px 0 14px;
+  background: rgba(176,208,164,0.07);
+  backdrop-filter: blur(30px);
+  border: 1px solid var(--edge-soft);
+  border-radius: 999px;
+}
+
+.zara-header-user-name {
+  font-size: 12.5px;
+  color: var(--txt-2);
+  font-weight: 500;
+}
+
+.zara-header-user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #86a578, #4a6242);
+}
+
+/* Navigation tabs */
+.zara-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.zara-nav-tab {
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--accent);
+  color: #0b120c;
+  border: none;
+  cursor: pointer;
+}
+
+.zara-nav-tab-inactive {
+  background: rgba(176,208,164,0.08);
+  backdrop-filter: blur(28px);
+  border: 1px solid var(--edge-soft);
+  color: var(--txt-2);
+}
+
+.zara-nav-tab-add {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(176,208,164,0.08);
+  border: 1px solid var(--edge-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--txt-3);
+  cursor: pointer;
+}
+
+.zara-nav-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.zara-nav-indicator-dot {
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.zara-nav-indicator-dot-inactive {
+  width: 7px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(176,208,164,0.24);
+}
+
+/* Panels grid */
+.zara-panels-grid {
+  display: grid;
+  grid-template-columns: 1.48fr 1.12fr 0.6fr 0.98fr;
+  gap: 13px;
+  height: 280px;
+}
+
+.zara-panel-card {
+  background: var(--glass);
+  backdrop-filter: blur(44px) saturate(160%);
+  -webkit-backdrop-filter: blur(44px) saturate(160%);
+  border: 1px solid var(--edge-soft);
+  border-radius: 22px;
+  box-shadow: 0 18px 48px rgba(0,0,0,0.34), var(--inner);
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Window controls */
+.zara-window-controls {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  justify-content: flex-end;
+}
+
+.zara-window-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zara-window-btn-close {
+  background: #ff5f57;
+}
+
+.zara-window-btn-minimize {
+  background: #ffbd2e;
+}
+
+.zara-window-btn-maximize {
+  background: #28ca42;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .zara-panels-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+}

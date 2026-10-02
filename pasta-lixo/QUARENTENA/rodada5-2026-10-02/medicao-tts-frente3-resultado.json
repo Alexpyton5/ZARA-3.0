@@ -1,0 +1,82 @@
+{
+  "quando": "2026-09-28T18:31:03-0300",
+  "fases": {
+    "initialize": {
+      "ok": true,
+      "edge_subiu": true,
+      "kokoro_subiu": false,
+      "kokoro_esperava_falhar_por_falta_de_pesos": true,
+      "omnivoice_construido": true,
+      "omnivoice_ready": false,
+      "gemini_subiu": false,
+      "edge_caminho_streaming_disponivel": true,
+      "log": "[TTS] Edge initialized (gratuita, pt-BR-FranciscaNeural)\n[TTS] Kokoro init failed: TTS_MODEL_NOT_CONFIGURED: pesos Kokoro ausentes em C:\\Users\\alexp\\AppData\\Local\\ZARA3\\models\\kokoro. Esperado kokoro-v1.0.onnx + voices-v1.0.bin ou kokoro-v0.19.onnx + voices.json.\n"
+    },
+    "b_edge_streaming_primeiro_bloco": {
+      "ok": true,
+      "erro": null,
+      "latencia_ate_primeiro_audio_ms": 1018.7,
+      "tempo_total_streaming_ms": 1297.9,
+      "nota": "INSTRUMENTACAO DE MEDICAO: sounddevice.OutputStream trocado por fake que registra o ts do 1o write() e descarta. Nenhum byte chegou aos alto-falantes."
+    },
+    "c_arquivo_curta": {
+      "chars": 20,
+      "rounds": [
+        {
+          "ok": true,
+          "ms": 1388.3,
+          "bytes": 14976
+        },
+        {
+          "ok": true,
+          "ms": 1111.9,
+          "bytes": 14976
+        }
+      ],
+      "media_ms": 1250.1
+    },
+    "c_arquivo_media": {
+      "chars": 101,
+      "rounds": [
+        {
+          "ok": true,
+          "ms": 1365.0,
+          "bytes": 40752
+        },
+        {
+          "ok": true,
+          "ms": 1227.8,
+          "bytes": 40752
+        }
+      ],
+      "media_ms": 1296.4
+    },
+    "c_arquivo_longa": {
+      "chars": 305,
+      "rounds": [
+        {
+          "ok": true,
+          "ms": 1474.9,
+          "bytes": 111024
+        },
+        {
+          "ok": true,
+          "ms": 1941.9,
+          "bytes": 111024
+        }
+      ],
+      "media_ms": 1708.4
+    },
+    "d_cascata_kore_sem_kore": {
+      "ok": true,
+      "erro": null,
+      "ordem_engines_tentados": [
+        "edge"
+      ],
+      "caiu_para_a_edge": true,
+      "latencia_ate_primeiro_audio_ms": 1131.2,
+      "tempo_total_ms": 1330.9
+    }
+  },
+  "notas": []
+}

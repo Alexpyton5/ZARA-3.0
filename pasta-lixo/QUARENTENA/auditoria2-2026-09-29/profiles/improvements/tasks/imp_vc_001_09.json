@@ -1,0 +1,23 @@
+{
+  "goal": "Ajustar coordenadas de detecção com base na escala DPI de cada monitor",
+  "context": "Parte da tarefa de captura segura: garantir que detecção funcione corretamente apesar da escala DPI",
+  "expected_behavior": [
+    "Converte coordenadas de tela física para coordenadas lógicas considerando DPI",
+    "Aplica mesmo fator de escala tanto às coordenadas de entrada quanto às de saída",
+    "Funciona com monitores de DPI diferente simultaneamente (ex: monitor principal 150%, secundário 100%)",
+    "Preserva precisão de detecção independentemente da escala DPI",
+    "Lida corretamente com coordenadas fracionárias resultantes da escala DPI"
+  ],
+  "verification": [
+    "Teste unitário: test_coordinate_adjustment_for_150_dpi()",
+    "Teste unitario: test_coordinate_adjustment_for_mixed_dpi_scenarios()",
+    "Teste unitario: test_fractional_coordinate_handling()",
+    "Teste real: processe screenshot de monitor com DPI não-padrão, verifique detecção precisa",
+    "Teste de regressão: confirme que funcionamento em DPI padrão 100% não foi afetado"
+  ],
+  "files_to_touch": [
+    "core/vision/screen_capture.py",
+    "core/vision/pii_detector.py",
+    "tests/vision/test_dpi_coordinate_adjustment.py"
+  ]
+}

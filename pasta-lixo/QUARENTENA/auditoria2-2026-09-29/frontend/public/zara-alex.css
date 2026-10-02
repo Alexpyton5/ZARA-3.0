@@ -1,0 +1,798 @@
+/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */
+@layer theme{:root,:host{--font-sans:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";--font-mono:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;--spacing:.25rem;--default-font-family:var(--font-sans);--default-mono-font-family:var(--font-mono)}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring{outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}}@layer components;@layer utilities{.visible{visibility:visible}.relative{position:relative}.start{inset-inline-start:var(--spacing)}.table{display:table}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}}:root{--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light dark}@media (prefers-color-scheme:dark){:root{--lightningcss-light: ;--lightningcss-dark:initial}}*{box-sizing:border-box}html,body{min-width:980px;min-height:680px;margin:0;overflow:hidden}button,input{font:inherit}button{color:inherit}.zara-preview{--page:#f3eeea;--window:#faf7f5f0;--sidebar:#f6f1ecb8;--card:#efe8e199;--ink:#242321;--muted:#817c76;--line:#463b3421;--strong-line:#463b3433;--accent:#533845;--accent-soft:#5338451f;--green:#5db36c;--ring:#b38a9f;width:100vw;height:100vh;color:var(--ink);background:radial-gradient(circle at 16% 11%,#fffffff7,transparent 31%), radial-gradient(circle at 75% 70%,#daccc138,transparent 35%), var(--page);isolation:isolate;padding:clamp(34px,6vh,61px) clamp(34px,3.5vw,55px) clamp(64px,8.5vh,86px);font-family:Segoe UI Variable Text,Segoe UI,Helvetica Neue,Arial,sans-serif;transition:background .35s,color .35s;overflow:hidden}.zara-preview:before{content:"";z-index:-1;pointer-events:none;opacity:.14;mix-blend-mode:multiply;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");position:fixed;inset:0}.theme-dark{--page:#121313;--window:#191a1af0;--sidebar:#161817c7;--card:#181c1999;--ink:#f0f2ed;--muted:#a1a9a0;--line:#bed3b81c;--strong-line:#bed3b833;--accent:#b9cfae;--accent-soft:#a8c3a02e;--green:#91b985;--ring:#a8c3a0;background:radial-gradient(circle at 39% 22%,#667d5f14,transparent 33%),radial-gradient(circle at 78% 73%,#414f3d0f,transparent 31%),var(--page)}.theme-dark.zara-preview:before{opacity:.25;mix-blend-mode:soft-light}.desktop-frame{grid-template-columns:minmax(700px,1fr) clamp(238px,17.3vw,270px);gap:clamp(22px,1.9vw,30px);width:100%;height:100%;display:grid}.main-window{border:1px solid var(--strong-line);background:var(--window);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-radius:22px;grid-template-columns:clamp(188px,13.35vw,210px) minmax(0,1fr);min-width:0;min-height:0;display:grid;position:relative;overflow:hidden;box-shadow:0 27px 64px #3d2f2729,inset 0 1px #ffffff6b}.theme-dark .main-window{box-shadow:0 30px 72px #00000085,inset 0 1px #ffffff09}.sidebar{border-right:1px solid var(--line);background:var(--sidebar);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);flex-direction:column;min-height:0;padding:69px 20px 28px;display:flex}.brand{cursor:pointer;background:0 0;border:0;align-self:center;width:132px;height:128px;padding:0}.brand img{object-fit:contain;width:132px;height:128px}.brand-dark,.theme-dark .brand-light{display:none}.theme-dark .brand-dark{display:block}.sidebar nav{flex-direction:column;gap:10px;margin-top:77px;display:flex}.sidebar nav button{width:100%;height:48px;color:var(--ink);cursor:pointer;text-align:left;background:0 0;border:1px solid #0000;border-radius:25px;align-items:center;gap:15px;padding:0 17px;font-size:14px;display:flex}.sidebar nav button svg{flex:none;width:22px;height:22px}.sidebar nav button.active{color:var(--accent);background:var(--accent-soft)}.sidebar footer{flex-direction:column;gap:42px;margin-top:auto;display:flex}.online-row{color:var(--muted);letter-spacing:.07em;grid-template-columns:10px 1fr 34px;align-items:center;gap:10px;font-size:10px;display:grid}.online-row>i{background:var(--green);width:9px;height:9px;box-shadow:0 0 12px var(--green);border-radius:50%}@supports (color:color-mix(in lab, red, red)){.online-row>i{box-shadow:0 0 12px color-mix(in srgb,var(--green) 42%,transparent)}}.online-row button{width:34px;height:34px;color:var(--muted);cursor:pointer;background:0 0;border:0;place-items:center;padding:0;display:grid}.online-row svg{width:19px;height:19px}.user-row{justify-content:space-between;align-items:center;display:flex}.user-row img{object-fit:cover;border-radius:50%;width:58px;height:58px}.user-row span{color:var(--ink);font-size:22px;font-weight:200}.main-actions{z-index:8;gap:20px;display:flex;position:absolute;top:45px;right:28px}.main-actions button{width:27px;height:28px;color:var(--ink);cursor:pointer;background:0 0;border:0;place-items:center;padding:0;display:grid}.main-actions svg{width:21px;height:21px}.home-stage{grid-template-columns:minmax(0,1fr) clamp(236px,16.1vw,252px);gap:clamp(38px,3.1vw,50px);min-width:0;min-height:0;padding:127px 31px 54px 55px;display:grid}.presence-stage{justify-content:center;align-items:center;min-width:0;min-height:0;display:flex;position:relative}.orb{--audio-level:.02;--audio-tone:.46;--jitter-x:0px;--jitter-y:0px;aspect-ratio:1;cursor:pointer;isolation:isolate;background:0 0;border:0;place-items:center;width:clamp(350px,28.8vw,450px);padding:0;display:grid;position:relative;transform:translateY(-27px)}.orb-filter-defs{pointer-events:none;width:0;height:0;position:absolute;overflow:hidden}.orb img{object-fit:contain;opacity:1;pointer-events:none;width:100%;height:100%;position:absolute;inset:0}.orb .ring-base{z-index:3;transform:translate3d(var(--jitter-x),var(--jitter-y),0);filter:url(#zara-cord-vibration) drop-shadow(0 0 6px #97708d30) brightness(calc(1 + var(--audio-level) * .25)) saturate(calc(1 + var(--audio-level) * .46));animation:60s linear infinite orbSpin,5.8s ease-in-out infinite orbBreath}.orb .ring-dark,.theme-dark .orb .ring-light{display:none}.theme-dark .orb .ring-dark{display:block}.theme-dark .orb .ring-dark.ring-base{filter:url(#zara-cord-vibration) drop-shadow(0 0 8px #a8c3a04a) brightness(calc(1 + var(--audio-level) * .42)) saturate(calc(1.06 + var(--audio-level) * .62))}.theme-light .orb .ring-light.ring-base{filter:url(#zara-cord-vibration) drop-shadow(0 0 5px #97708d26) brightness(.97) contrast(calc(1.03 + var(--audio-level) * .3)) saturate(calc(1.18 + var(--audio-level) * .78))}.spectrum-canvas{z-index:4;pointer-events:none;opacity:.94;mix-blend-mode:screen;width:100%;height:100%;position:absolute;inset:0}.theme-light .spectrum-canvas{mix-blend-mode:multiply;opacity:.82}.orb-listening .orb .ring-base,.orb-speaking .orb .ring-base{animation:60s linear infinite orbSpin}.audio-live .orb .ring-base{filter:url(#zara-cord-vibration) drop-shadow(0 0 7px var(--ring)) brightness(calc(1.02 + var(--audio-level) * .48)) saturate(calc(1.12 + var(--audio-level) * .68))}@supports (color:color-mix(in lab, red, red)){.audio-live .orb .ring-base{filter:url(#zara-cord-vibration) drop-shadow(0 0 7px color-mix(in srgb,var(--ring) 34%,transparent)) brightness(calc(1.02 + var(--audio-level) * .48)) saturate(calc(1.12 + var(--audio-level) * .68))}}@keyframes orbSpin{to{rotate:360deg}}@keyframes orbBreath{0%,to{opacity:.93;scale:.995}50%{opacity:1;scale:1.008}}.command-bar{border:1px solid var(--strong-line);width:min(100%,558px);height:63px;color:var(--muted);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);background:#faf7f594;border-radius:33px;grid-template-columns:minmax(0,1fr) 47px 47px;align-items:center;gap:8px;padding:7px 9px 7px 26px;font-size:13px;display:grid;position:absolute;bottom:0;left:50%;transform:translate(-50%);box-shadow:0 12px 28px #3228220b,inset 0 1px #ffffff6b}.theme-dark .command-bar{background:#12151394;box-shadow:0 14px 31px #00000047,inset 0 1px #ffffff06}.command-bar button{cursor:pointer;border-radius:50%;place-items:center;width:46px;height:46px;padding:0;display:grid}.command-bar svg{width:21px;height:21px}.mic-button{border:1px solid var(--accent);color:var(--accent);background:0 0;transition:background .2s,box-shadow .2s,transform .2s}.mic-button.active{color:var(--window);background:var(--accent);box-shadow:0 0 0 4px var(--accent),0 0 18px var(--accent)}@supports (color:color-mix(in lab, red, red)){.mic-button.active{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 11%,transparent),0 0 18px color-mix(in srgb,var(--accent) 24%,transparent)}}.voice-button{color:#fff;background:var(--accent);box-shadow:0 7px 18px var(--accent);border:0}@supports (color:color-mix(in lab, red, red)){.voice-button{box-shadow:0 7px 18px color-mix(in srgb,var(--accent) 27%,transparent)}}.voice-bars{align-items:center;gap:3px;height:24px;display:flex}.voice-bars i{background:currentColor;border-radius:2px;width:2px;height:10px}.voice-bars i:nth-child(2),.voice-bars i:nth-child(4){height:17px}.voice-bars i:nth-child(3){height:23px}.today-card{border:1px solid var(--line);width:100%;height:100%;min-height:0;color:var(--ink);background:var(--card);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-radius:25px;flex-direction:column;padding:36px 22px 24px;display:flex;box-shadow:inset 0 1px #ffffff47}.today-card header{border-bottom:1px solid var(--line);justify-content:space-between;align-items:center;padding:0 0 22px;display:flex}.today-card header div{color:var(--accent);align-items:center;gap:13px;display:flex}.today-card header svg{width:25px;height:25px}.today-card header strong{font-size:17px;font-weight:500}.today-card header>span{color:var(--muted);letter-spacing:.12em}.today-card article{border-bottom:1px solid var(--line);grid-template-columns:31px minmax(0,1fr);gap:12px;min-height:118px;padding:27px 0;display:grid}.today-card article:last-child{border-bottom:0}.agenda-symbol{color:var(--accent);font-size:23px;line-height:1}.agenda-symbol.plane{transform:rotate(-25deg)}.today-card article.priority .agenda-symbol{color:var(--green)}.today-card article div{flex-direction:column;gap:8px;display:flex}.today-card article strong{font-size:12px;font-weight:500;line-height:1.45}.today-card article small{color:var(--muted);font-size:11px;line-height:1.65}.lab-window{color:#f0efec;background:radial-gradient(circle at 48% 17%,#ffffff0b,#0000 32%),linear-gradient(155deg,#292a28 0%,#1b1d1b 58%,#232421 100%);border:1px solid #ffffff1f;border-radius:22px;grid-template-rows:58px 261px minmax(0,1fr) 51px;min-width:0;min-height:0;padding:0 14px 20px;display:grid;position:relative;overflow:hidden;box-shadow:0 26px 58px #1f1b1847,inset 0 1px #ffffff0f}.theme-dark .lab-window{background:radial-gradient(circle at 50% 17%,#7f96760b,#0000 32%),linear-gradient(160deg,#141715 0%,#0b0e0c 62%,#121512 100%);box-shadow:0 28px 64px #00000094,inset 0 1px #ffffff09}.window-controls{grid-row:1;grid-template-columns:repeat(3,48px);justify-content:end;margin:0 -14px;display:grid}.window-controls button{color:#f0f1ed;cursor:pointer;background:0 0;border:0;place-items:center;height:58px;padding:0;font-size:26px;font-weight:200;display:grid}.window-controls button:hover{background:#ffffff0f}.window-controls i{border:1.4px solid;width:16px;height:16px}.lab-watermark{z-index:0;object-fit:cover;opacity:.92;pointer-events:none;width:182px;height:190px;position:absolute;top:57px;left:50%;transform:translate(-50%)}.participants{z-index:2;text-align:center;grid-row:2;grid-template-columns:repeat(3,1fr);align-self:end;padding-bottom:9px;display:grid;position:relative}.participants div{flex-direction:column;align-items:center;gap:7px;display:flex}.participants img{object-fit:cover;border-radius:50%;width:50px;height:50px;box-shadow:0 9px 19px #00000047}.participants small{color:#eceae5;font-size:10px}.lab-messages{z-index:2;grid-row:3;min-height:0;position:relative;overflow:hidden}.lab-messages article{color:#f3f0eb;border:1px solid #ffffff0e;border-radius:14px;min-height:86px;max-height:100px;margin-bottom:10px;padding:12px 13px}.lab-messages article.wine{background:#5b4155d1}.lab-messages article.gold{background:#7e6852c2}.lab-messages article.gray{background:#5f5e5ad1}.theme-dark .lab-messages article.wine{background:#262d25f5}.theme-dark .lab-messages article.gold{background:#374333e6}.theme-dark .lab-messages article.gray{background:#383d37e6}.lab-messages strong{font-size:10px;font-weight:500}.lab-messages p{white-space:pre-line;margin:7px 0 0;font-size:11px;line-height:1.58}.lab-composer{z-index:3;color:#969792;background:#0a0c0a40;border:1px solid #ffffff29;border-radius:23px;grid-row:4;grid-template-columns:minmax(0,1fr) 36px;align-self:end;align-items:center;height:45px;padding:4px 5px 4px 13px;font-size:9px;display:grid;position:relative}.lab-composer button{color:#ddd9d2;cursor:pointer;background:0 0;border:0;place-items:center;width:34px;height:34px;padding:0;display:grid}.lab-composer svg{width:19px;height:19px}.review-dock{z-index:50;color:#ecefe9;flex-direction:column;align-items:center;gap:7px;font-size:11px;display:flex;position:fixed;bottom:12px;left:50%;transform:translate(-50%)}.review-handle{color:#d5dbd1;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);cursor:pointer;background:#141715d6;border:1px solid #ffffff24;border-radius:13px;height:25px;padding:0 12px;font-size:9px}.review-controls{-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);background:#121513e0;border:1px solid #ffffff24;border-radius:22px;align-items:center;gap:6px;height:43px;padding:5px 7px 5px 14px;display:flex;box-shadow:0 12px 30px #00000040}.review-controls>span{color:#aab5a5;text-transform:uppercase;letter-spacing:.09em;margin-right:6px;font-size:8px}.review-controls>i{background:#ffffff1f;width:1px;height:22px;margin:0 3px}.review-controls button{color:#aab0a7;cursor:pointer;background:0 0;border:1px solid #0000;border-radius:16px;height:31px;padding:0 11px;font-size:9px}.review-controls button.selected{color:#eaf1e6;background:#a8c3a029;border-color:#a8c3a059}.review-controls button.live-audio:before{content:"";background:#9ccb8f;border-radius:50%;width:5px;height:5px;margin-right:6px;animation:1.2s ease-in-out infinite alternate micLive;display:inline-block;box-shadow:0 0 8px #9ccb8fd1}@keyframes micLive{0%{opacity:.48;transform:scale(.8)}to{opacity:1;transform:scale(1.25)}}@media (prefers-reduced-motion:reduce){.orb img,.review-controls button.live-audio:before{animation:none!important}}@media (width<=1260px){.zara-preview{padding-left:28px;padding-right:28px}.desktop-frame{grid-template-columns:minmax(680px,1fr) 226px;gap:20px}.main-window{grid-template-columns:178px minmax(0,1fr)}.sidebar{padding-left:15px;padding-right:15px}.home-stage{grid-template-columns:minmax(0,1fr) 218px;gap:22px;padding-left:26px;padding-right:22px}.orb{width:clamp(295px,31vw,365px)}.window-controls{grid-template-columns:repeat(3,42px)}}@media (height<=790px){.zara-preview{padding-top:24px;padding-bottom:64px}.sidebar{padding-top:35px;padding-bottom:18px}.brand,.brand img{width:105px;height:102px}.sidebar nav{margin-top:36px}.sidebar nav button{height:41px}.sidebar footer{gap:23px}.home-stage{padding-top:76px;padding-bottom:28px}.orb{width:min(40vh,340px);transform:translateY(-15px)}.command-bar{height:56px}.today-card{padding-top:24px}.today-card article{min-height:89px;padding:18px 0}.lab-window{grid-template-rows:52px 190px minmax(0,1fr) 47px;padding-bottom:14px}.window-controls button{height:52px}.lab-watermark{top:35px;transform:translate(-50%)scale(.82)}.lab-messages article{min-height:69px;max-height:78px;padding:9px 11px}.lab-messages p{margin-top:4px;line-height:1.4}}
+
+/* ============================================================================
+   Acréscimos do app — tudo acima desta linha é o CSS que o Alex gerou, byte a
+   byte. Aqui embaixo ficam só as peças que a prévia não tinha porque não
+   precisava: escolher motor de IA, ver a conversa e avisos.
+   Todas usam as variáveis dele, para não destoar.
+   ============================================================================ */
+
+.online-row i.online { background: var(--green); box-shadow: 0 0 12px color-mix(in srgb, var(--green) 45%, transparent); }
+
+.today-card .motor-de-ia { display: grid; gap: 6px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+.today-card .motor-de-ia select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--card); font-size: 11px; cursor: pointer; }
+.today-card .motor-de-ia select:disabled { opacity: .5; cursor: not-allowed; }
+
+/* A prévia não mostrava a conversa com a ZARA: ela existia só como desenho.
+   No app real o que ela responde precisa aparecer. */
+/* Fora do fluxo: o palco do anel e um flex centralizado, entao qualquer irmao
+   visivel empurra o circulo para o lado. Foi isso que descentralizou o anel.
+   Aqui a conversa flutua acima da barra de comando e o palco continua so com
+   o circulo, exatamente como no desenho do Alex. */
+.conversa-recente {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  width: min(558px, 86%);
+  max-height: 168px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  z-index: 4;
+}
+.conversa-recente article { padding: 10px 13px; border: 1px solid var(--line); border-radius: 13px; background: var(--card); }
+.conversa-recente article.user { border-color: color-mix(in srgb, var(--accent) 34%, transparent); }
+.conversa-recente strong { display: block; color: var(--muted); font-size: 9px; letter-spacing: .09em; text-transform: uppercase; }
+.conversa-recente p { margin-top: 4px; color: var(--ink); font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.conversa-recente time { color: var(--muted); font-size: 9px; }
+
+/* Sem botao de enviar: a barra do Alex e uma grade de 3 colunas
+   (texto + microfone + voz). Um quarto filho arrebentava o alinhamento. */
+.command-bar input { border: 0; background: transparent; color: var(--ink); outline: none; }
+.command-bar input::placeholder { color: var(--muted); }
+
+/* LIGADO nao pinta nada: fica o estilo original do Alex, que ja usa a cor de
+   acento de cada tema (ameixa no claro, salvia no escuro). Pintar de verde por
+   cima, como eu tinha feito, destruia o desenho dele.
+   DESLIGADO precisa gritar, porque "nao sei se estou sendo ouvido" e o mesmo
+   que estar desligado. */
+.mic-button.desligado, .voice-button.desligado {
+  color: #fff !important;
+  background: #b5705f !important;
+  box-shadow: 0 6px 16px rgba(181,112,95,.4) !important;
+}
+.mic-button.desligado svg, .voice-button.desligado .voice-bars i { color: #fff; background: currentColor; }
+
+.lab-cheio { grid-column: 1 / -1; min-height: 0; overflow: auto; }
+
+.zara-toasts { position: fixed; right: 22px; bottom: 22px; display: grid; gap: 8px; z-index: 40; }
+.zara-toast { padding: 10px 15px; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: var(--window); box-shadow: 0 14px 34px rgba(0,0,0,.3); font-size: 12px; }
+.zara-toast.warn { border-color: #c8a15f66; }
+.zara-toast.error { border-color: #b5705f88; }
+
+.spin { animation: zara-girar 1s linear infinite; }
+@keyframes zara-girar { to { transform: rotate(360deg); } }
+
+/* A pílula do Alex, fixada. No app ela vinha larga e quadrada: algo do CSS
+   antigo do projeto ganhava da regra dele. Aqui os valores dele voltam a
+   valer — 558px de largura, raio 33 e centralizada sob o anel. */
+.zara-preview .command-bar {
+  width: min(100%, 558px) !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  border-radius: 33px !important;
+}
+/* O campo precisa poder encolher dentro da grade, senao o texto e cortado. */
+.zara-preview .command-bar input { min-width: 0; width: 100%; }
+/* O botao de voz usa a cor de acento do tema, como no desenho. */
+.zara-preview .voice-button:not(.desligado) { background: var(--accent); color: #fff; }
+.zara-preview .mic-button:not(.desligado) { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+
+/* ---- botoes da pilula: redondos, no lugar dos seus ----
+   Estavam saindo como retangulo arredondado. Aqui a geometria e travada:
+   circulo de 46px, o microfone contornado e a voz preenchida com o acento,
+   exatamente como na imagem original. */
+.zara-preview .command-bar .mic-button,
+.zara-preview .command-bar .voice-button {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px;
+  flex: 0 0 46px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: grid !important;
+  place-items: center !important;
+  aspect-ratio: 1 / 1;
+}
+.zara-preview .command-bar .mic-button:not(.desligado) {
+  border: 1px solid var(--strong-line) !important;
+  background: transparent !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+}
+.zara-preview .command-bar .voice-button:not(.desligado) {
+  border: 0 !important;
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* ---- menu dos tres pontos ---- */
+.menu-painel { position: relative; }
+.menu-painel > button { border: 0; background: transparent; color: var(--muted); cursor: pointer; letter-spacing: .12em; padding: 2px 4px; }
+.menu-opcoes {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+  min-width: 208px; display: grid; padding: 6px;
+  border: 1px solid var(--strong-line); border-radius: 14px;
+  background: var(--window); box-shadow: 0 18px 40px rgba(0,0,0,.34);
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+}
+.menu-opcoes button { border: 0; border-radius: 9px; padding: 9px 11px; text-align: left; color: var(--ink); background: transparent; cursor: pointer; font-size: 12px; }
+.menu-opcoes button:hover { background: var(--card); }
+.menu-opcoes button.marcado { color: var(--accent); background: var(--accent-soft); }
+
+/* ---- a conversa como inquilino do painel da direita ---- */
+.painel-conversa { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; height: 100%; padding: 16px 14px; gap: 10px; }
+.painel-conversa > header { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+.painel-conversa > header button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+.painel-conversa > header button:disabled { opacity: .35; cursor: not-allowed; }
+.painel-conversa-lista { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 9px; }
+.painel-conversa-lista .vazio { color: var(--muted); font-size: 12px; }
+.painel-conversa-lista article { padding: 10px 12px; border-radius: 13px; background: var(--card); }
+.painel-conversa-lista article.user { background: var(--accent-soft); }
+.painel-conversa-lista strong { display: block; color: var(--muted); font-size: 9px; letter-spacing: .09em; text-transform: uppercase; }
+.painel-conversa-lista p { margin-top: 4px; color: var(--ink); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; }
+.painel-conversa-lista time { color: var(--muted); font-size: 9px; }
+
+/* ---- painel escondido: uma aba fina para trazer de volta ---- */
+.painel-oculto {
+  align-self: center; width: 22px; height: 74px; padding: 0;
+  border: 1px solid var(--strong-line); border-right: 0;
+  border-radius: 12px 0 0 12px;
+  color: var(--muted); background: var(--card); cursor: pointer;
+}
+/* A grade da pilula: texto ocupa tudo, os dois botoes ficam no canto direito.
+   Alguma regra posterior estava encolhendo a coluna do texto, e era isso que
+   cortava "Como posso pensar com voce hoje?" e jogava os botoes para o meio. */
+.zara-preview .command-bar {
+  grid-template-columns: minmax(0, 1fr) 46px 46px !important;
+  gap: 8px !important;
+  padding: 7px 9px 7px 26px !important;
+}
+
+/* ---- a pilula, na medida do desenho ----
+   Ela estava curta e com os botoes grudados no texto porque a grade original
+   nao vencia. Agora o campo ocupa toda a coluna da esquerda e os dois botoes
+   ficam ancorados no fim da caixa, como no desenho do Alex. */
+.zara-preview .command-bar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 8px 10px 8px 28px !important;
+  height: 64px !important;
+  width: min(100%, 620px) !important;
+}
+.zara-preview .command-bar > input {
+  grid-column: 1 !important;
+  justify-self: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  outline: none !important;
+  color: var(--ink) !important;
+  font-size: 13px !important;
+}
+.zara-preview .command-bar > .mic-button { grid-column: 2 !important; justify-self: end !important; }
+.zara-preview .command-bar > .voice-button { grid-column: 3 !important; justify-self: end !important; }
+
+/* ---- marca d'agua do Lab: a logo, em preto fosco ----
+   Antes era outro arquivo e vinha com object-fit:cover num quadro de 182x190,
+   ou seja, o desenho era CORTADO — dai o "quadrado faltando um pedaco" e o
+   nome puxando para o esverdeado.
+   Agora e a propria logo da barra lateral. brightness(0) apaga toda a cor e
+   deixa so a silhueta preta; a opacidade baixa faz ela sumir no fundo do
+   painel, camuflada, aparecendo so quando a luz bate. */
+.zara-preview .lab-watermark {
+  object-fit: contain !important;
+  width: 190px !important;
+  height: auto !important;
+  opacity: .5 !important;
+  filter: brightness(0) !important;
+  mix-blend-mode: normal !important;
+}
+
+/* ---- marca d'agua: mais alta e menor ----
+   Estava encostando nas bolas dos avatares. */
+.zara-preview .lab-watermark {
+  width: 148px !important;
+  top: 30px !important;
+  opacity: .42 !important;
+}
+
+/* ---- avatares de marca ----
+   O Claude passa a ter o simbolo dele, como a OpenAI ja tinha; a ZARA passa a
+   usar o proprio monograma em vez de uma foto. O recorte pega so o ZA, sem a
+   palavra ZARA que vem embaixo no arquivo. */
+.zara-preview .participants .avatar-marca {
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  display: block;
+  overflow: hidden;
+  box-shadow: 0 9px 19px rgba(0,0,0,.28);
+}
+.zara-preview .participants .avatar-marca svg { width: 100%; height: 100%; display: block; }
+.zara-preview .participants .avatar-marca.zara {
+  background-image: url("./zara-brand-dark.png");
+  background-size: 150% auto;
+  background-position: center 22%;
+  background-repeat: no-repeat;
+  background-color: #10120f;
+}
+.theme-light .zara-preview .participants .avatar-marca.zara,
+.zara-preview.theme-light .participants .avatar-marca.zara {
+  background-image: url("./zara-brand-light.png");
+  background-color: #f2eee9;
+}
+
+/* ---- baloes do Lab: uma caixa so, que cresce com o texto ----
+   Tinham altura minima e maxima fixas (86px a 100px). Texto maior que isso
+   vazava para fora — e o recorte da altura maxima era o "quadrado dentro da
+   caixa". Agora a caixa acompanha o texto e a lista e que rola. */
+.zara-preview .lab-messages { overflow-y: auto !important; padding-right: 2px; }
+.zara-preview .lab-messages article {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  border: 0 !important;
+  border-radius: 15px !important;
+  padding: 13px 14px !important;
+  margin-bottom: 10px !important;
+  overflow: visible !important;
+}
+.zara-preview .lab-messages p {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  margin-top: 6px !important;
+}
+
+/* ---- participantes: nome mais perto do circulo, conjunto mais alto ---- */
+.zara-preview .participants { padding-bottom: 20px !important; }
+.zara-preview .participants div { gap: 4px !important; }
+
+/* ---- simbolo do Claude maior dentro da bolinha ----
+   O arquivo oficial vem com folga em volta; o recorte redondo deixa ampliar
+   so o simbolo, sem mexer no tamanho do circulo. */
+.zara-preview .participants .foto-claude {
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  display: block;
+  overflow: hidden;
+  box-shadow: 0 9px 19px rgba(0,0,0,.28);
+}
+.zara-preview .participants .foto-claude img {
+  width: 100%; height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  transform: scale(1.34);
+}
+
+/* ---- caixa de participar do Lab: uma borda so ----
+   O campo trazia borda, fundo e contorno proprios dentro da caixa que ja tem
+   borda. Duas bordas concentricas era o "quadrado dentro do quadrado" de novo,
+   agora no rodape do painel. */
+.zara-preview .lab-composer input {
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #cfd3ca !important;
+  font-size: 11px !important;
+  padding: 0 !important;
+  min-width: 0;
+  width: 100%;
+}
+.zara-preview .lab-composer input::placeholder { color: #7f857c !important; }
+
+/* ---- simbolo do Claude: zoom menor ----
+   1.34 cortou demais as pontas das petalas. */
+.zara-preview .participants .foto-claude img { transform: scale(1.12); }
+
+/* ---- fotos de perfil mais altas, perto da marca d'agua ---- */
+.zara-preview .participants { padding-bottom: 46px !important; }
+
+/* ============================================================================
+   TEMA CLARO — o que ficava preto porque nunca foi olhado
+   ============================================================================
+   A interface nasceu escura e so o escuro foi verificado. No claro sobravam
+   tres ilhas pretas: a barra de comando, o painel do Lab e o log da conversa.
+   Sao regras da folha antiga do projeto, carregada depois desta, vencendo por
+   ordem de cascata. */
+
+/* 1) a pilula volta a ser clara */
+.zara-preview.theme-light .command-bar {
+  background: rgba(250, 247, 245, .82) !important;
+  box-shadow: 0 12px 28px rgba(50, 40, 34, .07), inset 0 1px rgba(255,255,255,.7) !important;
+}
+.zara-preview.theme-light .command-bar > input { color: var(--ink) !important; }
+.zara-preview.theme-light .command-bar > input::placeholder { color: var(--muted) !important; }
+.zara-preview.theme-light .command-bar .mic-button:not(.desligado) { color: var(--ink) !important; }
+
+/* 2) o painel da direita entra na paleta clara */
+.zara-preview.theme-light .lab-window {
+  color: var(--ink) !important;
+  border: 1px solid var(--strong-line) !important;
+  background:
+    radial-gradient(circle at 48% 16%, rgba(255,255,255,.7), transparent 33%),
+    linear-gradient(158deg, #f7f3ef 0%, #efe9e3 60%, #f4efea 100%) !important;
+  box-shadow: 0 26px 58px rgba(63, 52, 45, .16), inset 0 1px rgba(255,255,255,.75) !important;
+}
+.zara-preview.theme-light .window-controls button { color: var(--muted) !important; }
+.zara-preview.theme-light .window-controls button:hover { background: rgba(70,59,52,.07) !important; }
+.zara-preview.theme-light .participants small { color: var(--muted) !important; }
+.zara-preview.theme-light .lab-composer {
+  color: var(--muted) !important;
+  border: 1px solid var(--strong-line) !important;
+  background: rgba(255,255,255,.55) !important;
+}
+.zara-preview.theme-light .lab-composer input { color: var(--ink) !important; }
+.zara-preview.theme-light .lab-composer input::placeholder { color: var(--muted) !important; }
+.zara-preview.theme-light .lab-composer button { color: var(--accent) !important; }
+
+/* baloes: mesmos tres tons do escuro, na versao clara */
+.zara-preview.theme-light .lab-messages article { color: var(--ink) !important; }
+.zara-preview.theme-light .lab-messages article.wine { background: rgba(83, 56, 69, .13) !important; }
+.zara-preview.theme-light .lab-messages article.gold { background: rgba(200, 185, 158, .3) !important; }
+.zara-preview.theme-light .lab-messages article.gray { background: rgba(70, 59, 52, .09) !important; }
+
+/* 3) o log da conversa segue o mesmo painel */
+.zara-preview.theme-light .painel-conversa-lista article { background: rgba(70, 59, 52, .07) !important; }
+.zara-preview.theme-light .painel-conversa-lista article.user { background: rgba(83, 56, 69, .12) !important; }
+
+/* 4) a marca d'agua: preta no escuro, BRANCA no claro.
+   O efeito que o Alex quer e o mesmo — sumir no fundo e so aparecer quando a
+   luz bate. Num fundo claro, quem some e o branco, nao o preto. */
+.zara-preview.theme-light .lab-watermark {
+  filter: brightness(0) invert(1) !important;
+  opacity: .62 !important;
+}
+
+/* ---- fotos de perfil: mesmo tamanho e centradas nos dois temas ---- */
+.zara-preview .participants div { justify-content: flex-end; }
+.zara-preview .participants img,
+.zara-preview .participants .foto-claude,
+.zara-preview .participants .avatar-marca {
+  width: 50px !important;
+  height: 50px !important;
+  flex: 0 0 50px;
+  border-radius: 50% !important;
+  object-fit: cover;
+  margin: 0 auto;
+}
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 132% auto !important;
+  background-position: center 24% !important;
+}
+.zara-preview.theme-light .participants .avatar-marca.zara { background-color: #f4efe9 !important; }
+.zara-preview.theme-light .participants img,
+.zara-preview.theme-light .participants .foto-claude,
+.zara-preview.theme-light .participants .avatar-marca {
+  box-shadow: 0 7px 15px rgba(63, 52, 45, .18) !important;
+}
+
+/* ---- avatar da ZARA: monograma centrado, do tamanho dos outros ----
+   Medido no proprio arquivo: o monograma ocupa 65,2% da largura e tem o centro
+   a 39,8% da altura. Dai saem os dois numeros abaixo — 100/65,2 = 154% para ele
+   preencher o circulo, e 19% de deslocamento vertical para o centro dele cair
+   no centro da bolinha. Antes eu tinha chutado 132%/24% e sobrava pedaco da
+   palavra ZARA dentro do circulo. */
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 154% auto !important;
+  background-position: center 19% !important;
+}
+
+/* ---- os tres perfis um pouco mais altos ---- */
+.zara-preview .participants { padding-bottom: 62px !important; }
+
+/* ---- ZARA: menos zoom, centrada ----
+   154% enchia o circulo de borda a borda e cortava as pontas do monograma.
+   126% deixa respiro, e o 1px vertical vem da conta: o centro do desenho esta
+   a 39,8% da altura do arquivo, entao a imagem precisa descer 0,7px para o
+   centro dele cair no centro da bolinha. */
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 126% auto !important;
+  background-position: center 1px !important;
+}
+
+/* A OpenAI agora e o icone oficial de 180px, ja centrado no arquivo. */
+.zara-preview .participants img { object-position: center center; }
+
+
+/* ---- marca d'agua clara: off-white quente, nao branco puro ----
+   Branco puro sobre creme tambem fica morto. O sepia leve puxa para o marfim
+   da paleta dele. */
+.zara-preview.theme-light .lab-watermark {
+  filter: brightness(0) invert(1) sepia(.32) saturate(.5) !important;
+  opacity: .72 !important;
+}
+
+
+
+/* ---- letras dos baloes: maiores e mais encorpadas ----
+   Alex: "muito finas e pequenas". Eram 11px em peso normal dentro de um painel
+   escuro — some. */
+.zara-preview .lab-messages strong,
+.zara-preview .painel-conversa-lista strong {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: .04em !important;
+}
+.zara-preview .lab-messages p,
+.zara-preview .painel-conversa-lista p {
+  font-size: 13px !important;
+  font-weight: 450 !important;
+  line-height: 1.62 !important;
+}
+.zara-preview .lab-composer input,
+.zara-preview .lab-composer { font-size: 12px !important; }
+.zara-preview .participants small { font-size: 11px !important; font-weight: 500 !important; }
+
+/* ---- botao de enviar do Lab: sem caixa, colado na margem ----
+   No desenho do Alex e so a seta. O meu tinha um quadrado translucido atras,
+   estava alto e longe da borda direita. */
+.zara-preview .lab-composer {
+  grid-template-columns: minmax(0, 1fr) 30px !important;
+  align-items: center !important;
+  padding: 4px 10px 4px 15px !important;
+}
+.zara-preview .lab-composer button {
+  width: 30px !important;
+  height: 30px !important;
+  align-self: center !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--muted) !important;
+}
+.zara-preview.theme-light .lab-composer button { color: var(--accent) !important; }
+
+/* A rolagem do Lab aparecia como uma barra escura colada no balao. */
+.zara-preview .lab-messages::-webkit-scrollbar,
+.zara-preview .painel-conversa-lista::-webkit-scrollbar { width: 5px; }
+.zara-preview .lab-messages::-webkit-scrollbar-track,
+.zara-preview .painel-conversa-lista::-webkit-scrollbar-track { background: transparent; }
+.zara-preview .lab-messages::-webkit-scrollbar-thumb,
+.zara-preview .painel-conversa-lista::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+
+/* ---- ZARA no circulo: numeros medidos no arquivo claro ----
+   monograma = 66,7% da largura, centro a 45,3% da altura. Para ele ocupar 88%
+   do circulo de 50px: 132% de escala, e -4px de deslocamento vertical para o
+   centro do desenho cair no centro da bolinha. */
+.zara-preview .participants .avatar-marca.zara {
+  background-size: 132% auto !important;
+  background-position: center -4px !important;
+}
+.zara-preview .lab-composer button svg { width: 19px; height: 19px; }
+
+/* ============================================================================
+   CONFIGURACOES — as variaveis escritas pelo painel precisam ter efeito aqui.
+   Cada uma tem um valor de reserva igual ao que ja existia, entao sem o painel
+   nada muda de aparencia.
+   ============================================================================ */
+.zara-preview .lab-messages p,
+.zara-preview .painel-conversa-lista p { font-size: var(--zara-fonte-lab, 13px) !important; }
+.zara-preview .lab-messages strong,
+.zara-preview .painel-conversa-lista strong { font-size: calc(var(--zara-fonte-lab, 13px) - 2px) !important; }
+.zara-preview .lab-composer input { font-size: calc(var(--zara-fonte-lab, 13px) - 1px) !important; }
+
+/* fundo atras do anel — o QUADRADO inteiro, chapado.
+   Eu tinha feito um halo desfocado em volta do circulo; Alex: "eu nao quero uma
+   luz em volta do anel, eu quero que mude a cor desse quadrado inteiro atras do
+   anel". Agora e o painel todo pintado, sem desfoque. */
+.zara-preview .presence-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  background: var(--zara-palco, transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+
+/* cor das logos */
+.zara-preview .lab-watermark {
+  filter: var(--zara-agua-filtro, brightness(0)) !important;
+  opacity: var(--zara-agua-opacidade, .5) !important;
+}
+.zara-preview.theme-light .lab-watermark {
+  filter: var(--zara-agua-filtro, brightness(0) invert(1) sepia(.32) saturate(.5)) !important;
+  opacity: var(--zara-agua-opacidade, .72) !important;
+}
+.zara-preview .brand img { filter: var(--zara-logo-filtro, none); }
+
+/* ---- o painel ---- */
+.config-fundo { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  background: rgba(0,0,0,.34); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.config-painel {
+  width: min(420px, 92vw); max-height: 88vh; overflow-y: auto;
+  padding: 20px 22px 18px;
+  border: 1px solid var(--strong-line); border-radius: 20px;
+  color: var(--ink); background: var(--window);
+  box-shadow: 0 30px 70px rgba(0,0,0,.4);
+  -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+}
+.config-painel > header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.config-painel > header strong { font-size: 15px; font-weight: 500; }
+.config-painel > header button { border: 0; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+.config-painel section { padding: 15px 0 4px; border-bottom: 1px solid var(--line); }
+.config-painel h4 { color: var(--muted); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; margin-bottom: 10px; }
+.config-modos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.config-modos button { padding: 9px 4px; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: transparent; cursor: pointer; font-size: 11px; }
+.config-modos button.marcado { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: var(--accent-soft); }
+.config-linha { display: grid; grid-template-columns: 116px minmax(0, 1fr) 46px; align-items: center; gap: 10px; margin-bottom: 9px; }
+.config-linha > span { color: var(--ink); font-size: 12px; }
+.config-linha > small { color: var(--muted); font-size: 10px; text-align: right; }
+.config-linha input[type="range"] { width: 100%; height: 3px; border-radius: 2px; appearance: none; background: var(--line); cursor: pointer; }
+.config-linha input[type="range"]::-webkit-slider-thumb { appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+.config-linha input[type="color"] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: transparent; cursor: pointer; }
+.config-painel > footer { padding-top: 14px; }
+.config-painel > footer button { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
+.config-painel > footer button:hover { color: var(--ink); }
+
+/* ---- o quadradinho de cor ----
+   Estava esticado por toda a coluna do regulador. Vira um quadrado pequeno,
+   como nos seletores de tema comuns. */
+.config-linha.cor { grid-template-columns: 116px 1fr 26px 62px; }
+.config-linha.cor input[type="color"] {
+  grid-column: 3;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--strong-line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.config-linha.cor input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.config-linha.cor input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
+
+/* ---- barras de rolagem ----
+   No tema claro elas apareciam pretas, porque a barra padrao do Chromium nao
+   sabe do nosso tema. */
+.zara-preview *, .config-painel, .config-painel * { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+.zara-preview ::-webkit-scrollbar,
+.config-painel::-webkit-scrollbar { width: 6px; height: 6px; }
+.zara-preview ::-webkit-scrollbar-track,
+.config-painel::-webkit-scrollbar-track { background: transparent; }
+.zara-preview ::-webkit-scrollbar-thumb,
+.config-painel::-webkit-scrollbar-thumb { border-radius: 3px; background: rgba(255,255,255,.14); }
+.zara-preview.theme-light ::-webkit-scrollbar-thumb,
+.zara-preview.theme-light .config-painel::-webkit-scrollbar-thumb { background: rgba(70,59,52,.16); }
+.zara-preview.theme-light *, .zara-preview.theme-light .config-painel { scrollbar-color: rgba(70,59,52,.22) transparent; }
+
+/* ---- altura e tamanho do anel ----
+   So a vertical e ajustavel de proposito: soltar o eixo horizontal deixaria o
+   circulo torto em relacao a barra de comando, que e centrada. */
+.zara-preview .orb {
+  width: calc(var(--zara-anel-tamanho, 1) * clamp(350px, 28.8vw, 450px)) !important;
+  transform: translateY(var(--zara-anel-y, -27px)) !important;
+}
+
+/* ---- agrupamento de cor pedido pelo Alex ----
+   UM controle para o quadrado central, OUTRO para as tres barras. As tres
+   (lateral, card Hoje e Lab/log) andam sempre juntas: mexeu numa, mexeu nas
+   tres. O Lab tinha um degrade proprio no CSS original e ficava de fora. */
+.zara-preview .lab-window {
+  background: var(--sidebar) !important;
+  border: 1px solid var(--line) !important;
+}
+.zara-preview .today-card { background: var(--sidebar) !important; }
+
+/* o quadrado central pinta a area inteira, nao so o miolo do palco.
+   Os valores negativos sao o padding do .home-stage (127 31 54 55) invertido. */
+.zara-preview .presence-stage::before {
+  inset: -127px -31px -54px -55px !important;
+  border-radius: 0 !important;
+}
+@media (height <= 790px) {
+  .zara-preview .presence-stage::before { inset: -76px -31px -28px -55px !important; }
+}
+@media (width <= 1260px) {
+  .zara-preview .presence-stage::before { inset: -127px -22px -54px -26px !important; }
+}
+
+/* ---- o fundo atras do card Hoje acompanha o quadrado central ----
+   Alex: "esse fundo atras da barra deveria ficar da mesma cor do quadrado
+   central sem alterar a cor da barra". Entao a cor vai na area inteira
+   (.home-stage, que contem o palco E a coluna do card) e o card fica por cima
+   com a cor das barras. Isso tambem aposenta o truque de margens negativas
+   que eu tinha usado no ::before. */
+.zara-preview .home-stage { background: var(--zara-palco, transparent); }
+.zara-preview .presence-stage::before { display: none !important; }
+
+/* os tres controles da janela na mesma caixa e no mesmo peso */
+.zara-preview .window-controls button { font-size: 0 !important; }
+.zara-preview .window-controls svg { width: 12px; height: 12px; display: block; opacity: .82; }
+.zara-preview .window-controls button:hover svg { opacity: 1; }
+
+/* ---- desfazer / refazer ---- */
+.config-historico { display: flex; align-items: center; gap: 2px; }
+.config-historico button { width: 28px; height: 28px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 15px; line-height: 1; }
+.config-historico button:hover:not(:disabled) { color: var(--ink); background: var(--card); }
+.config-historico button:disabled { opacity: .3; cursor: default; }
+.config-historico button:last-child { font-size: 20px; }
+
+/* ---- trilho com marcas e o ponto do padrao ---- */
+.config-trilho { position: relative; display: flex; align-items: center; height: 20px; }
+.config-trilho input[type="range"] {
+  width: 100%;
+  background-image: repeating-linear-gradient(to right,
+    color-mix(in srgb, var(--muted) 42%, transparent) 0 1px,
+    transparent 1px 10%);
+}
+/* O ponto do padrao: maior que as marcas, para ele achar de onde saiu. */
+.config-padrao {
+  position: absolute;
+  top: 50%;
+  width: 9px; height: 9px;
+  margin-left: -4.5px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 62%, transparent);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.config-padrao:hover { background: var(--accent); transform: translateY(-50%) scale(1.35); }
+.config-padrao.no-lugar { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+
+
+/* ---- reguladores do anel, sem substituir o filtro do Alex ----
+   A versao anterior REESCREVIA o filter inteiro e por isso destruia o desenho:
+   o drop-shadow espalhava a partir da silhueta e virava um halo fora dos fios.
+   Aqui o filtro original dele continua intacto no CSS acima; a cor, a forca e o
+   brilho entram como uma camada por cima, aplicada no container. Mexer nos
+   reguladores nao pode mais deformar nem borrar o traco.
+   Alex: "nada disso pode perder a qualidade ou deformar". */
+.zara-preview .orb {
+  filter: brightness(var(--zara-anel-forca, 1)) saturate(var(--zara-anel-sat, 1));
+}
+.zara-preview .presence-stage {
+  --zara-halo: transparent;
+}
+
+/* ---- realce dos fios no tema claro ----
+   O traco rose sobre pagina creme tem pouco contraste natural e some. O reforco
+   entra no CONTAINER, nao na imagem: contraste e saturacao sao operacoes por
+   pixel, entao nao borram, nao deformam e nao encostam no arquivo do Alex.
+   Foi reescrever o PNG e usar drop-shadow que estragou o desenho antes. */
+.zara-preview.theme-light .orb {
+  filter: brightness(calc(var(--zara-anel-forca, 1) * .94))
+          saturate(1.45)
+          contrast(1.42);
+}
+
+/* No claro o canvas precisa SOMAR luz, nao multiplicar, senao os brilhos
+   viajantes escurecem em vez de acender. */
+.zara-preview.theme-light .spectrum-canvas { mix-blend-mode: normal; opacity: .95; }
+/* Saturacao um pouco acima, contraste contido: passar da conta posteriza uma
+   imagem de 470px, que e exatamente o granulado que Alex nao quer. */
+.zara-preview.theme-light .orb {
+  filter: brightness(calc(var(--zara-anel-forca, 1) * .93)) saturate(1.62) contrast(1.46);
+}
+
+/* ---- paleta clara oficial ----
+   Hexes lidos direto da prancha que o Alex mandou, onde eles estao escritos
+   embaixo das amostras. Nada aqui e interpretacao minha. */
+.zara-preview.theme-light {
+  --page: #F3F0EA;
+  --window: #FAF8F4;
+  --sidebar: #F3F0EA;
+  --card: #EDE9E2;
+  --ink: #242321;
+  --muted: #85817A;
+  --accent: #72586F;
+  --accent-soft: rgba(114, 88, 111, .13);
+  --champagne: #C8B99E;
+  --ring: #C8B99E;
+  --line: rgba(36, 35, 33, .10);
+  --strong-line: rgba(36, 35, 33, .16);
+}
+/* Na prancha o anel e champanhe quente com um ponto branco de luz — nao rose.
+   O realce fica mais suave porque a cor ja tem corpo suficiente sozinha. */
+.zara-preview.theme-light .orb {
+  filter: brightness(calc(var(--zara-anel-forca, 1) * .98)) saturate(1.15) contrast(1.12);
+}
+
+/* ---- paleta dos baloes do Lab ----
+   Lida da imagem que o Alex mandou: ameixa para o Claude, champanhe queimado
+   para a OpenAI, cinza para a ZARA e uma ameixa mais funda para ele. O painel
+   fica escuro nos DOIS temas, como esta na prancha de identidade dele. */
+.zara-preview .lab-window,
+.zara-preview.theme-light .lab-window {
+  color: #EDEAE4 !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(158deg, #262421 0%, #1B1A18 60%, #232120 100%) !important;
+}
+.zara-preview .lab-messages article,
+.zara-preview.theme-light .lab-messages article { color: #F2EFE9 !important; border: 0 !important; }
+.zara-preview .lab-messages article.wine,
+.zara-preview.theme-light .lab-messages article.wine { background: #6B5166 !important; }
+.zara-preview .lab-messages article.gold,
+.zara-preview.theme-light .lab-messages article.gold { background: #A98A5F !important; }
+.zara-preview .lab-messages article.gray,
+.zara-preview.theme-light .lab-messages article.gray { background: #6E6E67 !important; }
+/* a fala do proprio Alex numa ameixa mais funda, para nao competir com o Claude */
+.zara-preview .lab-messages article.wine:nth-child(4n),
+.zara-preview.theme-light .lab-messages article.wine:nth-child(4n) { background: #5B4256 !important; }
+
+.zara-preview .participants small,
+.zara-preview.theme-light .participants small { color: #DCD8D1 !important; }
+.zara-preview .window-controls button,
+.zara-preview.theme-light .window-controls button { color: #DCD8D1 !important; }
+.zara-preview .lab-composer,
+.zara-preview.theme-light .lab-composer {
+  color: #9A968E !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  background: rgba(255,255,255,.04) !important;
+}
+.zara-preview .lab-composer input,
+.zara-preview.theme-light .lab-composer input { color: #EDEAE4 !important; }
+.zara-preview .lab-composer button,
+.zara-preview.theme-light .lab-composer button { color: #DCD8D1 !important; }
+.zara-preview.theme-light .lab-watermark { filter: brightness(0) invert(1) sepia(.3) saturate(.5) !important; }
+
+/* ---- o Lab volta para o grupo das barras ----
+   Alex: "nao deixe o lab claro no da mesma cor das barras 1 e 2 e se mudar uma
+   muda as 3". A prancha mostrava o Lab escuro no tema claro, mas a regra dele
+   vale mais: as tres superficies andam juntas. Os baloes coloridos continuam,
+   so o painel que os segura muda. */
+.zara-preview.theme-light .lab-window {
+  color: var(--ink) !important;
+  border: 1px solid var(--line) !important;
+  background: var(--sidebar) !important;
+}
+.zara-preview.theme-light .participants small,
+.zara-preview.theme-light .window-controls button,
+.zara-preview.theme-light .lab-composer button { color: var(--muted) !important; }
+.zara-preview.theme-light .lab-composer {
+  color: var(--muted) !important;
+  border: 1px solid var(--strong-line) !important;
+  background: rgba(255,255,255,.5) !important;
+}
+.zara-preview.theme-light .lab-composer input { color: var(--ink) !important; }
+
+/* ---- o anel gira o tempo inteiro ----
+   A animacao original era de 60s por volta: quase imperceptivel, e Alex leu
+   como "nao gira". 26s e visivel sem virar carrossel. */
+.zara-preview .orb .ring-base { animation-duration: 26s, 5.8s !important; }
+.zara-preview.orb-listening .orb .ring-base { animation: orbSpin 20s linear infinite !important; }
+.zara-preview.orb-speaking .orb .ring-base { animation: orbSpin 14s linear infinite !important; }
+
+/* ---- o giro organico vai no PROPRIO anel do Alex ----
+   Eu tinha desenhado um anel novo por dentro; ele nao pediu isso. O que ele
+   quer e simples: o desenho dele girando e os fios vibrando ao mesmo tempo.
+   A vibracao ja vem do filtro de turbulencia; aqui esta o giro, com uma
+   velocidade que oscila para nao parecer ponteiro de relogio. */
+@keyframes zaraGiroOrganico {
+  0%   { rotate: 0deg; }
+  28%  { rotate: 104deg; }
+  53%  { rotate: 182deg; }
+  76%  { rotate: 288deg; }
+  100% { rotate: 360deg; }
+}
+.zara-preview .orb .ring-base { animation: zaraGiroOrganico 34s ease-in-out infinite, orbBreath 5.8s ease-in-out infinite !important; }
+.zara-preview.orb-listening .orb .ring-base { animation: zaraGiroOrganico 24s ease-in-out infinite, orbBreath 4.2s ease-in-out infinite !important; }
+.zara-preview.orb-speaking .orb .ring-base { animation: zaraGiroOrganico 17s ease-in-out infinite, orbBreath 3.1s ease-in-out infinite !important; }
+
+/* ---- fios soltos uns dos outros ----
+   Cada copia do anel usa uma turbulencia com semente diferente, entao cada
+   camada de fios vibra no proprio ritmo. As opacidades somam ~1, e o
+   deslocamento e centrado em zero, entao a DISTANCIA media entre os fios nao
+   muda — que foi exatamente a condicao que o Alex deu. */
+.zara-preview .orb .ring-base.camada-0 { filter: url(#zara-cord-vibration) drop-shadow(0 0 8px var(--ring)); opacity: .62; }
+.zara-preview .orb .ring-base.camada-1 { filter: url(#zara-cord-vibration-1); opacity: .3; }
+.zara-preview .orb .ring-base.camada-2 { filter: url(#zara-cord-vibration-2); opacity: .22; }
+.zara-preview .orb .ring-base.camada-1,
+.zara-preview .orb .ring-base.camada-2 { animation-delay: -7s, -2.3s; }
+.zara-preview .orb .ring-base.camada-2 { animation-delay: -15s, -4.1s; }
+.theme-light .zara-preview .orb .ring-base.camada-0,
+.zara-preview.theme-light .orb .ring-base.camada-0 { filter: url(#zara-cord-vibration); }

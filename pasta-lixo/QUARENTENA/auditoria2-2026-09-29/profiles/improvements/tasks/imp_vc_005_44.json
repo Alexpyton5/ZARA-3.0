@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar armazenamento de entradas de diário em formato legível e pesquisável",
+  "context": "Parte do diário automático: preservar histórico para consulta futura",
+  "expected_behavior": [
+    "Salva cada entrada de diário como arquivo individual mensal (diario_YYYY_MM.md)",
+    "Usa formato Markdown para facilitar leitura e formatação básica",
+    "Inclui cabeçalho com mês/ano e entrada diária com formato consistente",
+    "Permite busca por texto dentro do diário usando comandos de voz",
+    "Mantém arquivos organizados por ano/subpastas mensais para fácil navegação"
+  ],
+  "verification": [
+    "Teste unitario: test_monthly_diary_file_creation_format()",
+    "Teste unitario: test_markdown_format_with_proper_headers()",
+    "Teste unitario: test_text_search_within_diary_entries()",
+    "Teste real: após vários dias de uso, verifique arquivos de diário criados corretamente",
+    "Teste de acessibilidade: confirme que entradas antigas podem ser acessadas facilmente"
+  ],
+  "files_to_touch": [
+    "core/diary.py",
+    "core/diary_storage.py",
+    "tests/diary/test_diary_storage.py"
+  ]
+}

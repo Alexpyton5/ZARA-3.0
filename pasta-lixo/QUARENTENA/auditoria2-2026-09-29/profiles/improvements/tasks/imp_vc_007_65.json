@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar ação antecipativa de sugestão contextual baseada no padrão detectado",
+  "context": "Parte do sistema de antecipação: oferecer ajuda útil quando padrão é detectado",
+  "expected_behavior": [
+    "Quando padrão detectado, oferece sugestão relevante em vez de executar ação diretamente",
+    "Sugestão é específica e acionável ('Que tal abrir o arquivo X que você usou ontem?')",
+    "Sugestão aparece como notificação discreta, não interrupção de fluxo de trabalho",
+    "Permite que usuário aceite sugestão, ignore ou solicite mais detalhes",
+    "Aprende com aceitação ou rejeição para melhorar futuras sugestões"
+  ],
+  "verification": [
+    "Teste unitario: test_contextual_suggestion_offered_when_pattern_detected()",
+    "Teste unitario: test_suggestion_is_specific_and_actionable()",
+    "Teste unitario: test_suggestion_appears_as_discreet_notification()",
+    "Teste real: após detectar padrão de abertura de projeto específico, verifique sugestão relevante",
+    "Teste de aprendizado: confirme que sistema aprende quando usuário segue sugestão"
+  ],
+  "files_to_touch": [
+    "core/anticipation.py",
+    "tests/anticipation/test_contextual_suggestion.py"
+  ]
+}

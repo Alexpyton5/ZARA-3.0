@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar aplicação de borrão gaussiano com kernel configurável para regiões sensíveis",
+  "context": "Parte da tarefa de captura segura: aplicar borrão apenas em regiões identificadas como sensíveis",
+  "expected_behavior": [
+    "Recebe máscara binária indicando regiões a serem borradas",
+    "Aplica filtro gaussiano com tamanho de kernel configurável (padrão: 15x15)",
+    "Preserva qualidade da imagem fora das regiões marcadas para borrão",
+    "Funciona com imagens em escala de cinza e coloridas (RGB/BGR)",
+    "Não excede limites da imagem ao aplicar borrão nas bordas"
+  ],
+  "verification": [
+    "Teste unitário: test_gaussian_blur_preserves_non_masked_areas()",
+    "Teste unitário: test_gaussian_blur_with_different_kernel_sizes()",
+    "Teste unitário: test_gaussian_blur_grayscale_vs_color()",
+    "Teste real: processe screenshot com região marcada, verifique que apenas essa região foi borrada",
+    "Teste de desempenho: <30ms para aplicar borrão em região 200x200px"
+  ],
+  "files_to_touch": [
+    "core/vision/screen_capture.py",
+    "tests/vision/test_gaussian_blur.py"
+  ]
+}

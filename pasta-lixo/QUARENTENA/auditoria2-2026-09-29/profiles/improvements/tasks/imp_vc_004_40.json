@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar integração com sistema de diário para usar aprendizado na geração de insights diários",
+  "context": "Parte do sistema de aprendizado: conectar aprendizado acumulado ao diário para melhorar relevância dos insights",
+  "expected_behavior": [
+    "Usa padrões de comando/action com alta confiança para sugerir melhorias de fluxo de trabalho",
+    "Identifica comandos frequentemente corrigidos como candidatos a tutoriais ou ajuda contextual",
+    "Inclui no diário sugestões baseadas em aprendizado (ex: 'Você frequentemente esquece de salvar antes de fechar')",
+    "Respeita privacidade: não inclui detalhes sensíveis nos insights gerados a partir do aprendizado",
+    "Funciona mesmo com dados de aprendizado limitados (mínimo de 10 registros para gerar insights)"
+  ],
+  "verification": [
+    "Teste unitario: test_learning_informs_workflow_suggestions()",
+    "Teste unitario: test_frequently_corrected_commands_become_tutorial_topics()",
+    "Teste unitario: test_privacy_respected_in_learning_based_insights()",
+    "Teste real: após vários dias de uso, verifique que diário contém insights úteis baseados no aprendizado",
+    "Teste de limite inferior: confirme que poucos registros não geram insights enganosos ou vazios"
+  ],
+  "files_to_touch": [
+    "core/aprendizado.py",
+    "core/diary.py",
+    "tests/apprendizado/test_learning_diary_integration.py"
+  ]
+}

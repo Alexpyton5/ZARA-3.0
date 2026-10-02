@@ -1,0 +1,449 @@
+/* ============================================================
+   ZARA DESIGN TOKENS — Sistema unificado de tokens visuais
+   ============================================================
+   Consolida: Pearl (pearl.css), Aparência (aparencia.css), 
+   Pele Instrumento (pele-instrumento.css), ZaraVoiceOrb.tsx
+   
+   Princípios:
+   - Uma fonte de verdade para cores, espaçamento, tipografia, motion
+   - Compatível com tema claro/escuro via data-theme attribute
+   - Tokens semânticos (não valores hardcoded) para componentes
+   - Motion tokens respeitam prefers-reduced-motion
+   ============================================================ */
+
+/* ===== CORES PRIMITIVAS (valores base, não usar direto em componentes) ===== */
+:root {
+  /* Verde militar — assinatura da ZARA (escolhido pelo Alex) */
+  --color-military-50:  #f0f5ee;
+  --color-military-100: #dcead8;
+  --color-military-200: #b9d5b1;
+  --color-military-300: #8fc17f;  /* PRIMARY / ACCENT */
+  --color-military-400: #73a662;
+  --color-military-500: #5f8354;
+  --color-military-600: #4a6642;
+  --color-military-700: #374931;
+  --color-military-800: #262f22;
+  --color-military-900: #161a15;
+  --color-military-950: #0b0f0b;  /* BASE DARK */
+
+  /* Terracota — segundo fio (complementar) */
+  --color-terracotta-50:  #fdf3ef;
+  --color-terracotta-100: #fadfd7;
+  --color-terracotta-200: #f3b9a6;
+  --color-terracotta-300: #e88d6b;
+  --color-terracotta-400: #df6b43;
+  --color-terracotta-500: #d9a441;  /* WARM ACCENT */
+  --color-terracotta-600: #c0392b;
+  --color-terracotta-700: #972d21;
+  --color-terracotta-800: #73241c;
+  --color-terracotta-900: #5d1f19;
+  --color-terracotta-950: #32100d;
+
+  /* Neutros quentes (Pearl) */
+  --color-pearl-50:  #faf9f6;
+  --color-pearl-100: #f3eeea;
+  --color-pearl-200: #e6ded5;
+  --color-pearl-300: #d4c8ba;
+  --color-pearl-400: #b8a791;
+  --color-pearl-500: #9a866d;
+  --color-pearl-600: #7d6a54;
+  --color-pearl-700: #635242;
+  --color-pearl-800: #4f4135;
+  --color-pearl-900: #42362d;
+  --color-pearl-950: #242321;
+
+  /* Neutros frios (Instrumento) */
+  --color-slate-50:  #f0f2ed;
+  --color-slate-100: #e4e9e2;
+  --color-slate-200: #c8d2c9;
+  --color-slate-300: #a1a9a0;
+  --color-slate-400: #8d9a88;
+  --color-slate-500: #6e7d6b;
+  --color-slate-600: #566355;
+  --color-slate-700: #444d42;
+  --color-slate-800: #373e34;
+  --color-slate-900: #2f352c;
+  --color-slate-950: #121313;  /* BASE DARK alt */
+
+  /* Estados semânticos */
+  --color-success: #8fc17f;
+  --color-success-hover: #73a662;
+  --color-warning: #d9b45e;
+  --color-warning-hover: #c9a04a;
+  --color-danger: #e0705f;
+  --color-danger-hover: #c95a48;
+  --color-info: #7fb3ff;
+
+  /* Opacidades padrão */
+  --opacity-disabled: 0.36;
+  --opacity-muted: 0.58;
+  --opacity-subtle: 0.12;
+  --opacity-overlay: 0.68;
+}
+
+/* ===== TEMA ESCURO (padrão) ===== */
+[data-theme="dark"], :root:not([data-theme="light"]) {
+  /* Superfícies */
+  --surface-base: var(--color-military-950);        /* #0B0F0B */
+  --surface-raised: var(--color-military-900);      /* #161A15 */
+  --surface-panel: var(--color-military-800);       /* #262F22 */
+  --surface-panel-hover: var(--color-military-700); /* #374931 */
+  --surface-input: rgba(15, 18, 16, 0.84);          /* #0F1210D6 */
+  --surface-overlay: rgba(11, 15, 11, 0.94);        /* #0B0F0BF0 */
+
+  /* Bordas */
+  --border-subtle: rgba(190, 211, 184, 0.11);       /* --pearl-line dark */
+  --border-default: rgba(190, 211, 184, 0.19);      /* --pearl-line-strong dark */
+  --border-focus: var(--color-military-300);        /* #8FC17F */
+  --border-accent: var(--color-military-300);
+
+  /* Texto */
+  --text-primary: var(--color-slate-100);           /* #E4E9E2 */
+  --text-secondary: var(--color-slate-300);         /* #A1A9A0 */
+  --text-muted: var(--color-slate-400);             /* #8D9A88 */
+  --text-faint: var(--color-slate-500);             /* #6E7D6B */
+  --text-inverse: var(--color-military-950);        /* #0B0F0B */
+  --text-on-accent: var(--color-military-950);      /* #0B0F0B */
+
+  /* Accent / Destaque */
+  --accent-primary: var(--color-military-300);      /* #8FC17F */
+  --accent-soft: rgba(143, 193, 127, 0.18);        /* --pearl-accent-soft dark */
+  --accent-muted: var(--color-military-500);        /* #5F8354 */
+  --accent-glow: rgba(162, 203, 145, 0.72);         /* --pearl-glow dark */
+
+  /* Orb específico (do ZaraVoiceOrb) */
+  --orb-primary: rgba(177, 207, 164, 0.98);         /* filament primary dark */
+  --orb-secondary: rgba(226, 235, 222, 0.86);       /* filament secondary dark */
+  --orb-glow: rgba(162, 203, 145, 0.72);            /* filament glow dark */
+  --orb-particle: rgba(225, 239, 219, 0.98);        /* particle dark */
+
+  /* Sombra */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 26px 70px rgba(0, 0, 0, 0.48);    /* --pearl-shadow dark */
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(25, 26, 26, 0.94);
+  --glass-border: rgba(190, 211, 184, 0.11);
+  --glass-blur: blur(24px);
+
+  /* Padrão de fundo (aparencia.css) */
+  --pattern-color: var(--color-terracotta-600);     /* --t-segundo */
+  --pattern-opacity: 0.035;                         /* força sutil */
+
+  /* Voice states */
+  --voice-standby: 0.045;
+  --voice-idle: 0.045;
+  --voice-listening-base: 0.10;
+  --voice-speaking-base: 0.16;
+  --voice-thinking: 0.25;
+  --voice-muted: 0.012;
+}
+
+/* ===== TEMA CLARO ===== */
+[data-theme="light"] {
+  /* Superfícies */
+  --surface-base: var(--color-pearl-50);            /* #FAF9F6 */
+  --surface-raised: var(--color-pearl-100);         /* #F3EEEA */
+  --surface-panel: var(--color-pearl-200);          /* #E6DED5 */
+  --surface-panel-hover: var(--color-pearl-300);    /* #D4C8BA */
+  --surface-input: rgba(246, 243, 238, 0.7);        /* #F6F3EEB3 */
+  --surface-overlay: rgba(250, 247, 245, 0.94);     /* #FAF7F5F0 */
+
+  /* Bordas */
+  --border-subtle: rgba(70, 59, 52, 0.13);          /* --pearl-line light */
+  --border-default: rgba(70, 59, 52, 0.20);         /* --pearl-line-strong light */
+  --border-focus: var(--color-military-500);        /* #5F8354 */
+  --border-accent: var(--color-pearl-700);          /* #635242 */
+
+  /* Texto */
+  --text-primary: var(--color-pearl-950);           /* #242321 */
+  --text-secondary: var(--color-pearl-600);         /* #7D6A54 */
+  --text-muted: var(--color-pearl-500);             /* #9A866D */
+  --text-faint: var(--color-pearl-400);             /* #B8A791 */
+  --text-inverse: var(--color-pearl-50);            /* #FAF9F6 */
+  --text-on-accent: #FFFFFF;
+
+  /* Accent / Destaque */
+  --accent-primary: var(--color-pearl-700);         /* #635242 / #533845 Pearl */
+  --accent-soft: rgba(83, 56, 69, 0.12);            /* --pearl-accent-soft light */
+  --accent-muted: var(--color-pearl-600);           /* #7D6A54 */
+  --accent-glow: rgba(150, 108, 140, 0.58);         /* --pearl-glow light */
+
+  /* Orb específico */
+  --orb-primary: rgba(113, 83, 107, 0.96);          /* filament primary light */
+  --orb-secondary: rgba(194, 175, 145, 0.86);       /* filament secondary light */
+  --orb-glow: rgba(150, 108, 140, 0.58);            /* filament glow light */
+  --orb-particle: rgba(130, 91, 121, 0.96);         /* particle light */
+
+  /* Sombra */
+  --shadow-sm: 0 1px 2px rgba(57, 48, 42, 0.08);
+  --shadow-md: 0 4px 16px rgba(57, 48, 42, 0.12);
+  --shadow-lg: 0 16px 40px rgba(57, 48, 42, 0.15);
+  --shadow-xl: 0 24px 62px rgba(57, 48, 42, 0.17);  /* --pearl-shadow light */
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(250, 247, 245, 0.94);
+  --glass-border: rgba(70, 59, 52, 0.13);
+  --glass-blur: blur(24px);
+
+  /* Padrão de fundo */
+  --pattern-color: var(--color-terracotta-500);     /* #D9A441 */
+  --pattern-opacity: 0.035;
+
+  /* Voice states */
+  --voice-standby: 0.045;
+  --voice-idle: 0.045;
+  --voice-listening-base: 0.10;
+  --voice-speaking-base: 0.16;
+  --voice-thinking: 0.25;
+  --voice-muted: 0.012;
+}
+
+/* ===== ESPAÇAMENTO (escala 4px base) ===== */
+:root {
+  --space-0: 0;
+  --space-1: 4px;    /* 0.25rem */
+  --space-2: 8px;    /* 0.5rem */
+  --space-3: 12px;   /* 0.75rem */
+  --space-4: 16px;   /* 1rem */
+  --space-5: 20px;   /* 1.25rem */
+  --space-6: 24px;   /* 1.5rem */
+  --space-8: 32px;   /* 2rem */
+  --space-10: 40px;  /* 2.5rem */
+  --space-12: 48px;  /* 3rem */
+  --space-16: 64px;  /* 4rem */
+  --space-20: 80px;  /* 5rem */
+  --space-24: 96px;  /* 6rem */
+
+  /* Espaçamentos semânticos */
+  --space-xs: var(--space-1);
+  --space-sm: var(--space-2);
+  --space-md: var(--space-4);
+  --space-lg: var(--space-6);
+  --space-xl: var(--space-8);
+  --space-2xl: var(--space-12);
+  --space-3xl: var(--space-16);
+
+  /* Layout específico */
+  --header-height: 52px;
+  --sidebar-width: 214px;
+  --right-rail-width: 250px;
+  --orb-min-size: 260px;
+  --orb-max-size: 420px;
+  --command-bar-height: 62px;
+  --window-radius: 20px;
+  --panel-radius: 16px;
+  --button-radius: 12px;
+  --input-radius: 8px;
+  --pill-radius: 999px;
+}
+
+/* ===== TIPOGRAFIA ===== */
+:root {
+  /* Famílias */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-brand: "Bodoni 72", Didot, "Times New Roman", serif;
+
+  /* Tamanhos (clamp para responsividade) */
+  --text-xs: clamp(10px, 0.75rem, 11px);      /* 0.625-0.6875rem */
+  --text-sm: clamp(11px, 0.8125rem, 12px);    /* 0.6875-0.75rem */
+  --text-base: clamp(13px, 0.875rem, 14px);   /* 0.8125-0.875rem */
+  --text-lg: clamp(14px, 0.9375rem, 16px);    /* 0.875-1rem */
+  --text-xl: clamp(16px, 1.125rem, 18px);     /* 1-1.125rem */
+  --text-2xl: clamp(20px, 1.375rem, 24px);    /* 1.25-1.5rem */
+  --text-3xl: clamp(28px, 1.75rem, 36px);     /* 1.75-2.25rem */
+  --text-4xl: clamp(36px, 2.25rem, 48px);     /* 2.25-3rem */
+
+  /* Semânticos */
+  --font-size-caption: var(--text-xs);
+  --font-size-body: var(--text-base);
+  --font-size-body-lg: var(--text-lg);
+  --font-size-heading: var(--text-xl);
+  --font-size-title: var(--text-2xl);
+  --font-size-display: var(--text-3xl);
+  --font-size-brand: clamp(24px, 2vw, 32px);
+
+  /* Pesos */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Line heights */
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  --leading-loose: 1.8;
+
+  /* Letter spacing */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+  --tracking-wider: 0.08em;
+  --tracking-widest: 0.16em;
+  --tracking-brand: 0.32em;
+  --tracking-mono: 0.04em;
+  --tracking-upper: 0.14em;
+}
+
+/* ===== MOTION / ANIMAÇÃO ===== */
+:root {
+  /* Durações */
+  --duration-instant: 0ms;
+  --duration-fast: 100ms;
+  --duration-normal: 180ms;
+  --duration-slow: 280ms;
+  --duration-slower: 400ms;
+  --duration-ambient: 6800ms;      /* Orb idle cycle */
+  --duration-orb-listen: 3400ms;   /* Orb listen rotation */
+  --duration-orb-speak: 720ms;     /* Orb speak pulse */
+  --duration-orb-think: 4000ms;    /* Orb think cycle */
+  --duration-halo-listen: 1900ms;  /* Halo listen pulse */
+  --duration-halo-speak: 580ms;    /* Halo speak pulse */
+
+  /* Easings */
+  --ease-linear: linear;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-orb-think: cubic-bezier(0.62, 0.08, 0.31, 0.92);
+  --ease-orb-idle: ease-in-out;
+  --ease-gentle: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  /* Orb physics (do ZaraVoiceOrb.tsx) */
+  --orb-energy-response-rise: 8.4;   /* damping when energy increases */
+  --orb-energy-response-fall: 4.6;   /* damping when energy decreases */
+  --orb-vibration-speed-speak: 2.04; /* max */
+  --orb-vibration-speed-listen: 1.12;
+  --orb-vibration-speed-think: 0.58;
+  --orb-vibration-speed-idle: 0.32;
+  --orb-vibration-speed-muted: 0.08;
+  --orb-rotation-speed-speak: 0.11;  /* max rad/frame */
+  --orb-rotation-speed-listen: 0.082;
+  --orb-rotation-speed-think: 0.07;
+  --orb-rotation-speed-idle: 0.052;
+  --orb-rotation-speed-muted: 0.026;
+
+  /* Particle system */
+  --particle-count: 42;
+  --particle-energy-base: 0.58;
+  --particle-energy-multiplier: 1.42;
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+    --duration-slower: 0ms;
+    --duration-ambient: 0ms;
+    --duration-orb-listen: 0ms;
+    --duration-orb-speak: 0ms;
+    --duration-orb-think: 0ms;
+    --duration-halo-listen: 0ms;
+    --duration-halo-speak: 0ms;
+    --orb-energy-response-rise: 0;
+    --orb-energy-response-fall: 0;
+    --orb-vibration-speed-speak: 0;
+    --orb-vibration-speed-listen: 0;
+    --orb-vibration-speed-think: 0;
+    --orb-vibration-speed-idle: 0;
+    --orb-vibration-speed-muted: 0;
+    --orb-rotation-speed-speak: 0;
+    --orb-rotation-speed-listen: 0;
+    --orb-rotation-speed-think: 0;
+    --orb-rotation-speed-idle: 0;
+    --orb-rotation-speed-muted: 0;
+  }
+}
+
+/* ===== Z-INDEX SCALE ===== */
+:root {
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+  --z-toast: 800;
+  --z-max: 9999;
+}
+
+/* ===== BREAKPOINTS (para reference em JS/TS) ===== */
+:root {
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  --bp-2xl: 1536px;
+}
+
+/* ===== FOCUS VISIBLE ===== */
+:root {
+  --focus-ring: 2px solid var(--border-focus);
+  --focus-ring-offset: 2px;
+}
+
+*:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ===== SCROLLBAR ===== */
+:root {
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: var(--border-default);
+  --scrollbar-thumb-hover: var(--border-accent);
+  --scrollbar-width: 8px;
+  --scrollbar-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { 
+  background: var(--scrollbar-thumb); 
+  border-radius: var(--scrollbar-radius);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ===== SELECTION ===== */
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+/* ===== UTILITÁRIOS DE TOKEN (para uso em CSS customizado) ===== */
+.token-surface-base { background-color: var(--surface-base); }
+.token-surface-raised { background-color: var(--surface-raised); }
+.token-surface-panel { background-color: var(--surface-panel); }
+.token-surface-input { background-color: var(--surface-input); }
+.token-text-primary { color: var(--text-primary); }
+.token-text-secondary { color: var(--text-secondary); }
+.token-text-muted { color: var(--text-muted); }
+.token-text-faint { color: var(--text-faint); }
+.token-border-subtle { border-color: var(--border-subtle); }
+.token-border-default { border-color: var(--border-default); }
+.token-accent-primary { color: var(--accent-primary); }
+.token-accent-bg { background-color: var(--accent-primary); }
+.token-shadow-sm { box-shadow: var(--shadow-sm); }
+.token-shadow-md { box-shadow: var(--shadow-md); }
+.token-shadow-lg { box-shadow: var(--shadow-lg); }
+.token-shadow-xl { box-shadow: var(--shadow-xl); }
+.token-glass { 
+  background: var(--glass-bg); 
+  border: 1px solid var(--glass-border); 
+  backdrop-filter: var(--glass-blur); 
+}

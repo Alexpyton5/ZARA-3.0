@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar captura de tela que automaticamente identifica e borra áreas sensíveis (senhas, cartões, documentos) antes de processamento de OCR",
+  "context": "Baseado em IDEIAS-DO-ALEX.md #1 e discussões sobre privacidade. Usar OpenCV para detecção de padrões + Tesseract configurado para PT-BR.",
+  "expected_behavior": [
+    "Detecta campos de senha por padrões de asteriscos/pontos",
+    "Identifica números de cartão via regex e Luhn check",
+    "Aplica borrão gaussiano apenas em regiões detectadas como sensíveis",
+    "Retorna coordenadas das áreas borradas para log de auditoria",
+    "Funciona em múltiplos monitores com DPI scaling"
+  ],
+  "verification": [
+    "Unit test: test_redaction_detects_asterisk_password_fields()",
+    "Unit test: test_redaction_preserves_non_sensitive_text()",
+    "Docker test: ride em container sem acesso à rede, confirme que nenhum pixel de tela saiu",
+    "Performance test: <100ms para tela 1920x1080 em CPU médio"
+  ],
+  "files_to_touch": [
+    "core/vision/screen_capture.py",
+    "core/vision/pii_detector.py",
+    "tests/vision/test_redaction.py"
+  ]
+}

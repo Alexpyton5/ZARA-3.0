@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar política de resolução de conflitos 'último vence' para dados de aprendizado",
+  "context": "Parte da multi-dispositivo básico: decidir como resolver conflitos de aprendizado",
+  "expected_behavior": [
+    "Quando conflito detectado, escolhe versão com timestamp de modificação mais recente",
+    "Respeita fuso horário: converte todos os timestamps para UTC antes de comparar",
+    "Fornece registro de qual versão foi escolhida e por quê",
+    "Permite configuração de política diferente para diferentes tipos de dado",
+    "Funciona mesmo quando dispositivos estiveram desconectados por período prolongado"
+  ],
+  "verification": [
+    "Teste unitario: test_last_write_wins_based_on_utc_timestamp()",
+    "Teste unitario: test_timezone_handling_in_timestamp_comparison()",
+    "Teste unitario: test_conflict_resolution_decision_logged()",
+    "Teste real: simular conflito com timestamps conhecidos, verifique que versão mais recente vence",
+    "Teste de configurabilidade: confirme que política pode ser alterada se necessário"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_resolution_policy.py",
+    "tests/sync/test_last_write_wins_policy.py"
+  ]
+}

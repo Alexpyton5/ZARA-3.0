@@ -1,0 +1,22 @@
+{
+  "goal": "Criar sistema de diário que fecha o dia sozinho e acumula 'dia 1, dia 2...' com métricas e aprendizados",
+  "context": "Baseado em IDEIAS-DO-ALEX.md 'Em construção agora' - item 2: 'Diário dela'. Deve funcionar autonomamente ao final do dia ou quando solicitado.",
+  "expected_behavior": [
+    "Coletar estatísticas do dia: ações realizadas, erros, tempo de resposta, comandos não entendidos",
+    "Identificar padrões: horários de pico, tipos de pedido mais comuns, ações bem-sucedidas",
+    "Gerar resumo em linguagem natural: 'Hoje você pediu 12 vezes volume, 8 foram acertados'",
+    "Armazenar em formato legível com possibilidade de busca por período",
+    "Oferecer insights: 'Você pede mais lembretes às segundas manhãs'"
+  ],
+  "verification": [
+    "Unit test: test_diary_collects_daily_stats()",
+    "Unit test: test_diary_generates_natural_summary()",
+    "Teste real: esperar 24h simulado e verificar geração de entrada de diario",
+    "Verificar que entradas são salvas em %LOCALAPPDATA%\\ZARA3\\data\\diary\\ diarios.md"
+  ],
+  "files_to_touch": [
+    "core/diary.py",
+    "core/diary_storage.py",
+    "tests/diary/test_diary_system.py"
+  ]
+}

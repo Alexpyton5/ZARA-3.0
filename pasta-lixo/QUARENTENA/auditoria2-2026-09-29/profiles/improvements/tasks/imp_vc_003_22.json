@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar deteção de botões modernos do Windows (estilo Fluent/UX)",
+  "context": "Parte da tarefa de detetor de elementos UI: identificar botões interativos na tela",
+  "expected_behavior": [
+    "Detecta botões com estilo moderno do Windows 10/11 (bordas arredondadas, efeito de elevação)",
+    "Funciona com botões de barra de ferramentas e painéis de configuração",
+    "Detecta variações de cor (primário, secundário, sucesso, perigo, aviso)",
+    "Funciona com temas claro e escuro do Windows",
+    "Retorna coordenadas, tamanho, texto e estilo do botão detectado"
+  ],
+  "verification": [
+    "Teste unitario: test_detect_modern_windows_button()",
+    "Teste unitario: test_detect_toolbar_and_panel_buttons()",
+    "Teste unitario: test_detect_color_variations_primary_secondary()",
+    "Teste real: processe screenshot com Configurações do Windows 11, verifique deteção de botões",
+    "Teste de desempenho: <75ms para processar região 400x400px contendo botões modernos"
+  ],
+  "files_to_touch": [
+    "core/vision/ui_detector.py",
+    "core/vision/template_matcher.py",
+    "tests/vision/test_modern_button_detection.py"
+  ]
+}

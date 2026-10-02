@@ -1,0 +1,23 @@
+{
+  "goal": "Implementar modo de fallback para monitores com DPI desconhecido usando escala padrão",
+  "context": "Parte da tarefa de captura segura: garantir funcionamento mesmo quando informações de DPI não estão disponíveis",
+  "expected_behavior": [
+    "Quando escala DPI não pode ser determinada, assume valor padrão de 96 DPI (100% escala)",
+    "Registra aviso no log quando fallback para DPI padrão é utilizado",
+    "Continua funcionando normalmente, embora com potencialmente ligeira imprecisão em monitores de alto DPI",
+    "Não falha ou trava quando informações de monitor estão incompletas",
+    "Tentativa de reconexão periódica para obter informações de DPI quando disponíveis"
+  ],
+  "verification": [
+    "Teste unitario: test_fallback_to_standard_dpi_when_unavailable()",
+    "Teste unitario: test_warning_logged_when_using_fallback()",
+    "Teste unitario: test_functionality_preserved_with_fallback_dpi()",
+    "Teste real: simule cenário onde informações de DPI estão temporariamente indisponíveis, verifique fallback",
+    "Teste de recuperação: verifique que sistema retorna ao funcionamento completo quando DPI fica disponível novamente"
+  ],
+  "files_to_touch": [
+    "core/vision/monitor_manager.py",
+    "core/vision/screen_capture.py",
+    "tests/vision/test_dpi_fallback.py"
+  ]
+}

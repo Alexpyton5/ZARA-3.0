@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar formato neutro para sincronização de aprendizado entre dispositivos",
+  "context": "Parte da multi-dispositivo básico: definir como o aprendizado será compartilhado entre dispositivos",
+  "expected_behavior": [
+    "Define estrutura JSON para entrada de aprendizado (comando, ação, resultado, reação, timestamp)",
+    "Inclui ID de dispositivo para rastrear origem do registro",
+    "Usa timestamp UTC absoluto para evitar confusão de fuso horário",
+    "Não inclui informações sensíveis ou pessoais no formato de sincronização",
+    "Permite extensão futura através de campos reservados no formato"
+  ],
+  "verification": [
+    "Teste unitario: test_neutral_format_includes_required_fields()",
+    "Teste unitario: test_device_id_present_in_format()",
+    "Teste unitario: test_utc_timestamp_used_for_consistency()",
+    "Teste real: criar entrada de aprendizado em dispositivo A, verificar que formato é neutro",
+    "Teste de privacidade: confirme que nenhuma informação sensível está incluída"
+  ],
+  "files_to_touch": [
+    "core/sync/sync_format.py",
+    "tests/sync/test_neutral_format.py"
+  ]
+}

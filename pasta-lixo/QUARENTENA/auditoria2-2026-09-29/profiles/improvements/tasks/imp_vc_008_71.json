@@ -1,0 +1,22 @@
+{
+  "goal": "Implementar buffer de áudio pós-frase de 1 segundo para melhorar transcrição de palavras finais",
+  "context": "Parte do microfone mais preciso: capturar áudio após o usuário parar de falar para melhorar transcrição",
+  "expected_behavior": [
+    "Continua capturando áudio por 1 segundo após detecção de fim de fala",
+    "Combina buffer principal com buffer pós-frase antes de enviar para transcrição",
+    "Ajusta dinamicamente o tamanho do buffer baseado na qualidade do áudio inicial",
+    "Não aumenta latência perceptível quando usuário fala continuamente",
+    "Libera recursos de memória do buffer imediatamente após uso"
+  ],
+  "verification": [
+    "Teste unitario: test_one_second_post_phrase_buffer_capture()",
+    "Teste unitario: test_main_and_post_phrase_buffers_combined_before_transcription()",
+    "Teste unitario: test_dynamic_buffer_size_adjustment()",
+    "Teste real: gravar áudio com palavra final truncada, verifique melhoria na transcrição",
+    "Teste de desempenho: confirme que latência adicional é <1.5s mesmo com buffer"
+  ],
+  "files_to_touch": [
+    "core/voice/post_phrase_processor.py",
+    "tests/voice/test_post_phrase_buffer.py"
+  ]
+}

@@ -51,6 +51,8 @@ MONEY_ACTION_NAME_PATTERNS: tuple[str, ...] = (
     r"billing",
     r"cobran[cç]a",
     r"transfer[eê]ncia",
+    r"transferir",
+    r"dinheiro",
     r"dep[oó]sito",
     r"\bsaque\b",
     r"empr[eé]stimo",

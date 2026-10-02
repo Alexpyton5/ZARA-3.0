@@ -64,14 +64,15 @@ def test_probe_cache_preserves_fact_and_adverse_overlay_without_contamination(tm
 
 def test_probe_cache_force_refresh_and_ttl(tmp_path):
     adapter = CountingAdapter()
-    registry = ProviderRegistry(tmp_path / "health.json", probe_ttl_s=0.02)
+    # TTL e sleep bem acima da resolucao do relogio Windows (15.6ms) para evitar flaky
+    registry = ProviderRegistry(tmp_path / "health.json", probe_ttl_s=0.1)
     registry.register(adapter)
     registry.list_providers()
     registry.list_providers()
     assert adapter.probes == 1
     registry.list_providers(force_refresh=True)
     assert adapter.probes == 2
-    time.sleep(0.03)
+    time.sleep(0.25)
     registry.list_providers()
     assert adapter.probes == 3
 

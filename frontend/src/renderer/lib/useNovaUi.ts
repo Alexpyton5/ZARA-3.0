@@ -35,7 +35,7 @@ export function useNovaUi(provider: PilotProvider = 'muse') {
 
   const pause = useCallback(async () => {
     if (mutating.current) return;
-    if (!state || state.paused === null) throw new Error('Espere o motor confirmar o estado da equipe.');
+    if (!state || state.paused === null) throw new Error('Espere o motor confirmar como a equipe está.');
     mutating.current = true; setBusy(true);
     try {
       const api = window.zaraIPC?.novaUI;

@@ -82,8 +82,8 @@ def render_self_knowledge(topic: str, snapshot: dict[str, Any]) -> str:
     """Render a concise answer from observed runtime state."""
     if topic == "identity":
         return (
-            "Eu sou ZARA, a assistente local deste computador. "
-            "Modelo e provider são motores que eu uso; não são minha identidade."
+            "Eu sou o motor do TROPA DEV, a ZARA, rodando neste computador. "
+            "Quem conversa com você é o seu avatar; eu executo — voz, visão, memória e controle total do PC."
         )
 
     if topic == "model":
@@ -91,13 +91,13 @@ def render_self_knowledge(topic: str, snapshot: dict[str, Any]) -> str:
         model = snapshot.get("effective_model")
         if isinstance(model, dict) and model:
             return (
-                f"Eu sou ZARA. Meu motor efetivo mais recente foi {model.get('name') or model.get('id')} "
+                f"Eu sou o motor do TROPA DEV, a ZARA. O modelo efetivo mais recente foi {model.get('name') or model.get('id')} "
                 f"({model.get('provider')}, modelo {model.get('api_model') or model.get('id')}). "
                 f"Política atual: {policy}."
             )
         return (
-            f"Eu sou ZARA. Política atual: {policy}. "
-            "Ainda não há um motor efetivamente usado registrado nesta sessão."
+            f"Eu sou o motor do TROPA DEV, a ZARA. Política atual: {policy}. "
+            "Ainda não há um modelo efetivamente usado registrado nesta sessão."
         )
 
     if topic == "providers":

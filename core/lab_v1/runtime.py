@@ -197,7 +197,7 @@ CEO_ACTING_REASON = "Papel CEO inicial do time; a disponibilidade depende do pro
 # --------------------------------------------------------------------------
 
 _CEO_PROMPT_TEMPLATE = """Voce e {agent_name}, ocupando o cargo de {role} ({designation}) no time {team_name} da ZARA.
-A ZARA e a assistente pessoal do Alex e e a regente do sistema: ela guarda o contexto, a memoria, e observa tudo o que acontece.
+A ZARA e o motor do TROPA DEV: guarda o contexto, a memoria, e observa tudo o que acontece.
 
 Seu time:
 {roster}

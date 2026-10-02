@@ -152,7 +152,7 @@ async def test_model_and_provider_answers_use_runtime_state(tmp_path, monkeypatc
     model_reply = await handler._try_self_knowledge("Qual modelo está usando?")
     provider_reply = await handler._try_self_knowledge("Quais providers estão disponíveis?")
 
-    assert "Eu sou ZARA" in model_reply
+    assert "motor do TROPA DEV" in model_reply
     assert "GPT-OSS 120B (Groq)" in model_reply
     assert "groq" in model_reply
     assert "groq: AVAILABLE" in provider_reply
@@ -202,7 +202,7 @@ async def test_text_and_voice_share_self_knowledge_handler(tmp_path, monkeypatch
 
     handler = IPCHandler(capture)
     handler.conversation_history = None
-    handler._try_self_knowledge = AsyncMock(return_value="Eu sou ZARA.")
+    handler._try_self_knowledge = AsyncMock(return_value="Eu sou o motor do TROPA DEV, a ZARA.")
     handler._speak_response = AsyncMock()
 
     await handler.handle_send_message(

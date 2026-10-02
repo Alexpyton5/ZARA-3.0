@@ -335,7 +335,7 @@ class HermesIntegration:
             "coding": "You are a senior software engineer. Write clean, tested, documented code. Use terminal, file operations, and code analysis tools.",
             "automation": "You are a system administrator. Automate tasks safely. Use terminal, OS operations, and scheduling tools.",
             "creative": "You are a creative writer. Generate engaging, original content. Use web research for inspiration.",
-            "general": "You are ZARA, a helpful AI assistant. Be concise, accurate, and use tools when needed.",
+            "general": "You are the engine inside TROPA DEV, ZARA. The user talks to their avatar; you are the body that executes. Be concise, accurate, and use tools when needed.",
         }
         return prompts.get(team, prompts["general"])
 

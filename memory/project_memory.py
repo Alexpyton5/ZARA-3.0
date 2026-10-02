@@ -14,6 +14,7 @@ Layout (spec do Mentor):
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import sqlite3
@@ -325,6 +326,58 @@ class ProjectMemory:
             return nome
         except OSError:
             return None
+
+    def record_pilot_turn(self, turn: dict) -> str | None:
+        """Archive one completed exchange without duplicating retries or touching peer notes.
+
+        A caller-generated observation ID identifies the submission, rather than the
+        utterance or provider DOM IDs (which may collide across accounts).
+        """
+        from memory.pilot_learning import pilot_turn_body, valid_pilot_turn
+        if not valid_pilot_turn(turn):
+            return None
+        vault = self._current_obsidian_vault()
+        if vault is None:
+            return None
+        temporary = None
+        try:
+            folder = vault / "conversas"
+            folder.mkdir(exist_ok=True)
+            # Reject an archive folder redirected outside the configured vault.
+            if not folder.resolve().is_relative_to(vault.resolve()):
+                return None
+            name = "pilot-" + hashlib.sha256(turn["event_id"].encode("utf-8")).hexdigest() + ".md"
+            target = folder / name
+            body = pilot_turn_body(turn)
+            note = ("# Conversa observada do piloto\n\n"
+                    f"Data: {datetime.now().astimezone().isoformat()}\n\n{body}")
+            temporary = folder / (name + "." + uuid4().hex + ".tmp")
+            temporary.write_text(note, encoding="utf-8", newline="\n")
+            try:
+                # Atomic exclusive publication: a concurrent/retried writer cannot
+                # replace an existing note or expose a partially written file.
+                os.link(temporary, target)
+                return name
+            except FileExistsError:
+                if target.is_symlink() or target.stat().st_size > 256000:
+                    return None
+                with target.open(encoding="utf-8", newline="") as existing:
+                    saved = existing.read(256001)
+                # Date is the first observation's date. Content changes conflict.
+                prefix, separator, saved_body = saved.partition("\n\nRegistro observado")
+                if (separator and prefix.startswith("# Conversa observada do piloto\n\nData: ")
+                        and "Registro observado" + saved_body == body):
+                    return name
+                return None
+        except (OSError, UnicodeError):
+            return None
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
 
     def append_decision(self, decision: str) -> None:
         """Append a decision to the project decisions log."""

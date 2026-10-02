@@ -79,11 +79,13 @@ def test_multiline_windows_text_remains_quoted_and_idempotent(tmp_path):
     assert "> # Dado citado" in (vault / "conversas" / name).read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("private_text", ["Minha senha é Exemplo123", "Meu PIN é 1234", "Dados bancários do teste fictício"])
-def test_automatic_capture_rejects_natural_language_credentials(tmp_path, private_text):
+@pytest.mark.parametrize("field", ["user_text", "assistant_text"])
+@pytest.mark.parametrize("private_text", ["Minha senha é Exemplo123", "Meu PIN é 1234", "Dados bancários do teste fictício",
+                                         "Meu token de acesso é valor-ficticio-para-revisao"])
+def test_automatic_capture_rejects_natural_language_credentials(tmp_path, private_text, field):
     pm, vault = memory(tmp_path)
     event = exchange()
-    event["user_text"] = private_text
+    event[field] = private_text
     assert pm.record_pilot_turn(event) is None
     assert not list(vault.rglob("*.md"))
 

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { PILOTS, cancelPilotReply, checkPilotCancellation, isPilotProvider, preparePilotTurn, probePilot, sendPilotMessage, type PilotProvider } from './pilotConversation';
 import type { MuseWebview } from './museConversation';
 import { useZoeVoice } from './useZoeVoice';
+import { createPilotTurnRecorder } from './pilotLearning';
 import { extractZoeComputerGoal } from './computerAgentTrigger';
 import { getComputerAgentBridge } from '../components/computer-agent/computerAgentBridge';
 
@@ -124,7 +125,9 @@ export function PilotSessionProvider({ children }: { children: ReactNode }) {
       const turn = await preparePilotTurn(text, window.zaraIPC?.pilot, cancelled, manualFallback);
       if (turn.handled) return turn.response;
       if (!connected || !webviewRef.current) { connect(); throw new Error('Entre na sua conta para conversar com o piloto.'); }
-      return await sendPilotMessage(webviewRef.current, provider, turn.text, cancelled, turn.context);
+      const record = createPilotTurnRecorder(provider, text, 'text', window.zaraIPC?.pilot);
+      return await sendPilotMessage(webviewRef.current, provider, turn.text, cancelled, turn.context,
+        (submission, reply) => { void record(submission, reply); });
     } finally { sending.current = false; }
   }, [provider, connected, connect, voice.voiceState]);
 

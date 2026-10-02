@@ -44,7 +44,9 @@ def source_identity(backend_only: bool = False) -> dict:
         if path.is_file():
             paths.append(path)
         elif path.is_dir():
-            paths.extend(p for p in path.rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix not in {".pyc", ".pyo"})
+            # Git packs and worktree pointers are mutable repository metadata,
+            # not runtime inputs. Keep real code and .gitignore/.github files.
+            paths.extend(p for p in path.rglob("*") if ".git" not in p.parts and p.is_file() and "__pycache__" not in p.parts and p.suffix not in {".pyc", ".pyo"})
     entries = [{"path": p.relative_to(ROOT).as_posix(), "sha256": digest(p)} for p in sorted(set(paths))]
     payload = json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()
     return {"sha256": hashlib.sha256(payload).hexdigest(), "files": entries}

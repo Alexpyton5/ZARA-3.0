@@ -968,6 +968,7 @@ function hideComputerAgentOverlay(): void {
 }
 
 function setupIPC(): void {
+  ipcMain.handle('pilot-learn', (_event, payload) => sendToPython('shared-brain-learn', payload))
   ipcMain.handle('pilot-context', (_event, payload) => sendToPython('pilot-context', payload))
   ipcMain.handle('pilot-command', (_event, payload) => sendToPython('pilot-command', payload))
   ipcMain.handle('nova-ui-state', () => sendToPython('nova-ui-state'))

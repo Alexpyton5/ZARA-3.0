@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -280,30 +278,5 @@ test('pararAudioAec fecha contexto de saida mesmo sem microfone renderer', () =>
   assert.equal(context.closed, true);
 });
 
-test('VoiceDock limita AEC ao transporte renderer e limpa listeners', () => {
-  const source = readFileSync(
-    resolve(process.cwd(), 'src/renderer/components/zara-home/VoiceDock.tsx'),
-    'utf8',
-  );
-
-  assert.match(source, /response\.mode !== 'local' && response\.audio_transport !== 'local'/);
-  assert.match(source, /iniciarAudioAec\(\(pcm\) => window\.zaraIPC\?\.voice\?\.sendMicChunk/);
-  assert.match(source, /voiceOutputAudio\?\.\(\(data\) =>/);
-  assert.match(source, /if \(data\?\.stop\) cortarKore\(\)/);
-  assert.match(source, /else if \(data\?\.pcm\) tocarKore\(data\.pcm, data\.sampleRate \|\| 24000\)/);
-  assert.match(source, /unsubscribePlayback\(\)/);
-  assert.match(source, /unsubscribe\?\.\(\)/);
-});
-
-test('VoiceDock aborta voz renderer quando AEC retorna ok false', () => {
-  const source = readFileSync(
-    resolve(process.cwd(), 'src/renderer/components/zara-home/VoiceDock.tsx'),
-    'utf8',
-  );
-
-  assert.match(
-    source,
-    /const result = await iniciarAudioAec[\s\S]*?if \(!result\.ok\) throw new Error\('Microfone indisponível/,
-  );
-  assert.match(source, /catch \(cause\) \{\s+pararAudioAec\(\);[\s\S]*?voice\?\.stop/);
-});
+// Transport selection, failed capture and listener cleanup are exercised through
+// the live useZoeVoice hook in useZoeVoice.test.ts. VoiceDock was retired.

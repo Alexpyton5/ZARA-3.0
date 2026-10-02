@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as conversation from '../src/renderer/lib/pilotConversation';
 import * as muse from '../src/renderer/lib/museConversation';
+import * as learning from '../src/renderer/lib/pilotLearning';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -22,9 +23,15 @@ function voiceHarness(options: {
   start?: () => Promise<any>;
   playback?: () => Promise<void>;
   read?: () => Promise<muse.MuseReply>;
+  learn?: learning.PilotLearningBridge['learn'];
+  capture?: () => Promise<{ ok: boolean }>;
 } = {}) {
   const states: unknown[] = [];
-  const calls = { commands: [] as string[], contexts: [] as string[], spoken: [] as string[], submitted: [] as string[], played: [] as string[], stops: 0, providerStops: 0 };
+  const refs: Array<{ current: unknown }> = [];
+  const cleanups: Array<() => void> = [];
+  let stateIndex = 0, refIndex = 0, mounted = false;
+  let captureMic: ((pcm: string) => void) | undefined;
+  const calls = { commands: [] as string[], contexts: [] as string[], spoken: [] as string[], submitted: [] as string[], played: [] as string[], learned: [] as learning.PilotTurnObservation[], stops: 0, providerStops: 0, captureStarts: 0, captureStops: 0, cuts: 0, mic: [] as string[], unsubscribed: [] as string[] };
   const events: Record<string, (data: any) => void> = {};
   const timers: Array<{ callback: () => void; delay: number }> = [];
   let now = 0;
@@ -35,16 +42,22 @@ function voiceHarness(options: {
     return { submitted: true, confirmed: true, userId: 'user', previousAssistantId: 'old' };
   } };
   const react = {
-    useRef: (value: unknown) => ({ current: value }),
+    useRef: (value: unknown) => refs[refIndex++] ||= { current: value },
     useCallback: (fn: unknown) => fn,
     useState: (value: unknown) => {
-      const index = states.push(value) - 1;
-      return [value, (next: unknown) => { states[index] = next; }];
+      const index = stateIndex++;
+      if (index >= states.length) states.push(value);
+      return [states[index], (next: unknown) => { states[index] = next; }];
     },
-    useEffect: (fn: () => unknown) => { fn(); },
+    useEffect: (fn: () => unknown) => {
+      if (mounted) return;
+      const cleanup = fn();
+      if (typeof cleanup === 'function') cleanups.push(cleanup as () => void);
+    },
   };
   const ipc = {
     pilot: {
+      learn: async (turn: learning.PilotTurnObservation) => { calls.learned.push(turn); return options.learn ? options.learn(turn) : { success: true, path: 'note.md' }; },
       command: async (text: string) => { calls.commands.push(text); return options.command ? options.command(text) : { handled: false, success: true, response: '' }; },
       context: async (text: string) => { calls.contexts.push(text); return options.context ? options.context(text) : { success: true, context: `fresh:${text}` }; },
     },
@@ -57,10 +70,11 @@ function voiceHarness(options: {
         return { success: true };
       },
       stop: async () => { calls.stops++; },
+      sendMicChunk: (pcm: string) => { calls.mic.push(pcm); },
     },
     on: {
-      voiceOutputAudio: (callback: (data: any) => void) => { events.audio = callback; return () => {}; },
-      zoeVoiceInput: (callback: (data: any) => void) => { events.input = callback; return () => {}; },
+      voiceOutputAudio: (callback: (data: any) => void) => { events.audio = callback; return () => { calls.unsubscribed.push('audio'); }; },
+      zoeVoiceInput: (callback: (data: any) => void) => { events.input = callback; return () => { calls.unsubscribed.push('input'); }; },
     },
   };
   const source = readFileSync(path.resolve(__dirname, '../../src/renderer/lib/useZoeVoice.ts'), 'utf8');
@@ -70,12 +84,20 @@ function voiceHarness(options: {
     exports,
     require: (name: string) => {
       if (name === 'react') return react;
-      if (name === './pilotConversation') return { ...conversation, readPilotReply: async () => options.read ? options.read() : reply };
+      if (name === './pilotConversation') return { ...conversation, readPilotReply: async () => {
+        const result = options.read ? await options.read() : reply;
+        return { ...result, correlation: result.correlation || 'matched' };
+      } };
       if (name === './museConversation') return muse;
+      if (name === './pilotLearning') return learning;
       if (name === './computerAgentTrigger') return { extractZoeComputerGoal: () => null };
       if (name.includes('computerAgentBridge')) return { getComputerAgentBridge: () => { throw new Error('Unexpected manual execution'); } };
       if (name === './aecAudio') return {
-        cortarKore: () => {}, pararAudioAec: () => {}, iniciarAudioAec: async () => ({ ok: true }),
+        cortarKore: () => { calls.cuts++; }, pararAudioAec: () => { calls.captureStops++; },
+        iniciarAudioAec: async (send: (pcm: string) => void) => {
+          calls.captureStarts++; captureMic = send;
+          return options.capture ? options.capture() : { ok: true };
+        },
         tocarKore: (pcm: string) => calls.played.push(pcm),
         aguardarFimKore: options.playback || (async () => undefined),
       };
@@ -86,7 +108,12 @@ function voiceHarness(options: {
     performance: { now: () => now },
     setTimeout: (callback: () => void, delay: number) => { timers.push({ callback, delay }); },
   });
-  const voice = exports.useZoeVoice({ current: webview }, true, 'muse');
+  const snapshot = () => {
+    stateIndex = 0; refIndex = 0;
+    return exports.useZoeVoice({ current: webview }, true, 'muse');
+  };
+  const voice = snapshot();
+  mounted = true;
   const flush = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
   const tick = async (count = 1) => {
     for (let i = 0; i < count; i++) {
@@ -98,7 +125,9 @@ function voiceHarness(options: {
       await flush();
     }
   };
-  return { voice, states, calls, events, flush, tick, setReply: (value: muse.MuseReply) => { reply = value; }, time: () => now };
+  return { voice, snapshot, states, calls, events, flush, tick,
+    sendCapture: (pcm: string) => captureMic?.(pcm), unmount: () => cleanups.forEach(fn => fn()),
+    setReply: (value: muse.MuseReply) => { reply = value; }, time: () => now };
 }
 
 test('busy replies remain open through a 2.5-second plateau and speak the later continuation once', async () => {
@@ -106,18 +135,23 @@ test('busy replies remain open through a 2.5-second plateau and speak the later 
   await h.voice.toggle();
   h.events.input({ text: 'conte algo' });
   await h.tick(20);
+  assert.equal(h.calls.learned.length, 0);
   assert.ok(h.time() > 2500);
   assert.notEqual(h.states[0], 'listening');
   assert.deepEqual(h.calls.spoken, ['Primeira frase.']);
   h.setReply({ assistantId: 'answer', text: 'Primeira frase. Segunda frase.', busy: false });
   await h.tick(5);
   assert.equal(h.states[0], 'listening');
+  assert.equal(h.calls.learned.length, 1);
+  assert.equal(h.calls.learned[0].assistant_text, 'Primeira frase. Segunda frase.');
+  assert.equal(h.calls.learned[0].user_text, 'conte algo');
+  assert.equal(h.calls.learned[0].channel, 'voice');
   assert.deepEqual(h.calls.spoken, ['Primeira frase.', 'Segunda frase.']);
   assert.deepEqual(h.calls.commands, ['conte algo']);
   assert.deepEqual(h.calls.contexts, ['conte algo']);
   assert.match(h.calls.submitted[0], /fresh:conte algo/);
-  assert.equal(h.states[4], 180); // transcribed input to first matching pilot text
-  assert.equal(h.states[5], 180); // transcribed input to first mocked PCM event
+  assert.equal(h.snapshot().museWaitMs, 180); // transcribed input to first matching pilot text
+  assert.equal(h.snapshot().firstSoundMs, 180); // transcribed input to first mocked PCM event
   await h.voice.stop();
 });
 
@@ -131,6 +165,7 @@ test('ordinary voice commands speak the executor result without submitting to th
     assert.deepEqual(h.calls.spoken, [response]);
     assert.deepEqual(h.calls.contexts, []);
     assert.deepEqual(h.calls.submitted, []);
+    assert.deepEqual(h.calls.learned, []);
     assert.equal(h.states[0], 'listening');
     await h.voice.stop();
   }
@@ -144,7 +179,7 @@ test('a greeting answer plays automatically and returns to listening without a p
   assert.deepEqual(h.calls.spoken, ['Oi, Alex!']);
   assert.deepEqual(h.calls.played, ['test-pcm']);
   assert.equal(h.states[0], 'listening');
-  assert.equal(h.states[5], 180);
+  assert.equal(h.snapshot().firstSoundMs, 180);
   await h.voice.stop();
 });
 
@@ -222,10 +257,38 @@ test('barge-in drops the old reply, keeps the mic open and accepts the next turn
   delayed.resolve({ assistantId: 'old', text: 'Não fale esta resposta.', busy: false });
   await h.flush();
   assert.deepEqual(h.calls.spoken, []);
+  assert.equal(h.calls.learned.length, 0);
   h.events.input({ text: 'segunda pergunta' });
   await h.tick(5);
   assert.deepEqual(h.calls.spoken, ['Nova resposta.']);
+  assert.equal(h.calls.learned.length, 1);
+  assert.equal(h.calls.learned[0].user_text, 'segunda pergunta');
   await h.voice.stop();
+});
+
+test('the microphone returns to listening even when persistence is pending or rejected', async () => {
+  for (const learn of [async () => new Promise<learning.PilotLearningReceipt>(() => {}), async () => { throw new Error('offline'); }]) {
+    const h = voiceHarness({ learn, read: async () => ({ assistantId: 'reply', text: 'Plano pronto para revisar.', busy: false, correlation: 'matched' }) });
+    await h.voice.toggle();
+    h.events.input({ text: 'Plano' });
+    await h.tick(5);
+    assert.equal(h.states[0], 'listening');
+    assert.equal(h.calls.learned.length, 1);
+    assert.deepEqual(h.calls.played, ['test-pcm']);
+    await h.voice.stop();
+  }
+});
+
+test('a missing or ambiguous reply is never spoken or archived', async () => {
+  for (const correlation of ['missing', 'ambiguous', 'superseded'] as const) {
+    const h = voiceHarness({ read: async () => ({ assistantId: 'unrelated', text: 'Outra conversa.', busy: false, correlation }) });
+    await h.voice.toggle();
+    h.events.input({ text: 'Plano' });
+    await h.tick(correlation === 'missing' ? 5 : 1);
+    assert.deepEqual(h.calls.spoken, []);
+    assert.deepEqual(h.calls.learned, []);
+    await h.voice.stop();
+  }
 });
 
 test('queued speech captures its generation and cannot replay after stop and restart', async () => {
@@ -281,4 +344,49 @@ test('assistant node replacement does not speak the same already-consumed text t
   await h.tick(2);
   assert.deepEqual(h.calls.spoken, ['Primeira frase.']);
   await h.voice.stop();
+});
+
+test('renderer capture starts only for renderer transport and stops forwarding after stop', async () => {
+  for (const result of [{ success: true, mode: 'local' }, { success: true, audio_transport: 'local' }, { success: true, mode: 'renderer' }]) {
+    const h = voiceHarness({ start: async () => result });
+    await h.voice.toggle();
+    const expected = result.mode === 'renderer' ? 1 : 0;
+    assert.equal(h.calls.captureStarts, expected);
+    h.sendCapture('active-pcm');
+    assert.deepEqual(h.calls.mic, expected ? ['active-pcm'] : []);
+    await h.voice.stop();
+    h.sendCapture('late-pcm');
+    assert.deepEqual(h.calls.mic, expected ? ['active-pcm'] : []);
+  }
+});
+
+test('failed renderer capture stops backend voice and leaves the microphone unavailable', async () => {
+  const h = voiceHarness({ start: async () => ({ success: true, mode: 'renderer' }), capture: async () => ({ ok: false }) });
+  await h.voice.toggle();
+  assert.equal(h.snapshot().voiceState, 'error');
+  assert.match(h.snapshot().error, /Microfone indisponível/);
+  assert.equal(h.calls.stops, 1);
+  assert.ok(h.calls.captureStops > 0);
+  h.sendCapture('rejected-pcm');
+  assert.deepEqual(h.calls.mic, []);
+});
+
+test('audio stop interrupts playback and unmount releases both listeners and late events', async () => {
+  const h = voiceHarness({ command: async () => ({ handled: true, success: true, response: 'Resposta local.' }) });
+  await h.voice.toggle();
+  h.events.input({ text: 'volume' });
+  await h.flush();
+  assert.deepEqual(h.calls.played, ['test-pcm']);
+  const previousCuts = h.calls.cuts;
+  h.events.audio({ stop: true });
+  assert.equal(h.calls.cuts, previousCuts + 1);
+  h.unmount();
+  await h.flush();
+  assert.deepEqual(h.calls.unsubscribed.sort(), ['audio', 'input']);
+  assert.equal(h.calls.stops, 1);
+  h.events.audio({ pcm: 'late-pcm' });
+  h.events.input({ text: 'late-command' });
+  await h.flush();
+  assert.deepEqual(h.calls.played, ['test-pcm']);
+  assert.deepEqual(h.calls.commands, ['volume']);
 });

@@ -9,7 +9,7 @@ from memory.shared_second_brain import SharedSecondBrain
 # Automatic capture is deliberately more conservative than manual learning.
 # Natural-language credentials need no colon/equals sign to remain private.
 _AUTOMATIC_PRIVATE = re.compile(
-    r"\b(?:senhas?|pin|cvv|cvc|iban|cpf|cart[aã]o|dados\s+banc[aá]rios|"
+    r"\b(?:senhas?|tokens?|pin|cvv|cvc|iban|cpf|cart[aã]o|dados\s+banc[aá]rios|"
     r"c[oó]digo\s+de\s+acesso|chave\s+(?:(?:da|de)\s+)?(?:api|pix|privada))\b", re.IGNORECASE)
 
 

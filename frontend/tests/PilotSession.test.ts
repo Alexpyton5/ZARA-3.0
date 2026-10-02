@@ -5,16 +5,18 @@ import path from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as conversation from '../src/renderer/lib/pilotConversation';
+import * as learning from '../src/renderer/lib/pilotLearning';
 
 function sessionHarness(options: {
   command?: conversation.PilotBridge['command'];
   context?: conversation.PilotBridge['context'];
   goal?: string;
   signedIn?: boolean;
+  learn?: learning.PilotLearningBridge['learn'];
 } = {}) {
   const states: any[] = [], refs: any[] = [], effects: any[] = [];
   let stateIndex = 0, refIndex = 0, effectIndex = 0;
-  const calls = { commands: [] as string[], contexts: [] as string[], messages: [] as Array<{ text: string; context?: string }>, manual: 0, stops: 0 };
+  const calls = { commands: [] as string[], contexts: [] as string[], messages: [] as Array<{ text: string; context?: string }>, learned: [] as learning.PilotTurnObservation[], manual: 0, stops: 0 };
   const events: Record<string, () => void> = {};
   const voice = { voiceState: 'off', stop: async () => { calls.stops++; } };
   const webview = {
@@ -47,13 +49,15 @@ function sessionHarness(options: {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }) };
       if (name === './useZoeVoice') return { useZoeVoice: () => voice };
+      if (name === './pilotLearning') return learning;
       if (name === './computerAgentTrigger') return { extractZoeComputerGoal: () => options.goal ?? null };
       if (name.includes('computerAgentBridge')) return { getComputerAgentBridge: () => ({ run: async () => { calls.manual++; return { success: true, verified: true }; } }) };
       if (name === './pilotConversation') return {
         ...conversation,
-        sendPilotMessage: async (_webview: unknown, _provider: unknown, text: string, cancelled: () => boolean, context?: string) => {
+        sendPilotMessage: async (_webview: unknown, _provider: unknown, text: string, cancelled: () => boolean, context?: string, onComplete?: (submission: any, reply: any) => void) => {
           conversation.checkPilotCancellation(cancelled);
           calls.messages.push({ text, context });
+          onComplete?.({ submitted: true, confirmed: true, userId: 'user', previousAssistantId: 'old' }, { assistantId: 'reply', text: 'Resposta do modelo: abra o terminal.', busy: false, correlation: 'matched' });
           return 'Resposta do modelo: abra o terminal.';
         },
       };
@@ -63,6 +67,7 @@ function sessionHarness(options: {
     window: {
       setInterval: () => 1, clearInterval: () => {},
       zaraIPC: { pilot: {
+        learn: async (turn: learning.PilotTurnObservation) => { calls.learned.push(turn); return options.learn ? options.learn(turn) : { success: true, path: 'note.md' }; },
         command: async (text: string) => { calls.commands.push(text); return options.command ? options.command(text) : { handled: false, success: true, response: '' }; },
         context: async (text: string) => { calls.contexts.push(text); return options.context ? options.context(text) : { success: true, context: `revision-${calls.contexts.length}` }; },
       } },
@@ -92,6 +97,29 @@ test('ordinary text commands return the executor reply even when the pilot accou
     assert.equal(await h.session().send('diminua o volume'), response);
     assert.deepEqual(h.calls.contexts, []);
     assert.deepEqual(h.calls.messages, []);
+    assert.deepEqual(h.calls.learned, []);
+  }
+});
+
+test('confirmed text replies record each actual submission, even when the same phrase is repeated', async () => {
+  const h = sessionHarness();
+  await h.ready();
+  await h.session().send('Planeje a entrega');
+  await h.session().send('Planeje a entrega');
+  assert.equal(h.calls.learned.length, 2);
+  assert.notEqual(h.calls.learned[0].event_id, h.calls.learned[1].event_id);
+  assert.equal(h.calls.learned[0].user_text, 'Planeje a entrega');
+  assert.equal(h.calls.learned[0].channel, 'text');
+  assert.equal(h.calls.learned[0].assistant_text, 'Resposta do modelo: abra o terminal.');
+  assert.doesNotMatch(JSON.stringify(h.calls.learned), /revision-/);
+});
+
+test('text reply returns while the memory write is pending or rejected', async () => {
+  for (const learn of [async () => new Promise<learning.PilotLearningReceipt>(() => {}), async () => { throw new Error('offline'); }]) {
+    const h = sessionHarness({ learn });
+    await h.ready();
+    assert.equal(await h.session().send('Plano'), 'Resposta do modelo: abra o terminal.');
+    assert.equal(h.calls.learned.length, 1);
   }
 });
 

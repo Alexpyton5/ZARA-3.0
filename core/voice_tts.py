@@ -91,7 +91,7 @@ class TTSConfig:
     # Gemini Live fallback
     gemini_api_key: str = ""
     gemini_voice: str = "Puck"  # Puck, Charon, Kore, Fenrir, Aoede
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.5-flash-preview-tts"  # 1.5-flash nao tem modalidade AUDIO; 2.5-preview-tts verificada na amostra_kore.wav (01/10)
 
     # Audio output
     output_device: int | None = None

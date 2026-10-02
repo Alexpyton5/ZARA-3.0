@@ -1,11 +1,11 @@
-/** Shell da interface da TROPA dev. — rail lateral + header global + page-head + toast.
+/** Shell da interface da TROPA DEV. — rail lateral + header global + page-head + toast.
  *  Visual segue o molde (zara-ui-lab): classes e estrutura idênticas,
  *  cores só por variáveis CSS (contrato da frente TEMA). */
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Clock3, House, MessageCircle, Mic, Users, Settings } from 'lucide-react';
 import type { AvatarInfo, NavKey } from '../types';
-import tropaBall from '../../../assets/prototipo/tropa-ball-v2.svg';
+import tropaLogoNova from '../../../assets/tropa-logo-nova.png';
 
 /* ------------------------------------------------------------------ */
 /* Toast: contexto exposto para as telas mostrarem avisos curtos.      */
@@ -32,7 +32,7 @@ const NAV: Array<{ key: NavKey; rotulo: string; Icon: typeof House }> = [
 
 const CABECALHO: Record<NavKey, { eyebrow: string; titulo: string }> = {
   inicio: { eyebrow: 'SEU TEMPO, DE VOLTA PARA VOCÊ', titulo: 'Início' },
-  conversa: { eyebrow: 'SEU PILOTO PENSA. A TROPA dev. FAZ.', titulo: 'Conversa' },
+  conversa: { eyebrow: 'SEU PILOTO PENSA. A TROPA DEV. FAZ.', titulo: 'Conversa' },
   voz: { eyebrow: 'A SUA VOZ É O COMANDO', titulo: 'Voz' },
   atividade: { eyebrow: 'O TRABALHO CONTINUA', titulo: 'Enquanto você estava fora' },
   equipe: { eyebrow: 'CADA AVATAR, UMA ESPECIALIDADE', titulo: 'Minha equipe' },
@@ -75,7 +75,7 @@ function Relogio() {
 export interface ZaraNovaShellProps {
   active: NavKey;
   onNavigate: (key: NavKey) => void;
-  /** Ações à direita do page-head (ex.: botão "Falar com a TROPA dev."). */
+  /** Ações à direita do page-head (ex.: botão "Falar com a TROPA DEV."). */
   pageActions?: ReactNode;
   children: ReactNode;
   avatar?: AvatarInfo;
@@ -101,7 +101,7 @@ export function ZaraNovaShell({ active, onNavigate, pageActions, children, avata
       <div className="app-shell">
         <aside className="app-rail">
           <button className="brand" onClick={() => onNavigate('inicio')} aria-label="Ir para o Início">
-            <img className="brand-symbol" src={tropaBall} alt="" width={48} height={48} />
+            <img className="brand-symbol" src={tropaLogoNova} alt="" width={48} height={48} />
             <span className="brand-wordmark"><b className="brand-tropa">TROPA</b> <b className="brand-dev">dev.</b></span>
           </button>
 

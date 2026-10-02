@@ -14,9 +14,11 @@ O delta escreve turnos finais confirmados de texto/voz em conversas/ do vault ex
 4. Compilar em diretorio novo apenas quando os gates da base estiverem resolvidos. Nao sobrescrever ponteiros/instalacao; nomear EXE/BUILD_ID e hashes ASAR/backend/EXE; executar smoke do candidato identificado.
 5. A verificacao fisica de texto/voz e memoria unica no vault permanece NAO PROVADA. WhatsApp exige ordem humana real, recibo do Lab e retorno da Zoe ao chat de origem; nao enviar teste externo por conta propria.
 
-## Instalacao preservada observada
+## Identidade de pacote observada — auditoria fresca
 
-ZARA_ACTIVE_BUILD.json ainda identifica zara-current-20260928-041712, com EXE em frontend/ZARA CURRENT BUILD/win-unpacked/ZARA 3.0.exe. Esse pacote anterior nao e evidencia do novo registro. O candidato F5 anterior tambem nao cobre os reparos desta tarefa. Nenhuma instalacao ou promocao foi executada aqui.
+Auditoria fresca de pacote: ZARA_ACTIVE_BUILD.json conserva BUILD_ID zara-current-20260928-041712, mas seu EXE_PATH nao existe. Tres arquivos reais (EXE/ASAR/backend) foram encontrados e hasheados em AppData/Local/Programs/zara-frontend; BUILD_ID e funcionamento desse instalado permanecem NAO PROVADOS sem metadata/smoke. Nao houve alteracao de ponteiro, instalacao ou fontes. Recibo .zara-tests/installed-pointer-audit-20261002.json. No action_registry atual, PC_CONTROL verifica check_whatsapp_grant antes da autonomia e nega erros/ausencia/expiracao; pc_control_allowed=True legado sozinho nao prova bypass. Diff atual dessas duas politicas e apenas texto/BOM, embora escopo de ordens descritas por colegas continue referencia. Nao repetir como fato fresco o bypass anterior; a auditoria nao concede permissoes.
+
+Os hashes de arquivos nao provam que o app abre, que o microfone funciona ou que o pacote contem o registro desta tarefa. O apontador de setembro e historico desatualizado e nao deve ser usado como baseline atual sem reconciliacao com a sala de lancamento. Sem promocao automatica.
 
 ## Evidencia de fonte antes da full
 

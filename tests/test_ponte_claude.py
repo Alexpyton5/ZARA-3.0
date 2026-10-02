@@ -154,7 +154,7 @@ async def test_a_resposta_e_o_recado_e_nao_um_pronto(monkeypatch, acao, texto):
         "blocked": False, "physical_effect": 1, "reply": "", "contextual": False,
     })()
     monkeypatch.setattr(
-        "core.pc_voice_intent.PcVoiceIntentDetector.detect", lambda self, t: detectado
+        "core.pc_voice_intent.PcVoiceIntentDetector.detect", lambda self, t, **k: detectado
     )
 
     reply = await handler._try_pc_intent("lê o que o claude falou")

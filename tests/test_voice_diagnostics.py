@@ -131,17 +131,17 @@ def test_check_ipc_wiring_errors_on_missing(tmp_path):
 
 def test_tts_cascade_uses_official_policy():
     engines = {
-        "gemini_key_set": True, "omnivoice_module": True,
+        "gemini_key_set": True,
         "edge_tts": True, "kokoro_onnx": True,
     }
     result = vd.check_tts_cascade(engines)
-    assert result["order"] == ["kore", "omnivoice", "edge", "kokoro"]
+    assert result["order"] == ["kore", "edge", "kokoro"]
     assert result["status"] == "ok"
 
 
 def test_tts_cascade_empty_is_error():
     result = vd.check_tts_cascade({
-        "gemini_key_set": False, "omnivoice_module": False,
+        "gemini_key_set": False,
         "edge_tts": False, "kokoro_onnx": False,
     })
     assert result["status"] == "error"

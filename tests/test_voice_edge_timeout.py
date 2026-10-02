@@ -51,7 +51,6 @@ def test_speak_normalizes_text_before_cascade():
     manager = TTSManager(config)
     fake_edge = Mock()
     manager.edge = fake_edge
-    manager.omnivoice = None
     manager.kokoro = None
     manager.gemini = None
 
@@ -66,7 +65,6 @@ def test_speak_leaves_plain_text_untouched():
     manager = TTSManager(config)
     fake_edge = Mock()
     manager.edge = fake_edge
-    manager.omnivoice = None
     manager.kokoro = None
     manager.gemini = None
 

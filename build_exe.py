@@ -185,11 +185,7 @@ def create_pyinstaller_spec() -> Path:
     jsonschema_specifications_datas = collect_data_files("jsonschema_specifications")
     # PCM transcription uses no bundled Silero weights until their own audit.
     whisper_datas = collect_data_files("faster_whisper", excludes=["assets/*.onnx"])
-    # Keep OmniVoice's heavy model/dependencies out of the frozen backend. The
-    # optional model runs in its own per-user venv; only its small worker script
-    # is bundled so the installed app can use that runtime when present.
-    omnivoice_worker_data = [(str(PROJECT_ROOT / "core" / "omnivoice_worker.py"), "core")]
-    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas + sounddevice_datas + certifi_datas + jsonschema_specifications_datas + omnivoice_worker_data + whisper_datas
+    datas = porcupine_datas + kokoro_datas + language_tags_datas + genai_datas + sounddevice_datas + certifi_datas + jsonschema_specifications_datas + whisper_datas
 
     # google-genai has a broad async/live module tree; collect it explicitly so
     # PyInstaller cannot miss modules imported dynamically by the SDK.

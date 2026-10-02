@@ -2,7 +2,7 @@
 
 Ponto fraco real que isto cobre: a ZARA falava "R$ 280" como "R cifrão
 duzentos e oitenta" e "14:30" como "quatorze dois pontos trinta" — os
-motores (Edge/Kokoro/OmniVoice) não expandem esses símbolos sozinhos.
+motores (Edge/Kokoro) não expandem esses símbolos sozinhos.
 """
 from __future__ import annotations
 

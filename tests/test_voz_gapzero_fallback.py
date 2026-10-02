@@ -1,12 +1,9 @@
-"""GAP-ZERO — FRENTE 1 (Voz): a cadeia de voz degrada graciosamente
-quando o runtime OmniVoice está ausente.
+"""GAP-ZERO — FRENTE 1 (Voz): a cadeia de voz degrada graciosamente.
 
-Estado real no PC do Alex (2026-09-28): o runtime nunca foi instalado
-(sem venv em %LOCALAPPDATA%\\ZARA3\\runtimes\\omnivoice e sem ready.json).
-Estes testes simulam exatamente esse estado e provam que o app NUNCA
-quebra por voz faltando: a Kore falha -> o OmniVoice ausente é pulado
-sem ser chamado -> a Edge local assume -> e mesmo sem voz nenhuma o
-app continua funcionando (fica calado, texto na tela).
+Cascata oficial (02/10, decisao do Alex): Kore -> Edge -> Kokoro (reserva
+local). O OmniVoice foi removido do sistema — estes testes provam que o app
+NUNCA quebra por voz faltando: a Kore falha -> a Edge assume -> e mesmo sem
+voz nenhuma o app continua funcionando (fica calado, texto na tela).
 """
 
 from __future__ import annotations
@@ -17,7 +14,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from core.ipc_handlers import IPCHandler
-from core.omnivoice_runtime import OmniVoiceWorkerTTS
 from core.voice_engine_policy import voice_output_order
 from core.voice_fallback import KoreRecoveryPolicy
 
@@ -50,21 +46,6 @@ class _EdgeLocal:
         self.spoken.append(text)
 
 
-def _runtime_ausente(tmp_path) -> OmniVoiceWorkerTTS:
-    """OmniVoiceWorkerTTS real apontando para pastas vazias.
-
-    É exatamente o estado do PC do Alex: o objeto existe no tts_manager,
-    mas available é False porque venv e ready.json não existem.
-    """
-    worker = tmp_path / "omnivoice_worker.py"
-    worker.write_text("# worker ausente", encoding="utf-8")
-    return OmniVoiceWorkerTTS(
-        runtime_root=tmp_path / "runtime",
-        data_root=tmp_path / "data",
-        worker_path=worker,
-    )
-
-
 def _politica_rapida() -> KoreRecoveryPolicy:
     return KoreRecoveryPolicy(
         minimum_timeout_seconds=0.01,
@@ -83,34 +64,26 @@ def _handler(kore, tts_manager) -> IPCHandler:
     return handler
 
 
-def test_runtime_ausente_marca_available_false(tmp_path):
-    runtime = _runtime_ausente(tmp_path)
-    assert runtime.available is False
-
-
 @pytest.mark.asyncio
-async def test_cascata_pula_omnivoice_ausente_e_cai_na_edge(tmp_path):
-    """Kore morta + OmniVoice ausente: a Edge fala, sem excecao."""
-    omni = _runtime_ausente(tmp_path)
+async def test_cascata_cai_na_edge_quando_kore_morre():
+    """Kore morta: a Edge fala, sem excecao."""
     edge = _EdgeLocal()
-    manager = SimpleNamespace(omnivoice=omni, edge=edge, kokoro=None, gemini=None)
+    manager = SimpleNamespace(edge=edge, kokoro=None, gemini=None)
     handler = _handler(_KoreMorta(), manager)
 
     await handler._speak_response("A voz local assume quando a Kore cai.")
 
-    assert omni.available is False
     assert edge.spoken == ["A voz local assume quando a Kore cai."]
 
 
 @pytest.mark.asyncio
 async def test_sem_nenhuma_voz_o_app_continua_funcionando():
-    """Pior caso: Kore inativa, OmniVoice ausente, Edge/Kokoro/Gemini None.
+    """Pior caso: Kore inativa, Edge/Kokoro/Gemini None.
 
     O app nao pode levantar excecao: ele fica calado, o texto aparece
     na tela e o estado volta para STANDBY.
     """
-    omni = SimpleNamespace(available=False)
-    manager = SimpleNamespace(omnivoice=omni, edge=None, kokoro=None, gemini=None)
+    manager = SimpleNamespace(edge=None, kokoro=None, gemini=None)
     kore = _KoreMorta()
     kore.active = False
     handler = _handler(kore, manager)
@@ -124,13 +97,12 @@ async def test_sem_nenhuma_voz_o_app_continua_funcionando():
     assert standby, "o app deve voltar ao estado STANDBY mesmo sem voz"
 
 
-def test_ordem_de_voz_nunca_inventa_omnivoice_ausente():
-    """Mesmo com OmniVoice selecionado, se o runtime sumiu a ordem nao
-    pode conter 'omnivoice': cai para kore/edge ou fica vazia."""
+def test_ordem_de_voz_nunca_contem_omnivoice():
+    """O OmniVoice nao existe mais: a ordem nunca pode conte-lo, mesmo se
+    alguem pedir pelo nome antigo (mapeia pra kore)."""
     ordem = voice_output_order(
         "omnivoice",
         kore_ready=False,
-        omnivoice_ready=False,
         edge_ready=True,
         kokoro_ready=False,
     )
@@ -140,19 +112,17 @@ def test_ordem_de_voz_nunca_inventa_omnivoice_ausente():
     ordem_vazia = voice_output_order(
         "omnivoice",
         kore_ready=False,
-        omnivoice_ready=False,
         edge_ready=False,
         kokoro_ready=False,
     )
     assert ordem_vazia == ()
 
 
-def test_ordem_com_omnivoice_presente_mantem_o_local_primeiro():
+def test_ordem_oficial_e_kore_edge_kokoro():
     ordem = voice_output_order(
-        "omnivoice",
+        "kore",
         kore_ready=True,
-        omnivoice_ready=True,
         edge_ready=True,
-        kokoro_ready=False,
+        kokoro_ready=True,
     )
-    assert ordem[0] == "omnivoice"
+    assert ordem == ("kore", "edge", "kokoro")

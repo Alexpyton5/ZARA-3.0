@@ -12,7 +12,7 @@ E1. FLUXO DA CHAMADA OUTBOUND
    configurado. Sem isso, fail-closed: levanta CallNotAuthorizedError e
    registra "blocked" no audit. Nenhuma ligacao real sai sem ele pedir.
 4. FALAR -- o roteiro vai para a voz dela (TTSManager em cascata Kore ->
-   OmniVoice -> Edge -> Kokoro; injetavel para testes).
+   Edge -> Kokoro; injetavel para testes).
 5. REGISTRAR -- toda tentativa cai no audit_log: outbound_call / MEDIUM /
    outcome (simulated | completed | blocked | failed).
 

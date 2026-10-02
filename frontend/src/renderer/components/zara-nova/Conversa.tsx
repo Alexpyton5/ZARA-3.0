@@ -162,7 +162,7 @@ export function Conversa({ avatar = ZOE_PADRAO, historico = [], onEnviar, voz, o
           </div>
           <div className="voz-hero-legenda" role="status" aria-live="polite">
             <strong>{rotuloVoz(voz, avatar.nome)}</strong>
-            {voz?.motor ? <span>Voz: {voz.motor === 'kore' ? 'Kore' : 'OmniVoice (reserva)'}</span> : null}
+            {voz?.motor ? <span>Voz: Kore</span> : null}
           </div>
         </div>
 

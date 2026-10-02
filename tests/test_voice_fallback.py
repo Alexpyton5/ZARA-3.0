@@ -135,7 +135,7 @@ async def test_ipc_times_out_kore_once_then_uses_existing_local_fallback():
     edge = FakeEdge()
     handler.gemini_live_voice = kore
     handler.tts_manager = SimpleNamespace(
-        omnivoice=None, edge=edge, kokoro=None, gemini=None
+        edge=edge, kokoro=None, gemini=None
     )
 
     await handler._speak_response("Use a voz local se Kore travar.")

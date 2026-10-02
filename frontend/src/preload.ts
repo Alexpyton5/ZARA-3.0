@@ -7,6 +7,7 @@ import type { ReminderEvent } from './reminderEvents'
 // Define the API we want to expose to the renderer
 const zaraAPI = {
   pilot: {
+    learn: (turn: unknown) => ipcRenderer.invoke('pilot-learn', { turn }) as Promise<{ success: boolean; path?: string }>,
     context: (text: string) => ipcRenderer.invoke('pilot-context', { text }) as Promise<{ success: boolean; context: string; error?: string }>,
     command: (text: string) => ipcRenderer.invoke('pilot-command', { text }) as Promise<{ success: boolean; handled: boolean; response: string; error?: string; verified?: boolean }>,
   },
@@ -134,7 +135,7 @@ const zaraAPI = {
     stop: () => ipcRenderer.invoke('voice-stop'),
     status: () => ipcRenderer.invoke('voice-status'),
     getEngine: () => ipcRenderer.invoke('voice-engine-get'),
-    setEngine: (engine: 'kore' | 'omnivoice') => ipcRenderer.invoke('voice-engine-set', { engine }),
+    setEngine: (engine: 'kore') => ipcRenderer.invoke('voice-engine-set', { engine }),
     sendMicChunk: (pcm: any) => ipcRenderer.send('voice-mic-chunk', pcm),
     mute: (mudo?: boolean) => ipcRenderer.invoke('voice-mute', mudo),
   },

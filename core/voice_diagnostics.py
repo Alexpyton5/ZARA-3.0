@@ -143,8 +143,7 @@ VOICE_STAGES: tuple[Stage, ...] = (
     Stage(
         "tts",
         "Texto -> fala (TTS)",
-        "Qual motor da cascata está ativo? Ordem oficial: kore -> edge -> "
-        "omnivoice -> kokoro (core/voice_engine_policy.py). A ZARA nunca "
+        "Qual motor da cascata está ativo? Ordem oficial: kore -> edge -> kokoro (core/voice_engine_policy.py). A ZARA nunca "
         "pode ficar muda: se um motor falha, o próximo assume.",
         ("core/voice_tts.py", "core/voice_engine_policy.py", "core/voice_fallback.py"),
     ),
@@ -223,7 +222,6 @@ def check_engines() -> dict:
         "porcupine": _installed("pvporcupine"),
         "edge_tts": _installed("edge_tts"),
         "kokoro_onnx": _installed("kokoro_onnx"),
-        "omnivoice_module": _installed("core.omnivoice_runtime"),
         # Chaves: só "existe / não existe", o valor nunca entra no relatório.
         "gemini_key_set": bool(os.environ.get("GEMINI_API_KEY")),
         "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
@@ -366,7 +364,6 @@ def check_tts_cascade(engines: dict | None = None) -> dict:
         order = voice_output_order(
             "kore",
             kore_ready=bool(eng.get("gemini_key_set")),
-            omnivoice_ready=bool(eng.get("omnivoice_module")),
             edge_ready=bool(eng.get("edge_tts")),
             kokoro_ready=bool(eng.get("kokoro_onnx")),
         )

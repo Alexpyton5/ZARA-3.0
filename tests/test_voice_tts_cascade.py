@@ -76,26 +76,6 @@ def test_manager_survives_with_edge_only():
     assert mgr.edge.spoken == ["Estou aqui."]
 
 
-def test_omnivoice_is_tried_before_edge_after_the_live_kore_fails():
-    mgr = TTSManager(TTSConfig())
-    mgr.omnivoice = _FakeEngine()
-    mgr.edge = _FakeEngine()
-
-    mgr.speak("Resposta local.")
-
-    assert mgr.omnivoice.spoken == ["Resposta local."]
-    assert mgr.edge.spoken == []
-
-
-def test_interrupt_stops_omnivoice_playback():
-    mgr = TTSManager(TTSConfig())
-    mgr.omnivoice = _FakeEngine()
-
-    mgr.interrupt()
-
-    assert mgr.omnivoice.stopped is True
-
-
 def test_edge_engine_reports_its_own_voice_name_not_gemini_voice():
     """[VOICE_TRACE] tem de nomear a voz que realmente falou."""
     from core.ipc_handlers import _tts_voice_name
@@ -108,8 +88,8 @@ def test_edge_engine_reports_its_own_voice_name_not_gemini_voice():
 
 
 @pytest.mark.asyncio
-async def test_speak_response_uses_omnivoice_before_edge_when_kore_is_unavailable(monkeypatch):
-    """Runtime local instalado assumes antes de Edge quando Kore não fala."""
+async def test_speak_response_uses_edge_when_kore_is_unavailable(monkeypatch):
+    """Sem Kore, a Edge fala direto (OmniVoice removido em 02/10)."""
     sapi_calls: list[str] = []
     monkeypatch.setattr(
         "core.ipc_handlers._speak_windows_sapi",
@@ -124,24 +104,20 @@ async def test_speak_response_uses_omnivoice_before_edge_when_kore_is_unavailabl
     handler._tts_initialized = True
 
     edge = _FakeEngine()
-    omni = _FakeEngine()
-    omni.available = True
     edge.voice_name = "pt-BR-FranciscaNeural"
     handler.tts_manager = Mock()
     handler.tts_manager.edge = edge
-    handler.tts_manager.omnivoice = omni
     handler.tts_manager.kokoro = None
     handler.tts_manager.gemini = None
 
     await handler._speak_response("A cota da Kore acabou.")
 
-    assert omni.spoken == ["A cota da Kore acabou."]
-    assert edge.spoken == []
+    assert edge.spoken == ["A cota da Kore acabou."]
     assert sapi_calls == []
 
 
 @pytest.mark.asyncio
-async def test_speak_response_uses_omnivoice_before_edge_after_kore_failure():
+async def test_speak_response_uses_edge_after_kore_failure():
     live = Mock()
     live.active = True
     live.ultimo_audio_entregue.return_value = None
@@ -150,35 +126,15 @@ async def test_speak_response_uses_omnivoice_before_edge_after_kore_failure():
         return False
 
     live.speak = kore_unavailable
-    omni = _FakeEngine()
-    omni.available = True
     edge = _FakeEngine()
     handler = _handler_de_voz(live=live, edge=edge)
-    handler.tts_manager.omnivoice = omni
 
     await handler._speak_response("A Kore falhou.")
 
-    assert omni.spoken == ["A Kore falhou."]
-    assert edge.spoken == []
+    assert edge.spoken == ["A Kore falhou."]
 
 
 @pytest.mark.asyncio
-async def test_omnivoice_selection_skips_kore_live():
-    live = Mock()
-    live.active = True
-    live.speak = AsyncMock(side_effect=AssertionError("Kore não deve ser chamada"))
-    omni = _FakeEngine()
-    omni.available = True
-    handler = _handler_de_voz(live=live)
-    handler._voice_output_engine = "omnivoice"
-    handler.tts_manager.omnivoice = omni
-
-    await handler._speak_response("Voz local selecionada.")
-
-    live.speak.assert_not_awaited()
-    assert omni.spoken == ["Voz local selecionada."]
-
-
 # --------------------------------------------------------------------------
 # ZARA-VOZ-UNICA-002 — só Kore e Edge. A voz do Windows saiu de cena.
 #

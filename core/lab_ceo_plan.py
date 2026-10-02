@@ -69,7 +69,7 @@ SEAT_KINDS: Dict[str, Tuple[str, ...]] = {
 # Minúsculas, sem acento duplicado — determinística e auditável.
 _KEYWORDS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("VOICE", ("voz", "voice", "tts", "microfone", "vosk", "fala",
-                "omnivoice", "kore", "kokoro", "edge-tts", "stt")),
+                "kore", "kokoro", "edge-tts", "stt")),
     ("TEST", ("teste", "test", "suite", "suíte", "gate", "regressao",
                "regressão", "flak", "coverage", "cobertura")),
     ("BUILD", ("build", "exe", "instalador", "empacot", "release",

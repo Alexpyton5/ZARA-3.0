@@ -54,6 +54,7 @@ declare global {
   interface Window {
     zaraIPC: {
       pilot?: {
+        learn?: (turn: import('../lib/pilotLearning').PilotTurnObservation) => Promise<import('../lib/pilotLearning').PilotLearningReceipt>;
         context: (text: string) => Promise<{ success: boolean; context: string; error?: string }>;
         command: (text: string) => Promise<{ success: boolean; handled: boolean; response: string; error?: string; verified?: boolean }>;
       };
@@ -74,7 +75,7 @@ declare global {
       };
       action?: { execute?: (action: string, params: Record<string, any>) => Promise<any>; list?: () => Promise<any> };
       system?: { metrics?: () => Promise<any>; info?: () => Promise<any>; selfStatus?: () => Promise<any> };
-      voice?: { start?: () => Promise<any>; startZoe?: () => Promise<any>; speakZoe?: (text: string) => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any>; getEngine?: () => Promise<any>; setEngine?: (engine: 'kore' | 'omnivoice') => Promise<any>; mute?: (muted?: boolean) => Promise<any>; sendMicChunk?: (pcm: any) => void };
+      voice?: { start?: () => Promise<any>; startZoe?: () => Promise<any>; speakZoe?: (text: string) => Promise<any>; stop?: () => Promise<any>; status?: () => Promise<any>; getEngine?: () => Promise<any>; setEngine?: (engine: 'kore') => Promise<any>; mute?: (muted?: boolean) => Promise<any>; sendMicChunk?: (pcm: any) => void };
       config?: { get?: () => Promise<any>; set?: (key: string, value: any) => Promise<any> };
       // Atalhos de desktop (abrir apps, pastas, links externos, configurações)
       desktop?: {

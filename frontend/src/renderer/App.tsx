@@ -104,8 +104,7 @@ function TelasLogadas({ avatar, onTrocar }: { avatar: AvatarInfo; onTrocar: () =
       voz={{ estado: pilot.voice.voiceState, erro: pilot.voice.error, motor: pilot.voice.engine, alternar: mic }}
       onAbrirVoz={() => setNav('voz')} /></div>
     {nav === 'voz' && <Voz avatar={avatar} state={mapearEstadoVoz(pilot.voice.voiceState)} onMicClick={mic}
-      motor={pilot.voice.engine} erro={pilot.voice.error} omnivoiceAvailable={pilot.voice.omnivoiceAvailable}
-      onTrocarMotor={pilot.voice.changeEngine} />}
+      motor={pilot.voice.engine} erro={pilot.voice.error} />}
     {nav === 'atividade' && <Atividade itens={state?.activity || []} carregando={!state && !live.error} onAbrirEntrega={result} />}
     {nav === 'equipe' && <Equipe projetos={state?.projects || []} onNovoProjeto={() => setCreating(true)} />}
     {nav === 'lab' && <Lab projetos={state?.projects || []} modo={modoLab} onMudarModo={setModoLab} provider={pilot.provider} onNovoProjeto={() => setCreating(true)} />}

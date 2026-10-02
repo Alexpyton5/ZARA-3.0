@@ -32,15 +32,13 @@ print("=== Pre-voo da voz da ZARA ===\n")
 # 1. Arquivos da cadeia de voz
 arq_voz = [
     "core/voice_engine_policy.py",
-    "core/omnivoice_worker.py",
     "core/voice_tts.py",
-    "tools/install_omnivoice_runtime.py",
 ]
 faltando = [a for a in arq_voz if not (ROOT / a).exists()]
 check(
-    "Cadeia de voz (Kore -> OmniVoice)",
+    "Cadeia de voz (Kore -> Edge -> Kokoro)",
     not faltando,
-    "todos os 4 arquivos presentes" if not faltando else "faltando: " + ", ".join(faltando),
+    "todos os 2 arquivos presentes" if not faltando else "faltando: " + ", ".join(faltando),
 )
 
 # 2. Chave da Kore - so confere se existe, nunca mostra o valor

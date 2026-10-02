@@ -4,7 +4,7 @@ A1. MAPA DO PIPELINE DE VOZ (microfone -> acao real no PC)
 ----------------------------------------------------------
 1. CAPTURA: microfone -> Gemini Live (`core/gemini_live_voice.py`, voz Kore)
    transcreve a fala em tempo real. NAO ha STT local: sem internet, a entrada
-   de voz morre (a cascata Kore->OmniVoice cobre so a SAIDA/TTS).
+   de voz morre (a cascata Kore->Edge->Kokoro cobre so a SAIDA/TTS).
 2. TEXTO: a transcricao entra em `IPCHandler._process_voice_message(text)`.
 3. INTENCAO (deterministica, nesta ordem):
    jarvis multi-action -> reminder -> operational memory -> self knowledge ->
@@ -14,8 +14,7 @@ A1. MAPA DO PIPELINE DE VOZ (microfone -> acao real no PC)
 4. EXECUCAO: `_executar_intent_de_pc` mapeia acao+parametro e chama
    `execute_action()` no registry -> acao REAL no Windows
    (os_app, window_*, browser_*, input_*, vision_*, os_volume...).
-5. RESPOSTA FALADA (`_speak_response`): Kore -> OmniVoice (local) ->
-   Edge neural (gratis) -> Kokoro (local) -> Gemini HTTP -> silencio.
+5. RESPOSTA FALADA (`_speak_response`): Kore -> Edge neural (gratis) -> Kokoro (local) -> Gemini HTTP -> silencio.
    A voz robotica do Windows (SAPI) foi REMOVIDA por decisao do Alex.
 6. LATENCIA OBSERVAVEL: `core/cronometro.py` grava cada turno em disco;
    [VOICE_TRACE] marca os estagios no console.

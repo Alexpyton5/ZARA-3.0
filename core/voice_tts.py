@@ -3,8 +3,8 @@ Voice TTS — cascata de vozes da ZARA.
 
 Ordem de preferencia: Kore (Gemini Live, melhor entonacao, tem cota) ->
 Edge Neural (gratuita, sem chave, sem cota, precisa de internet) ->
-OmniVoice (reserva local automática, grátis, sem cota — decisão do Alex) ->
-Kokoro ONNX (local, offline, sem limite) -> Gemini HTTP.
+Kokoro ONNX (reserva local oficial, offline, sem limite — decisao do Alex 02/10) ->
+Gemini HTTP.
 
 ZARA-VOZ-UNICA-002 removeu o Windows SAPI da cascata em definitivo. O teste
 `test_a_voz_do_windows_nunca_mais_e_chamada` garante que `_speak_windows_sapi`
@@ -19,7 +19,6 @@ import os
 import sys
 import tempfile
 import threading
-import time
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,7 +68,6 @@ except ImportError:
 
 from core.paths import user_data_dir
 from core.voice_stt import VoiceNotConfiguredError
-from core.omnivoice_runtime import OmniVoiceWorkerTTS
 from core.voice_engine_policy import voice_output_order
 from core.voice_text_norm import normalize_for_tts
 from core.pii_filter import scrub_pii
@@ -633,15 +631,10 @@ class TTSManager:
         self.config = config
         self.edge: EdgeTTS | None = None
         self.kokoro: KokoroTTS | None = None
-        self.omnivoice: OmniVoiceWorkerTTS | None = OmniVoiceWorkerTTS()
         self.gemini: GeminiTTS | None = None
         self._current_playback = None
         self._interrupt_event = threading.Event()
         self._speaking_event = threading.Event()
-        # Disjuntor do OmniVoice: quando o worker quebra (ex.: modelo CUDA
-        # sem VRAM), nao queima ~14s de novo a cada fala — pula direto p/
-        # a Edge por 30 min, depois tenta o OmniVoice de novo.
-        self._omnivoice_cooldown_until = 0.0
 
     def initialize(self):
         """Initialize available TTS engines."""
@@ -675,9 +668,9 @@ class TTSManager:
                 print(f"[TTS] Gemini init failed: {e}")
                 self.gemini = None
 
-        if not self.edge and not self._omnivoice_ready() and not self.kokoro and not self.gemini:
+        if not self.edge and not self.kokoro and not self.gemini:
             raise RuntimeError(
-                "No TTS engine available. Install edge-tts, kokoro-onnx or the local OmniVoice runtime."
+                "No TTS engine available. Install edge-tts or kokoro-onnx."
             )
 
     def speak(self, text: str, voice: str = None, speed: float = 1.0, blocking: bool = True,
@@ -693,14 +686,13 @@ class TTSManager:
         # síntese; frase normal volta idêntica, sem mudança de comportamento.
         text = normalize_for_tts(text)
         self._interrupt_event.clear()
-        motores = {"omnivoice": (self.omnivoice, "OmniVoice"),
-                   "edge": (self.edge, "Edge"), "kokoro": (self.kokoro, "Kokoro")}
+        motores = {"edge": (self.edge, "Edge"), "kokoro": (self.kokoro, "Kokoro")}
         selected = self.config.output_engine
         if self.config.tts_engine in {"edge", "kokoro"}:
             selected = self.config.tts_engine
         names = voice_output_order(
             selected, kore_ready=False,
-            omnivoice_ready=self._omnivoice_ready(), edge_ready=bool(self.edge),
+            edge_ready=bool(self.edge),
             kokoro_ready=bool(self.kokoro),
         )
         engines = [motores[name] for name in names]
@@ -762,8 +754,6 @@ class TTSManager:
                     return False
                 failures.append((label, f"{type(e).__name__}: {e}"))
                 print(f"[TTS] {label} failed, trying fallback: {e}")
-                if label == "OmniVoice":
-                    self._omnivoice_cooldown_until = time.monotonic() + 1800
 
         if not attempted:
             failures.append(("cascata", "nenhum motor de TTS configurado"))
@@ -788,11 +778,6 @@ class TTSManager:
         print("[TTS] Cascade exhausted (non-blocking) - nenhuma voz falou este texto")
         return False
 
-    def _omnivoice_ready(self) -> bool:
-        if time.monotonic() < self._omnivoice_cooldown_until:
-            return False
-        return bool(self.omnivoice and getattr(self.omnivoice, "available", True))
-
     async def _gemini_speak(self, text: str, voice: str = None):
         """Speak via Gemini (async)."""
         await self.gemini.play(text, voice)
@@ -804,8 +789,6 @@ class TTSManager:
             # A Edge toca via MCI, fora do sounddevice: sem isto o barge-in
             # apagaria o Kokoro e deixaria a voz da Edge falando sozinha.
             self.edge.stop()
-        if self.omnivoice:
-            self.omnivoice.stop()
         if SOUNDDEVICE_AVAILABLE:
             sd.stop()
         if self._current_playback and self._current_playback.is_alive():
@@ -829,8 +812,6 @@ class TTSManager:
     def cleanup(self):
         """Cleanup resources."""
         self.interrupt()
-        if self.omnivoice:
-            self.omnivoice.cleanup()
         if self.gemini:
             asyncio.run(self.gemini.close())
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { createPilotTurnRecorder } from './pilotLearning';
 import { aguardarFimKore, cortarKore, iniciarAudioAec, pararAudioAec, tocarKore } from './aecAudio';
 import { completeSentences, stableSpeechPrefix, type MuseWebview } from './museConversation';
 import { cancelPilotReply, checkPilotCancellation, preparePilotTurn, readPilotReply, submitToPilot, type PilotProvider } from './pilotConversation';
@@ -27,8 +28,7 @@ function speechPieces(text: string): string[] {
 export function useZoeVoice(webviewRef: RefObject<MuseWebview | null>, pageReady: boolean, provider: PilotProvider = 'muse') {
   const [voiceState, setVoiceState] = useState<VoiceState>('off');
   const [error, setError] = useState('');
-  const [engine, setEngine] = useState<'kore' | 'omnivoice'>('kore');
-  const [omnivoiceAvailable, setOmnivoiceAvailable] = useState(false);
+  const [engine, setEngine] = useState<'kore'>('kore');
   const [museWaitMs, setMuseWaitMs] = useState<number | null>(null);
   const [firstSoundMs, setFirstSoundMs] = useState<number | null>(null);
   const active = useRef(false);
@@ -144,6 +144,7 @@ export function useZoeVoice(webviewRef: RefObject<MuseWebview | null>, pageReady
     checkPilotCancellation(cancelled);
     if (!submission.submitted) throw new Error(submission.error || 'Não consegui enviar sua fala à Zoe.');
     if (!submission.confirmed) throw new Error('O envio não foi confirmado. Confira a conversa antes de tentar de novo.');
+    const record = createPilotTurnRecorder(provider, text, 'voice', window.zaraIPC?.pilot);
 
     let previousText = '';
     let consumed = 0;
@@ -163,6 +164,7 @@ export function useZoeVoice(webviewRef: RefObject<MuseWebview | null>, pageReady
       if (reply.correlation === 'superseded' || reply.correlation === 'ambiguous') {
         throw new Error('Outra conversa entrou no mesmo turno. Confira sua conta antes de continuar por voz.');
       }
+      if (reply.correlation === 'missing') continue;
       if (reply.assistantId && reply.text) {
         if (!measuredFirst) {
           measuredFirst = true;
@@ -198,6 +200,7 @@ export function useZoeVoice(webviewRef: RefObject<MuseWebview | null>, pageReady
         if (speechError.current) throw speechError.current;
         await aguardarFimKore();
         checkPilotCancellation(cancelled);
+        void record(submission, reply);
         setVoiceState('listening');
         traceVoice('ZOE_TURN_COMPLETE', `ms=${Math.round(performance.now() - started)}`);
         return;
@@ -267,8 +270,7 @@ export function useZoeVoice(webviewRef: RefObject<MuseWebview | null>, pageReady
     });
     void window.zaraIPC?.voice?.getEngine?.().then((result) => {
       if (result?.success) {
-        setEngine(result.engine === 'omnivoice' ? 'omnivoice' : 'kore');
-        setOmnivoiceAvailable(Boolean(result.omnivoice_available));
+        setEngine('kore');
       }
     }).catch(() => undefined);
     return () => {
@@ -323,14 +325,5 @@ export function useZoeVoice(webviewRef: RefObject<MuseWebview | null>, pageReady
     }
   }, [pageReady, stop]);
 
-  const changeEngine = useCallback(async (value: 'kore' | 'omnivoice') => {
-    const result = await window.zaraIPC?.voice?.setEngine?.(value);
-    if (result?.success !== true) {
-      setError(result?.error || 'Não foi possível trocar a voz.');
-      return;
-    }
-    setEngine(value);
-  }, []);
-
-  return { voiceState, error, engine, omnivoiceAvailable, museWaitMs, firstSoundMs, toggle, changeEngine, stop };
+  return { voiceState, error, engine, museWaitMs, firstSoundMs, toggle, stop };
 }

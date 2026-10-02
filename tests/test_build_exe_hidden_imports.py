@@ -16,12 +16,13 @@ def test_pyinstaller_collects_certifi_ca_bundle(monkeypatch, tmp_path):
     assert "cacert.pem" in spec_path.read_text(encoding="utf-8")
 
 
-def test_pyinstaller_bundles_only_the_optional_omnivoice_worker(monkeypatch, tmp_path):
+def test_pyinstaller_no_longer_bundles_omnivoice_worker(monkeypatch, tmp_path):
+    # OmniVoice removido (02/10, decisao do Alex): nem o worker vai pro pacote.
     monkeypatch.setattr(build_exe, "BUILD_DIR", tmp_path)
     spec_path = build_exe.create_pyinstaller_spec()
     spec = spec_path.read_text(encoding="utf-8")
 
-    assert "omnivoice_worker.py" in spec
+    assert "omnivoice_worker.py" not in spec
     assert "OmniVoice.from_pretrained" not in spec
 
 

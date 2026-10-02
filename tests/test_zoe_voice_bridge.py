@@ -87,7 +87,7 @@ async def test_zoe_uses_live_transcription_without_gemini_answer(monkeypatch):
 async def test_zoe_speech_response_waits_for_real_local_playback(monkeypatch):
     from core.voice_preferences import load_voice_output_engine
 
-    monkeypatch.setattr("core.voice_preferences.load_voice_output_engine", lambda: "omnivoice")
+    monkeypatch.setattr("core.voice_preferences.load_voice_output_engine", lambda: "kore")
     timeline: list[str] = []
 
     async def send(message):
@@ -115,7 +115,7 @@ async def test_zoe_speech_response_waits_for_real_local_playback(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_zoe_does_not_report_speech_after_interrupted_playback(monkeypatch):
-    monkeypatch.setattr("core.voice_preferences.load_voice_output_engine", lambda: "omnivoice")
+    monkeypatch.setattr("core.voice_preferences.load_voice_output_engine", lambda: "kore")
 
     class TTS:
         def initialize(self):

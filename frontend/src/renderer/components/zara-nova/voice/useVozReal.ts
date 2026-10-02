@@ -49,16 +49,12 @@ export interface VozReal {
   onMicClick: () => void;
   /** Mensagem de erro legível ('' = sem erro). */
   error: string;
-  /** Motor de TTS ativo: 'kore' (bonita, depende de internet/cota) ou 'omnivoice' (local, grátis). */
-  engine: 'kore' | 'omnivoice';
-  /** A reserva local está disponível? */
-  omnivoiceAvailable: boolean;
-  /** Troca o motor de voz. */
-  trocarMotor: (engine: 'kore' | 'omnivoice') => Promise<void>;
+  /** Motor de TTS ativo: 'kore' (a reserva local Kokoro entra sozinha se a Kore falhar). */
+  engine: 'kore';
 }
 
 export function useVozReal(webviewRef: RefObject<MuseWebview | null>, pageReady: boolean): VozReal {
-  const { voiceState, error, engine, omnivoiceAvailable, toggle, changeEngine } = useZoeVoice(webviewRef, pageReady);
+  const { voiceState, error, engine, toggle } = useZoeVoice(webviewRef, pageReady);
 
   return {
     state: MAPA[voiceState as ZoeVoiceState] ?? 'error',
@@ -67,7 +63,5 @@ export function useVozReal(webviewRef: RefObject<MuseWebview | null>, pageReady:
     },
     error,
     engine,
-    omnivoiceAvailable,
-    trocarMotor: changeEngine,
   };
 }

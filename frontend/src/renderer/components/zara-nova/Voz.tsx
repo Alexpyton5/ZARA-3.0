@@ -9,7 +9,7 @@
  *  stableSpeechPrefix), não é só ler texto em voz alta.
  *
  *  Cascata de TTS (Manual §4.3, decisão do Alex 2026-09-27): Kore principal →
- *  OmniVoice como reserva automática (local, grátis) → Edge → Kokoro.
+ *  Kore principal → Edge → Kokoro (reserva local).
  *
  *  A fala contínua chega pelo evento de áudio da Kore; respostas de texto
  *  também podem solicitar TTS pelo IPC `zoe-voice-speak`, cujo handler está
@@ -54,19 +54,17 @@ export function mapearEstadoVoz(estado: EstadoVozReal): VoiceState {
   }
 }
 
-export type MotorVoz = 'kore' | 'omnivoice' | 'edge' | 'kokoro';
+export type MotorVoz = 'kore' | 'edge' | 'kokoro';
 
 export interface VozProps {
   state: VoiceState;
   onMicClick: () => void;
   /** Avatar exibido na órbita (padrão: LYRA, a voz da TROPA dev. — original fiel). */
   avatar?: AvatarInfo;
-  /** Motor de TTS ativo (a fiação real informa; Kore principal, OmniVoice reserva). */
+  /** Motor de TTS que falou por último (Kore principal; Edge/Kokoro entram sozinhos na reserva). */
   motor?: MotorVoz;
   /** Mensagem de erro real do pipeline, quando houver. */
   erro?: string;
-  onTrocarMotor?: (motor: 'kore' | 'omnivoice') => Promise<void>;
-  omnivoiceAvailable?: boolean;
 }
 
 const LYRA_PADRAO: AvatarInfo = {
@@ -101,7 +99,6 @@ const COPIA: Record<VoiceState, { titulo: string; texto: string }> = {
 
 const MOTOR_ROTULO: Record<MotorVoz, string> = {
   kore: 'Kore',
-  omnivoice: 'OmniVoice (reserva)',
   edge: 'Edge',
   kokoro: 'Kokoro',
 };
@@ -112,7 +109,7 @@ const ESTADOS: Array<{ key: VoiceState; rotulo: string }> = [
   { key: 'doing', rotulo: 'Fazendo' },
 ];
 
-export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro, onTrocarMotor, omnivoiceAvailable }: VozProps) {
+export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro }: VozProps) {
   const [imagemFalhou, setImagemFalhou] = useState(false);
   const { titulo, texto } = COPIA[state];
   const ativo = state === 'listening' || state === 'thinking' || state === 'doing';
@@ -158,10 +155,7 @@ export function Voz({ state, onMicClick, avatar = LYRA_PADRAO, motor, erro, onTr
         {ativo ? <MicOff size={25} aria-hidden="true" /> : <Mic size={25} aria-hidden="true" />}
       </button>
 
-      {onTrocarMotor ? <label className="voice-demo">Voz: <select aria-label="Escolher voz" value={motor || 'kore'} onChange={event => void onTrocarMotor(event.target.value as 'kore' | 'omnivoice')}>
-        <option value="kore">Kore</option>
-        <option value="omnivoice" disabled={!omnivoiceAvailable}>OmniVoice {omnivoiceAvailable ? '' : '(indisponível)'}</option>
-      </select></label> : <span className="voice-demo">{motor ? `Voz: ${MOTOR_ROTULO[motor]}` : 'Entre na sua conta para conversar.'}</span>}
+      <span className="voice-demo">{motor ? `Voz: ${MOTOR_ROTULO[motor]}` : 'Entre na sua conta para conversar.'}</span>
     </section>
   );
 }

@@ -1,6 +1,6 @@
 """Normalização de texto PT-BR para TTS.
 
-Motores de TTS (Edge, Kokoro, OmniVoice) leem bem frases corridas, mas
+Motores de TTS (Edge, Kokoro) leem bem frases corridas, mas
 engasgam em símbolos: "R$ 280" sai como "R cifrão duzentos e oitenta",
 "26,7%" vira ruído, "14:30" vira "quatorze dois pontos trinta". Este módulo
 converte esses trechos para forma falável ANTES da síntese, sem tocar no

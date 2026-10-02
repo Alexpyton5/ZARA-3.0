@@ -86,13 +86,11 @@ export function useSupercerebroStatus(): SupercerebroStatus {
 /* Voz — motor de TTS                                                  */
 /* ------------------------------------------------------------------ */
 
-export type VoiceEngineId = 'kore' | 'omnivoice';
+export type VoiceEngineId = 'kore';
 
 export interface VoiceEngine {
   engine: VoiceEngineId;
-  omnivoiceAvailable: boolean;
-  busy: boolean;
-  setEngine: (engine: VoiceEngineId) => Promise<boolean>;
+  busy: boolean;}
   /**
    * Pede ao backend para falar um texto; resolve após a reprodução ser confirmada.
    */
@@ -101,7 +99,6 @@ export interface VoiceEngine {
 
 export function useVoiceEngine(): VoiceEngine {
   const [engine, setEngineState] = useState<VoiceEngineId>('kore');
-  const [omnivoiceAvailable, setOmnivoiceAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -110,8 +107,7 @@ export function useVoiceEngine(): VoiceEngine {
       ?.getEngine?.()
       .then((result: any) => {
         if (!mounted || !result?.success) return;
-        setEngineState(result.engine === 'omnivoice' ? 'omnivoice' : 'kore');
-        setOmnivoiceAvailable(Boolean(result.omnivoice_available));
+        setEngineState('kore');
       })
       .catch(() => {
         /* motor desconhecido até o backend responder */
@@ -121,18 +117,6 @@ export function useVoiceEngine(): VoiceEngine {
     };
   }, []);
 
-  const setEngine = useCallback(async (next: VoiceEngineId): Promise<boolean> => {
-    setBusy(true);
-    try {
-      const result: any = await window.zaraIPC?.voice?.setEngine?.(next);
-      if (result?.success !== true) return false;
-      setEngineState(next);
-      return true;
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
   const speak = useCallback(async (text: string): Promise<void> => {
     const result: any = await window.zaraIPC?.voice?.speakZoe?.(text);
     if (result?.success !== true) {
@@ -140,7 +124,7 @@ export function useVoiceEngine(): VoiceEngine {
     }
   }, []);
 
-  return { engine, omnivoiceAvailable, busy, setEngine, speak };
+  return { engine, busy, speak };
 }
 
 /* ------------------------------------------------------------------ */

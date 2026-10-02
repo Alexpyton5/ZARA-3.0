@@ -53,7 +53,7 @@ SEED_PROPOSALS: List[Dict[str, object]] = [
         "title": "Garantir o modelo Vosk PT offline (voz que não abandona)",
         "description": (
             "Motivo: a voz PT-BR local (Vosk) é a rede de segurança da cascata "
-            "Kore→OmniVoice→edge→kokoro quando a internet cai; se o modelo não "
+            "Kore→edge→kokoro quando a internet cai; se o modelo não "
             "estiver no pacote, a reserva falha justo na hora que mais importa "
             "(critério nº 1 do Alex: não deixar na mão). Origem: RECON voz "
             "(gemini_live_voice.py:365 lê %LOCALAPPDATA%\\ZARA3\\models\\vosk). "

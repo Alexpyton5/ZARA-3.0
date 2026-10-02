@@ -47,7 +47,7 @@ export function Configuracoes({ onTrocar }: { onTrocar: () => void }) {
     </section>
     <section className="confidence-card">
       <h2>Voz</h2>
-      <label>Quem fala com você <select value={pilot.voice.engine} onChange={event => void pilot.voice.changeEngine(event.target.value === 'omnivoice' ? 'omnivoice' : 'kore')}><option value="kore">Kore</option><option value="omnivoice" disabled={!pilot.voice.omnivoiceAvailable}>OmniVoice{pilot.voice.omnivoiceAvailable ? '' : ' · indisponível'}</option></select></label>
+      <p>Quem fala com você: <strong>Kore</strong> (com reserva automática se ela falhar).</p>
       {pilot.voice.error && <p role="alert">{pilot.voice.error}</p>}
       <p>Ao abrir a conversa com sua conta Muse conectada, a voz inicia automaticamente. Você pode desligar o microfone a qualquer momento.</p>
     </section>

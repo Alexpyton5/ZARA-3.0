@@ -90,7 +90,7 @@ export type VoiceEngineId = 'kore';
 
 export interface VoiceEngine {
   engine: VoiceEngineId;
-  busy: boolean;}
+  busy: boolean;
   /**
    * Pede ao backend para falar um texto; resolve após a reprodução ser confirmada.
    */

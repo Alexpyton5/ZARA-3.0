@@ -71,7 +71,7 @@ class VoiceConfig:
 
     # VAD (Voice Activity Detection)
     vad_threshold: float = 0.02
-    vad_silence_chunks: int = 30  # ~0.5s at 16kHz/4096
+    vad_silence_chunks: int = 4  # ~1.0s at 16kHz/4096 (4 blocos x 256ms)
 
     def __post_init__(self):
         if self.wake_words is None:
